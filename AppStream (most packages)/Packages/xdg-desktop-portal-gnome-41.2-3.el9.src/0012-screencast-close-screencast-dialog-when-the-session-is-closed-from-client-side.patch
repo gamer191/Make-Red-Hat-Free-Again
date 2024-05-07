@@ -1,0 +1,27 @@
+From 5450d65d61ea927752c001dff9f94cb9fd7baf7a Mon Sep 17 00:00:00 2001
+From: Jan Grulich <jgrulich@redhat.com>
+Date: Tue, 14 Jun 2022 15:39:26 +0200
+Subject: [PATCH] ScreenCast: close screencast dialog when the session is
+ closed from the client side
+
+When the session is closed, for example trying to share a screen in Chrome and closing
+the web page while having the portal dialog still open, it will not take down the dialog
+and instead it just gets hidden below Chrome's window.
+---
+ src/screencast.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/screencast.c b/src/screencast.c
+index 15f6a80..729d668 100644
+--- a/src/screencast.c
++++ b/src/screencast.c
+@@ -852,6 +852,9 @@ screen_cast_session_close (Session *session)
+                    error->message);
+       g_clear_object (&screen_cast_session->gnome_screen_cast_session);
+     }
++
++  g_clear_pointer (&screen_cast_session->dialog_handle,
++                   screen_cast_dialog_handle_close);
+ }
+
+ static void

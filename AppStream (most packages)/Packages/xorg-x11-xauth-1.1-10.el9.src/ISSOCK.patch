@@ -1,0 +1,21 @@
+diff -r -u xauth-1.0.10-orig/gethost.c xauth-1.0.10/gethost.c
+--- xauth-1.0.10-orig/gethost.c	2017-01-29 22:00:12.000000000 +0100
++++ xauth-1.0.10/gethost.c	2020-08-20 16:18:08.399196240 +0200
+@@ -202,14 +202,14 @@
+ 	    strncpy(path, fulldpyname, sizeof(path));
+ 	    path[sizeof(path) - 1] = '\0';
+ #endif
+-	    if (0 == stat(path, &sbuf)) {
++	    if (0 == stat(path, &sbuf) && S_ISSOCK(sbuf.st_mode) ) {
+ 		is_path_to_socket = 1;
+ 	    } else {
+ 		char *dot = strrchr(path, '.');
+ 		if (dot) {
+ 		    *dot = '\0';
+ 		    /* screen = atoi(dot + 1); */
+-		    if (0 == stat(path, &sbuf)) {
++		    if (0 == stat(path, &sbuf) && S_ISSOCK(sbuf.st_mode)) {
+ 		        is_path_to_socket = 1;
+ 		    }
+ 		}
+Nur in xauth-1.0.10: gethost.c~.

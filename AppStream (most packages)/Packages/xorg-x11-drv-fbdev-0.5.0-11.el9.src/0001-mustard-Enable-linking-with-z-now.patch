@@ -1,0 +1,409 @@
+From 9a151d87fb084a914ad76f77be78f720448fa201 Mon Sep 17 00:00:00 2001
+From: Adam Jackson <ajax@redhat.com>
+Date: Tue, 25 Jan 2022 13:37:14 -0500
+Subject: [PATCH xf86-video-fbdev] mustard: Enable linking with -z now
+
+The xfree86 design loads the fb, fbdev, and shadow modules _after_ the
+driver is loaded, which means we need to dlsym^WLoaderSymbol for the API
+we need ourselves.
+---
+ src/fbdev.c | 152 ++++++++++++++++++++++++++++++++++++++--------------
+ 1 file changed, 113 insertions(+), 39 deletions(-)
+
+diff --git a/src/fbdev.c b/src/fbdev.c
+index e4f66a2..ee3a716 100644
+--- a/src/fbdev.c
++++ b/src/fbdev.c
+@@ -77,6 +77,75 @@ static Bool	FBDevDriverFunc(ScrnInfoPtr pScrn, xorgDriverFuncOp op,
+ 
+ enum { FBDEV_ROTATE_NONE=0, FBDEV_ROTATE_CW=270, FBDEV_ROTATE_UD=180, FBDEV_ROTATE_CCW=90 };
+ 
++static typeof(fbdevHWAdjustFrame) *my_fbdevHWAdjustFrame;
++static typeof(fbdevHWDPMSSet) *my_fbdevHWDPMSSet;
++static typeof(fbdevHWEnterVT) *my_fbdevHWEnterVT;
++static typeof(fbdevHWGetDepth) *my_fbdevHWGetDepth;
++static typeof(fbdevHWGetLineLength) *my_fbdevHWGetLineLength;
++static typeof(fbdevHWGetName) *my_fbdevHWGetName;
++static typeof(fbdevHWGetType) *my_fbdevHWGetType;
++static typeof(fbdevHWGetVidmem) *my_fbdevHWGetVidmem;
++static typeof(fbdevHWInit) *my_fbdevHWInit;
++static typeof(fbdevHWLeaveVT) *my_fbdevHWLeaveVT;
++static typeof(fbdevHWLinearOffset) *my_fbdevHWLinearOffset;
++static typeof(fbdevHWLoadPalette) *my_fbdevHWLoadPalette;
++static typeof(fbdevHWMapVidmem) *my_fbdevHWMapVidmem;
++static typeof(fbdevHWModeInit) *my_fbdevHWModeInit;
++static typeof(fbdevHWProbe) *my_fbdevHWProbe;
++static typeof(fbdevHWRestore) *my_fbdevHWRestore;
++static typeof(fbdevHWSave) *my_fbdevHWSave;
++static typeof(fbdevHWSaveScreen) *my_fbdevHWSaveScreen;
++static typeof(fbdevHWSetVideoModes) *my_fbdevHWSetVideoModes;
++static typeof(fbdevHWSwitchMode) *my_fbdevHWSwitchMode;
++static typeof(fbdevHWUnmapVidmem) *my_fbdevHWUnmapVidmem;
++static typeof(fbdevHWUseBuildinMode) *my_fbdevHWUseBuildinMode;
++static typeof(fbdevHWValidMode) *my_fbdevHWValidMode;
++
++static void
++bind_fbdevhw(void)
++{
++    my_fbdevHWAdjustFrame = LoaderSymbol("fbdevHWAdjustFrame");
++    my_fbdevHWDPMSSet = LoaderSymbol("fbdevHWDPMSSet");
++    my_fbdevHWEnterVT = LoaderSymbol("fbdevHWEnterVT");
++    my_fbdevHWGetDepth = LoaderSymbol("fbdevHWGetDepth");
++    my_fbdevHWGetLineLength = LoaderSymbol("fbdevHWGetLineLength");
++    my_fbdevHWGetName = LoaderSymbol("fbdevHWGetName");
++    my_fbdevHWGetType = LoaderSymbol("fbdevHWGetType");
++    my_fbdevHWGetVidmem = LoaderSymbol("fbdevHWGetVidmem");
++    my_fbdevHWInit = LoaderSymbol("fbdevHWInit");
++    my_fbdevHWLeaveVT = LoaderSymbol("fbdevHWLeaveVT");
++    my_fbdevHWLinearOffset = LoaderSymbol("fbdevHWLinearOffset");
++    my_fbdevHWLoadPalette = LoaderSymbol("fbdevHWLoadPalette");
++    my_fbdevHWMapVidmem = LoaderSymbol("fbdevHWMapVidmem");
++    my_fbdevHWModeInit = LoaderSymbol("fbdevHWModeInit");
++    my_fbdevHWProbe = LoaderSymbol("fbdevHWProbe");
++    my_fbdevHWRestore = LoaderSymbol("fbdevHWRestore");
++    my_fbdevHWSave = LoaderSymbol("fbdevHWSave");
++    my_fbdevHWSaveScreen = LoaderSymbol("fbdevHWSaveScreen");
++    my_fbdevHWSetVideoModes = LoaderSymbol("fbdevHWSetVideoModes");
++    my_fbdevHWSwitchMode = LoaderSymbol("fbdevHWSwitchMode");
++    my_fbdevHWUnmapVidmem = LoaderSymbol("fbdevHWUnmapVidmem");
++    my_fbdevHWUseBuildinMode = LoaderSymbol("fbdevHWUseBuildinMode");
++    my_fbdevHWValidMode = LoaderSymbol("fbdevHWValidMode");
++}
++
++static typeof(shadowAdd) *my_shadowAdd;
++static typeof(shadowRemove) *my_shadowRemove;
++static typeof(shadowSetup) *my_shadowSetup;
++static typeof(shadowUpdate32to24) *my_shadowUpdate32to24;
++static typeof(shadowUpdatePacked) *my_shadowUpdatePacked;
++static typeof(shadowUpdateRotatePacked) *my_shadowUpdateRotatePacked;
++
++static void
++bind_shadow(void)
++{
++    my_shadowAdd = LoaderSymbol("shadowAdd");
++    my_shadowRemove = LoaderSymbol("shadowRemove");
++    my_shadowSetup = LoaderSymbol("shadowSetup");
++    my_shadowUpdate32to24 = LoaderSymbol("shadowUpdate32to24");
++    my_shadowUpdatePacked = LoaderSymbol("shadowUpdatePacked");
++    my_shadowUpdateRotatePacked = LoaderSymbol("shadowUpdateRotatePacked");
++}
+ 
+ /* -------------------------------------------------------------------- */
+ 
+@@ -235,31 +304,31 @@ FBDevIdentify(int flags)
+ static Bool
+ fbdevSwitchMode(ScrnInfoPtr pScrn, DisplayModePtr mode)
+ {
+-    return fbdevHWSwitchMode(pScrn, mode);
++    return my_fbdevHWSwitchMode(pScrn, mode);
+ }
+ 
+ static void
+ fbdevAdjustFrame(ScrnInfoPtr pScrn, int x, int y)
+ {
+-    fbdevHWAdjustFrame(pScrn, x, y);
++    my_fbdevHWAdjustFrame(pScrn, x, y);
+ }
+ 
+ static Bool
+ fbdevEnterVT(ScrnInfoPtr pScrn)
+ {
+-    return fbdevHWEnterVT(pScrn);
++    return my_fbdevHWEnterVT(pScrn);
+ }
+ 
+ static void
+ fbdevLeaveVT(ScrnInfoPtr pScrn)
+ {
+-    fbdevHWLeaveVT(pScrn);
++    my_fbdevHWLeaveVT(pScrn);
+ }
+ 
+ static ModeStatus
+ fbdevValidMode(ScrnInfoPtr pScrn, DisplayModePtr mode, Bool verbose, int flags)
+ {
+-    return fbdevHWValidMode(pScrn, mode, verbose, flags);
++    return my_fbdevHWValidMode(pScrn, mode, verbose, flags);
+ }
+ 
+ #ifdef XSERVER_LIBPCIACCESS
+@@ -270,6 +339,7 @@ static Bool FBDevPciProbe(DriverPtr drv, int entity_num,
+ 
+     if (!xf86LoadDrvSubModule(drv, "fbdevhw"))
+ 	return FALSE;
++    bind_fbdevhw();
+ 	    
+     pScrn = xf86ConfigPciEntity(NULL, 0, entity_num, NULL, NULL,
+ 				NULL, NULL, NULL, NULL);
+@@ -279,7 +349,7 @@ static Bool FBDevPciProbe(DriverPtr drv, int entity_num,
+ 						  pScrn->entityInstanceList[0]);
+ 
+ 	device = xf86FindOptionValue(devSection->options, "fbdev");
+-	if (fbdevHWProbe(dev, device, NULL)) {
++	if (my_fbdevHWProbe(dev, device, NULL)) {
+ 	    pScrn->driverVersion = FBDEV_VERSION;
+ 	    pScrn->driverName    = FBDEV_DRIVER_NAME;
+ 	    pScrn->name          = FBDEV_NAME;
+@@ -332,7 +402,8 @@ FBDevProbe(DriverPtr drv, int flags)
+ 	
+ 	if (!xf86LoadDrvSubModule(drv, "fbdevhw"))
+ 	    return FALSE;
+-	    
++        bind_fbdevhw();
++
+ 	for (i = 0; i < numDevSections; i++) {
+ 	    Bool isIsa = FALSE;
+ 	    Bool isPci = FALSE;
+@@ -355,7 +426,7 @@ FBDevProbe(DriverPtr drv, int flags)
+ 		    0;
+ 		  
+ 	    }
+-	    if (fbdevHWProbe(NULL,dev,NULL)) {
++	    if (my_fbdevHWProbe(NULL,dev,NULL)) {
+ 		pScrn = NULL;
+ 		if (isPci) {
+ #ifndef XSERVER_LIBPCIACCESS
+@@ -459,11 +530,11 @@ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
+ 	    pci_dev = fPtr->pEnt->location.id.pci;
+ #endif
+ 	/* open device */
+-	if (!fbdevHWInit(pScrn, pci_dev,
++	if (!my_fbdevHWInit(pScrn, pci_dev,
+ 			 xf86FindOptionValue(fPtr->pEnt->device->options,
+ 					     "fbdev")))
+ 		return FALSE;
+-	default_depth = fbdevHWGetDepth(pScrn,&fbbpp);
++	default_depth = my_fbdevHWGetDepth(pScrn,&fbbpp);
+ 
+ 	if (default_depth == 8) do {
+ 	    /* trust the command line */
+@@ -531,10 +602,10 @@ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
+ 	pScrn->progClock = TRUE;
+ 	pScrn->rgbBits   = 8;
+ 	pScrn->chipset   = "fbdev";
+-	pScrn->videoRam  = fbdevHWGetVidmem(pScrn);
++	pScrn->videoRam  = my_fbdevHWGetVidmem(pScrn);
+ 
+ 	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "hardware: %s (video memory:"
+-		   " %dkB)\n", fbdevHWGetName(pScrn), pScrn->videoRam/1024);
++		   " %dkB)\n", my_fbdevHWGetName(pScrn), pScrn->videoRam/1024);
+ 
+ 	/* handle options */
+ 	xf86CollectOptions(pScrn, NULL);
+@@ -591,7 +662,7 @@ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
+ 	/* select video modes */
+ 
+ 	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "checking modes against framebuffer device...\n");
+-	fbdevHWSetVideoModes(pScrn);
++	my_fbdevHWSetVideoModes(pScrn);
+ 
+ 	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "checking modes against monitor...\n");
+ 	{
+@@ -606,7 +677,7 @@ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
+ 	}
+ 
+ 	if (NULL == pScrn->modes)
+-		fbdevHWUseBuildinMode(pScrn);
++		my_fbdevHWUseBuildinMode(pScrn);
+ 	pScrn->currentMode = pScrn->modes;
+ 
+ 	/* First approximation, may be refined in ScreenInit */
+@@ -618,7 +689,7 @@ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
+ 	xf86SetDpi(pScrn, 0, 0);
+ 
+ 	/* Load bpp-specific modules */
+-	switch ((type = fbdevHWGetType(pScrn)))
++	switch ((type = my_fbdevHWGetType(pScrn)))
+ 	{
+ 	case FBDEVHW_PACKED_PIXELS:
+ 		switch (pScrn->bitsPerPixel)
+@@ -671,6 +742,7 @@ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
+ 			FBDevFreeRec(pScrn);
+ 			return FALSE;
+ 		}
++                bind_shadow();
+ 	}
+ 
+ 	TRACE_EXIT("PreInit");
+@@ -681,20 +753,20 @@ static void
+ fbdevUpdate32to24(ScreenPtr pScreen, shadowBufPtr pBuf)
+ {
+ #ifdef HAVE_SHADOW_3224
+-    shadowUpdate32to24(pScreen, pBuf);
++    my_shadowUpdate32to24(pScreen, pBuf);
+ #endif
+ }
+ 
+ static void
+ fbdevUpdateRotatePacked(ScreenPtr pScreen, shadowBufPtr pBuf)
+ {
+-    shadowUpdateRotatePacked(pScreen, pBuf);
++    my_shadowUpdateRotatePacked(pScreen, pBuf);
+ }
+ 
+ static void
+ fbdevUpdatePacked(ScreenPtr pScreen, shadowBufPtr pBuf)
+ {
+-    shadowUpdatePacked(pScreen, pBuf);
++    my_shadowUpdatePacked(pScreen, pBuf);
+ }
+ 
+ static Bool
+@@ -722,7 +794,7 @@ FBDevCreateScreenResources(ScreenPtr pScreen)
+     else
+         update = fbdevUpdatePacked;
+ 
+-    if (!shadowAdd(pScreen, pPixmap, update, FBDevWindowLinear, fPtr->rotate,
++    if (!my_shadowAdd(pScreen, pPixmap, update, FBDevWindowLinear, fPtr->rotate,
+                    NULL)) {
+ 	return FALSE;
+     }
+@@ -736,7 +808,7 @@ FBDevShadowInit(ScreenPtr pScreen)
+     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+     FBDevPtr fPtr = FBDEVPTR(pScrn);
+     
+-    if (!shadowSetup(pScreen)) {
++    if (!my_shadowSetup(pScreen)) {
+ 	return FALSE;
+     }
+ 
+@@ -749,19 +821,19 @@ FBDevShadowInit(ScreenPtr pScreen)
+ static void
+ fbdevLoadPalette(ScrnInfoPtr pScrn, int num, int *i, LOCO *col, VisualPtr pVis)
+ {
+-    fbdevHWLoadPalette(pScrn, num, i, col, pVis);
++    my_fbdevHWLoadPalette(pScrn, num, i, col, pVis);
+ }
+ 
+ static void
+ fbdevDPMSSet(ScrnInfoPtr pScrn, int mode, int flags)
+ {
+-    fbdevHWDPMSSet(pScrn, mode, flags);
++    my_fbdevHWDPMSSet(pScrn, mode, flags);
+ }
+ 
+ static Bool
+ fbdevSaveScreen(ScreenPtr pScreen, int mode)
+ {
+-    return fbdevHWSaveScreen(pScreen, mode);
++    return my_fbdevHWSaveScreen(pScreen, mode);
+ }
+ 
+ static Bool
+@@ -773,6 +845,8 @@ FBDevScreenInit(SCREEN_INIT_ARGS_DECL)
+ 	int init_picture = 0;
+ 	int ret, flags;
+ 	int type;
++        typeof(fbScreenInit) *my_fbScreenInit = LoaderSymbol("fbScreenInit");
++        typeof(fbPictureInit) *my_fbPictureInit = LoaderSymbol("fbPictureInit");
+ 
+ 	TRACE_ENTER("FBDevScreenInit");
+ 
+@@ -786,21 +860,21 @@ FBDevScreenInit(SCREEN_INIT_ARGS_DECL)
+ 	       pScrn->offset.red,pScrn->offset.green,pScrn->offset.blue);
+ #endif
+ 
+-	if (NULL == (fPtr->fbmem = fbdevHWMapVidmem(pScrn))) {
++	if (NULL == (fPtr->fbmem = my_fbdevHWMapVidmem(pScrn))) {
+ 	        xf86DrvMsg(pScrn->scrnIndex,X_ERROR,"mapping of video memory"
+ 			   " failed\n");
+ 		return FALSE;
+ 	}
+-	fPtr->fboff = fbdevHWLinearOffset(pScrn);
++	fPtr->fboff = my_fbdevHWLinearOffset(pScrn);
+ 
+-	fbdevHWSave(pScrn);
++	my_fbdevHWSave(pScrn);
+ 
+-	if (!fbdevHWModeInit(pScrn, pScrn->currentMode)) {
++	if (!my_fbdevHWModeInit(pScrn, pScrn->currentMode)) {
+ 		xf86DrvMsg(pScrn->scrnIndex,X_ERROR,"mode initialization failed\n");
+ 		return FALSE;
+ 	}
+-	fbdevHWSaveScreen(pScreen, SCREEN_SAVER_ON);
+-	fbdevHWAdjustFrame(ADJUST_FRAME_ARGS(pScrn, 0, 0));
++	my_fbdevHWSaveScreen(pScreen, SCREEN_SAVER_ON);
++	my_fbdevHWAdjustFrame(ADJUST_FRAME_ARGS(pScrn, 0, 0));
+ 
+ 	/* mi layer */
+ 	miClearVisualTypes();
+@@ -834,7 +908,7 @@ FBDevScreenInit(SCREEN_INIT_ARGS_DECL)
+ 	} else if (!fPtr->shadowFB) {
+ 		/* FIXME: this doesn't work for all cases, e.g. when each scanline
+ 			has a padding which is independent from the depth (controlfb) */
+-		pScrn->displayWidth = fbdevHWGetLineLength(pScrn) /
++		pScrn->displayWidth = my_fbdevHWGetLineLength(pScrn) /
+ 				      (pScrn->bitsPerPixel / 8);
+ 
+ 		if (pScrn->displayWidth != pScrn->virtualX) {
+@@ -862,7 +936,7 @@ FBDevScreenInit(SCREEN_INIT_ARGS_DECL)
+ 	    }
+ 	}
+ 
+-	switch ((type = fbdevHWGetType(pScrn)))
++	switch ((type = my_fbdevHWGetType(pScrn)))
+ 	{
+ 	case FBDEVHW_PACKED_PIXELS:
+ 		switch (pScrn->bitsPerPixel) {
+@@ -870,7 +944,7 @@ FBDevScreenInit(SCREEN_INIT_ARGS_DECL)
+ 		case 16:
+ 		case 24:
+ 		case 32:
+-			ret = fbScreenInit(pScreen, fPtr->shadowFB ? fPtr->shadow
++			ret = my_fbScreenInit(pScreen, fPtr->shadowFB ? fPtr->shadow
+ 					   : fPtr->fbstart, pScrn->virtualX,
+ 					   pScrn->virtualY, pScrn->xDpi,
+ 					   pScrn->yDpi, pScrn->displayWidth,
+@@ -935,7 +1009,7 @@ FBDevScreenInit(SCREEN_INIT_ARGS_DECL)
+ 	}
+ 
+ 	/* must be after RGB ordering fixed */
+-	if (init_picture && !fbPictureInit(pScreen, NULL, 0))
++	if (init_picture && !my_fbPictureInit(pScreen, NULL, 0))
+ 		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+ 			   "Render extension initialisation failed\n");
+ 
+@@ -966,7 +1040,7 @@ FBDevScreenInit(SCREEN_INIT_ARGS_DECL)
+ 	miDCInitialize(pScreen, xf86GetPointerScreenFuncs());
+ 
+ 	/* colormap */
+-	switch ((type = fbdevHWGetType(pScrn)))
++	switch ((type = my_fbdevHWGetType(pScrn)))
+ 	{
+ 	/* XXX It would be simpler to use miCreateDefColormap() in all cases. */
+ 	case FBDEVHW_PACKED_PIXELS:
+@@ -1032,10 +1106,10 @@ FBDevCloseScreen(CLOSE_SCREEN_ARGS_DECL)
+ 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+ 	FBDevPtr fPtr = FBDEVPTR(pScrn);
+ 	
+-	fbdevHWRestore(pScrn);
+-	fbdevHWUnmapVidmem(pScrn);
++	my_fbdevHWRestore(pScrn);
++	my_fbdevHWUnmapVidmem(pScrn);
+ 	if (fPtr->shadow) {
+-	    shadowRemove(pScreen, pScreen->GetScreenPixmap(pScreen));
++	    my_shadowRemove(pScreen, pScreen->GetScreenPixmap(pScreen));
+ 	    free(fPtr->shadow);
+ 	    fPtr->shadow = NULL;
+ 	}
+@@ -1070,7 +1144,7 @@ FBDevWindowLinear(ScreenPtr pScreen, CARD32 row, CARD32 offset, int mode,
+     if (fPtr->lineLength)
+       *size = fPtr->lineLength;
+     else
+-      *size = fPtr->lineLength = fbdevHWGetLineLength(pScrn);
++      *size = fPtr->lineLength = my_fbdevHWGetLineLength(pScrn);
+ 
+     return ((CARD8 *)fPtr->fbstart + row * fPtr->lineLength + offset);
+ }
+@@ -1225,7 +1299,7 @@ FBDevDGAAddModes(ScrnInfoPtr pScrn)
+ 	if (fPtr->lineLength)
+ 	  pDGAMode->bytesPerScanline = fPtr->lineLength;
+ 	else
+-	  pDGAMode->bytesPerScanline = fPtr->lineLength = fbdevHWGetLineLength(pScrn);
++	  pDGAMode->bytesPerScanline = fPtr->lineLength = my_fbdevHWGetLineLength(pScrn);
+ 
+ 	pDGAMode->imageWidth = pMode->HDisplay;
+ 	pDGAMode->imageHeight =  pMode->VDisplay;
+-- 
+2.34.1
+

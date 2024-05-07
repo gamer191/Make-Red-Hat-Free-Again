@@ -1,0 +1,12 @@
+diff -up ./build.xml.fix2 ./build.xml
+--- ./build.xml.fix2	2020-06-24 14:11:03.342338406 -0400
++++ ./build.xml	2020-06-24 14:14:03.000100028 -0400
+@@ -447,7 +447,7 @@ Authors:
+       author='true' version='true'
+       windowtitle='XML Standard API' doctitle='XML Standard API'
+       bottom='${copyright}'
+-      additionalparam='${additional.param}'
++      additionalparam='--patch-module jdk.xml.dom=${build.src}/org/w3c/dom/html ${additional.param}'
+       />
+     <mkdir dir='${build.dir}/docs/javadocs/xni'/>
+     <javadoc packagenames='org.apache.xerces.xni.*'

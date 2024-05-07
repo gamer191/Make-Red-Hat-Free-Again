@@ -1,0 +1,29 @@
+From 6d293e77e4470d0e5df57c29eeb6e1ed5cb619e8 Mon Sep 17 00:00:00 2001
+From: Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
+Date: Fri, 18 Mar 2022 13:36:37 -0300
+Subject: [PATCH] screencast: Don't wrap restore data in another variant
+
+We were sending a variant with the wrong type. This was a
+fallout from the evolution of the xdg-desktop-portal work,
+which originally started as a 'v' variant, but then changed
+to '(suv)', and we didn't adapt properly
+
+See https://github.com/flatpak/xdg-desktop-portal/pull/730
+---
+ src/screencast.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/screencast.c b/src/screencast.c
+index 5f9a738..6b0014a 100644
+--- a/src/screencast.c
++++ b/src/screencast.c
+@@ -229,8 +229,7 @@ on_gnome_screen_cast_session_ready (GnomeScreenCastSession *gnome_screen_cast_se
+         {
+           g_variant_builder_add (&results_builder, "{sv}", "persist_mode",
+                                  g_variant_new_uint32 (screen_cast_session->persist_mode));
+-          g_variant_builder_add (&results_builder, "{sv}", "restore_data",
+-                                 g_variant_new_variant (restore_data));
++          g_variant_builder_add (&results_builder, "{sv}", "restore_data", restore_data);
+         }
+     }
+ 

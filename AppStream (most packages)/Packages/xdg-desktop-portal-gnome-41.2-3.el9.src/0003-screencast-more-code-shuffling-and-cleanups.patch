@@ -1,0 +1,452 @@
+From 367f05b980ab780ae3b3380164f2135ce4f487fa Mon Sep 17 00:00:00 2001
+From: Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
+Date: Wed, 10 Nov 2021 16:04:59 -0300
+Subject: [PATCH] screencast: More code shuffling and cleanups
+
+No funcional changes.
+---
+ src/screencast.c | 350 +++++++++++++++++++++++------------------------
+ 1 file changed, 168 insertions(+), 182 deletions(-)
+
+diff --git a/src/screencast.c b/src/screencast.c
+index 98390ab..4ba67aa 100644
+--- a/src/screencast.c
++++ b/src/screencast.c
+@@ -82,10 +82,6 @@ start_session (ScreenCastSession *session,
+                GVariant *selections,
+                GError **error);
+ 
+-static void
+-cancel_start_session (ScreenCastSession *session,
+-                      int response);
+-
+ static gboolean
+ is_screen_cast_session (Session *session)
+ {
+@@ -108,10 +104,23 @@ screen_cast_dialog_handle_close (ScreenCastDialogHandle *dialog_handle)
+   screen_cast_dialog_handle_free (dialog_handle);
+ }
+ 
++static void
++cancel_start_session (ScreenCastSession *screen_cast_session,
++                      int response)
++{
++  GVariantBuilder results_builder;
++
++  g_variant_builder_init (&results_builder, G_VARIANT_TYPE_VARDICT);
++  xdp_impl_screen_cast_complete_start (XDP_IMPL_SCREEN_CAST (impl),
++                                       screen_cast_session->start_invocation,
++                                       response,
++                                       g_variant_builder_end (&results_builder));
++}
++
+ static gboolean
+-handle_close (XdpImplRequest *object,
+-              GDBusMethodInvocation *invocation,
+-              ScreenCastDialogHandle *dialog_handle)
++on_request_handle_close_cb (XdpImplRequest         *object,
++                            GDBusMethodInvocation  *invocation,
++                            ScreenCastDialogHandle *dialog_handle)
+ {
+   cancel_start_session (dialog_handle->session, 2);
+ 
+@@ -121,10 +130,10 @@ handle_close (XdpImplRequest *object,
+ }
+ 
+ static void
+-screen_cast_dialog_done (GtkWidget *widget,
+-                         int dialog_response,
+-                         GVariant *selections,
+-                         ScreenCastDialogHandle *dialog_handle)
++on_screen_cast_dialog_done_cb (GtkWidget              *widget,
++                               int                     dialog_response,
++                               GVariant               *selections,
++                               ScreenCastDialogHandle *dialog_handle)
+ {
+   int response;
+ 
+@@ -165,10 +174,10 @@ screen_cast_dialog_done (GtkWidget *widget,
+ }
+ 
+ static ScreenCastDialogHandle *
+-create_screen_cast_dialog (ScreenCastSession *session,
++create_screen_cast_dialog (ScreenCastSession     *session,
+                            GDBusMethodInvocation *invocation,
+-                           Request *request,
+-                           const char *parent_window)
++                           Request               *request,
++                           const char            *parent_window)
+ {
+   ScreenCastDialogHandle *dialog_handle;
+   ExternalWindow *external_parent;
+@@ -210,10 +219,9 @@ create_screen_cast_dialog (ScreenCastSession *session,
+   dialog_handle->dialog = dialog;
+ 
+   g_signal_connect (request, "handle-close",
+-                    G_CALLBACK (handle_close), dialog_handle);
+-
++                    G_CALLBACK (on_request_handle_close_cb), dialog_handle);
+   g_signal_connect (dialog, "done",
+-                    G_CALLBACK (screen_cast_dialog_done), dialog_handle);
++                    G_CALLBACK (on_screen_cast_dialog_done_cb), dialog_handle);
+ 
+   gtk_widget_realize (dialog);
+ 
+@@ -226,145 +234,6 @@ create_screen_cast_dialog (ScreenCastSession *session,
+   return dialog_handle;
+ }
+ 
+-static ScreenCastSession *
+-screen_cast_session_new (const char *app_id,
+-                         const char *session_handle)
+-{
+-  ScreenCastSession *screen_cast_session;
+-
+-  screen_cast_session = g_object_new (screen_cast_session_get_type (),
+-                                      "id", session_handle,
+-                                      NULL);
+-
+-  return screen_cast_session;
+-}
+-
+-static gboolean
+-handle_create_session (XdpImplScreenCast *object,
+-                       GDBusMethodInvocation *invocation,
+-                       const char *arg_handle,
+-                       const char *arg_session_handle,
+-                       const char *arg_app_id,
+-                       GVariant *arg_options)
+-{
+-  g_autoptr(GError) error = NULL;
+-  int response;
+-  Session *session;
+-  GVariantBuilder results_builder;
+-
+-  session = (Session *)screen_cast_session_new (arg_app_id,
+-                                                arg_session_handle);
+-
+-  if (!session_export (session,
+-                       g_dbus_method_invocation_get_connection (invocation),
+-                       &error))
+-    {
+-      g_clear_object (&session);
+-      g_warning ("Failed to create screen cast session: %s", error->message);
+-      response = 2;
+-      goto out;
+-    }
+-
+-  response = 0;
+-
+-out:
+-  g_variant_builder_init (&results_builder, G_VARIANT_TYPE_VARDICT);
+-  xdp_impl_screen_cast_complete_create_session (object,
+-                                                invocation,
+-                                                response,
+-                                                g_variant_builder_end (&results_builder));
+-
+-  return TRUE;
+-}
+-
+-static gboolean
+-handle_select_sources (XdpImplScreenCast *object,
+-                       GDBusMethodInvocation *invocation,
+-                       const char *arg_handle,
+-                       const char *arg_session_handle,
+-                       const char *arg_app_id,
+-                       GVariant *arg_options)
+-{
+-  Session *session;
+-  int response;
+-  uint32_t types;
+-  gboolean multiple;
+-  ScreenCastCursorMode cursor_mode;
+-  ScreenCastSelection select;
+-  GVariantBuilder results_builder;
+-  GVariant *results;
+-
+-  session = lookup_session (arg_session_handle);
+-  if (!session)
+-    {
+-      g_warning ("Tried to select sources on non-existing %s", arg_session_handle);
+-      response = 2;
+-      goto out;
+-    }
+-
+-  if (!g_variant_lookup (arg_options, "multiple", "b", &multiple))
+-    multiple = FALSE;
+-
+-  if (!g_variant_lookup (arg_options, "types", "u", &types))
+-    types = SCREEN_CAST_SOURCE_TYPE_MONITOR;
+-
+-  if (!(types & (SCREEN_CAST_SOURCE_TYPE_MONITOR |
+-                 SCREEN_CAST_SOURCE_TYPE_WINDOW)))
+-    {
+-      g_warning ("Unknown screen cast source type");
+-      response = 2;
+-      goto out;
+-    }
+-
+-  if (!g_variant_lookup (arg_options, "cursor_mode", "u", &cursor_mode))
+-    cursor_mode = SCREEN_CAST_CURSOR_MODE_HIDDEN;
+-
+-  switch (cursor_mode)
+-    {
+-    case SCREEN_CAST_CURSOR_MODE_HIDDEN:
+-    case SCREEN_CAST_CURSOR_MODE_EMBEDDED:
+-    case SCREEN_CAST_CURSOR_MODE_METADATA:
+-      break;
+-    default:
+-      g_warning ("Unknown screen cast cursor mode");
+-      response = 2;
+-      goto out;
+-    }
+-
+-  select.multiple = multiple;
+-  select.source_types = types;
+-  select.cursor_mode = cursor_mode;
+-
+-  if (is_screen_cast_session (session))
+-    {
+-      ScreenCastSession *screen_cast_session = (ScreenCastSession *)session;
+-
+-      screen_cast_session->select = select;
+-      response = 0;
+-    }
+-  else if (is_remote_desktop_session (session))
+-    {
+-      RemoteDesktopSession *remote_desktop_session =
+-        (RemoteDesktopSession *)session;
+-
+-      remote_desktop_session_sources_selected (remote_desktop_session, &select);
+-      response = 0;
+-    }
+-  else
+-    {
+-      g_warning ("Tried to select sources on invalid session type");
+-      response = 2;
+-    }
+-
+-out:
+-  g_variant_builder_init (&results_builder, G_VARIANT_TYPE_VARDICT);
+-  results = g_variant_builder_end (&results_builder);
+-  xdp_impl_screen_cast_complete_select_sources (object, invocation,
+-                                                response, results);
+-
+-  return TRUE;
+-}
+-
+ static void
+ start_done (ScreenCastSession *screen_cast_session)
+ {
+@@ -391,14 +260,14 @@ start_done (ScreenCastSession *screen_cast_session)
+ 
+ static void
+ on_gnome_screen_cast_session_ready (GnomeScreenCastSession *gnome_screen_cast_session,
+-                                    ScreenCastSession *screen_cast_session)
++                                    ScreenCastSession      *screen_cast_session)
+ {
+   start_done (screen_cast_session);
+ }
+ 
+ static void
+ on_gnome_screen_cast_session_closed (GnomeScreenCastSession *gnome_screen_cast_session,
+-                                     ScreenCastSession *screen_cast_session)
++                                     ScreenCastSession      *screen_cast_session)
+ {
+   session_close ((Session *)screen_cast_session);
+ }
+@@ -441,27 +310,14 @@ start_session (ScreenCastSession *screen_cast_session,
+   return TRUE;
+ }
+ 
+-static void
+-cancel_start_session (ScreenCastSession *screen_cast_session,
+-                      int response)
+-{
+-  GVariantBuilder results_builder;
+-
+-  g_variant_builder_init (&results_builder, G_VARIANT_TYPE_VARDICT);
+-  xdp_impl_screen_cast_complete_start (XDP_IMPL_SCREEN_CAST (impl),
+-                                       screen_cast_session->start_invocation,
+-                                       response,
+-                                       g_variant_builder_end (&results_builder));
+-}
+-
+ static gboolean
+-handle_start (XdpImplScreenCast *object,
++handle_start (XdpImplScreenCast     *object,
+               GDBusMethodInvocation *invocation,
+-              const char *arg_handle,
+-              const char *arg_session_handle,
+-              const char *arg_app_id,
+-              const char *arg_parent_window,
+-              GVariant *arg_options)
++              const char            *arg_handle,
++              const char            *arg_session_handle,
++              const char            *arg_app_id,
++              const char            *arg_parent_window,
++              GVariant              *arg_options)
+ {
+   const char *sender;
+   g_autoptr(Request) request = NULL;
+@@ -507,6 +363,133 @@ err:
+   return TRUE;
+ }
+ 
++static gboolean
++handle_select_sources (XdpImplScreenCast     *object,
++                       GDBusMethodInvocation *invocation,
++                       const char            *arg_handle,
++                       const char            *arg_session_handle,
++                       const char            *arg_app_id,
++                       GVariant              *arg_options)
++{
++  Session *session;
++  int response;
++  uint32_t types;
++  gboolean multiple;
++  ScreenCastCursorMode cursor_mode;
++  ScreenCastSelection select;
++  GVariantBuilder results_builder;
++  GVariant *results;
++
++  session = lookup_session (arg_session_handle);
++  if (!session)
++    {
++      g_warning ("Tried to select sources on non-existing %s", arg_session_handle);
++      response = 2;
++      goto out;
++    }
++
++  if (!g_variant_lookup (arg_options, "multiple", "b", &multiple))
++    multiple = FALSE;
++
++  if (!g_variant_lookup (arg_options, "types", "u", &types))
++    types = SCREEN_CAST_SOURCE_TYPE_MONITOR;
++
++  if (!(types & (SCREEN_CAST_SOURCE_TYPE_MONITOR |
++                 SCREEN_CAST_SOURCE_TYPE_WINDOW)))
++    {
++      g_warning ("Unknown screen cast source type");
++      response = 2;
++      goto out;
++    }
++
++  if (!g_variant_lookup (arg_options, "cursor_mode", "u", &cursor_mode))
++    cursor_mode = SCREEN_CAST_CURSOR_MODE_HIDDEN;
++
++  switch (cursor_mode)
++    {
++    case SCREEN_CAST_CURSOR_MODE_HIDDEN:
++    case SCREEN_CAST_CURSOR_MODE_EMBEDDED:
++    case SCREEN_CAST_CURSOR_MODE_METADATA:
++      break;
++    default:
++      g_warning ("Unknown screen cast cursor mode");
++      response = 2;
++      goto out;
++    }
++
++  select.multiple = multiple;
++  select.source_types = types;
++  select.cursor_mode = cursor_mode;
++
++  if (is_screen_cast_session (session))
++    {
++      ScreenCastSession *screen_cast_session = (ScreenCastSession *)session;
++
++      screen_cast_session->select = select;
++      response = 0;
++    }
++  else if (is_remote_desktop_session (session))
++    {
++      RemoteDesktopSession *remote_desktop_session =
++        (RemoteDesktopSession *)session;
++
++      remote_desktop_session_sources_selected (remote_desktop_session, &select);
++      response = 0;
++    }
++  else
++    {
++      g_warning ("Tried to select sources on invalid session type");
++      response = 2;
++    }
++
++out:
++  g_variant_builder_init (&results_builder, G_VARIANT_TYPE_VARDICT);
++  results = g_variant_builder_end (&results_builder);
++  xdp_impl_screen_cast_complete_select_sources (object, invocation,
++                                                response, results);
++
++  return TRUE;
++}
++
++static gboolean
++handle_create_session (XdpImplScreenCast     *object,
++                       GDBusMethodInvocation *invocation,
++                       const char            *arg_handle,
++                       const char            *arg_session_handle,
++                       const char            *arg_app_id,
++                       GVariant              *arg_options)
++{
++  g_autoptr(GError) error = NULL;
++  int response;
++  Session *session;
++  GVariantBuilder results_builder;
++
++  session = g_object_new (screen_cast_session_get_type (),
++                          "id", arg_session_handle,
++                          NULL);
++
++  if (!session_export (session,
++                       g_dbus_method_invocation_get_connection (invocation),
++                       &error))
++    {
++      g_clear_object (&session);
++      g_warning ("Failed to create screen cast session: %s", error->message);
++      response = 2;
++      goto out;
++    }
++
++  response = 0;
++
++out:
++  g_variant_builder_init (&results_builder, G_VARIANT_TYPE_VARDICT);
++  xdp_impl_screen_cast_complete_create_session (object,
++                                                invocation,
++                                                response,
++                                                g_variant_builder_end (&results_builder));
++
++  return TRUE;
++}
++
+ static void
+ on_gnome_screen_cast_enabled (GnomeScreenCast *gnome_screen_cast)
+ {
+@@ -535,9 +518,12 @@ on_gnome_screen_cast_enabled (GnomeScreenCast *gnome_screen_cast)
+ 
+   available_cursor_modes = SCREEN_CAST_CURSOR_MODE_NONE;
+   if (gnome_api_version >= 2)
+-    available_cursor_modes |= (SCREEN_CAST_CURSOR_MODE_HIDDEN |
+-                               SCREEN_CAST_CURSOR_MODE_EMBEDDED |
+-                               SCREEN_CAST_CURSOR_MODE_METADATA);
++    {
++      available_cursor_modes |= SCREEN_CAST_CURSOR_MODE_HIDDEN |
++                                SCREEN_CAST_CURSOR_MODE_EMBEDDED |
++                                SCREEN_CAST_CURSOR_MODE_METADATA;
++    }
++
+   g_object_set (G_OBJECT (impl),
+                 "available-cursor-modes", available_cursor_modes,
+                 NULL);
+@@ -620,8 +606,8 @@ screen_cast_session_class_init (ScreenCastSessionClass *klass)
+ }
+ 
+ gboolean
+-screen_cast_init (GDBusConnection *connection,
+-                  GError **error)
++screen_cast_init (GDBusConnection  *connection,
++                  GError          **error)
+ {
+   impl_connection = connection;
+   gnome_screen_cast = gnome_screen_cast_new (connection);

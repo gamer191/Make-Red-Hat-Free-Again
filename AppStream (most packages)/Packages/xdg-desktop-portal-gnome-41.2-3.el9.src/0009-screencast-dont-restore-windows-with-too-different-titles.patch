@@ -1,0 +1,30 @@
+From 4251d584b010c130f278ba22869d4c9a9d19ebdb Mon Sep 17 00:00:00 2001
+From: Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
+Date: Fri, 18 Mar 2022 13:32:11 -0300
+Subject: [PATCH] screencast: Don't restore windows with too different titles
+
+If the title is too different, don't restore it. The "too
+different" part is arbitrarily chosen to be half of the
+title's length. If this is too strict, we can review it
+later.
+---
+ src/screencast.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/screencast.c b/src/screencast.c
+index c46a4a8..5f9a738 100644
+--- a/src/screencast.c
++++ b/src/screencast.c
+@@ -455,6 +455,12 @@ find_best_window_by_app_id_and_title (const char *app_id,
+         }
+     }
+ 
++  /* If even the best match's window title is too different, don't
++   * restore it.
++   */
++  if (best_match_distance > strlen (title) / 2)
++    return NULL;
++
+   return best_match;
+ }
+ 

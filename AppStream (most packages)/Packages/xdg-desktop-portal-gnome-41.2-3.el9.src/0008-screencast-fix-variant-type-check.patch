@@ -1,0 +1,24 @@
+From df8ddc91a6ab1254b22de8f092f07ce9aca4ea3c Mon Sep 17 00:00:00 2001
+From: Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
+Date: Thu, 25 Nov 2021 10:27:07 -0300
+Subject: [PATCH] screencast: Fix variant type check
+
+The restore data type is not the (suv) variant, but rather the
+GNOME-specific variant format.
+---
+ src/screencast.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/screencast.c b/src/screencast.c
+index 3be8337..c46a4a8 100644
+--- a/src/screencast.c
++++ b/src/screencast.c
+@@ -698,7 +698,7 @@ handle_select_sources (XdpImplScreenCast     *object,
+ 
+   if (g_variant_lookup (arg_options, "restore_data", "(suv)", &provider, &version, &restore_data))
+     {
+-      if (!g_variant_check_format_string (restore_data, "(suv)", FALSE))
++      if (!g_variant_check_format_string (restore_data, RESTORE_VARIANT_TYPE, FALSE))
+         {
+           g_warning ("Cannot parse restore data, ignoring");
+           goto out;

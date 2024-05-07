@@ -1,0 +1,23 @@
+From a7c03eb9642a244f5623bf5bbe0e29f759554567 Mon Sep 17 00:00:00 2001
+From: Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
+Date: Wed, 10 Nov 2021 15:52:37 -0300
+Subject: [PATCH] screencast: Cleanup unnecessary forward declaration
+
+---
+ src/screencast.c | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/src/screencast.c b/src/screencast.c
+index 38d1d05..98390ab 100644
+--- a/src/screencast.c
++++ b/src/screencast.c
+@@ -77,9 +77,6 @@ static GnomeScreenCast *gnome_screen_cast;
+ GType screen_cast_session_get_type (void);
+ G_DEFINE_TYPE (ScreenCastSession, screen_cast_session, session_get_type ())
+ 
+-static void
+-start_done (ScreenCastSession *session);
+-
+ static gboolean
+ start_session (ScreenCastSession *session,
+                GVariant *selections,

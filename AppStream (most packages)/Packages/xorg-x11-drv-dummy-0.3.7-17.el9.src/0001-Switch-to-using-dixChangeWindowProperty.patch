@@ -1,0 +1,33 @@
+From 8706f60ab457867c120dd44e812b8fadc2be7179 Mon Sep 17 00:00:00 2001
+From: Peter Hutterer <peter.hutterer@who-t.net>
+Date: Thu, 14 Jan 2016 10:30:40 +1000
+Subject: [PATCH xf86-video-dummy] Switch to using dixChangeWindowProperty
+
+eb36924ead40564325aa56d54a973dc8fb4eae83 removed ChangeWindowProperty from the
+server.
+
+Signed-off-by: Peter Hutterer <peter.hutterer@who-t.net>
+Reviewed-by: Jon Turney <jon.turney@dronecode.org.uk>
+---
+ src/dummy_driver.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/dummy_driver.c b/src/dummy_driver.c
+index 470e125..9d4d5bf 100644
+--- a/src/dummy_driver.c
++++ b/src/dummy_driver.c
+@@ -790,8 +790,9 @@ DUMMYCreateWindow(WindowPtr pWin)
+         if (! ValidAtom(VFB_PROP))
+             VFB_PROP = MakeAtom(VFB_PROP_NAME, strlen(VFB_PROP_NAME), 1);
+ 
+-        ret = ChangeWindowProperty(pWinRoot, VFB_PROP, XA_STRING, 
+-		8, PropModeReplace, (int)4, (pointer)"TRUE", FALSE);
++        ret = dixChangeWindowProperty(serverClient, pWinRoot, VFB_PROP,
++                                      XA_STRING, 8, PropModeReplace,
++                                      (int)4, (pointer)"TRUE", FALSE);
+ 	if( ret != Success)
+ 		ErrorF("Could not set VFB root window property");
+         dPtr->prop = TRUE;
+-- 
+2.9.3
+

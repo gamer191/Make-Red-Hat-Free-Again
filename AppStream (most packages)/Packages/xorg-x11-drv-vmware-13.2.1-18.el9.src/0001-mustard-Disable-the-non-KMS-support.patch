@@ -1,0 +1,60 @@
+From 515aad74707ed978b7ed3744d604b6520df18b3f Mon Sep 17 00:00:00 2001
+From: Adam Jackson <ajax@redhat.com>
+Date: Wed, 23 Feb 2022 14:39:43 -0500
+Subject: [PATCH xf86-video-vmware] mustard: Disable the non-KMS support
+
+We don't support it in RHEL and should never be able to hit this. That
+part of the driver is the only part requiring vgahw or shadowfb symbols,
+neither of which are present at module load time, so the #if 0 work here
+keeps any of those symbol references from being linked into the final
+driver, after which we can build this driver with full hardening
+cflags.
+---
+ src/vmware.c           | 2 ++
+ src/vmware_bootstrap.c | 3 ++-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/vmware.c b/src/vmware.c
+index 12f12ed..1f6007f 100644
+--- a/src/vmware.c
++++ b/src/vmware.c
+@@ -1642,6 +1642,7 @@ VMWAREValidMode(SCRN_ARG_TYPE arg, DisplayModePtr mode, Bool verbose, int flags)
+     return MODE_OK;
+ }
+ 
++#if 0
+ void
+ vmwlegacy_hookup(ScrnInfoPtr pScrn)
+ {
+@@ -1653,6 +1654,7 @@ vmwlegacy_hookup(ScrnInfoPtr pScrn)
+     pScrn->FreeScreen = VMWAREFreeScreen;
+     pScrn->ValidMode = VMWAREValidMode;
+ }
++#endif
+ 
+ #ifdef XFree86LOADER
+ void
+diff --git a/src/vmware_bootstrap.c b/src/vmware_bootstrap.c
+index d7ab070..30e6b86 100644
+--- a/src/vmware_bootstrap.c
++++ b/src/vmware_bootstrap.c
+@@ -239,7 +239,6 @@ VMwarePreinitStub(ScrnInfoPtr pScrn, int flags)
+ #else
+     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+ 	       "Driver was compiled without KMS- and 3D support.\n");
+-#endif /* defined(BUILD_VMWGFX) */
+     xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+ 	       "Disabling 3D support.\n");
+     xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+@@ -259,6 +258,8 @@ VMwarePreinitStub(ScrnInfoPtr pScrn, int flags)
+ 					      DEVICE_ID(pciInfo));
+ 
+     return (*pScrn->PreInit)(pScrn, flags);
++#endif /* defined(BUILD_VMWGFX) */
++    return FALSE;
+ };
+ 
+ #if XSERVER_LIBPCIACCESS
+-- 
+2.34.1
+

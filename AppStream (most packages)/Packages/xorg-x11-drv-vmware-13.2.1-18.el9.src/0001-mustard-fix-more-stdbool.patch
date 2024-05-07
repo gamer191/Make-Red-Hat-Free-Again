@@ -1,0 +1,19 @@
+diff -up xf86-video-vmware-13.2.1/vmwgfx/vmwgfx_output.c.jx xf86-video-vmware-13.2.1/vmwgfx/vmwgfx_output.c
+--- xf86-video-vmware-13.2.1/vmwgfx/vmwgfx_output.c.jx	2016-11-15 23:06:33.000000000 -0500
++++ xf86-video-vmware-13.2.1/vmwgfx/vmwgfx_output.c	2022-02-23 15:04:31.494921797 -0500
+@@ -33,7 +33,6 @@
+ 
+ #include "xorg-server.h"
+ #include <xf86drm.h>
+-#include <xf86drmMode.h>
+ #include <xf86str.h>
+ #include <randrstr.h>
+ #include <xf86Crtc.h>
+@@ -48,6 +47,7 @@
+ #endif
+ 
+ #include "vmwgfx_driver.h"
++#include <xf86drmMode.h>
+ 
+ /**
+  * struct output_prop - Structure representing an output property.

@@ -1,0 +1,746 @@
+From 0b73fb82ccf178d496bd8da5b8c0a6906b14d030 Mon Sep 17 00:00:00 2001
+From: Rex Dieter <rdieter@gmail.com>
+Date: Sun, 13 May 2018 08:40:55 -0500
+Subject: [PATCH 01/16] open for post 1.1.3 development
+
+---
+ ChangeLog                   | 3 +++
+ scripts/xdg-utils-common.in | 2 +-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index c9eaeea..6864f88 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,6 @@
++=== xdg-utils 1.1.4 ===
++
++
+ === xdg-utils 1.1.3 ===
+ 
+ 2018-05-10
+diff --git a/scripts/xdg-utils-common.in b/scripts/xdg-utils-common.in
+index 9cfc8a3..a8abed8 100644
+--- a/scripts/xdg-utils-common.in
++++ b/scripts/xdg-utils-common.in
+@@ -245,7 +245,7 @@ check_common_commands()
+             ;;
+ 
+             --version)
+-            echo "@NAME@ 1.1.3"
++            echo "@NAME@ 1.1.3+"
+             exit_success
+             ;;
+         esac
+-- 
+2.33.1
+
+
+From 31525d3855f876ddf2e29091b2e8d376f923e09e Mon Sep 17 00:00:00 2001
+From: Rex Dieter <rdieter@gmail.com>
+Date: Thu, 24 May 2018 14:40:53 -0500
+Subject: [PATCH 02/16] xdg-open: better pcmanfm check (BR106636,BR106161)
+
+---
+ ChangeLog           | 2 ++
+ scripts/xdg-open.in | 2 +-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 6864f88..3eed7c4 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,5 +1,7 @@
+ === xdg-utils 1.1.4 ===
+ 
++2018-05-24
++   * xdg-open: better pcmanfm check (BR106636,BR106161)
+ 
+ === xdg-utils 1.1.3 ===
+ 
+diff --git a/scripts/xdg-open.in b/scripts/xdg-open.in
+index 630e63e..bf9da4c 100644
+--- a/scripts/xdg-open.in
++++ b/scripts/xdg-open.in
+@@ -451,7 +451,7 @@ open_lxde()
+ {
+ 
+     # pcmanfm only knows how to handle file:// urls and filepaths, it seems.
+-    if pcmanfm --help >/dev/null 2>&1 -a is_file_url_or_path "$1"; then
++    if pcmanfm --help >/dev/null 2>&1 && is_file_url_or_path "$1"; then
+         local file="$(file_url_to_path "$1")"
+ 
+         # handle relative paths
+-- 
+2.33.1
+
+
+From 56991bc165577f011f9ad7ca721c5a5134710e33 Mon Sep 17 00:00:00 2001
+From: Alberto Salvia Novella <es20490446e@gmail.com>
+Date: Tue, 11 Sep 2018 02:26:39 +0200
+Subject: [PATCH 03/16] xdg-email: Support for Deepin
+
+---
+ ChangeLog                   | 6 ++++++
+ scripts/xdg-email.in        | 2 +-
+ scripts/xdg-open.in         | 6 +++---
+ scripts/xdg-utils-common.in | 5 ++---
+ 4 files changed, 12 insertions(+), 7 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 3eed7c4..1c6b4c1 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,9 @@
++=== xdg-utils 1.1.5 ===
++	
++2018-09-11 Alberto Salvia Novella <es20490446e@gmail.com>
++   * all: Deepin Desktop name standarised as "deepin"
++   * xdg-email: Support for Deepin (BR107877)
++
+ === xdg-utils 1.1.4 ===
+ 
+ 2018-05-24
+diff --git a/scripts/xdg-email.in b/scripts/xdg-email.in
+index 3614776..6db58ad 100644
+--- a/scripts/xdg-email.in
++++ b/scripts/xdg-email.in
+@@ -472,7 +472,7 @@ case "$DE" in
+     open_gnome "${mailto}"
+     ;;
+ 
+-    gnome3|cinnamon|lxde|mate)
++    gnome3|cinnamon|lxde|mate|deepin)
+     open_gnome3 "${mailto}"
+     ;;
+ 
+diff --git a/scripts/xdg-open.in b/scripts/xdg-open.in
+index bf9da4c..4928538 100644
+--- a/scripts/xdg-open.in
++++ b/scripts/xdg-open.in
+@@ -142,7 +142,7 @@ open_kde()
+     fi
+ }
+ 
+-open_dde()
++open_deepin()
+ {
+     if dde-open -version >/dev/null 2>&1; then
+         dde-open "$1"
+@@ -524,8 +524,8 @@ case "$DE" in
+     open_kde "$url"
+     ;;
+ 
+-    dde)
+-    open_dde "$url"
++    deepin)
++    open_deepin "$url"
+     ;;
+ 
+     gnome3|cinnamon)
+diff --git a/scripts/xdg-utils-common.in b/scripts/xdg-utils-common.in
+index a8abed8..7d2c49c 100644
+--- a/scripts/xdg-utils-common.in
++++ b/scripts/xdg-utils-common.in
+@@ -288,9 +288,8 @@ detectDE()
+          KDE)
+            DE=kde;
+            ;;
+-         # Deepin Desktop Environments
+-         DEEPIN|Deepin|deepin)
+-           DE=dde;
++         Deepin)
++           DE=deepin;
+            ;;
+          LXDE)
+            DE=lxde;
+-- 
+2.33.1
+
+
+From 74776910981b60877d25b1ab9587e5928af1e9c4 Mon Sep 17 00:00:00 2001
+From: Rex Dieter <rdieter@gmail.com>
+Date: Thu, 13 Sep 2018 10:48:28 -0500
+Subject: [PATCH 04/16] Restore matching of older deepin names
+
+Reverts a small part of prior commit
+56991bc165577f011f9ad7ca721c5a5134710e33
+---
+ scripts/xdg-utils-common.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/xdg-utils-common.in b/scripts/xdg-utils-common.in
+index 7d2c49c..b4333e2 100644
+--- a/scripts/xdg-utils-common.in
++++ b/scripts/xdg-utils-common.in
+@@ -288,7 +288,7 @@ detectDE()
+          KDE)
+            DE=kde;
+            ;;
+-         Deepin)
++         DEEPIN|Deepin|deepin)
+            DE=deepin;
+            ;;
+          LXDE)
+-- 
+2.33.1
+
+
+From 186966735dcccd61afde937118f27043bd084f57 Mon Sep 17 00:00:00 2001
+From: Richard Tollerton <rich.tollerton@ni.com>
+Date: Thu, 10 Jan 2019 15:41:08 -0600
+Subject: [PATCH 05/16] xdg-open: handle file://localhost/
+
+Presently, file://localhost/ URLs are totally unsupported: is_file_url_or_path
+correctly considers them files, but they are undecoded and hence
+check_input_file fails.
+
+While the standardization surrounding file: URLs is admittedly vague [1], AFAIK,
+*all* literature, and other implementations, unambiguously demonstrate that
+file://localhost/ should be equivalent to file:///:
+
+- The "File URI specification" explicitly linked to from the xdg-utils homepage [2]
+- RFC 8089 section 1.1
+- RFC 1738 section 3.10
+- Observed implementations of Windows `start`, macOS `open`, Firefox, Chrome, IE
+
+Fix this by adding some simple carve-outs for file://localhost specifically in
+file_url_to_path.
+
+[1] https://lists.freedesktop.org/archives/xdg/2004-November/003711.html
+[2] https://edeproject.org/spec/file-uri-spec.txt
+
+Signed-off-by: Richard Tollerton <rich.tollerton@ni.com>
+---
+ autotests/t-xdg-open.sh | 6 ++++++
+ scripts/xdg-open.in     | 3 ++-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/autotests/t-xdg-open.sh b/autotests/t-xdg-open.sh
+index 810bdc3..0d4b8d2 100755
+--- a/autotests/t-xdg-open.sh
++++ b/autotests/t-xdg-open.sh
+@@ -155,3 +155,9 @@ test_generic_open_file 'test#file.txt'
+ 
+ test_that_it opens files with spaces in their name in generic mode
+ test_generic_open_file 'test file.txt'
++
++test_that_it opens file://localhost/ paths
++mock pcmanfm
++touch $LABDIR/file.txt
++run lxde xdg-open file://localhost$(pwd)/$LABDIR/file%2etxt
++assert_run pcmanfm $(pwd)/$LABDIR/file.txt
+diff --git a/scripts/xdg-open.in b/scripts/xdg-open.in
+index 4928538..09ef6d8 100644
+--- a/scripts/xdg-open.in
++++ b/scripts/xdg-open.in
+@@ -84,7 +84,8 @@ is_file_url_or_path()
+ file_url_to_path()
+ {
+     local file="$1"
+-    if echo "$file" | grep -q '^file:///'; then
++    if echo "$file" | grep -q '^file://\(localhost\)\?/'; then
++        file=${file#file://localhost}
+         file=${file#file://}
+         file=${file%%#*}
+         file=$(echo "$file" | sed -r 's/\?.*$//')
+-- 
+2.33.1
+
+
+From af7b34a6d3b77b7c9565fa7b396c7da676aa2fec Mon Sep 17 00:00:00 2001
+From: Richard Tollerton <rich.tollerton@ni.com>
+Date: Thu, 10 Jan 2019 16:31:38 -0600
+Subject: [PATCH 06/16] test-lib.sh: run: eat xdg-open's exit code
+
+It was observed that t-xdg-open.sh exits after only a fraction of the tests have
+been run, e.g.
+
+ASSERTION FAILED: expected command to be run: gio open http://www.freedesktop.org/
+ASSERTION FAILED: expected command to be run: gio open http://www.freedesktop.org/
+  - opens a URL with gvfs-open if gio open is missing in GNOME 3, GNOME 2, and Cinnamon
+gio: http://www.freedesktop.org/: Operation not supported
+make: *** [Makefile:21: t-xdg-open.sh] Error 4
+
+Given that some tests are failing on my machine (likely because of the
+peculiarities of my archlinux install), the root cause is `set -e`. The nonzero
+exit code returned by xdg-open gets returned by run(), which is also returned by
+e.g. test_open_url(), which causes the script to exit immediately.
+
+All test passes/failures at present are being defined by explicit assertions,
+not by exit codes, and it seems at least plausible that some xdg-open calls are
+meant to fail. So rather than report the nonzero error code, just ignore it, and
+trust that the assertions determine the results.
+
+Signed-off-by: Richard Tollerton <rich.tollerton@ni.com>
+---
+ autotests/test-lib.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/autotests/test-lib.sh b/autotests/test-lib.sh
+index 5ea01b3..ca3b10b 100644
+--- a/autotests/test-lib.sh
++++ b/autotests/test-lib.sh
+@@ -213,7 +213,7 @@ run() {
+         XDG_CONFIG_DIRS=$XDG_CONFIG_DIRS \
+         DISPLAY=x \
+         BROWSER="$BROWSER" \
+-        $trace ../scripts/$cmd "$@"
++        $trace ../scripts/$cmd "$@" ||:
+ }
+ 
+ echo "* Testing that $COMMAND_TESTED"
+-- 
+2.33.1
+
+
+From 755e1f27c58016507053d192351666862905b3cc Mon Sep 17 00:00:00 2001
+From: Ronan Arraes Jardim Chagas <ronisbr@gmail.com>
+Date: Tue, 19 Mar 2019 15:12:58 +1030
+Subject: [PATCH 07/16] Fix a bug when xdg-terminal needs gsettings to get the
+ default terminal
+
+xdg-terminal is not working when it needs gsettings to obtain the
+default terminal. Thus, xdg-terminal cannot be used in MATE, Cinnamon
+or GNOME. This issue was already reported in:
+https://bugs.freedesktop.org/show_bug.cgi?id=93231
+
+Thus, this patch provides a temporary workaround until upstream fixes
+it.
+
+Link: https://bugs.freedesktop.org/show_bug.cgi?id=93231
+Signed-off-by: Simon Lees <sflees@suse.de>
+---
+ scripts/xdg-terminal.in | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/xdg-terminal.in b/scripts/xdg-terminal.in
+index f67897d..221487c 100644
+--- a/scripts/xdg-terminal.in
++++ b/scripts/xdg-terminal.in
+@@ -86,8 +86,8 @@ terminal_gsettings()
+ {
+     term_schema="$1"; shift
+ 
+-    term_exec=`gsettings get ${term_schema} exec`
+-    term_exec_arg=`gsettings get ${term_schema} exec-arg`
++    term_exec=`gsettings get ${term_schema} exec | sed -r "s/^'(.*)'$/\1/"`
++    term_exec_arg=`gsettings get ${term_schema} exec-arg | sed -r "s/^'(.*)'$/\1/"`
+ 
+     terminal_exec=`which $term_exec 2>/dev/null`
+ 
+-- 
+2.33.1
+
+
+From acdf8909f2bf65ca20e69ab1e6bc6854d54b333d Mon Sep 17 00:00:00 2001
+From: "sor.alexei@meowr.ru" <sor.alexei@meowr.ru>
+Date: Tue, 19 Mar 2019 15:13:38 +1030
+Subject: [PATCH 08/16] Fixes -x argument, which is the default for
+ {gnome,mate}-terminal
+
+Signed-off-by: Simon Lees <sflees@suse.de>
+---
+ scripts/xdg-terminal.in | 34 +++++++++++++++++++++++-----------
+ 1 file changed, 23 insertions(+), 11 deletions(-)
+
+diff --git a/scripts/xdg-terminal.in b/scripts/xdg-terminal.in
+index 221487c..36a9833 100644
+--- a/scripts/xdg-terminal.in
++++ b/scripts/xdg-terminal.in
+@@ -65,11 +65,17 @@ terminal_gnome()
+         if [ x"$1" = x"" ]; then
+             $terminal_exec
+         else
+-            if [ x"$term_exec_arg" = x"" ]; then
+-                $terminal_exec "$1"
+-            else
+-                $terminal_exec "$term_exec_arg" "$1"
+-            fi
++            case "$term_exec_arg" in
++              "")
++                "$terminal_exec" "$1"
++                ;;
++              *-x*)
++                "$terminal_exec" "$term_exec_arg" sh -c "$1"
++                ;;
++              *)
++                "$terminal_exec" "$term_exec_arg" "$1"
++              ;;
++            esac
+         fi
+ 
+         if [ $? -eq 0 ]; then
+@@ -93,13 +99,19 @@ terminal_gsettings()
+ 
+     if [ -x "$terminal_exec" ]; then
+         if [ x"$1" = x"" ]; then
+-            $terminal_exec
++            "$terminal_exec"
+         else
+-            if [ x"$term_exec_arg" = x"" ]; then
+-                $terminal_exec "$1"
+-            else
+-                $terminal_exec "$term_exec_arg" "$1"
+-            fi
++            case "$term_exec_arg" in
++              "")
++                "$terminal_exec" "$1"
++                ;;
++              *-x*)
++                "$terminal_exec" "$term_exec_arg" sh -c "$1"
++                ;;
++              *)
++                "$terminal_exec" "$term_exec_arg" "$1"
++              ;;
++            esac
+         fi
+ 
+         if [ $? -eq 0 ]; then
+-- 
+2.33.1
+
+
+From 455d066182546b37984e6b9719bde2347bf6fa94 Mon Sep 17 00:00:00 2001
+From: Iain Lane <iain.lane@canonical.com>
+Date: Tue, 2 Oct 2018 10:29:03 +0100
+Subject: [PATCH 09/16] xdg-screensaver: Sanitise window name before sending it
+ over the bus
+
+libdbus expects string arguments to be valid UTF-8. If they are not,
+then it aborts, which causes our backgrounded command to terminate
+abnormally.
+
+Signed-off-by: Simon Lees <sflees@suse.de>
+---
+ scripts/xdg-screensaver.in | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/scripts/xdg-screensaver.in b/scripts/xdg-screensaver.in
+index 9e68196..ccb4307 100644
+--- a/scripts/xdg-screensaver.in
++++ b/scripts/xdg-screensaver.in
+@@ -468,6 +468,7 @@ screensaver_gnome_screensaver()
+         perl -e '
+ use strict;
+ use warnings;
++use Encode qw(decode);
+ use IO::File;
+ use Net::DBus;
+ use X11::Protocol;
+@@ -489,6 +490,10 @@ while (1) {
+   }
+ }
+ 
++# Replace any invalid unicode characters with U+FFFD, so we dont crash when we
++# pass them over to D-Bus
++$window_name = decode("utf8", $window_name, Encode::FB_DEFAULT);
++
+ # Inhibit idle detection (flags = 8) with window name and ID.
+ # We have no reason so just send the window name again.
+ my $bus = Net::DBus->session();
+-- 
+2.33.1
+
+
+From 0801b7104c46ac2eff07bf8b867f7d45c74963c2 Mon Sep 17 00:00:00 2001
+From: Reuben Thomas <rrt@sc3d.org>
+Date: Sun, 30 Oct 2016 06:21:53 +0000
+Subject: [PATCH 10/16] xdg-su: fix some easy TODOs
+
+Although xdg-su is not currently shipped, fix some trivial documentation
+TODOs.
+
+Signed-off-by: Simon Lees <sflees@suse.de>
+---
+ TODO                    |  3 ---
+ scripts/desc/xdg-su.xml | 11 ++++++++++-
+ 2 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/TODO b/TODO
+index 183ea6c..a4f3b17 100644
+--- a/TODO
++++ b/TODO
+@@ -16,9 +16,6 @@ General
+ * Add xdg-autostart
+ 
+ xdg-su:
+-* The summary is incorrect, it suggests that it can only run things as
+-root which is incorrect according to the main body of the document.
+-* The -c option is listed in the synopsis, but not in options.
+ * It would be useful if it was possible to distinguish between a failure
+ because of a bad password or some other failure.
+ * use sudo style syntax, drop -c option
+diff --git a/scripts/desc/xdg-su.xml b/scripts/desc/xdg-su.xml
+index 53a0f32..b4e1b7e 100644
+--- a/scripts/desc/xdg-su.xml
++++ b/scripts/desc/xdg-su.xml
+@@ -30,7 +30,7 @@
+ 
+   <refnamediv>
+     <refname>xdg-su</refname>
+-    <refpurpose>run a GUI program as root after prompting for the root password</refpurpose>
++    <refpurpose>run a GUI program as another user (typically root) after prompting for that user's password</refpurpose>
+   </refnamediv>
+ 
+   <refsynopsisdiv>
+@@ -67,6 +67,15 @@
+   <refsect1 id="options">
+     <title>Options</title>
+     <variablelist>
++      <varlistentry>
++	<term><option>-c <replaceable>command</replaceable></option></term>
++	<listitem>
++	  <simpara>
++	    the command to run. This argument is mandatory.
++	  </simpara>
++	</listitem>
++      </varlistentry>
++
+       <varlistentry>
+ 	<term><option>-u <replaceable>user</replaceable></option></term>
+ 	<listitem>
+-- 
+2.33.1
+
+
+From 15144f8abd0bfd7de23b18a282f539d1e9c79ef9 Mon Sep 17 00:00:00 2001
+From: Reuben Thomas <rrt@sc3d.org>
+Date: Sun, 30 Oct 2016 06:12:45 +0000
+Subject: [PATCH 11/16] xdg-open: fix comment typo
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Also bump Rex Dieter’s copyright date
+
+Signed-off-by: Simon Lees <sflees@suse.de>
+---
+ scripts/xdg-open.in | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/xdg-open.in b/scripts/xdg-open.in
+index 09ef6d8..c38e1e0 100644
+--- a/scripts/xdg-open.in
++++ b/scripts/xdg-open.in
+@@ -7,7 +7,7 @@
+ #   Refer to the usage() function below for usage.
+ #
+ #   Copyright 2009-2010, Fathi Boudra <fabo@freedesktop.org>
+-#   Copyright 2009-2010, Rex Dieter <rdieter@fedoraproject.org>
++#   Copyright 2009-2016, Rex Dieter <rdieter@fedoraproject.org>
+ #   Copyright 2006, Kevin Krammer <kevin.krammer@gmx.at>
+ #   Copyright 2006, Jeremy White <jwhite@codeweavers.com>
+ #
+@@ -510,7 +510,7 @@ fi
+ 
+ DEBUG 2 "Selected DE $DE"
+ 
+-# sanitize BROWSER (avoid caling ourselves in particular)
++# sanitize BROWSER (avoid calling ourselves in particular)
+ case "${BROWSER}" in
+     *:"xdg-open"|"xdg-open":*)
+         BROWSER=$(echo $BROWSER | sed -e 's|:xdg-open||g' -e 's|xdg-open:||g')
+-- 
+2.33.1
+
+
+From 7f5349ea485fa9e0a4cb69dc645fbaf9ce3cec2e Mon Sep 17 00:00:00 2001
+From: mvdlinde <linde@b1-systems.de>
+Date: Sun, 3 Mar 2019 16:20:48 +0000
+Subject: [PATCH 12/16] Enable cinnamon screensaver for xdg aware desktop
+ environments (eg lxqt)
+
+---
+ scripts/xdg-screensaver.in | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/scripts/xdg-screensaver.in b/scripts/xdg-screensaver.in
+index 9e68196..bc5c4ee 100644
+--- a/scripts/xdg-screensaver.in
++++ b/scripts/xdg-screensaver.in
+@@ -887,6 +887,8 @@ xscreensaver-command -version 2> /dev/null | grep XScreenSaver > /dev/null && DE
+ dbus-send --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner string:org.gnome.ScreenSaver > /dev/null 2>&1 && DE="gnome_screensaver"
+ # Consider "mate-screensaver" a separate DE
+ dbus-send --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner string:org.mate.ScreenSaver > /dev/null 2>&1 && DE="mate_screensaver"
++# Consider "cinnamon-screensaver" a separate DE
++dbus-send --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner string:org.cinnamon.ScreenSaver > /dev/null 2>&1 && DE="cinnamon"
+ # Consider "xautolock" a separate DE
+ xautolock -enable > /dev/null 2>&1 && DE="xautolock_screensaver"
+ 
+-- 
+2.33.1
+
+
+From bfcefa162b1dcd6d62e193019969ff2f5ff331cf Mon Sep 17 00:00:00 2001
+From: Cameron Fieber <cameron@fieber.ca>
+Date: Mon, 25 Mar 2019 22:30:25 -0700
+Subject: [PATCH 13/16] support digits in uri scheme regex
+
+As per RFC 2396[1] a valid URI scheme may contain a digit:
+
+scheme        = alpha *( alpha | digit | + | - | . )
+
+[1]: https://www.ietf.org/rfc/rfc2396.txt
+---
+ scripts/xdg-open.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/xdg-open.in b/scripts/xdg-open.in
+index c38e1e0..202f3e3 100644
+--- a/scripts/xdg-open.in
++++ b/scripts/xdg-open.in
+@@ -72,7 +72,7 @@ get_key()
+ is_file_url_or_path()
+ {
+     if echo "$1" | grep -q '^file://' \
+-            || ! echo "$1" | egrep -q '^[[:alpha:]+\.\-]+:'; then
++            || ! echo "$1" | egrep -q '^[[:alpha:]][[:alpha:][:digit:]+\.\-]*:'; then
+         return 0
+     else
+         return 1
+-- 
+2.33.1
+
+
+From 0547886c0a7ae79145998495a6e3af6a1450d0c7 Mon Sep 17 00:00:00 2001
+From: Martin Puppe <dev@mpuppe.de>
+Date: Sat, 13 Apr 2019 12:46:44 +0200
+Subject: [PATCH 14/16] xdg-mime: return correct exit code for GNOME
+
+If the desktop environment was GNOME and none of the commands for
+detecting the MIME type of a file was available, xdg-mime used to return
+exit code 0 even though it failed. The man page says it should return
+exit code 3. This commit fixes the issue.
+
+I have considered returning exit code 4 instead since that is what would
+be returned if info_kde() or info_generic() fail to find a tool for MIME
+type detection. But I have decided to implement the behavior as
+specified in the man page.
+
+The exit code of an if construct is 0 if no condition
+tested true [^1]. The author of the original code probably was not aware
+of this.
+
+[^1]: https://www.gnu.org/software/bash/manual/html_node/Conditional-Constructs.html#Conditional-Constructs
+---
+ scripts/xdg-mime.in | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/scripts/xdg-mime.in b/scripts/xdg-mime.in
+index 0e567c7..034d0ef 100644
+--- a/scripts/xdg-mime.in
++++ b/scripts/xdg-mime.in
+@@ -84,6 +84,8 @@ info_gnome()
+     elif gnomevfs-info --help 2>/dev/null 1>&2; then
+         DEBUG 1 "Running gnomevfs-info \"$1\""
+         gnomevfs-info --slow-mime "$1" 2> /dev/null | grep "^MIME" | cut -d ":" -f 2 | sed s/"^ "//
++    else
++        exit_failure_operation_impossible "no method available for querying MIME type of '$filename'"
+     fi
+ 
+     if [ $? -eq 0 ]; then
+-- 
+2.33.1
+
+
+From 9816ebb3e6fd9f23e993b8b7fcbd56f92d9c9197 Mon Sep 17 00:00:00 2001
+From: Andrea Tarocchi <andrea.tarocchi@gmail.com>
+Date: Thu, 20 Feb 2020 22:01:04 +0100
+Subject: [PATCH 15/16] fixed #166: xdg-open dose not search correctly in
+ directories with spaces in the name
+
+---
+ scripts/xdg-mime.in | 2 +-
+ scripts/xdg-open.in | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/xdg-mime.in b/scripts/xdg-mime.in
+index 034d0ef..612d2ce 100644
+--- a/scripts/xdg-mime.in
++++ b/scripts/xdg-mime.in
+@@ -307,7 +307,7 @@ search_desktop_file()
+ 
+     grep -l "$MIME;" "$dir/"*.desktop 2>/dev/null
+ 
+-    for f in $dir/*/; do
++    for f in "$dir/"*/; do
+       [ -d "$f" ] && search_desktop_file "$MIME" "$f"
+     done
+ }
+diff --git a/scripts/xdg-open.in b/scripts/xdg-open.in
+index 202f3e3..8de839a 100644
+--- a/scripts/xdg-open.in
++++ b/scripts/xdg-open.in
+@@ -328,7 +328,7 @@ search_desktop_file()
+         fi
+     fi
+ 
+-    for d in $dir/*/; do
++    for d in "$dir/"*/; do
+         [ -d "$d" ] && search_desktop_file "$default" "$d" "$target"
+     done
+ }
+-- 
+2.33.1
+
+
+From d11b33ec7f24cfb1546f6b459611d440013bdc72 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?M=C3=A9ven=20Car?= <meven.car@enioka.com>
+Date: Wed, 21 Oct 2020 16:58:20 +0200
+Subject: [PATCH 16/16] Fix xdg-settings support for default-web-browser for
+ Plasma 5.19+
+
+---
+ scripts/xdg-settings.in | 18 +++++++++++++++---
+ 1 file changed, 15 insertions(+), 3 deletions(-)
+ mode change 100644 => 100755 scripts/xdg-settings.in
+
+diff --git a/scripts/xdg-settings.in b/scripts/xdg-settings.in
+old mode 100644
+new mode 100755
+index 3781de8..ab18d3a
+--- a/scripts/xdg-settings.in
++++ b/scripts/xdg-settings.in
+@@ -130,7 +130,7 @@ set_browser_mime()
+     fix_local_desktop_file "$1" "$MIME" || return
+     mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+     xdg-mime default "$1" "$MIME" || return
+-    if [ x"`get_browser_mime`" != x"$1" ]; then
++    if [ x"`get_browser_mime $MIME`" != x"$1" ]; then
+         # Put back the original value
+         xdg-mime default "$orig" "$MIME"
+         exit_failure_operation_failed
+@@ -203,7 +203,13 @@ resolve_kde_browser_desktop()
+ 
+ read_kde_browser()
+ {
+-    read_kde_config kdeglobals General BrowserApplication
++    ret=`read_kde_config kdeglobals General BrowserApplication`
++    if [ -z "$ret" ]; then
++        # since Plasma >= 5.19
++        ret=`get_browser_mime "x-scheme-handler/http"`
++    fi
++    
++    echo $ret
+ }
+ 
+ get_browser_kde()
+@@ -252,7 +258,13 @@ check_browser_kde()
+ 
+ set_browser_kde()
+ {
+-    set_browser_mime "$1" || return
++    # Set the default browser.
++    for protocol in http https; do
++        set_browser_mime "$1" "x-scheme-handler/$protocol" || return
++    done
++
++    # Plasma < 5.19
++    set_browser_mime "$1" "text/html" || return
+     if [ x"${KDE_SESSION_VERSION}" = x"5" ]; then
+         kwriteconfig5 --file kdeglobals --group General --key BrowserApplication "$1"
+     else
+-- 
+2.33.1
+

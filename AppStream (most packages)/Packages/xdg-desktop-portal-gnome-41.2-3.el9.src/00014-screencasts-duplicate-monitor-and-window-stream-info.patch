@@ -1,0 +1,223 @@
+diff --git a/src/displaystatetracker.c b/src/displaystatetracker.c
+index fc9109e..ebe1105 100644
+--- a/src/displaystatetracker.c
++++ b/src/displaystatetracker.c
+@@ -62,7 +62,7 @@ G_DEFINE_TYPE (DisplayStateTracker, display_state_tracker, G_TYPE_OBJECT)
+ 
+ static DisplayStateTracker *_display_state_tracker;
+ 
+-static void
++void
+ monitor_free (Monitor *monitor)
+ {
+   g_free (monitor->connector);
+@@ -71,6 +71,19 @@ monitor_free (Monitor *monitor)
+   g_free (monitor);
+ }
+ 
++Monitor *
++monitor_dup (Monitor *monitor)
++{
++  Monitor *new_monitor;
++
++  new_monitor = g_new0 (Monitor, 1);
++  new_monitor->connector = g_strdup (monitor->connector);
++  new_monitor->match_string = g_strdup (monitor->match_string);
++  new_monitor->display_name = g_strdup (monitor->display_name);
++
++  return new_monitor;
++}
++
+ const char *
+ monitor_get_connector (Monitor *monitor)
+ {
+diff --git a/src/displaystatetracker.h b/src/displaystatetracker.h
+index 1c3a7dc..e438dda 100644
+--- a/src/displaystatetracker.h
++++ b/src/displaystatetracker.h
+@@ -26,6 +26,10 @@ typedef struct _LogicalMonitor LogicalMonitor;
+ G_DECLARE_FINAL_TYPE (DisplayStateTracker, display_state_tracker,
+                       DISPLAY, STATE_TRACKER, GObject)
+ 
++void monitor_free (Monitor *monitor);
++
++Monitor * monitor_dup (Monitor *monitor);
++
+ const char * monitor_get_connector (Monitor *monitor);
+ 
+ const char * monitor_get_match_string (Monitor *monitor);
+diff --git a/src/screencast.c b/src/screencast.c
+index 0a15033..724ffc9 100644
+--- a/src/screencast.c
++++ b/src/screencast.c
+@@ -469,6 +469,22 @@ find_best_window_by_app_id_and_title (const char *app_id,
+   return best_match;
+ }
+ 
++void
++screen_cast_stream_info_free (ScreenCastStreamInfo *info)
++{
++  switch (info->type)
++    {
++    case SCREEN_CAST_SOURCE_TYPE_MONITOR:
++      g_clear_pointer (&info->data.monitor, monitor_free);
++      break;
++    case SCREEN_CAST_SOURCE_TYPE_WINDOW:
++      g_clear_pointer (&info->data.window, window_free);
++      break;
++    }
++
++  g_free (info);
++}
++
+ static gboolean
+ restore_stream_from_data (ScreenCastSession *screen_cast_session)
+ 
+@@ -486,7 +502,8 @@ restore_stream_from_data (ScreenCastSession *screen_cast_session)
+   if (!screen_cast_session->restored.data)
+     return FALSE;
+ 
+-  streams = g_ptr_array_new_with_free_func (g_free);
++  streams =
++    g_ptr_array_new_with_free_func ((GDestroyNotify) screen_cast_stream_info_free);
+ 
+   g_variant_get (screen_cast_session->restored.data,
+                  RESTORE_VARIANT_TYPE,
+@@ -512,7 +529,7 @@ restore_stream_from_data (ScreenCastSession *screen_cast_session)
+ 
+             info = g_new0 (ScreenCastStreamInfo, 1);
+             info->type = SCREEN_CAST_SOURCE_TYPE_MONITOR;
+-            info->data.monitor = monitor;
++            info->data.monitor = monitor_dup (monitor);
+             info->id = id;
+             g_ptr_array_add (streams, info);
+           }
+@@ -537,7 +554,7 @@ restore_stream_from_data (ScreenCastSession *screen_cast_session)
+ 
+             info = g_new0 (ScreenCastStreamInfo, 1);
+             info->type = SCREEN_CAST_SOURCE_TYPE_WINDOW;
+-            info->data.window = window;
++            info->data.window = window_dup (window);
+             info->id = id;
+             g_ptr_array_add (streams, info);
+           }
+diff --git a/src/screencast.h b/src/screencast.h
+index 3d64b4a..ae8988d 100644
+--- a/src/screencast.h
++++ b/src/screencast.h
+@@ -64,3 +64,5 @@ typedef struct
+ 
+ gboolean screen_cast_init (GDBusConnection *connection,
+                            GError **error);
++
++void screen_cast_stream_info_free (ScreenCastStreamInfo *info);
+diff --git a/src/screencastwidget.c b/src/screencastwidget.c
+index 11743f7..a40c824 100644
+--- a/src/screencastwidget.c
++++ b/src/screencastwidget.c
+@@ -101,9 +101,10 @@ create_window_widget (Window *window)
+   gtk_widget_set_margin_bottom (window_label, 12);
+   gtk_box_append (GTK_BOX (window_widget), window_label);
+ 
+-  g_object_set_qdata (G_OBJECT (window_widget),
+-                      quark_window_widget_data,
+-                      window);
++  g_object_set_qdata_full (G_OBJECT (window_widget),
++                           quark_window_widget_data,
++                           window_dup (window),
++                           (GDestroyNotify) window_free);
+   return window_widget;
+ }
+ 
+@@ -123,9 +124,12 @@ create_monitor_widget (LogicalMonitor *logical_monitor)
+       GtkWidget *monitor_label;
+ 
+       if (!l->prev)
+-        g_object_set_qdata (G_OBJECT (monitor_widget),
+-                            quark_monitor_widget_data,
+-                            monitor);
++        {
++          g_object_set_qdata_full (G_OBJECT (monitor_widget),
++                                   quark_monitor_widget_data,
++                                   monitor_dup (monitor),
++                                   (GDestroyNotify) monitor_free);
++        }
+ 
+       monitor_label = gtk_label_new (monitor_get_display_name (monitor));
+       gtk_widget_set_margin_top (monitor_label, 12);
+@@ -599,7 +603,8 @@ screen_cast_widget_get_selected_streams (ScreenCastWidget *self)
+   uint32_t id = 0;
+   GList *l;
+ 
+-  streams = g_ptr_array_new_with_free_func (g_free);
++  streams =
++    g_ptr_array_new_with_free_func ((GDestroyNotify) screen_cast_stream_info_free);
+ 
+   selected_monitor_rows =
+     gtk_list_box_get_selected_rows (GTK_LIST_BOX (self->monitor_list));
+@@ -619,7 +624,7 @@ screen_cast_widget_get_selected_streams (ScreenCastWidget *self)
+ 
+       info = g_new0 (ScreenCastStreamInfo, 1);
+       info->type = SCREEN_CAST_SOURCE_TYPE_MONITOR;
+-      info->data.monitor = monitor;
++      info->data.monitor = monitor_dup (monitor);
+       info->id = id++;
+       g_ptr_array_add (streams, info);
+     }
+@@ -634,7 +639,7 @@ screen_cast_widget_get_selected_streams (ScreenCastWidget *self)
+ 
+       info = g_new0 (ScreenCastStreamInfo, 1);
+       info->type = SCREEN_CAST_SOURCE_TYPE_WINDOW;
+-      info->data.window = window;
++      info->data.window = window_dup (window);
+       info->id = id++;
+       g_ptr_array_add (streams, info);
+     }
+diff --git a/src/shellintrospect.c b/src/shellintrospect.c
+index 8a81086..d1bcc8c 100644
+--- a/src/shellintrospect.c
++++ b/src/shellintrospect.c
+@@ -62,7 +62,7 @@ static guint signals[N_SIGNALS];
+ 
+ static ShellIntrospect *_shell_introspect;
+ 
+-static void
++void
+ window_free (Window *window)
+ {
+   g_free (window->title);
+@@ -70,6 +70,19 @@ window_free (Window *window)
+   g_free (window);
+ }
+ 
++Window *
++window_dup (Window *window)
++{
++  Window *new_window;
++
++  new_window = g_new0 (Window, 1);
++  new_window->id = window->id;
++  new_window->title = g_strdup (window->title);
++  new_window->app_id = g_strdup (window->app_id);
++
++  return new_window;
++}
++
+ static void
+ get_windows_cb (GObject *source_object,
+                 GAsyncResult *res,
+diff --git a/src/shellintrospect.h b/src/shellintrospect.h
+index f63ecee..ea4188f 100644
+--- a/src/shellintrospect.h
++++ b/src/shellintrospect.h
+@@ -34,6 +34,10 @@ void shell_introspect_ref_listeners (ShellIntrospect *shell_introspect);
+ 
+ void shell_introspect_unref_listeners (ShellIntrospect *shell_introspect);
+ 
++void window_free (Window *window);
++
++Window * window_dup (Window *window);
++
+ const char * window_get_app_id (Window *window);
+ 
+ const char * window_get_title (Window *window);
