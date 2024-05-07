@@ -1,4 +1,4 @@
-# temporary, to reduce the size of individual commits and git pushes
+# temporary, because my internet is slow :(
 AppStream (most packages)/Packages/a*
 AppStream (most packages)/Packages/b*
 AppStream (most packages)/Packages/c*
@@ -20,7 +20,6 @@ AppStream (most packages)/Packages/r*
 AppStream (most packages)/Packages/s*
 AppStream (most packages)/Packages/t*
 AppStream (most packages)/Packages/v*
-AppStream (most packages)/Packages/w*
 BaseOS
 
 # this .tar file is too big for Github (over 100mb), and contains symbolic links making it hard to extract using Windows. I'll add it back later (using my Linux VM)

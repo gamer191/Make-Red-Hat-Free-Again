@@ -1,0 +1,56 @@
+diff --git a/capinfos.c b/capinfos.c
+index 5536766..12b141e 100644
+--- a/capinfos.c
++++ b/capinfos.c
+@@ -739,7 +739,8 @@ print_stats(const gchar *filename, capture_info *cf_info)
+   }
+   if (cap_file_hashes) {
+     printf     ("SHA256:              %s\n", file_sha256);
+-    printf     ("RIPEMD160:           %s\n", file_rmd160);
++    if(!gcry_fips_mode_active())
++        printf     ("RIPEMD160:           %s\n", file_rmd160);
+     printf     ("SHA1:                %s\n", file_sha1);
+   }
+   if (cap_order)          printf     ("Strict time order:   %s\n", order_string(cf_info->order));
+@@ -851,7 +852,8 @@ print_stats_table_header(void)
+   if (cap_packet_rate)    print_stats_table_header_label("Average packet rate (packets/sec)");
+   if (cap_file_hashes) {
+     print_stats_table_header_label("SHA256");
+-    print_stats_table_header_label("RIPEMD160");
++    if(!gcry_fips_mode_active())
++        print_stats_table_header_label("RIPEMD160");
+     print_stats_table_header_label("SHA1");
+   }
+   if (cap_order)          print_stats_table_header_label("Strict time order");
+@@ -1447,7 +1449,10 @@ print_usage(FILE *output)
+   fprintf(output, "  -E display the capture file encapsulation\n");
+   fprintf(output, "  -I display the capture file interface information\n");
+   fprintf(output, "  -F display additional capture file information\n");
+-  fprintf(output, "  -H display the SHA256, RMD160, and SHA1 hashes of the file\n");
++  if(!gcry_fips_mode_active())
++      fprintf(output, "  -H display the SHA256 and SHA1 hashes of the file\n");
++  else
++      fprintf(output, "  -H display the SHA256, RMD160, and SHA1 hashes of the file\n");
+   fprintf(output, "  -k display the capture comment\n");
+   fprintf(output, "\n");
+   fprintf(output, "Size infos:\n");
+@@ -1795,7 +1800,8 @@ main(int argc, char *argv[])
+     gcry_check_version(NULL);
+     gcry_md_open(&hd, GCRY_MD_SHA256, 0);
+     if (hd) {
+-      gcry_md_enable(hd, GCRY_MD_RMD160);
++      if(!gcry_fips_mode_active())
++          gcry_md_enable(hd, GCRY_MD_RMD160);
+       gcry_md_enable(hd, GCRY_MD_SHA1);
+     }
+     hash_buf = (char *)g_malloc(HASH_BUF_SIZE);
+@@ -1817,7 +1823,8 @@ main(int argc, char *argv[])
+         }
+         gcry_md_final(hd);
+         hash_to_str(gcry_md_read(hd, GCRY_MD_SHA256), HASH_SIZE_SHA256, file_sha256);
+-        hash_to_str(gcry_md_read(hd, GCRY_MD_RMD160), HASH_SIZE_RMD160, file_rmd160);
++        if(!gcry_fips_mode_active())
++            hash_to_str(gcry_md_read(hd, GCRY_MD_RMD160), HASH_SIZE_RMD160, file_rmd160);
+         hash_to_str(gcry_md_read(hd, GCRY_MD_SHA1), HASH_SIZE_SHA1, file_sha1);
+       }
+       if (fh) fclose(fh);

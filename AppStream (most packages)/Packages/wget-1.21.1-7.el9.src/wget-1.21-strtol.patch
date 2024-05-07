@@ -1,0 +1,13 @@
+diff --git a/src/wget.h.old b/src/wget.h
+index 6f20eab..f422737 100644
+--- a/src/wget.h.old
++++ b/src/wget.h
+@@ -144,7 +144,7 @@ typedef int64_t wgint;
+ #define WGINT_MAX INT64_MAX
+ typedef wgint SUM_SIZE_INT;
+ 
+-#define str_to_wgint strtol
++#define str_to_wgint strtoll
+ 
+ #include "options.h"
+ 
