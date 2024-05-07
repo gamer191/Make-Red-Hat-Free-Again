@@ -1,0 +1,92 @@
+From 1fd887b793bead92b018498625bda041a6c1601d Mon Sep 17 00:00:00 2001
+From: David King <amigadave@amigadave.com>
+Date: Mon, 25 Apr 2022 13:42:41 +0100
+Subject: [PATCH 1/2] msg: Fix maximum width to 60 characters
+
+Commit 3b64d05e8a1aae1581d2bec7288d80ac4699e1b1 mentioned that labels in
+message dialogs were set to a maximum width of 60 characters, with
+inspiration from GtkMessageDialog, but in fact a typo meant that they
+were set to both a width and maximum width of just 10 characters. This
+lead to text layout problems, which can be fixed by using the intended
+maximum of 60 characters.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=2053530
+---
+ src/msg.c | 10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/src/msg.c b/src/msg.c
+index ca14d86..9265152 100644
+--- a/src/msg.c
++++ b/src/msg.c
+@@ -202,12 +202,10 @@ zenity_msg (ZenityData *data, ZenityMsgData *msg_data) {
+ 	if (data->width > -1)
+ 		gtk_widget_set_size_request (GTK_WIDGET (text), data->width, -1);
+ 	else if (!msg_data->ellipsize && !msg_data->no_wrap) {
+-		// the magic number 60 is picked from gtk+/gtk/ui/gtkmessagedialog.ui
+-		// however, 60 would increase the distance between the icon and the
+-		// text,
+-		// decreasing to 10 fix it.
+-		gtk_label_set_width_chars (text, 10);
+-		gtk_label_set_max_width_chars (text, 10);
++		/* The magic number 60 is taken from gtk+/gtk/ui/gtkmessagedialog.ui
++		   with 10 as a minimum width. */
++		gtk_label_set_width_chars (GTK_LABEL (text), 10);
++		gtk_label_set_max_width_chars (GTK_LABEL (text), 60);
+ 	}
+ 
+ 	if (data->modal)
+-- 
+2.36.1
+
+
+From ca21da303b468744540c1a7e803850c656415dd0 Mon Sep 17 00:00:00 2001
+From: David King <amigadave@amigadave.com>
+Date: Tue, 26 Apr 2022 08:18:18 +0100
+Subject: [PATCH 2/2] zenity.ui: make message dialogs non-resizable
+
+Use the approach of GtkMessageDialog, to avoid problems with narrow
+labels when the dialog text is long.
+---
+ src/zenity.ui | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/zenity.ui b/src/zenity.ui
+index 1359442..546a622 100644
+--- a/src/zenity.ui
++++ b/src/zenity.ui
+@@ -465,6 +465,7 @@
+     <property name="title" translatable="yes">Error</property>
+     <property name="window_position">center</property>
+     <property name="type_hint">dialog</property>
++    <property name="resizable">false</property>
+     <signal name="destroy" handler="gtk_main_quit" swapped="no"/>
+     <child internal-child="vbox">
+       <object class="GtkBox" id="dialog-vbox7">
+@@ -681,6 +682,7 @@
+     <property name="title" translatable="yes">Information</property>
+     <property name="window_position">center</property>
+     <property name="type_hint">dialog</property>
++    <property name="resizable">false</property>
+     <signal name="destroy" handler="gtk_main_quit" swapped="no"/>
+     <child internal-child="vbox">
+       <object class="GtkBox" id="dialog-vbox9">
+@@ -882,6 +884,7 @@
+     <property name="title" translatable="yes">Question</property>
+     <property name="window_position">center</property>
+     <property name="type_hint">dialog</property>
++    <property name="resizable">false</property>
+     <signal name="destroy" handler="gtk_main_quit" swapped="no"/>
+     <child internal-child="vbox">
+       <object class="GtkBox" id="dialog-vbox3">
+@@ -1064,6 +1067,7 @@
+     <property name="title" translatable="yes">Warning</property>
+     <property name="window_position">center</property>
+     <property name="type_hint">dialog</property>
++    <property name="resizable">false</property>
+     <signal name="destroy" handler="gtk_main_quit" swapped="no"/>
+     <child internal-child="vbox">
+       <object class="GtkBox" id="dialog-vbox1">
+-- 
+2.36.1
+
