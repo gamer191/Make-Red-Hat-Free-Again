@@ -1,0 +1,220 @@
+
+## <summary>policy for efs-utils</summary>
+
+########################################
+## <summary>
+##	Execute efsutils_exec_t in the efsutils domain.
+## </summary>
+## <param name="domain">
+## <summary>
+##	Domain allowed to transition.
+## </summary>
+## </param>
+#
+interface(`efsutils_domtrans',`
+	gen_require(`
+		type efsutils_t, efsutils_exec_t;
+	')
+
+	corecmd_search_bin($1)
+	domtrans_pattern($1, efsutils_exec_t, efsutils_t)
+')
+
+######################################
+## <summary>
+##	Execute efs-utils in the caller domain.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+interface(`efsutils_exec',`
+	gen_require(`
+		type efsutils_exec_t;
+	')
+
+	corecmd_search_bin($1)
+	can_exec($1, efsutils_exec_t)
+')
+########################################
+## <summary>
+##	Read efs-utils's log files.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+## <rolecap/>
+#
+interface(`efsutils_read_log',`
+	gen_require(`
+		type efsutils_log_t;
+	')
+
+	logging_search_logs($1)
+	read_files_pattern($1, efsutils_log_t, efsutils_log_t)
+')
+
+########################################
+## <summary>
+##	Append to efs-utils log files.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+interface(`efsutils_append_log',`
+	gen_require(`
+		type efsutils_log_t;
+	')
+
+	logging_search_logs($1)
+	append_files_pattern($1, efsutils_log_t, efsutils_log_t)
+')
+
+########################################
+## <summary>
+##	Manage efs-utils log files
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+interface(`efsutils_manage_log',`
+	gen_require(`
+		type efsutils_log_t;
+	')
+
+	logging_search_logs($1)
+	manage_dirs_pattern($1, efsutils_log_t, efsutils_log_t)
+	manage_files_pattern($1, efsutils_log_t, efsutils_log_t)
+	manage_lnk_files_pattern($1, efsutils_log_t, efsutils_log_t)
+')
+########################################
+## <summary>
+##	Execute efs-utils server in the efsutils domain.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed to transition.
+##	</summary>
+## </param>
+#
+interface(`efsutils_systemctl',`
+	gen_require(`
+		type efsutils_t;
+		type efsutils_unit_file_t;
+	')
+
+	systemd_exec_systemctl($1)
+        systemd_read_fifo_file_passwd_run($1)
+	allow $1 efsutils_unit_file_t:file read_file_perms;
+	allow $1 efsutils_unit_file_t:service manage_service_perms;
+
+	ps_process_pattern($1, efsutils_t)
+')
+
+
+########################################
+## <summary>
+##	All of the rules required to administrate
+##	an efs-utils environment
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+## <param name="role">
+##	<summary>
+##	Role allowed access.
+##	</summary>
+## </param>
+## <rolecap/>
+#
+interface(`efsutils_admin',`
+	gen_require(`
+		type efsutils_t;
+		type efsutils_log_t;
+	type efsutils_unit_file_t;
+	')
+
+	allow $1 efsutils_t:process { signal_perms };
+	ps_process_pattern($1, efsutils_t)
+
+    tunable_policy(`deny_ptrace',`',`
+        allow $1 efsutils_t:process ptrace;
+    ')
+
+	logging_search_logs($1)
+	admin_pattern($1, efsutils_log_t)
+
+	efsutils_systemctl($1)
+	admin_pattern($1, efsutils_unit_file_t)
+	allow $1 efsutils_unit_file_t:service all_service_perms;
+	optional_policy(`
+		systemd_passwd_agent_exec($1)
+		systemd_read_fifo_file_passwd_run($1)
+	')
+')
+
+
+########################################
+#
+# Interface compatibility blocks
+#
+# The following definitions ensure compatibility with distribution policy
+# versions that do not contain given interfaces (epel, or older Fedora
+# releases).
+# Each block tests for existence of given interface and defines it if needed.
+#
+
+
+######################################
+## <summary>
+##	Execute stunnel in the caller domain.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+ifndef(`stunnel_exec',`
+	interface(`stunnel_exec',`
+		gen_require(`
+			type stunnel_exec_t;
+		')
+
+		corecmd_search_bin($1)
+		can_exec($1, stunnel_exec_t)
+	')
+')
+
+
+########################################
+## <summary>
+##      Read unconfined domain files.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+ifndef(`unconfined_read_files',`
+	interface(`unconfined_read_files',`
+		gen_require(`
+			type unconfined_t;
+		')
+
+		read_files_pattern($1, unconfined_t, unconfined_t)
+	')
+')

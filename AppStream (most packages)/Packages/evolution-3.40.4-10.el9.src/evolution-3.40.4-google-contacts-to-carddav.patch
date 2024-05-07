@@ -1,0 +1,1124 @@
+diff -up evolution-3.40.4/.3 evolution-3.40.4/
+diff -up evolution-3.40.4/po/ca.po.3 evolution-3.40.4/po/ca.po
+--- evolution-3.40.4/po/ca.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/ca.po	2022-04-05 10:00:37.396025268 +0200
+@@ -29878,3 +29878,11 @@ msgstr "Certificat importat"
+ 
+ #~ msgid "Certificate details"
+ #~ msgstr "Detalls del certificat"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Llibreta d'adreces d'usuari per defecte"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Llibreta d'adreces:"
+diff -up evolution-3.40.4/po/cs.po.3 evolution-3.40.4/po/cs.po
+--- evolution-3.40.4/po/cs.po.3	2022-04-05 10:00:37.398025267 +0200
++++ evolution-3.40.4/po/cs.po	2022-04-05 10:01:37.100998171 +0200
+@@ -28264,3 +28264,10 @@ msgstr "Nelze zapsat úložiště na dis
+ msgid "Imported Certificate"
+ msgstr "Importovaný certifikát"
+ 
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Výchozí uživatelský adresář"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adresář:"
+diff -up evolution-3.40.4/po/da.po.3 evolution-3.40.4/po/da.po
+--- evolution-3.40.4/po/da.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/da.po	2022-04-05 10:00:37.400025266 +0200
+@@ -28202,3 +28202,11 @@ msgstr "Kan ikke skrive lageret til disk
+ #: ../src/smime/lib/e-pkcs12.c:407
+ msgid "Imported Certificate"
+ msgstr "Importeret certifikat"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Standard-brugeradressebog"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adressebog:"
+diff -up evolution-3.40.4/po/de.po.3 evolution-3.40.4/po/de.po
+--- evolution-3.40.4/po/de.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/de.po	2022-04-05 10:00:37.402025265 +0200
+@@ -28546,3 +28546,11 @@ msgstr "Importiertes Zertifikat"
+ 
+ #~ msgid "%d/%m/%Y"
+ #~ msgstr "%d.%m.%Y"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Standard-Benutzer-Adressbuch"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adressbuch:"
+diff -up evolution-3.40.4/po/el.po.3 evolution-3.40.4/po/el.po
+--- evolution-3.40.4/po/el.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/el.po	2022-04-05 10:00:37.404025264 +0200
+@@ -36518,3 +36518,11 @@ msgstr "Εισηγμένο πιστοπ�
+ #~ msgstr ""
+ #~ "Ειδοποιεί τον χρήστη με ένα εικονίδιο στην περιοχή ειδοποίησης και με ένα "
+ #~ "μήνυμα ειδοποίησης κάθε φορά που φθάνει ένα νέο μήνυμα."
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Προεπιλεγμένο βιβλίο διευθύνσεων χρήστη"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Βιβλίο διευθύνσεων:"
+diff -up evolution-3.40.4/po/eo.po.3 evolution-3.40.4/po/eo.po
+--- evolution-3.40.4/po/eo.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/eo.po	2022-04-05 10:00:37.406025263 +0200
+@@ -27968,3 +27968,7 @@ msgstr "Enportita atestilo"
+ 
+ #~ msgid "Read and write emails"
+ #~ msgstr "Legi kaj skribi retpoŝtojn"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adresaro:"
+diff -up evolution-3.40.4/po/es.po.3 evolution-3.40.4/po/es.po
+--- evolution-3.40.4/po/es.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/es.po	2022-04-05 10:00:37.408025262 +0200
+@@ -29113,3 +29113,11 @@ msgstr "Certificado importado"
+ #~ msgstr ""
+ #~ "El calendario «%s» contiene %d citas que entran en conflicto con esta "
+ #~ "reunión"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Eliminar la libreta de direcciones de usuario predeterminada"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Libreta de direcciones:"
+diff -up evolution-3.40.4/po/eu.po.3 evolution-3.40.4/po/eu.po
+--- evolution-3.40.4/po/eu.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/eu.po	2022-04-05 10:00:37.409025262 +0200
+@@ -27204,3 +27204,11 @@ msgstr "Inportatutako ziurtagiria"
+ 
+ #~ msgid "_Destination"
+ #~ msgstr "_Helburua"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Erabiltzailearen helbide-liburu lehenetsia"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Helbide-liburua:"
+diff -up evolution-3.40.4/po/fi.po.3 evolution-3.40.4/po/fi.po
+--- evolution-3.40.4/po/fi.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/fi.po	2022-04-05 10:00:37.411025261 +0200
+@@ -29750,3 +29750,7 @@ msgstr "Tuotu varmenne"
+ 
+ #~ msgid "Certificate details"
+ #~ msgstr "Varmenteen yksityiskohdat"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Osoitekirja:"
+diff -up evolution-3.40.4/po/fr.po.3 evolution-3.40.4/po/fr.po
+--- evolution-3.40.4/po/fr.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/fr.po	2022-04-05 10:00:37.413025260 +0200
+@@ -28750,3 +28750,11 @@ msgstr "Certificat importé"
+ 
+ #~ msgid "Preserve exiting reminder by default"
+ #~ msgstr "Conserver les rappels existants par défaut"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Carnet d’adresses par défaut de l’utilisateur"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Carnet d’adresses :"
+diff -up evolution-3.40.4/po/fur.po.3 evolution-3.40.4/po/fur.po
+--- evolution-3.40.4/po/fur.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/fur.po	2022-04-05 10:00:37.414025260 +0200
+@@ -29053,3 +29053,11 @@ msgstr "Certificât impuartât"
+ #~ msgctxt "PGPKeyDescription"
+ #~ msgid "%s - %s"
+ #~ msgstr "%s - %s"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Rubriche utent predefinît"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Rubriche:"
+diff -up evolution-3.40.4/po/gl.po.3 evolution-3.40.4/po/gl.po
+--- evolution-3.40.4/po/gl.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/gl.po	2022-04-05 10:00:37.416025259 +0200
+@@ -28502,3 +28502,11 @@ msgstr "Certificado importado"
+ 
+ #~ msgid "Delivery Notification for “%s”"
+ #~ msgstr "Notificación de recepción para «%s»"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Axenda de enderezos predeterminada do usuario"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Caderno de enderezos:"
+diff -up evolution-3.40.4/po/hr.po.3 evolution-3.40.4/po/hr.po
+--- evolution-3.40.4/po/hr.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/hr.po	2022-04-05 10:00:37.418025258 +0200
+@@ -28303,3 +28303,11 @@ msgstr "Uvezena vjerodajnica"
+ 
+ #~ msgid "This certificate is not viewable"
+ #~ msgstr "Ovaj potvrda nije vidljiva"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Zadani adresar korisnika"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adresar:"
+diff -up evolution-3.40.4/po/hu.po.3 evolution-3.40.4/po/hu.po
+--- evolution-3.40.4/po/hu.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/hu.po	2022-04-05 10:00:37.419025257 +0200
+@@ -27314,3 +27314,11 @@ msgstr "Importált tanúsítvány"
+ 
+ #~ msgid "_Destination"
+ #~ msgstr "_Cél"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Alapértelmezett felhasználói címjegyzék"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Címjegyzék:"
+diff -up evolution-3.40.4/po/id.po.3 evolution-3.40.4/po/id.po
+--- evolution-3.40.4/po/id.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/id.po	2022-04-05 10:00:37.421025257 +0200
+@@ -28288,3 +28288,11 @@ msgstr "Sertifikat Yang Diimpor"
+ 
+ #~ msgid "Delivery Notification for “%s”"
+ #~ msgstr "Notifikasi Pengiriman untuk \"%s\""
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Buku Alamat Pengguna Bawaan"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Buku Alamat:"
+diff -up evolution-3.40.4/po/it.po.3 evolution-3.40.4/po/it.po
+--- evolution-3.40.4/po/it.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/it.po	2022-04-05 10:00:37.423025256 +0200
+@@ -29030,3 +29030,11 @@ msgstr "Impossibile scrivere il salvatag
+ #: ../src/smime/lib/e-pkcs12.c:407
+ msgid "Imported Certificate"
+ msgstr "Certificato importato"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Rubrica predefinita dell'utente"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Rubrica:"
+diff -up evolution-3.40.4/po/kk.po.3 evolution-3.40.4/po/kk.po
+--- evolution-3.40.4/po/kk.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/kk.po	2022-04-05 10:00:37.424025255 +0200
+@@ -27302,3 +27302,7 @@ msgstr "Импортталған сер�
+ 
+ #~ msgid "_PostScript"
+ #~ msgstr "_PostScript"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Адрестік кітапша:"
+diff -up evolution-3.40.4/po/ko.po.3 evolution-3.40.4/po/ko.po
+--- evolution-3.40.4/po/ko.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/ko.po	2022-04-05 10:00:37.426025254 +0200
+@@ -28272,3 +28272,11 @@ msgstr "디스크에 저장 내용을 �
+ #: ../src/smime/lib/e-pkcs12.c:407
+ msgid "Imported Certificate"
+ msgstr "가져온 인증서"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "기본 사용자 주소록"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "주소록:"
+diff -up evolution-3.40.4/po/lt.po.3 evolution-3.40.4/po/lt.po
+--- evolution-3.40.4/po/lt.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/lt.po	2022-04-05 10:00:37.428025253 +0200
+@@ -29356,3 +29356,11 @@ msgstr "Importuotas liudijimas"
+ 
+ #~ msgid "Certificate details"
+ #~ msgstr "Liudijimo informacija"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Numatytoji naudotojo adresų knyga"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adresų knyga:"
+diff -up evolution-3.40.4/po/lv.po.3 evolution-3.40.4/po/lv.po
+--- evolution-3.40.4/po/lv.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/lv.po	2022-04-05 10:00:37.429025253 +0200
+@@ -26918,3 +26918,11 @@ msgstr "Importēts sertifikāts"
+ 
+ #~ msgid "Evolution Web Inspector"
+ #~ msgstr "Evolution tīmekļa inspektors"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Noklusējuma lietotāja adrešu grāmata"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adrešu grāmata:"
+diff -up evolution-3.40.4/po/nb.po.3 evolution-3.40.4/po/nb.po
+--- evolution-3.40.4/po/nb.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/nb.po	2022-04-05 10:00:37.431025252 +0200
+@@ -27933,3 +27933,11 @@ msgstr "Kan ikke skrive lager til disk.
+ #: ../src/smime/lib/e-pkcs12.c:407
+ msgid "Imported Certificate"
+ msgstr "Importert sertifikat"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Forvalgt adressebok for bruker"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adressebok:"
+diff -up evolution-3.40.4/po/nl.po.3 evolution-3.40.4/po/nl.po
+--- evolution-3.40.4/po/nl.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/nl.po	2022-04-05 10:00:37.432025252 +0200
+@@ -29667,3 +29667,11 @@ msgstr "Geïmporteerd certificaat"
+ # Herinnering geven [15] [minuten] voor het begin van elke afspraak
+ #~ msgid "Sh_ow a reminder"
+ #~ msgstr "Herinnering geven"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Standaardadresboek van gebruiker"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adresboek:"
+diff -up evolution-3.40.4/po/pl.po.3 evolution-3.40.4/po/pl.po
+--- evolution-3.40.4/po/pl.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/pl.po	2022-04-05 10:00:37.434025251 +0200
+@@ -28409,3 +28409,11 @@ msgstr "Nie można zapisać przechowalni
+ #: ../src/smime/lib/e-pkcs12.c:407
+ msgid "Imported Certificate"
+ msgstr "Zaimportowany certyfikat"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Domyślna książka adresowa użytkownika"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Książka adresowa:"
+diff -up evolution-3.40.4/po/POTFILES.in.3 evolution-3.40.4/po/POTFILES.in
+--- evolution-3.40.4/po/POTFILES.in.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/POTFILES.in	2022-04-05 10:00:37.392025269 +0200
+@@ -406,6 +406,7 @@ src/modules/backup-restore/org-gnome-bac
+ src/modules/bogofilter/evolution-bogofilter.c
+ src/modules/bogofilter/org.gnome.Evolution-bogofilter.metainfo.xml.in
+ src/modules/book-config-carddav/evolution-book-config-carddav.c
++src/modules/book-config-google/e-google-book-chooser-button.c
+ src/modules/book-config-google/evolution-book-config-google.c
+ src/modules/book-config-ldap/evolution-book-config-ldap.c
+ src/modules/cal-config-caldav/evolution-cal-config-caldav.c
+diff -up evolution-3.40.4/po/pt_BR.po.3 evolution-3.40.4/po/pt_BR.po
+--- evolution-3.40.4/po/pt_BR.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/pt_BR.po	2022-04-05 10:00:37.438025249 +0200
+@@ -29031,3 +29031,11 @@ msgstr "Certificado importado"
+ 
+ #~ msgid "Save name format for drag-and-drop operation"
+ #~ msgstr "Salvar formato de nome para operação de arrastar e soltar"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Catálogo de endereços do usuário padrão"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Catálogo de endereços:"
+diff -up evolution-3.40.4/po/pt.po.3 evolution-3.40.4/po/pt.po
+--- evolution-3.40.4/po/pt.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/pt.po	2022-04-05 10:00:37.436025250 +0200
+@@ -32805,3 +32805,11 @@ msgstr "Certificado importado"
+ 
+ #~ msgid "Checks incoming mail messages to be Junk"
+ #~ msgstr "Verificar nas mensagens recebidas se são Não Solicitadas"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Livro de endereços predefinido do utilizador"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Livro de endereços:"
+diff -up evolution-3.40.4/po/ro.po.3 evolution-3.40.4/po/ro.po
+--- evolution-3.40.4/po/ro.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/ro.po	2022-04-05 10:00:37.439025249 +0200
+@@ -26328,3 +26328,11 @@ msgstr "Certificatul importat"
+ 
+ #~ msgid "_Destination"
+ #~ msgstr "_Destinație"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Agenda utilizatorului implicit"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Agendă:"
+diff -up evolution-3.40.4/po/ru.po.3 evolution-3.40.4/po/ru.po
+--- evolution-3.40.4/po/ru.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/ru.po	2022-04-05 10:00:37.441025248 +0200
+@@ -28144,3 +28144,11 @@ msgstr "Импортированный �
+ #~ msgstr ""
+ #~ "Этот параметр будет использовать токен доступа OAuth 2.0 для подключения "
+ #~ "к серверу"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Адресная книга пользователя по умолчанию"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Адресная книга:"
+diff -up evolution-3.40.4/po/sk.po.3 evolution-3.40.4/po/sk.po
+--- evolution-3.40.4/po/sk.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/sk.po	2022-04-05 10:00:37.443025247 +0200
+@@ -29840,3 +29840,7 @@ msgstr "Importovaný certifikát"
+ # MČ: podpis certifikátu. Až ďalej sa určuje, či sa tento certifikát môže použiť na podpisovanie
+ #~ msgid "Certificate Signature Value"
+ #~ msgstr "Hodnota podpisu certifikátu"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adresár kontaktov:"
+diff -up evolution-3.40.4/po/sl.po.3 evolution-3.40.4/po/sl.po
+--- evolution-3.40.4/po/sl.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/sl.po	2022-04-05 10:00:37.444025246 +0200
+@@ -28539,3 +28539,11 @@ msgstr "Uvoženo potrdilo"
+ 
+ #~ msgid "Certificate"
+ #~ msgstr "Potrdilo"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Privzeti uporabniški imenik"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Imenik:"
+diff -up evolution-3.40.4/po/sr.po.3 evolution-3.40.4/po/sr.po
+--- evolution-3.40.4/po/sr.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/sr.po	2022-04-05 10:00:37.447025245 +0200
+@@ -29869,3 +29869,11 @@ msgstr "Увежено уверење"
+ 
+ #~ msgid "Certificate Signature Value"
+ #~ msgstr "Вредност потписа уверења"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Основни корисников именик"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Именик:"
+diff -up evolution-3.40.4/po/sv.po.3 evolution-3.40.4/po/sv.po
+--- evolution-3.40.4/po/sv.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/sv.po	2022-04-05 10:00:37.450025244 +0200
+@@ -29371,3 +29371,11 @@ msgstr "Importerat certifikat"
+ 
+ #~ msgid "User declined to provide a password"
+ #~ msgstr "Användare avböjde att tillhandahålla ett lösenord"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Standardadressbok för användare"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adressbok:"
+diff -up evolution-3.40.4/po/tr.po.3 evolution-3.40.4/po/tr.po
+--- evolution-3.40.4/po/tr.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/tr.po	2022-04-05 10:00:37.452025243 +0200
+@@ -28728,3 +28728,11 @@ msgstr "Aktarılmış Sertifika"
+ 
+ #~ msgid "Evolution Web Inspector"
+ #~ msgstr "Evolution Web Denetçisi"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Öntanımlı Kullanıcı Adres Defteri"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Adres Defteri:"
+diff -up evolution-3.40.4/po/uk.po.3 evolution-3.40.4/po/uk.po
+--- evolution-3.40.4/po/uk.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/uk.po	2022-04-05 10:00:37.455025241 +0200
+@@ -28418,3 +28418,11 @@ msgstr "Імпортований сер�
+ 
+ #~ msgid "<b>Background Image</b>"
+ #~ msgstr "<b>Зображення тла</b>"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "Типова адресна книга користувача"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "Адресна книга:"
+diff -up evolution-3.40.4/po/zh_CN.po.3 evolution-3.40.4/po/zh_CN.po
+--- evolution-3.40.4/po/zh_CN.po.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/po/zh_CN.po	2022-04-05 10:00:37.457025241 +0200
+@@ -32853,3 +32853,11 @@ msgstr "导入的证书"
+ 
+ #~ msgid "Local Calendars"
+ #~ msgstr "载入日历"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "默认用户通讯录"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "通讯录："
+diff -up evolution-3.40.4/po/ja.po.5 evolution-3.40.4/po/ja.po
+--- evolution-3.40.4/po/ja.po.3	2022-04-08 13:42:12.782532717 +0200
++++ evolution-3.40.4/po/ja.po	2022-04-08 13:42:38.886527919 +0200
+@@ -28035,3 +28035,11 @@ msgstr "インポートした証明書"
+ 
+ #~ msgid "Certificate Signature Value"
+ #~ msgstr "証明書の署名の値"
++
++#: ../src/modules/book-config-google/e-google-book-chooser-button.c:134
++msgid "Default User Address Book"
++msgstr "デフォルトのユーザーアドレス帳"
++
++#: ../src/modules/book-config-google/evolution-book-config-google.c:75
++msgid "Address Book:"
++msgstr "アドレス帳:"
+diff -up evolution-3.40.4/src/e-util/e-source-config.c.3 evolution-3.40.4/src/e-util/e-source-config.c
+--- evolution-3.40.4/src/e-util/e-source-config.c.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/src/e-util/e-source-config.c	2022-04-05 10:00:37.457025241 +0200
+@@ -505,9 +505,10 @@ source_config_init_for_editing_source (E
+ 	backend_name = e_source_backend_get_backend_name (extension);
+ 	g_return_if_fail (backend_name != NULL);
+ 
+-	/* Special-case Google calendars to use 'google' editor, instead
+-	   of the 'caldav' editor, even they use 'caldav' calendar backend. */
+-	if (g_ascii_strcasecmp (backend_name, "caldav") == 0 &&
++	/* Special-case Google books and calendars to use 'google' editor, instead
++	   of the 'carddav'/'caldav' editor, even they use 'carddav'/'caldav' backend. */
++	if ((g_ascii_strcasecmp (backend_name, "caldav") == 0 ||
++	     g_ascii_strcasecmp (backend_name, "carddav") == 0) &&
+ 	    g_strcmp0 (e_source_get_parent (original_source), "google-stub") == 0)
+ 		backend_name = "google";
+ 
+diff -up evolution-3.40.4/src/modules/book-config-google/CMakeLists.txt.3 evolution-3.40.4/src/modules/book-config-google/CMakeLists.txt
+--- evolution-3.40.4/src/modules/book-config-google/CMakeLists.txt.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/src/modules/book-config-google/CMakeLists.txt	2022-04-05 10:00:37.457025241 +0200
+@@ -1,5 +1,7 @@
+ set(extra_deps)
+ set(sources
++	e-google-book-chooser-button.c
++	e-google-book-chooser-button.h
+ 	evolution-book-config-google.c
+ )
+ set(extra_defines)
+diff -up evolution-3.40.4/src/modules/book-config-google/e-google-book-chooser-button.c.3 evolution-3.40.4/src/modules/book-config-google/e-google-book-chooser-button.c
+--- evolution-3.40.4/src/modules/book-config-google/e-google-book-chooser-button.c.3	2022-04-05 10:00:37.457025241 +0200
++++ evolution-3.40.4/src/modules/book-config-google/e-google-book-chooser-button.c	2022-04-05 10:00:37.457025241 +0200
+@@ -0,0 +1,402 @@
++/*
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU Lesser General Public License as published by
++ * the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
++ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "evolution-config.h"
++
++#include <glib/gi18n-lib.h>
++
++#include <libedataserverui/libedataserverui.h>
++
++#include "e-google-book-chooser-button.h"
++
++struct _EGoogleBookChooserButtonPrivate {
++	ESource *source;
++	ESourceConfig *config;
++	GtkWidget *label;
++};
++
++enum {
++	PROP_0,
++	PROP_SOURCE,
++	PROP_CONFIG
++};
++
++G_DEFINE_DYNAMIC_TYPE_EXTENDED (EGoogleBookChooserButton, e_google_book_chooser_button, GTK_TYPE_BUTTON, 0,
++	G_ADD_PRIVATE_DYNAMIC (EGoogleBookChooserButton))
++
++static void
++google_book_chooser_button_set_source (EGoogleBookChooserButton *button,
++				       ESource *source)
++{
++	g_return_if_fail (E_IS_SOURCE (source));
++	g_return_if_fail (button->priv->source == NULL);
++
++	button->priv->source = g_object_ref (source);
++}
++
++static void
++google_book_chooser_button_set_config (EGoogleBookChooserButton *button,
++				       ESourceConfig *config)
++{
++	g_return_if_fail (E_IS_SOURCE_CONFIG (config));
++	g_return_if_fail (button->priv->config == NULL);
++
++	button->priv->config = g_object_ref (config);
++}
++
++static void
++google_book_chooser_button_set_property (GObject *object,
++					 guint property_id,
++					 const GValue *value,
++					 GParamSpec *pspec)
++{
++	switch (property_id) {
++		case PROP_SOURCE:
++			google_book_chooser_button_set_source (
++				E_GOOGLE_BOOK_CHOOSER_BUTTON (object),
++				g_value_get_object (value));
++			return;
++
++		case PROP_CONFIG:
++			google_book_chooser_button_set_config (
++				E_GOOGLE_BOOK_CHOOSER_BUTTON (object),
++				g_value_get_object (value));
++			return;
++	}
++
++	G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
++}
++
++static void
++google_book_chooser_button_get_property (GObject *object,
++					 guint property_id,
++					 GValue *value,
++					 GParamSpec *pspec)
++{
++	switch (property_id) {
++		case PROP_SOURCE:
++			g_value_set_object (
++				value,
++				e_google_book_chooser_button_get_source (
++				E_GOOGLE_BOOK_CHOOSER_BUTTON (object)));
++			return;
++
++		case PROP_CONFIG:
++			g_value_set_object (
++				value,
++				e_google_book_chooser_button_get_config (
++				E_GOOGLE_BOOK_CHOOSER_BUTTON (object)));
++			return;
++	}
++
++	G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
++}
++
++static void
++google_book_chooser_button_dispose (GObject *object)
++{
++	EGoogleBookChooserButton *button = E_GOOGLE_BOOK_CHOOSER_BUTTON (object);
++
++	g_clear_object (&button->priv->source);
++	g_clear_object (&button->priv->config);
++	g_clear_object (&button->priv->label);
++
++	/* Chain up to parent's dispose() method. */
++	G_OBJECT_CLASS (e_google_book_chooser_button_parent_class)->dispose (object);
++}
++
++static void
++google_book_chooser_button_constructed (GObject *object)
++{
++	EGoogleBookChooserButton *button;
++	ESourceWebdav *webdav_extension;
++	GBindingFlags binding_flags;
++	GtkWidget *widget;
++	const gchar *display_name;
++
++	button = E_GOOGLE_BOOK_CHOOSER_BUTTON (object);
++
++	/* Chain up to parent's constructed() method. */
++	G_OBJECT_CLASS (e_google_book_chooser_button_parent_class)->constructed (object);
++
++	widget = gtk_label_new (_("Default User Address Book"));
++	gtk_misc_set_alignment (GTK_MISC (widget), 0.0, 0.5);
++	gtk_container_add (GTK_CONTAINER (button), widget);
++	button->priv->label = g_object_ref (widget);
++	gtk_widget_show (widget);
++
++	webdav_extension = e_source_get_extension (
++		button->priv->source, E_SOURCE_EXTENSION_WEBDAV_BACKEND);
++	display_name = e_source_webdav_get_display_name (webdav_extension);
++
++	binding_flags = G_BINDING_DEFAULT;
++	if (display_name != NULL && *display_name != '\0')
++		binding_flags |= G_BINDING_SYNC_CREATE;
++
++	e_binding_bind_property (
++		webdav_extension, "display-name",
++		button->priv->label, "label",
++		binding_flags);
++}
++
++static GtkWindow *
++google_config_get_dialog_parent_cb (ECredentialsPrompter *prompter,
++				    GtkWindow *dialog)
++{
++	return dialog;
++}
++
++static void
++google_book_chooser_button_clicked (GtkButton *btn)
++{
++	EGoogleBookChooserButton *button;
++	gpointer parent;
++	ESourceRegistry *registry;
++	ECredentialsPrompter *prompter;
++	ESourceWebdav *webdav_extension;
++	ESourceAuthentication *authentication_extension;
++	SoupURI *uri;
++	gchar *base_url;
++	GtkDialog *dialog;
++	gulong handler_id;
++	guint supports_filter = 0;
++	const gchar *title = NULL;
++
++	button = E_GOOGLE_BOOK_CHOOSER_BUTTON (btn);
++
++	parent = gtk_widget_get_toplevel (GTK_WIDGET (button));
++	parent = gtk_widget_is_toplevel (parent) ? parent : NULL;
++
++	registry = e_source_config_get_registry (button->priv->config);
++
++	authentication_extension = e_source_get_extension (button->priv->source, E_SOURCE_EXTENSION_AUTHENTICATION);
++	webdav_extension = e_source_get_extension (button->priv->source, E_SOURCE_EXTENSION_WEBDAV_BACKEND);
++
++	uri = e_source_webdav_dup_soup_uri (webdav_extension);
++
++	e_google_book_chooser_button_construct_default_uri (uri, e_source_authentication_get_user (authentication_extension));
++
++	/* Prefer 'Google', aka internal OAuth2, authentication method, if available */
++	e_source_authentication_set_method (authentication_extension, "Google");
++
++	/* See https://developers.google.com/people/carddav */
++	soup_uri_set_host (uri, "www.googleapis.com");
++	soup_uri_set_path (uri, "/.well-known/carddav");
++
++	/* Google's CardDAV interface requires a secure connection. */
++	soup_uri_set_scheme (uri, SOUP_URI_SCHEME_HTTPS);
++
++	e_source_webdav_set_soup_uri (webdav_extension, uri);
++
++	prompter = e_credentials_prompter_new (registry);
++	e_credentials_prompter_set_auto_prompt (prompter, FALSE);
++
++	supports_filter = E_WEBDAV_DISCOVER_SUPPORTS_CONTACTS;
++	title = _("Choose an Address Book");
++	base_url = soup_uri_to_string (uri, FALSE);
++
++	dialog = e_webdav_discover_dialog_new (parent, title, prompter, button->priv->source, base_url, supports_filter);
++
++	if (parent != NULL)
++		e_binding_bind_property (
++			parent, "icon-name",
++			dialog, "icon-name",
++			G_BINDING_SYNC_CREATE);
++
++	handler_id = g_signal_connect (prompter, "get-dialog-parent",
++		G_CALLBACK (google_config_get_dialog_parent_cb), dialog);
++
++	e_webdav_discover_dialog_refresh (dialog);
++
++	if (gtk_dialog_run (dialog) == GTK_RESPONSE_ACCEPT) {
++		gchar *href = NULL, *display_name = NULL, *color = NULL, *email;
++		guint supports = 0, order = 0;
++		GtkWidget *content;
++
++		content = e_webdav_discover_dialog_get_content (dialog);
++
++		if (e_webdav_discover_content_get_selected (content, 0, &href, &supports, &display_name, &color, &order)) {
++			soup_uri_free (uri);
++			uri = soup_uri_new (href);
++
++			if (uri) {
++				ESourceAddressBook *addressbook_extension;
++
++				addressbook_extension = e_source_get_extension (button->priv->source, E_SOURCE_EXTENSION_ADDRESS_BOOK);
++
++				e_source_set_display_name (button->priv->source, display_name);
++
++				e_source_webdav_set_display_name (webdav_extension, display_name);
++				e_source_webdav_set_soup_uri (webdav_extension, uri);
++				e_source_webdav_set_order (webdav_extension, order);
++
++				e_source_address_book_set_order (addressbook_extension, order);
++			}
++
++			g_clear_pointer (&href, g_free);
++			g_clear_pointer (&display_name, g_free);
++			g_clear_pointer (&color, g_free);
++		}
++
++		email = e_webdav_discover_content_get_user_address (content);
++		if (email && *email)
++			e_source_webdav_set_email_address (webdav_extension, email);
++		g_free (email);
++	}
++
++	g_signal_handler_disconnect (prompter, handler_id);
++
++	gtk_widget_destroy (GTK_WIDGET (dialog));
++
++	g_object_unref (prompter);
++	if (uri)
++		soup_uri_free (uri);
++	g_free (base_url);
++}
++
++static void
++e_google_book_chooser_button_class_init (EGoogleBookChooserButtonClass *class)
++{
++	GObjectClass *object_class;
++	GtkButtonClass *button_class;
++
++	object_class = G_OBJECT_CLASS (class);
++	object_class->set_property = google_book_chooser_button_set_property;
++	object_class->get_property = google_book_chooser_button_get_property;
++	object_class->dispose = google_book_chooser_button_dispose;
++	object_class->constructed = google_book_chooser_button_constructed;
++
++	button_class = GTK_BUTTON_CLASS (class);
++	button_class->clicked = google_book_chooser_button_clicked;
++
++	g_object_class_install_property (
++		object_class,
++		PROP_SOURCE,
++		g_param_spec_object (
++			"source",
++			NULL,
++			NULL,
++			E_TYPE_SOURCE,
++			G_PARAM_READWRITE |
++			G_PARAM_CONSTRUCT_ONLY));
++
++	g_object_class_install_property (
++		object_class,
++		PROP_CONFIG,
++		g_param_spec_object (
++			"config",
++			NULL,
++			NULL,
++			E_TYPE_SOURCE_CONFIG,
++			G_PARAM_READWRITE |
++			G_PARAM_CONSTRUCT_ONLY));
++}
++
++static void
++e_google_book_chooser_button_class_finalize (EGoogleBookChooserButtonClass *class)
++{
++}
++
++static void
++e_google_book_chooser_button_init (EGoogleBookChooserButton *button)
++{
++	button->priv = e_google_book_chooser_button_get_instance_private (button);
++}
++
++void
++e_google_book_chooser_button_type_register (GTypeModule *type_module)
++{
++	/* XXX G_DEFINE_DYNAMIC_TYPE declares a static type registration
++	 *     function, so we have to wrap it with a public function in
++	 *     order to register types from a separate compilation unit. */
++	e_google_book_chooser_button_register_type (type_module);
++}
++
++GtkWidget *
++e_google_book_chooser_button_new (ESource *source,
++				  ESourceConfig *config)
++{
++	g_return_val_if_fail (E_IS_SOURCE (source), NULL);
++
++	return g_object_new (
++		E_TYPE_GOOGLE_BOOK_CHOOSER_BUTTON,
++		"source", source,
++		"config", config, NULL);
++}
++
++ESource *
++e_google_book_chooser_button_get_source (EGoogleBookChooserButton *button)
++{
++	g_return_val_if_fail (E_IS_GOOGLE_BOOK_CHOOSER_BUTTON (button), NULL);
++
++	return button->priv->source;
++}
++
++ESourceConfig *
++e_google_book_chooser_button_get_config (EGoogleBookChooserButton *button)
++{
++	g_return_val_if_fail (E_IS_GOOGLE_BOOK_CHOOSER_BUTTON (button), NULL);
++
++	return button->priv->config;
++}
++
++static gchar *
++google_book_chooser_decode_user (const gchar *user)
++{
++	gchar *decoded_user;
++
++	if (user == NULL || *user == '\0')
++		return NULL;
++
++	/* Decode any encoded 'at' symbols ('%40' -> '@'). */
++	if (strstr (user, "%40") != NULL) {
++		gchar **segments;
++
++		segments = g_strsplit (user, "%40", 0);
++		decoded_user = g_strjoinv ("@", segments);
++		g_strfreev (segments);
++
++	/* If no domain is given, append "@gmail.com". */
++	} else if (strstr (user, "@") == NULL) {
++		decoded_user = g_strconcat (user, "@gmail.com", NULL);
++
++	/* Otherwise the user name should be fine as is. */
++	} else {
++		decoded_user = g_strdup (user);
++	}
++
++	return decoded_user;
++}
++
++void
++e_google_book_chooser_button_construct_default_uri (SoupURI *soup_uri,
++						    const gchar *username)
++{
++	gchar *decoded_user, *path;
++
++	decoded_user = google_book_chooser_decode_user (username);
++	if (!decoded_user)
++		return;
++
++	path = g_strdup_printf ("/carddav/v1/principals/%s/lists/default/", decoded_user);
++
++	soup_uri_set_scheme (soup_uri, SOUP_URI_SCHEME_HTTPS);
++	soup_uri_set_user (soup_uri, decoded_user);
++	soup_uri_set_host (soup_uri, "www.googleapis.com");
++	soup_uri_set_path (soup_uri, path);
++
++	g_free (decoded_user);
++	g_free (path);
++}
+diff -up evolution-3.40.4/src/modules/book-config-google/e-google-book-chooser-button.h.3 evolution-3.40.4/src/modules/book-config-google/e-google-book-chooser-button.h
+--- evolution-3.40.4/src/modules/book-config-google/e-google-book-chooser-button.h.3	2022-04-05 10:00:37.457025241 +0200
++++ evolution-3.40.4/src/modules/book-config-google/e-google-book-chooser-button.h	2022-04-05 10:00:37.457025241 +0200
+@@ -0,0 +1,70 @@
++/*
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU Lesser General Public License as published by
++ * the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
++ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#ifndef E_GOOGLE_BOOK_CHOOSER_BUTTON_H
++#define E_GOOGLE_BOOK_CHOOSER_BUTTON_H
++
++#include <e-util/e-util.h>
++
++/* Standard GObject macros */
++#define E_TYPE_GOOGLE_BOOK_CHOOSER_BUTTON \
++	(e_google_book_chooser_button_get_type ())
++#define E_GOOGLE_BOOK_CHOOSER_BUTTON(obj) \
++	(G_TYPE_CHECK_INSTANCE_CAST \
++	((obj), E_TYPE_GOOGLE_BOOK_CHOOSER_BUTTON, EGoogleBookChooserButton))
++#define E_GOOGLE_BOOK_CHOOSER_BUTTON_CLASS(cls) \
++	(G_TYPE_CHECK_CLASS_CAST \
++	((cls), E_TYPE_GOOGLE_BOOK_CHOOSER_BUTTON, EGoogleBookChooserButtonClass))
++#define E_IS_GOOGLE_BOOK_CHOOSER_BUTTON(obj) \
++	(G_TYPE_CHECK_INSTANCE_TYPE \
++	((obj), E_TYPE_GOOGLE_BOOK_CHOOSER_BUTTON))
++#define E_IS_GOOGLE_BOOK_CHOOSER_BUTTON_CLASS(cls) \
++	(G_TYPE_CHECK_CLASS_TYPE \
++	((cls), E_TYPE_GOOGLE_BOOK_CHOOSER_BUTTON))
++#define E_GOOGLE_BOOK_CHOOSER_BUTTON_GET_CLASS(obj) \
++	(G_TYPE_INSTANCE_GET_CLASS \
++	((obj), E_TYPE_GOOGLE_BOOK_CHOOSER_BUTTON, EGoogleBookChooserButtonClass))
++
++G_BEGIN_DECLS
++
++typedef struct _EGoogleBookChooserButton EGoogleBookChooserButton;
++typedef struct _EGoogleBookChooserButtonClass EGoogleBookChooserButtonClass;
++typedef struct _EGoogleBookChooserButtonPrivate EGoogleBookChooserButtonPrivate;
++
++struct _EGoogleBookChooserButton {
++	GtkButton parent;
++	EGoogleBookChooserButtonPrivate *priv;
++};
++
++struct _EGoogleBookChooserButtonClass {
++	GtkButtonClass parent_class;
++};
++
++GType		e_google_book_chooser_button_get_type (void);
++void		e_google_book_chooser_button_type_register
++						(GTypeModule *type_module);
++GtkWidget *	e_google_book_chooser_button_new(ESource *source,
++						 ESourceConfig *config);
++ESource *	e_google_book_chooser_button_get_source
++						(EGoogleBookChooserButton *button);
++ESourceConfig *	e_google_book_chooser_button_get_config
++						(EGoogleBookChooserButton *button);
++void		e_google_book_chooser_button_construct_default_uri
++						(SoupURI *soup_uri,
++						 const gchar *username);
++
++G_END_DECLS
++
++#endif /* E_GOOGLE_BOOK_CHOOSER_BUTTON_H */
+diff -up evolution-3.40.4/src/modules/book-config-google/evolution-book-config-google.c.3 evolution-3.40.4/src/modules/book-config-google/evolution-book-config-google.c
+--- evolution-3.40.4/src/modules/book-config-google/evolution-book-config-google.c.3	2021-08-13 11:50:35.000000000 +0200
++++ evolution-3.40.4/src/modules/book-config-google/evolution-book-config-google.c	2022-04-05 10:00:37.458025240 +0200
+@@ -23,6 +23,8 @@
+ 
+ #include <e-util/e-util.h>
+ 
++#include "e-google-book-chooser-button.h"
++
+ typedef ESourceConfigBackend EBookConfigGoogle;
+ typedef ESourceConfigBackendClass EBookConfigGoogleClass;
+ 
+@@ -55,6 +57,7 @@ book_config_google_insert_widgets (ESour
+                                    ESource *scratch_source)
+ {
+ 	ESourceConfig *config;
++	GtkWidget *widget;
+ 	Context *context;
+ 	const gchar *uid;
+ 
+@@ -68,6 +71,10 @@ book_config_google_insert_widgets (ESour
+ 
+ 	context->user_entry = e_source_config_add_user_entry (config, scratch_source);
+ 
++	widget = e_google_book_chooser_button_new (scratch_source, config);
++	e_source_config_insert_widget (config, scratch_source, _("Address Book:"), widget);
++	gtk_widget_show (widget);
++
+ 	e_source_config_add_refresh_interval (config, scratch_source);
+ }
+ 
+@@ -101,23 +108,32 @@ book_config_google_commit_changes (ESour
+ {
+ 	ESource *collection_source;
+ 	ESourceConfig *config;
++	ESourceBackend *addressbook_extension;
++	ESourceWebdav *webdav_extension;
+ 	ESourceAuthentication *extension;
++	SoupURI *soup_uri;
+ 	const gchar *extension_name;
+ 	const gchar *user;
+ 
+ 	config = e_source_config_backend_get_config (backend);
+ 	collection_source = e_source_config_get_collection_source (config);
+ 
++	addressbook_extension = e_source_get_extension (scratch_source, E_SOURCE_EXTENSION_ADDRESS_BOOK);
++	webdav_extension = e_source_get_extension (scratch_source, E_SOURCE_EXTENSION_WEBDAV_BACKEND);
++
+ 	extension_name = E_SOURCE_EXTENSION_AUTHENTICATION;
+ 	extension = e_source_get_extension (scratch_source, extension_name);
+ 
+-	if (!collection_source || (
+-	    !e_source_has_extension (collection_source, E_SOURCE_EXTENSION_GOA) &&
+-	    !e_source_has_extension (collection_source, E_SOURCE_EXTENSION_UOA))) {
+-		e_source_authentication_set_host (extension, "www.google.com");
++	if (!collection_source ||
++	    !e_source_authentication_get_is_external (extension)) {
++		e_source_authentication_set_host (extension, "www.googleapis.com");
+ 		e_source_authentication_set_method (extension, "Google");
+ 	}
+ 
++	/* The backend name is "carddav" even though the ESource is
++	 * a child of the built-in "Google" source. */
++	e_source_backend_set_backend_name (addressbook_extension, "carddav");
++
+ 	user = e_source_authentication_get_user (extension);
+ 	g_return_if_fail (user != NULL);
+ 
+@@ -129,6 +145,19 @@ book_config_google_commit_changes (ESour
+ 		e_source_authentication_set_user (extension, full_user);
+ 		g_free (full_user);
+ 	}
++
++	soup_uri = e_source_webdav_dup_soup_uri (webdav_extension);
++
++	if (!soup_uri->path || !*soup_uri->path || g_strcmp0 (soup_uri->path, "/") == 0) {
++		e_google_book_chooser_button_construct_default_uri (soup_uri, e_source_authentication_get_user (extension));
++	}
++
++	/* Google's CalDAV interface requires a secure connection. */
++	soup_uri_set_scheme (soup_uri, SOUP_URI_SCHEME_HTTPS);
++
++	e_source_webdav_set_soup_uri (webdav_extension, soup_uri);
++
++	soup_uri_free (soup_uri);
+ }
+ 
+ static void
+@@ -159,6 +188,7 @@ e_book_config_google_init (ESourceConfig
+ G_MODULE_EXPORT void
+ e_module_load (GTypeModule *type_module)
+ {
++	e_google_book_chooser_button_type_register (type_module);
+ 	e_book_config_google_register_type (type_module);
+ }
+ 

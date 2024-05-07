@@ -1,0 +1,75 @@
+policy_module(efsutils, 1.0.0)
+
+########################################
+#
+# Declarations
+#
+
+type efsutils_t;
+type efsutils_exec_t;
+init_daemon_domain(efsutils_t, efsutils_exec_t)
+
+type efsutils_log_t;
+logging_log_file(efsutils_log_t)
+
+type efsutils_unit_file_t;
+systemd_unit_file(efsutils_unit_file_t)
+
+########################################
+#
+# efsutils local policy
+#
+allow efsutils_t self:fifo_file rw_fifo_file_perms;
+allow efsutils_t self:unix_stream_socket create_stream_socket_perms;
+
+manage_dirs_pattern(efsutils_t, efsutils_log_t, efsutils_log_t)
+manage_files_pattern(efsutils_t, efsutils_log_t, efsutils_log_t)
+manage_lnk_files_pattern(efsutils_t, efsutils_log_t, efsutils_log_t)
+logging_log_filetrans(efsutils_t, efsutils_log_t, { dir file lnk_file })
+
+domain_use_interactive_fds(efsutils_t)
+
+files_read_etc_files(efsutils_t)
+
+miscfiles_read_localization(efsutils_t)
+
+########################################
+#
+# Custom policy
+#
+allow efsutils_t self:netlink_route_socket { bind create getattr nlmsg_read };
+allow efsutils_t self:process getpgid;
+allow efsutils_t self:tcp_socket { accept bind connect create getattr getopt listen setopt shutdown };
+allow efsutils_t self:unix_dgram_socket { connect create };
+
+auth_read_passwd_file(efsutils_t)
+corecmd_exec_bin(efsutils_t)
+corecmd_mmap_bin_files(efsutils_t)
+corenet_tcp_bind_generic_node(efsutils_t)
+corenet_tcp_bind_generic_port(efsutils_t)
+corenet_tcp_connect_nfs_port(efsutils_t)
+dev_read_sysfs(efsutils_t)
+files_rw_pid_dirs(efsutils_t)
+fs_getattr_nfs(efsutils_t)
+fs_list_nfs(efsutils_t)
+kernel_dgram_send(efsutils_t)
+logging_create_devlog_dev(efsutils_t)
+logging_read_syslog_pid(efsutils_t)
+miscfiles_read_generic_certs(efsutils_t)
+miscfiles_search_generic_cert_dirs(efsutils_t)
+sysnet_read_config(efsutils_t)
+
+# to be replaced by custom type - efsutils_var_run_t and corresponding rules
+# allow efsutils_t var_run_t:dir rmdir;
+files_delete_all_pids(efsutils_t)
+# allow efsutils_t var_run_t:file { create getattr ioctl open read rename setattr unlink write };
+files_manage_all_pids(efsutils_t)
+#allow efsutils_t unconfined_t:dir search;
+#allow efsutils_t unconfined_t:file { getattr open read };
+optional_policy(`
+	unconfined_read_files(efsutils_t)
+')
+#allow efs-utils_t stunnel_exec_t:file { execute execute_no_trans map open read };
+optional_policy(`
+	stunnel_exec(efsutils_t)
+')

@@ -1,0 +1,51 @@
+From ac15857f14eecd83a3a1950588a2f1edb9cb70de Mon Sep 17 00:00:00 2001
+From: Milan Crha <mcrha@redhat.com>
+Date: Fri, 18 Mar 2022 09:45:20 +0100
+Subject: [PATCH] I#1835 - Mail: Preview uses wrong colors for HTML mail with
+ dark theme
+
+Closes https://gitlab.gnome.org/GNOME/evolution/-/issues/1835
+---
+ data/webkit/e-web-view.js                  | 12 ++++++++++--
+ src/em-format/e-mail-formatter-text-html.c |  2 +-
+ 2 files changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/data/webkit/e-web-view.js b/data/webkit/e-web-view.js
+index 7f47fe4b26..a8f99c4668 100644
+--- a/data/webkit/e-web-view.js
++++ b/data/webkit/e-web-view.js
+@@ -695,8 +695,16 @@ Evo.initialize = function(elem)
+ 
+ 	if (doc.documentElement.style.getPropertyValue("color") == "" ||
+ 	    doc.documentElement.style.getPropertyValue("color") == "text") {
+-		doc.documentElement.style.setProperty("color", "inherit");
+-		doc.documentElement.style.setProperty("background-color", "inherit");
++		if (doc.defaultView && doc.defaultView.frameElement && !doc.defaultView.frameElement.hasAttribute("x-e-unset-colors") &&
++		    doc.defaultView.frameElement.ownerDocument &&
++		    doc.defaultView.frameElement.ownerDocument.defaultView &&
++		    doc.defaultView.frameElement.ownerDocument.defaultView.window) {
++			var style = doc.defaultView.frameElement.ownerDocument.defaultView.window.getComputedStyle(doc.defaultView.frameElement);
++			if (style) {
++				doc.documentElement.style.setProperty("color", style.color);
++				doc.documentElement.style.setProperty("background-color", style.backgroundColor);
++			}
++		}
+ 	}
+ 
+ 	elems = doc.querySelectorAll("input, textarea, select, button, label");
+diff --git a/src/em-format/e-mail-formatter-text-html.c b/src/em-format/e-mail-formatter-text-html.c
+index 708c29a5e4..8a938212ff 100644
+--- a/src/em-format/e-mail-formatter-text-html.c
++++ b/src/em-format/e-mail-formatter-text-html.c
+@@ -369,7 +369,7 @@ emfe_text_html_format (EMailFormatterExtension *extension,
+ 			e_mail_part_get_id (part),
+ 			e_mail_part_get_id (part),
+ 			e_mail_part_get_frame_security_style (part),
+-			g_settings_get_boolean (settings, "preview-unset-html-colors") ? "x-e-unset-colors=\"1\"" : "style=\"background-color: #ffffff;\"");
++			g_settings_get_boolean (settings, "preview-unset-html-colors") ? "x-e-unset-colors=\"1\"" : "style=\"background-color:white; color:black;\"");
+ 
+ 		g_output_stream_write_all (
+ 			stream, str, strlen (str),
+-- 
+GitLab
+

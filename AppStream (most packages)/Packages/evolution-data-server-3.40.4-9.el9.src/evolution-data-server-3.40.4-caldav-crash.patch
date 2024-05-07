@@ -1,0 +1,36 @@
+From ad616bafcf7df22d265f7254c82ec285252bf1e7 Mon Sep 17 00:00:00 2001
+From: Milan Crha <mcrha@redhat.com>
+Date: Tue, 24 May 2022 18:27:09 +0200
+Subject: [PATCH] I#359 - CalDAV: Crash on calendar update
+
+Closes https://gitlab.gnome.org/GNOME/evolution-data-server/-/issues/359
+---
+ src/calendar/backends/caldav/e-cal-backend-caldav.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/calendar/backends/caldav/e-cal-backend-caldav.c b/src/calendar/backends/caldav/e-cal-backend-caldav.c
+index c8aeb8205..2aeed3c91 100644
+--- a/src/calendar/backends/caldav/e-cal-backend-caldav.c
++++ b/src/calendar/backends/caldav/e-cal-backend-caldav.c
+@@ -545,7 +545,8 @@ ecb_caldav_multiget_from_sets_sync (ECalBackendCalDAV *cbdav,
+ 	link = *in_link;
+ 
+ 	while (link && left_to_go > 0) {
+-		ECalMetaBackendInfo *nfo = link->data;
++		GSList *nfo_link = link;
++		ECalMetaBackendInfo *nfo = nfo_link->data;
+ 
+ 		link = g_slist_next (link);
+ 		if (!link) {
+@@ -635,7 +636,7 @@ ecb_caldav_multiget_from_sets_sync (ECalBackendCalDAV *cbdav,
+ 					else
+ 						e_cal_meta_backend_info_free (nfo);
+ 
+-					link->data = NULL;
++					nfo_link->data = NULL;
+ 					g_clear_error (&local_error);
+ 					continue;
+ 				} else if (local_error) {
+-- 
+2.35.1
+

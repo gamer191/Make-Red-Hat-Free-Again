@@ -1,0 +1,33 @@
+diff -up evolution-data-server-3.40.4/src/libedataserverui/e-credentials-prompter-impl-oauth2.c.7 evolution-data-server-3.40.4/src/libedataserverui/e-credentials-prompter-impl-oauth2.c
+--- evolution-data-server-3.40.4/src/libedataserverui/e-credentials-prompter-impl-oauth2.c.7	2021-08-13 11:44:41.000000000 +0200
++++ evolution-data-server-3.40.4/src/libedataserverui/e-credentials-prompter-impl-oauth2.c	2024-01-11 15:28:03.245950925 +0100
+@@ -573,6 +573,7 @@ e_credentials_prompter_impl_oauth2_show_
+ 	GtkScrolledWindow *scrolled_window;
+ 	GtkWindow *dialog_parent;
+ 	ECredentialsPrompter *prompter;
++	WebKitCookieManager *cookie_manager;
+ 	WebKitSettings *webkit_settings;
+ 	WebKitWebContext *web_context;
+ 	gchar *title, *uri;
+@@ -725,9 +726,9 @@ e_credentials_prompter_impl_oauth2_show_
+ 	webkit_settings = webkit_settings_new_with_settings (
+ 		"auto-load-images", TRUE,
+ 		"default-charset", "utf-8",
+-		"enable-html5-database", FALSE,
+ 		"enable-dns-prefetching", FALSE,
+-		"enable-html5-local-storage", FALSE,
++		"enable-html5-database", TRUE,
++		"enable-html5-local-storage", TRUE,
+ 		"enable-offline-web-application-cache", FALSE,
+ 		"enable-page-cache", FALSE,
+ 		"enable-plugins", FALSE,
+@@ -737,6 +738,9 @@ e_credentials_prompter_impl_oauth2_show_
+ 	web_context = webkit_web_context_new ();
+ 	webkit_web_context_set_sandbox_enabled (web_context, TRUE);
+ 
++	cookie_manager = webkit_web_context_get_cookie_manager (web_context);
++	webkit_cookie_manager_set_accept_policy (cookie_manager, WEBKIT_COOKIE_POLICY_ACCEPT_ALWAYS);
++
+ 	widget = g_object_new (WEBKIT_TYPE_WEB_VIEW,
+ 			"settings", webkit_settings,
+ 			"web-context", web_context,

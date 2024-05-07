@@ -1,0 +1,56 @@
+From e75c4faa36a9eb17b88128e45f9e5d91628149f9 Mon Sep 17 00:00:00 2001
+From: Milan Crha <mcrha@redhat.com>
+Date: Mon, 4 Oct 2021 17:18:35 +0200
+Subject: I#1646 - Emoji picker empty
+
+Embed emoji.data as expected by the copy of the gtk+' emoji chooser dialog.
+
+Closes https://gitlab.gnome.org/GNOME/evolution/-/issues/1646
+
+diff --git a/data/org.gnome.Evolution.gresource.xml b/data/org.gnome.Evolution.gresource.xml
+new file mode 100644
+index 0000000000..783ed153b8
+--- /dev/null
++++ b/data/org.gnome.Evolution.gresource.xml
+@@ -0,0 +1,6 @@
++<?xml version='1.0' encoding='UTF-8'?>
++<gresources>
++  <gresource prefix="org.gnome.Evolution">
++    <file>emoji.data</file>
++  </gresource>
++</gresources>
+diff --git a/src/e-util/CMakeLists.txt b/src/e-util/CMakeLists.txt
+index 03b60d8e4b..6f63f29858 100644
+--- a/src/e-util/CMakeLists.txt
++++ b/src/e-util/CMakeLists.txt
+@@ -30,6 +30,8 @@ if(WIN32)
+ 	)
+ endif(WIN32)
+ 
++glib_compile_resources(${CMAKE_SOURCE_DIR}/data/ ${CMAKE_CURRENT_BINARY_DIR}/org.gnome.Evolution.gresource org_gnome_evolution ../../data/org.gnome.Evolution.gresource.xml ${CMAKE_SOURCE_DIR}/data/emoji.data)
++
+ # Main libevolution-util
+ 
+ set(DEPENDENCIES
+@@ -309,6 +311,8 @@ set(SOURCES
+ 	${PLATFORM_SOURCES}
+ 	${CMAKE_CURRENT_BINARY_DIR}/e-marshal.c
+ 	${CMAKE_CURRENT_BINARY_DIR}/e-util-enumtypes.c
++	${CMAKE_CURRENT_BINARY_DIR}/org.gnome.Evolution.gresource.c
++	${CMAKE_CURRENT_BINARY_DIR}/org.gnome.Evolution.gresource.h
+ )
+ 
+ set(HEADERS
+diff --git a/src/e-util/e-gtkemojichooser.c b/src/e-util/e-gtkemojichooser.c
+index ba4d15ecee..7d8aae3039 100644
+--- a/src/e-util/e-gtkemojichooser.c
++++ b/src/e-util/e-gtkemojichooser.c
+@@ -444,7 +444,7 @@ populate_emoji_chooser (gpointer data)
+ 
+   if (!chooser->data)
+     {
+-      bytes = g_resources_lookup_data ("/org/gtk/libgtk/emoji/emoji.data", 0, NULL);
++      bytes = g_resources_lookup_data ("/org.gnome.Evolution/emoji.data", 0, NULL);
+       chooser->data = g_variant_ref_sink (g_variant_new_from_bytes (G_VARIANT_TYPE ("a(auss)"), bytes, TRUE));
+     }
+ 

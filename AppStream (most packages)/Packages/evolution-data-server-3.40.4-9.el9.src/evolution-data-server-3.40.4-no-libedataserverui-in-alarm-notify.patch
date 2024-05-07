@@ -1,0 +1,71 @@
+diff --git a/src/services/evolution-alarm-notify/CMakeLists.txt b/src/services/evolution-alarm-notify/CMakeLists.txt
+index a4c0a41..a713797 100644
+--- a/src/services/evolution-alarm-notify/CMakeLists.txt
++++ b/src/services/evolution-alarm-notify/CMakeLists.txt
+@@ -1,9 +1,14 @@
+ set(DEPENDENCIES
+ 	ecal
+-	edataserverui
+ )
+ 
+ set(SOURCES
++	../../libedataserverui/libedataserverui-private.h
++	../../libedataserverui/libedataserverui-private.c
++	../../libedataserverui/e-buffer-tagger.h
++	../../libedataserverui/e-buffer-tagger.c
++	../../libedataserverui/e-reminders-widget.h
++	../../libedataserverui/e-reminders-widget.c
+ 	evolution-alarm-notify.c
+ 	e-alarm-notify.h
+ 	e-alarm-notify.c
+@@ -17,9 +22,15 @@ add_dependencies(evolution-alarm-notify
+ 	${DEPENDENCIES}
+ )
+ 
++# the -DLIBEDATASERVERUI_COMPILATION is a hackish way to borrow sources from
++# the libedataserverui without depending on it (because it can be uninstalled)
+ target_compile_definitions(evolution-alarm-notify PRIVATE
+ 	-DG_LOG_DOMAIN=\"evolution-alarm-notify\"
+ 	-DLOCALEDIR=\"${LOCALE_INSTALL_DIR}\"
++	-DLIBEDATASERVERUI_COMPILATION
++	-DE_DATA_SERVER_PREFIX=\"${CMAKE_INSTALL_PREFIX}\"
++	-DE_DATA_SERVER_UIMODULEDIR=\"${uimoduledir}\"
++	-DE_DATA_SERVER_ICONDIR=\"${icondir}\"
+ )
+ 
+ target_compile_options(evolution-alarm-notify PUBLIC
+@@ -33,6 +44,7 @@ target_include_directories(evolution-alarm-notify PUBLIC
+ 	${CMAKE_BINARY_DIR}
+ 	${CMAKE_BINARY_DIR}/src
+ 	${CMAKE_SOURCE_DIR}/src
++	${CMAKE_SOURCE_DIR}/src/libedataserverui
+ 	${CANBERRA_INCLUDE_DIRS}
+ 	${DATA_SERVER_INCLUDE_DIRS}
+ 	${GNOME_PLATFORM_INCLUDE_DIRS}
+diff --git a/src/services/evolution-alarm-notify/e-alarm-notify.c b/src/services/evolution-alarm-notify/e-alarm-notify.c
+index 5c9b479..bf53a86 100644
+--- a/src/services/evolution-alarm-notify/e-alarm-notify.c
++++ b/src/services/evolution-alarm-notify/e-alarm-notify.c
+@@ -30,7 +30,9 @@
+ #endif
+ 
+ #include "libecal/libecal.h"
+-#include "libedataserverui/libedataserverui.h"
++
++#include "libedataserverui/e-buffer-tagger.h"
++#include "libedataserverui/e-reminders-widget.h"
+ 
+ #include "e-alarm-notify.h"
+ 
+diff --git a/src/services/evolution-alarm-notify/evolution-alarm-notify.c b/src/services/evolution-alarm-notify/evolution-alarm-notify.c
+index 5467a8d..14a13aa 100644
+--- a/src/services/evolution-alarm-notify/evolution-alarm-notify.c
++++ b/src/services/evolution-alarm-notify/evolution-alarm-notify.c
+@@ -22,7 +22,6 @@
+ #include <glib/gi18n.h>
+ 
+ #include <libedataserver/libedataserver.h>
+-#include <libedataserverui/libedataserverui.h>
+ 
+ #include "e-alarm-notify.h"
+ 

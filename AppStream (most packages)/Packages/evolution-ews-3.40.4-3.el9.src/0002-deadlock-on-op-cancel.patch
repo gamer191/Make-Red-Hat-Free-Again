@@ -1,0 +1,45 @@
+From a80c55fee430452072540f06a1ae1271cd7a9650 Mon Sep 17 00:00:00 2001
+Date: Tue, 31 Aug 2021 17:40:07 +0200
+Subject: [PATCH] EEwsConnection: Release queue lock as soon as possible in
+ ews_next_request()
+
+This could cause a deadlock when other thread cancels an ongoing
+request (the ews_next_request() thread inside the e_ews_connection_utils_prepare_message())
+and the ews_cancel_request() is called as the callback to the GCancellable::cancelled
+signal.
+---
+ src/EWS/common/e-ews-connection.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/EWS/common/e-ews-connection.c b/src/EWS/common/e-ews-connection.c
+index 1ecacb19..0d7dcb25 100644
+--- a/src/EWS/common/e-ews-connection.c
++++ b/src/EWS/common/e-ews-connection.c
+@@ -711,22 +711,20 @@ ews_next_request (gpointer _cnc)
+ 	/* Add to active job queue */
+ 	cnc->priv->active_job_queue = g_slist_append (cnc->priv->active_job_queue, node);
+ 
++	QUEUE_UNLOCK (cnc);
++
+ 	if (cnc->priv->soup_session) {
+ 		SoupMessage *msg = SOUP_MESSAGE (node->msg);
+ 
+ 		if (!e_ews_connection_utils_prepare_message (cnc, NULL, msg, node->cancellable)) {
+ 			e_ews_debug_dump_raw_soup_request (msg);
+-			QUEUE_UNLOCK (cnc);
+ 
+ 			ews_response_cb (cnc->priv->soup_session, msg, node);
+ 		} else {
+ 			e_ews_debug_dump_raw_soup_request (msg);
+ 			soup_session_queue_message (cnc->priv->soup_session, msg, ews_response_cb, node);
+-			QUEUE_UNLOCK (cnc);
+ 		}
+ 	} else {
+-		QUEUE_UNLOCK (cnc);
+-
+ 		ews_cancel_request (NULL, node);
+ 	}
+ 
+-- 
+GitLab
+

@@ -1,0 +1,58 @@
+diff -up enchant-1.6.0/doc/enchant-lsmod.1.manpages enchant-1.6.0/doc/enchant-lsmod.1
+--- enchant-1.6.0/doc/enchant-lsmod.1.manpages	2018-08-27 12:48:41.277955309 +0200
++++ enchant-1.6.0/doc/enchant-lsmod.1	2018-08-27 13:42:43.933910469 +0200
+@@ -0,0 +1,34 @@
++.PU
++.TH ENCHANT-LSMOD 1 "July 2006" enchant "Enchant Mini Help File"
++.SH NAME
++enchant-lsmod \- list provider and dictionary information
++.SH SYNOPSIS
++.ll +8
++.B enchant-lsmod
++[\fB\-lang [\fBlanguage_tag\fR]\fR] [\fB\-list-dicts\fR] [\fB\-h\fR] [\fB\-v\fR]
++.ll -8
++.br
++.SH DESCRIPTION
++.B enchant-lsmod
++gives information about Enchant's spell-checker providers and the dictionaries each offers.
++.SS OPTIONS
++.TP
++.B "\-lang [language_tag]"
++Lists information about user's language if no \fIlanguage_tag\fR is given, or about that \fIlanguage_tag\fR.
++.TP
++.B "\-list-dicts"
++Lists installed dictionaries.
++.TP
++.B "\-h"
++Prints a brief usage information.
++.TP
++.B "\-v"
++Prints the program's version.
++.SH MORE INFORMATION
++http://www.abisource.com/enchant/
++.SH "SEE ALSO"
++.BR enchant(1)
++.SH "AUTHOR"
++ Dom Lachowicz
++ WEB: http://www.abisource.com/enchant/
++ MAIL: domlachowicz@gmail.com
+diff -up enchant-1.6.0/doc/Makefile.am.manpages enchant-1.6.0/doc/Makefile.am
+--- enchant-1.6.0/doc/Makefile.am.manpages	2010-04-01 22:53:37.000000000 +0200
++++ enchant-1.6.0/doc/Makefile.am	2018-08-27 12:48:41.277955309 +0200
+@@ -1,3 +1,3 @@
+-man_MANS = enchant.1
++man_MANS = enchant.1 enchant-lsmod.1
+ 
+ EXTRA_DIST = $(man_MANS)
+diff -up enchant-1.6.0/doc/Makefile.in.manpages enchant-1.6.0/doc/Makefile.in
+--- enchant-1.6.0/doc/Makefile.in.manpages	2010-04-01 22:56:37.000000000 +0200
++++ enchant-1.6.0/doc/Makefile.in	2018-08-27 12:48:41.278955309 +0200
+@@ -215,7 +215,7 @@ target_alias = @target_alias@
+ top_build_prefix = @top_build_prefix@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+-man_MANS = enchant.1
++man_MANS = enchant.1 enchant-lsmod.1
+ EXTRA_DIST = $(man_MANS)
+ all: all-am
+ 

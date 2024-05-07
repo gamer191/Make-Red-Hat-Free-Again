@@ -1,0 +1,27 @@
+From eb62ccaa28bbbca7668913ce7d8056a6d75f9b05 Mon Sep 17 00:00:00 2001
+From: Milan Crha <mcrha@redhat.com>
+Date: Thu, 21 Apr 2022 16:59:34 +0200
+Subject: [PATCH] Disable hardware acceleration for WebKitGTK
+
+This should help with crashes related to hardware acceleration
+on some machines, as being discussed at:
+https://bugs.webkit.org/show_bug.cgi?id=239429
+---
+ src/e-util/e-web-view.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/e-util/e-web-view.c b/src/e-util/e-web-view.c
+index 9ab13b69cc..68f86e8c59 100644
+--- a/src/e-util/e-web-view.c
++++ b/src/e-util/e-web-view.c
+@@ -3617,6 +3617,7 @@ e_web_view_get_default_webkit_settings (void)
+ 		"enable-plugins", FALSE,
+ 		"enable-smooth-scrolling", FALSE,
+ 		"media-playback-allows-inline", FALSE,
++		"hardware-acceleration-policy", WEBKIT_HARDWARE_ACCELERATION_POLICY_NEVER,
+ 		NULL);
+ 
+ 	e_web_view_utils_apply_minimum_font_size (settings);
+-- 
+GitLab
+

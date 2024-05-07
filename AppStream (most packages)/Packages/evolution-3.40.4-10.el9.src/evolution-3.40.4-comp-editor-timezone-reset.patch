@@ -1,0 +1,68 @@
+From 9bbb9289477c8a61a641b0b67cec367629f1e73a Mon Sep 17 00:00:00 2001
+From: Milan Crha <mcrha@redhat.com>
+Date: Thu, 10 Feb 2022 11:59:36 +0100
+Subject: [PATCH] ECompEditor: Timezone can be reset on component save
+
+The libical 3.0.14 contains a change, which unsets non-UTC timezones
+in date/time values. That uncovered a bug in the Evolution code, which
+expects the timezone will be preserved on re-read from the component,
+but it's not always possible. This is corrected by re-setting the timezone
+on the used ICalTime value.
+---
+ src/calendar/gui/e-comp-editor-property-part.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/src/calendar/gui/e-comp-editor-property-part.c b/src/calendar/gui/e-comp-editor-property-part.c
+index 6bed833b12..6ce699a2e6 100644
+--- a/src/calendar/gui/e-comp-editor-property-part.c
++++ b/src/calendar/gui/e-comp-editor-property-part.c
+@@ -913,8 +913,15 @@ ecepp_datetime_fill_component (ECompEditorPropertyPart *property_part,
+ 			g_object_unref (prop);
+ 		}
+ 	} else {
++		ICalTimezone *zone;
++
+ 		value = e_comp_editor_property_part_datetime_get_value (part_datetime);
+ 
++		zone = value && !i_cal_time_is_null_time (value) ? i_cal_time_get_timezone (value) : NULL;
++
++		if (zone)
++			g_object_ref (zone);
++
+ 		if (prop) {
+ 			/* Remove the VALUE parameter, to correspond to the actual value being set */
+ 			i_cal_property_remove_parameter_by_kind (prop, I_CAL_VALUE_PARAMETER);
+@@ -925,6 +932,11 @@ ecepp_datetime_fill_component (ECompEditorPropertyPart *property_part,
+ 			g_clear_object (&value);
+ 			value = klass->i_cal_get_func (prop);
+ 
++			/* The timezone can be dropped since libical 3.0.14, thus restore it
++			   before updating the TZID parameter */
++			if (zone && value && !i_cal_time_is_null_time (value) && !i_cal_time_is_date (value))
++				i_cal_time_set_timezone (value, zone);
++
+ 			cal_comp_util_update_tzid_parameter (prop, value);
+ 		} else {
+ 			prop = klass->i_cal_new_func (value);
+@@ -933,12 +945,18 @@ ecepp_datetime_fill_component (ECompEditorPropertyPart *property_part,
+ 			g_clear_object (&value);
+ 			value = klass->i_cal_get_func (prop);
+ 
++			/* The timezone can be dropped since libical 3.0.14, thus restore it
++			   before updating the TZID parameter */
++			if (zone && value && !i_cal_time_is_null_time (value) && !i_cal_time_is_date (value))
++				i_cal_time_set_timezone (value, zone);
++
+ 			cal_comp_util_update_tzid_parameter (prop, value);
+ 			i_cal_component_add_property (component, prop);
+ 		}
+ 
+ 		g_clear_object (&value);
+ 		g_clear_object (&prop);
++		g_clear_object (&zone);
+ 	}
+ }
+ 
+-- 
+2.33.1
+
