@@ -1,0 +1,41 @@
+# temporary, to reduce the size of individual commits and git pushes
+AppStream (most packages)/Packages/a*
+AppStream (most packages)/Packages/b*
+AppStream (most packages)/Packages/c*
+AppStream (most packages)/Packages/d*
+AppStream (most packages)/Packages/e*
+AppStream (most packages)/Packages/f*
+AppStream (most packages)/Packages/g*
+AppStream (most packages)/Packages/h*
+AppStream (most packages)/Packages/i*
+AppStream (most packages)/Packages/j*
+AppStream (most packages)/Packages/k*
+AppStream (most packages)/Packages/l*
+AppStream (most packages)/Packages/m*
+AppStream (most packages)/Packages/n*
+AppStream (most packages)/Packages/o*
+AppStream (most packages)/Packages/p*
+AppStream (most packages)/Packages/q*
+AppStream (most packages)/Packages/r*
+AppStream (most packages)/Packages/s*
+AppStream (most packages)/Packages/t*
+AppStream (most packages)/Packages/u*
+AppStream (most packages)/Packages/v*
+AppStream (most packages)/Packages/w*
+AppStream (most packages)/Packages/x*
+AppStream (most packages)/Packages/y*
+AppStream (most packages)/Packages/z*
+BaseOS
+
+# this .tar file is too big for Github (over 100mb), and contains symbolic links making it hard to extract using Windows. I'll add it back later (using my Linux VM)
+AppStream (most packages)/Packages/ceph-16.2.4-5.el9.src/ceph-16.2.4.tar
+
+
+# needs to be extracted
+AppStream (most packages)/Packages/mysql*
+AppStream (most packages)/Packages/osbuild-composer*
+AppStream (most packages)/Packages/qemu-kvm*
+AppStream (most packages)/Packages/rust*
+AppStream (most packages)/Packages/tesseract-tessdata*
+AppStream (most packages)/Packages/thunderbird*
+AppStream (most packages)/Packages/virtio-win-*
