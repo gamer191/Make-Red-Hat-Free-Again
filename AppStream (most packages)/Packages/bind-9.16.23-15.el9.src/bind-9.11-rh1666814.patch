@@ -1,0 +1,29 @@
+From 0f03071080e7fa68433b322359d46abaca2cc5ad Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20Men=C5=A1=C3=ADk?= <pemensik@redhat.com>
+Date: Wed, 16 Jan 2019 16:27:33 +0100
+Subject: [PATCH] Fix possible crash when loading corrupted file
+
+Some values passes internal triggers by coincidence. Fix the check and
+check also first_node_offset before even passing it further.
+---
+ lib/dns/rbt.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/lib/dns/rbt.c b/lib/dns/rbt.c
+index 5aee5f6..7f2c2d2 100644
+--- a/lib/dns/rbt.c
++++ b/lib/dns/rbt.c
+@@ -945,7 +945,9 @@ dns_rbt_deserialize_tree(void *base_address, size_t filesize,
+ 	rbt->root = (dns_rbtnode_t *)((char *)base_address + header_offset +
+ 				      header->first_node_offset);
+ 
+-	if ((header->nodecount * sizeof(dns_rbtnode_t)) > filesize) {
++	if ((header->nodecount * sizeof(dns_rbtnode_t)) > filesize
++	    || header->first_node_offset > filesize) {
++
+ 		result = ISC_R_INVALIDFILE;
+ 		goto cleanup;
+ 	}
+-- 
+2.31.1
+

@@ -1,0 +1,60 @@
+From 3a161af91bffcd457586ab466e32ac8484028763 Mon Sep 17 00:00:00 2001
+From: Petr Mensik <pemensik@redhat.com>
+Date: Wed, 17 Jun 2020 23:17:13 +0200
+Subject: [PATCH] Update man named with Red Hat specifics
+
+This is almost unmodified text and requires revalidation. Some of those
+statements are no longer correct.
+---
+ bin/named/named.rst | 35 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 35 insertions(+)
+
+diff --git a/bin/named/named.rst b/bin/named/named.rst
+index 6fd8f87..3cd6350 100644
+--- a/bin/named/named.rst
++++ b/bin/named/named.rst
+@@ -228,6 +228,41 @@ Files
+ ``/var/run/named/named.pid``
+    The default process-id file.
+ 
++Notes
++~~~~~
++
++**Red Hat SELinux BIND Security Profile:**
++
++By default, Red Hat ships BIND with the most secure SELinux policy
++that will not prevent normal BIND operation and will prevent exploitation
++of all known BIND security vulnerabilities. See the selinux(8) man page
++for information about SElinux.
++
++It is not necessary to run named in a chroot environment if the Red Hat
++SELinux policy for named is enabled. When enabled, this policy is far
++more secure than a chroot environment. Users are recommended to enable
++SELinux and remove the bind-chroot package.
++
++*With this extra security comes some restrictions:*
++
++By default, the SELinux policy does not allow named to write outside directory
++/var/named. That directory used to be read-only for named, but write access is
++enabled by default now.
++
++The "named" group must be granted read privelege to
++these files in order for named to be enabled to read them.
++Any file updated by named must be writeable by named user or named group.
++
++Any file created in the zone database file directory is automatically assigned
++the SELinux file context *named_zone_t* .
++
++The Red Hat BIND distribution and SELinux policy creates three directories where
++named were allowed to create and modify files: */var/named/slaves*, */var/named/dynamic*
++*/var/named/data*. The service is able to write and file under */var/named* with appropriate
++permissions. They are used for better organisation of zones and backward compatibility.
++Files in these directories are automatically assigned the '*named_cache_t*'
++file context, which SELinux always allows named to write.
++
+ See Also
+ ~~~~~~~~
+ 
+-- 
+2.26.2
+

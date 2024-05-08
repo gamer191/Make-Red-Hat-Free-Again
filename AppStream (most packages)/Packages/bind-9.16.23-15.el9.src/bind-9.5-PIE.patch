@@ -1,0 +1,30 @@
+diff --git a/bin/named/Makefile.in b/bin/named/Makefile.in
+index eb622d1..37053a7 100644
+--- a/bin/named/Makefile.in
++++ b/bin/named/Makefile.in
+@@ -117,8 +117,12 @@ SRCS =		builtin.c config.c control.c \
+ 		tkeyconf.c tsigconf.c zoneconf.c \
+ 		${DLZDRIVER_SRCS} ${DBDRIVER_SRCS}
+ 
++EXT_CFLAGS = -fpie
++
+ @BIND9_MAKE_RULES@
+ 
++LDFLAGS += -pie -Wl,-z,relro,-z,now,-z,nodlopen,-z,noexecstack
++
+ main.@O@: main.c
+ 	${LIBTOOL_MODE_COMPILE} ${CC} ${ALL_CFLAGS} \
+ 		-DVERSION=\"${VERSION}\" \
+diff --git a/bin/named/unix/Makefile.in b/bin/named/unix/Makefile.in
+index fd9ca8d..f1c102c 100644
+--- a/bin/named/unix/Makefile.in
++++ b/bin/named/unix/Makefile.in
+@@ -11,6 +11,8 @@ srcdir =	@srcdir@
+ VPATH =		@srcdir@
+ top_srcdir =	@top_srcdir@
+ 
++EXT_CFLAGS = -fpie
++
+ @BIND9_MAKE_INCLUDES@
+ 
+ CINCLUDES =	-I${srcdir}/include -I${srcdir}/../include \

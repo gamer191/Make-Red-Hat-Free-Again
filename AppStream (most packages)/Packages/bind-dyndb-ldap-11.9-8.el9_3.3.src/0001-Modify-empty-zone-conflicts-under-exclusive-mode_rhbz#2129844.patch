@@ -1,0 +1,35 @@
+From 7b4c1e28b3e64f7cd075599472e349510f8d33da Mon Sep 17 00:00:00 2001
+From: Petr Menšík <pemensik@redhat.com>
+Date: Sep 14 2022 15:23:20 +0000
+Subject: Modify empty zone conflicts under exclusive mode
+
+
+Does not accept new request when exclusive mode is active. Zone table
+can be modified even after main fwd entries have been added. Ensure
+empty zones handling keeps exclusive mode active.
+
+Exclusive mode were mentioned as the only protection it had by bind
+maintainer:
+https://gitlab.isc.org/isc-projects/bind9/-/merge_requests/6637#note_308928
+
+---
+
+diff --git a/src/fwd.c b/src/fwd.c
+index 24f6e53..0a3c673 100644
+--- a/src/fwd.c
++++ b/src/fwd.c
+@@ -595,10 +595,12 @@ fwd_configure_zone(const settings_set_t *set, ldap_instance_t *inst,
+ 		  dns_result_totext(result));
+ 
+ 	/* Handle collisions with automatic empty zones. */
+-	if (isconfigured == true)
++	if (isconfigured == true) {
++		run_exclusive_enter(inst, &lock_state);
+ 		CHECK(empty_zone_handle_conflicts(name,
+ 						  view->zonetable,
+ 						  (fwdpolicy == dns_fwdpolicy_first)));
++	}
+ 
+ cleanup:
+ 	run_exclusive_exit(inst, lock_state);
+

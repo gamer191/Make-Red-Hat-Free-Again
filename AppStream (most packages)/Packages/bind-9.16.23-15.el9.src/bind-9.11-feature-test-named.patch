@@ -1,0 +1,59 @@
+From e645046202006750f87531e21e3ff7c26fba3466 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20Men=C5=A1=C3=ADk?= <pemensik@redhat.com>
+Date: Wed, 30 Jan 2019 14:37:17 +0100
+Subject: [PATCH] Create feature-test in source directory
+
+Feature-test tool is used in system tests to test compiled in changes.
+Because we build more variants of named with different configuration,
+compile feature-test for each of them this way.
+---
+ bin/named/Makefile.in       | 12 +++++++++++-
+ bin/tests/system/conf.sh.in |  2 +-
+ 2 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/bin/named/Makefile.in b/bin/named/Makefile.in
+index 37053a7..ed9add2 100644
+--- a/bin/named/Makefile.in
++++ b/bin/named/Makefile.in
+@@ -91,7 +91,7 @@ NOSYMLIBS =	${NSLIBS} ${DNSLIBS} ${BIND9LIBS} \
+ 
+ SUBDIRS =	unix
+ 
+-TARGETS =	named@EXEEXT@
++TARGETS =	named@EXEEXT@ feature-test@EXEEXT@
+ 
+ GEOIP2LINKOBJS = geoip.@O@
+ 
+@@ -154,6 +154,16 @@ named@EXEEXT@: ${OBJS} ${DEPLIBS}
+ 	export BASEOBJS="${OBJS} ${UOBJS}"; \
+ 	${FINALBUILDCMD}
+ 
++# Bit of hack, do not produce intermediate .o object for featuretest
++feature-test.@O@: ${top_srcdir}/bin/tests/system/feature-test.c
++	${LIBTOOL_MODE_COMPILE} ${CC} ${ALL_CFLAGS} \
++		-c ${top_srcdir}/bin/tests/system/feature-test.c
++
++feature-test@EXEEXT@: feature-test.@O@
++	${LIBTOOL_MODE_LINK} ${PURIFY} ${CC} ${CFLAGS} ${LDFLAGS} \
++		-o $@ feature-test.@O@ ${ISCLIBS} ${LIBS}
++
++
+ clean distclean maintainer-clean::
+ 	rm -f ${TARGETS} ${OBJS}
+ 
+diff --git a/bin/tests/system/conf.sh.in b/bin/tests/system/conf.sh.in
+index 7934930..e84fde2 100644
+--- a/bin/tests/system/conf.sh.in
++++ b/bin/tests/system/conf.sh.in
+@@ -37,7 +37,7 @@ DELV=$TOP/bin/delv/delv
+ DIG=$TOP/bin/dig/dig
+ DNSTAPREAD=$TOP/bin/tools/dnstap-read
+ DSFROMKEY=$TOP/bin/dnssec/dnssec-dsfromkey
+-FEATURETEST=$TOP/bin/tests/system/feature-test
++FEATURETEST=$TOP/bin/named/feature-test
+ FSTRM_CAPTURE=@FSTRM_CAPTURE@
+ HOST=$TOP/bin/dig/host
+ IMPORTKEY=$TOP/bin/dnssec/dnssec-importkey
+-- 
+2.26.2
+

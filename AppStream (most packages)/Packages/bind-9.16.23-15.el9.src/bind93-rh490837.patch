@@ -1,0 +1,34 @@
+diff --git a/lib/isc/lex.c b/lib/isc/lex.c
+index cd44fe3..5b7c539 100644
+--- a/lib/isc/lex.c
++++ b/lib/isc/lex.c
+@@ -27,6 +27,8 @@
+ #include <isc/string.h>
+ #include <isc/util.h>
+ 
++#include "../errno2result.h"
++
+ typedef struct inputsource {
+ 	isc_result_t result;
+ 	bool is_file;
+@@ -422,7 +424,7 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
+ #endif /* if defined(HAVE_FLOCKFILE) && defined(HAVE_GETC_UNLOCKED) */
+ 				if (c == EOF) {
+ 					if (ferror(stream)) {
+-						source->result = ISC_R_IOERROR;
++						source->result = isc__errno2result(errno);
+ 						result = source->result;
+ 						goto done;
+ 					}
+diff --git a/lib/isc/unix/errno2result.c b/lib/isc/unix/errno2result.c
+index e3e2644..5e58600 100644
+--- a/lib/isc/unix/errno2result.c
++++ b/lib/isc/unix/errno2result.c
+@@ -37,6 +37,7 @@ isc___errno2result(int posixerrno, bool dolog, const char *file,
+ 	case EINVAL: /* XXX sometimes this is not for files */
+ 	case ENAMETOOLONG:
+ 	case EBADF:
++	case EISDIR:
+ 		return (ISC_R_INVALIDFILE);
+ 	case ENOENT:
+ 		return (ISC_R_FILENOTFOUND);

@@ -1,0 +1,31 @@
+From 606fc6d4aa8e8884f53f53e72dc1bd7babf37a47 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ond=C5=99ej=20Sur=C3=BD?= <ondrej@isc.org>
+Date: Mon, 16 Jan 2023 11:06:48 +0000
+Subject: [PATCH] Merge branch 'feature/main/zt-rwlock.h' into 'main'
+
+Include isc_rwlocktype_t type definition in zt.h
+
+See merge request isc-projects/bind9!7376
+
+(cherry picked from commit d7bcdf8bd6c5395726f708535120ce9a97eaa935)
+
+395d6fca Include isc_rwlocktype_t type definition in zt.h
+---
+ lib/dns/include/dns/zt.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/dns/include/dns/zt.h b/lib/dns/include/dns/zt.h
+index 189092bc3b..2964fc971f 100644
+--- a/lib/dns/include/dns/zt.h
++++ b/lib/dns/include/dns/zt.h
+@@ -19,6 +19,7 @@
+ #include <stdbool.h>
+ 
+ #include <isc/lang.h>
++#include <isc/rwlock.h>
+ 
+ #include <dns/types.h>
+ 
+-- 
+2.39.0
+

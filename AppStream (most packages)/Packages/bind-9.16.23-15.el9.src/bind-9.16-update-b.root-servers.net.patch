@@ -1,0 +1,53 @@
+From c532af966a7328f0e518273bc1f6051bb9d9e995 Mon Sep 17 00:00:00 2001
+From: Mark Andrews <marka@isc.org>
+Date: Thu, 12 Oct 2023 10:19:38 +1100
+Subject: [PATCH] Update b.root-servers.net IP addresses
+
+This covers both root hints and the default primaries for the root
+zone mirror.  The official change date is Nov 27, 2023.
+
+(cherry picked from commit 2ca2f7e9852a3d6e93f065c01ea4679f723688f7)
+---
+ bin/named/config.c | 4 ++--
+ lib/dns/rootns.c   | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/bin/named/config.c b/bin/named/config.c
+index 8c6f90c..c37015f 100644
+--- a/bin/named/config.c
++++ b/bin/named/config.c
+@@ -292,14 +292,14 @@ view \"_bind\" chaos {\n\
+ 			    "# END MANAGED KEYS\n\
+ \n\
+ primaries " DEFAULT_IANA_ROOT_ZONE_PRIMARIES " {\n\
+-	2001:500:200::b;	# b.root-servers.net\n\
++	2801:1b8:10::b;		# b.root-servers.net\n\
+ 	2001:500:2::c;		# c.root-servers.net\n\
+ 	2001:500:2f::f;		# f.root-servers.net\n\
+ 	2001:500:12::d0d;	# g.root-servers.net\n\
+ 	2001:7fd::1;		# k.root-servers.net\n\
+ 	2620:0:2830:202::132;	# xfr.cjr.dns.icann.org\n\
+ 	2620:0:2d0:202::132;	# xfr.lax.dns.icann.org\n\
+-	199.9.14.201;		# b.root-servers.net\n\
++	170.247.170.2;		# b.root-servers.net\n\
+ 	192.33.4.12;		# c.root-servers.net\n\
+ 	192.5.5.241;		# f.root-servers.net\n\
+ 	192.112.36.4;		# g.root-servers.net\n\
+diff --git a/lib/dns/rootns.c b/lib/dns/rootns.c
+index 885c2fb..b06d247 100644
+--- a/lib/dns/rootns.c
++++ b/lib/dns/rootns.c
+@@ -52,8 +52,8 @@ static char root_ns[] =
+ 	".                       518400  IN      NS      M.ROOT-SERVERS.NET.\n"
+ 	"A.ROOT-SERVERS.NET.     3600000 IN      A       198.41.0.4\n"
+ 	"A.ROOT-SERVERS.NET.     3600000 IN      AAAA    2001:503:BA3E::2:30\n"
+-	"B.ROOT-SERVERS.NET.     3600000 IN      A       199.9.14.201\n"
+-	"B.ROOT-SERVERS.NET.     3600000 IN      AAAA    2001:500:200::b\n"
++	"B.ROOT-SERVERS.NET.     3600000 IN      A       170.247.170.2\n"
++	"B.ROOT-SERVERS.NET.     3600000 IN      AAAA    2801:1b8:10::b\n"
+ 	"C.ROOT-SERVERS.NET.     3600000 IN      A       192.33.4.12\n"
+ 	"C.ROOT-SERVERS.NET.     3600000 IN      AAAA    2001:500:2::c\n"
+ 	"D.ROOT-SERVERS.NET.     3600000 IN      A       199.7.91.13\n"
+-- 
+2.43.0
+

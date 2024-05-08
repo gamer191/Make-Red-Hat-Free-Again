@@ -1,0 +1,65 @@
+From 607cec78382b016aad0fe041f2e1895b6896c647 Mon Sep 17 00:00:00 2001
+From: Petr Mensik <pemensik@redhat.com>
+Date: Fri, 1 Mar 2019 15:48:20 +0100
+Subject: [PATCH] Make alternative named builds testable in system tests
+
+Red Hat has alternative variant builds of named, which are not ever
+tested by system tests. New variables make it relatively easy to test
+alternative variants.
+
+For sdb variant use:
+export NAMED_VARIANT=-sdb DNSSEC_VARIANT=
+
+For pkcs variant use:
+export NAMED_VARIANT=-pkcs11 DNSSEC_VARIANT=-pkcs11
+---
+ bin/tests/system/conf.sh.in | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/bin/tests/system/conf.sh.in b/bin/tests/system/conf.sh.in
+index d859909..9152f07 100644
+--- a/bin/tests/system/conf.sh.in
++++ b/bin/tests/system/conf.sh.in
+@@ -37,17 +37,17 @@ DDNSCONFGEN=$TOP/bin/confgen/ddns-confgen
+ DELV=$TOP/bin/delv/delv
+ DIG=$TOP/bin/dig/dig
+ DNSTAPREAD=$TOP/bin/tools/dnstap-read
+-DSFROMKEY=$TOP/bin/dnssec/dnssec-dsfromkey
+-FEATURETEST=$TOP/bin/named/feature-test
++DSFROMKEY=$TOP/bin/dnssec${DNSSEC_VARIANT}/dnssec-dsfromkey${DNSSEC_VARIANT}
++FEATURETEST=$TOP/bin/named${NAMED_VARIANT}/feature-test${NAMED_VARIANT}
+ FSTRM_CAPTURE=@FSTRM_CAPTURE@
+ HOST=$TOP/bin/dig/host
+-IMPORTKEY=$TOP/bin/dnssec/dnssec-importkey
++IMPORTKEY=$TOP/bin/dnssec${DNSSEC_VARIANT}/dnssec-importkey${DNSSEC_VARIANT}
+ JOURNALPRINT=$TOP/bin/tools/named-journalprint
+-KEYFRLAB=$TOP/bin/dnssec/dnssec-keyfromlabel
+-KEYGEN=$TOP/bin/dnssec/dnssec-keygen
++KEYFRLAB=$TOP/bin/dnssec${DNSSEC_VARIANT}/dnssec-keyfromlabel${DNSSEC_VARIANT}
++KEYGEN=$TOP/bin/dnssec${DNSSEC_VARIANT}/dnssec-keygen${DNSSEC_VARIANT}
+ KEYMGR=$TOP/bin/python/dnssec-keymgr
+ MDIG=$TOP/bin/tools/mdig
+-NAMED=$TOP/bin/named/named
++NAMED=$TOP/bin/named${NAMED_VARIANT}/named${NAMED_VARIANT}
+ NSEC3HASH=$TOP/bin/tools/nsec3hash
+ NSLOOKUP=$TOP/bin/dig/nslookup
+ NSUPDATE=$TOP/bin/nsupdate/nsupdate
+@@ -56,12 +56,12 @@ PK11DEL="$TOP/bin/pkcs11/pkcs11-destroy -s ${SLOT:-0} -p ${HSMPIN:-1234} -w 0"
+ PK11GEN="$TOP/bin/pkcs11/pkcs11-keygen -q -s ${SLOT:-0} -p ${HSMPIN:-1234}"
+ PK11LIST="$TOP/bin/pkcs11/pkcs11-list -s ${SLOT:-0} -p ${HSMPIN:-1234}"
+ RESOLVE=$TOP/bin/tests/system/resolve
+-REVOKE=$TOP/bin/dnssec/dnssec-revoke
++REVOKE=$TOP/bin/dnssec${DNSSEC_VARIANT}/dnssec-revoke${DNSSEC_VARIANT}
+ RNDC=$TOP/bin/rndc/rndc
+ RNDCCONFGEN=$TOP/bin/confgen/rndc-confgen
+ RRCHECKER=$TOP/bin/tools/named-rrchecker
+-SETTIME=$TOP/bin/dnssec/dnssec-settime
+-SIGNER=$TOP/bin/dnssec/dnssec-signzone
++SETTIME=$TOP/bin/dnssec${DNSSEC_VARIANT}/dnssec-settime${DNSSEC_VARIANT}
++SIGNER=$TOP/bin/dnssec${DNSSEC_VARIANT}/dnssec-signzone${DNSSEC_VARIANT}
+ TSIGKEYGEN=$TOP/bin/confgen/tsig-keygen
+ VERIFY=$TOP/bin/dnssec/dnssec-verify
+ WIRETEST=$TOP/bin/tests/wire_test
+-- 
+2.26.3
+
