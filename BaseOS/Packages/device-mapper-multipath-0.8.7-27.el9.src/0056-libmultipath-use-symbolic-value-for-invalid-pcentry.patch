@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Thu, 14 Apr 2022 16:11:10 -0500
+Subject: [PATCH] libmultipath: use symbolic value for invalid pcentry
+
+Suggested-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/config.c | 4 ++--
+ libmultipath/config.h | 1 +
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/libmultipath/config.c b/libmultipath/config.c
+index 8b0e1f72..61b0dd51 100644
+--- a/libmultipath/config.c
++++ b/libmultipath/config.c
+@@ -384,7 +384,7 @@ alloc_pce (void)
+ {
+ 	struct pcentry *pce = (struct pcentry *)
+ 				calloc(1, sizeof(struct pcentry));
+-	pce->type = -1;
++	pce->type = PCE_INVALID;
+ 	return pce;
+ }
+ 
+@@ -643,7 +643,7 @@ validate_pctable(struct hwentry *ovr, int idx, const char *table_desc)
+ 		return;
+ 
+ 	vector_foreach_slot_after(ovr->pctable, pce, idx) {
+-		if (pce->type < 0) {
++		if (pce->type == PCE_INVALID) {
+ 			condlog(0, "protocol section in %s missing type",
+ 				table_desc);
+ 			vector_del_slot(ovr->pctable, idx--);
+diff --git a/libmultipath/config.h b/libmultipath/config.h
+index 57992604..c1e18363 100644
+--- a/libmultipath/config.h
++++ b/libmultipath/config.h
+@@ -41,6 +41,7 @@ enum force_reload_types {
+ 	FORCE_RELOAD_WEAK,
+ };
+ 
++#define PCE_INVALID -1
+ struct pcentry {
+ 	int type;
+ 	int fast_io_fail;

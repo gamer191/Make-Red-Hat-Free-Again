@@ -1,0 +1,23 @@
+diff -up nfs-utils-2.5.4/systemd/nfs.conf.man.orig nfs-utils-2.5.4/systemd/nfs.conf.man
+--- nfs-utils-2.5.4/systemd/nfs.conf.man.orig	2023-06-06 09:51:19.931377748 -0400
++++ nfs-utils-2.5.4/systemd/nfs.conf.man	2023-06-06 11:21:47.490616649 -0400
+@@ -131,8 +131,9 @@ but on the server, this will resolve to
+ .TP
+ .B exportd
+ Recognized values:
++.BR manage-gids ,
+ .BR threads ,
+-.BR cache-use-upaddr ,
++.BR cache-use-ipaddr ,
+ .BR ttl ,
+ .BR state-directory-path
+ 
+@@ -197,7 +198,7 @@ Recognized values:
+ .BR port ,
+ .BR threads ,
+ .BR reverse-lookup ,
+-.BR cache-use-upaddr ,
++.BR cache-use-ipaddr ,
+ .BR ttl ,
+ .BR state-directory-path ,
+ .BR ha-callout .

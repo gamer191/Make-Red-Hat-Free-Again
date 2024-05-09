@@ -1,0 +1,49 @@
+From 6f8695fdda4aa8889d2f335e785efb9bfeaef6c5 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Wed, 15 Jun 2022 16:48:09 -0600
+Subject: [PATCH 208/217] ndctl: move developer scripts from contrib/ to
+ scripts/
+
+Allow for scripts/ to be the defacto location for scripts and tooling
+that may be useful for developers of ndctl, but isn't distributed or
+installed. Move such scripts currently in contrib/ to scripts/.
+
+Link: https://lore.kernel.org/r/20220615224813.523053-2-vishal.l.verma@intel.com
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ {contrib => scripts}/daxctl-qemu-hmat-setup | 0
+ {contrib => scripts}/do_abidiff             | 0
+ {contrib => scripts}/prepare-release.sh     | 2 +-
+ 3 files changed, 1 insertion(+), 1 deletion(-)
+ rename {contrib => scripts}/daxctl-qemu-hmat-setup (100%)
+ rename {contrib => scripts}/do_abidiff (100%)
+ rename {contrib => scripts}/prepare-release.sh (99%)
+
+diff --git a/contrib/daxctl-qemu-hmat-setup b/scripts/daxctl-qemu-hmat-setup
+similarity index 100%
+rename from contrib/daxctl-qemu-hmat-setup
+rename to scripts/daxctl-qemu-hmat-setup
+diff --git a/contrib/do_abidiff b/scripts/do_abidiff
+similarity index 100%
+rename from contrib/do_abidiff
+rename to scripts/do_abidiff
+diff --git a/contrib/prepare-release.sh b/scripts/prepare-release.sh
+similarity index 99%
+rename from contrib/prepare-release.sh
+rename to scripts/prepare-release.sh
+index fb5cfe3..97ab964 100755
+--- a/contrib/prepare-release.sh
++++ b/scripts/prepare-release.sh
+@@ -186,7 +186,7 @@ check_libtool_vers "libdaxctl"
+ gen_lists ${last_ref}..HEAD~1
+ 
+ # For ABI diff purposes, use the latest fixes tag
+-contrib/do_abidiff ${last_fix}..HEAD
++scripts/do_abidiff ${last_fix}..HEAD
+ 
+ # once everything passes, update the git-version
+ sed -i -e "s/DEF_VER=[0-9]\+.*/DEF_VER=${next_ref#v}/" git-version
+-- 
+2.27.0
+

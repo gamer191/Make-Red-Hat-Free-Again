@@ -1,0 +1,40 @@
+From 633205122bc5a54b56ac6d961f9fc4aac917b0fd Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Fri, 4 Mar 2022 13:02:51 -0700
+Subject: [PATCH 147/217] scripts/docsurgeon: Fix document header for section 1
+ man pages
+
+Document header generation for section 1 man pages (cxl-foo commands) was
+missing the section number in parenthesis, i.e. it would generate:
+
+  cxl-foo
+  =======
+
+instead of:
+
+  cxl-foo(1)
+  ==========
+
+resulting in asciidoc(tor) warnings.
+
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ scripts/docsurgeon | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/docsurgeon b/scripts/docsurgeon
+index ca0ad78..1421ef7 100755
+--- a/scripts/docsurgeon
++++ b/scripts/docsurgeon
+@@ -244,7 +244,7 @@ gen_cli()
+ 
+ 	# Start template generation
+ 	printf "%s\n" "$copyright_cli" > "$tmp"
+-	gen_header "$name" >> "$tmp"
++	gen_header "$name($_arg_section)" >> "$tmp"
+ 	gen_section_name "$name" >> "$tmp"
+ 	gen_section_synopsis_1 "$name" >> "$tmp"
+ 	gen_section "DESCRIPTION" >> "$tmp"
+-- 
+2.27.0
+

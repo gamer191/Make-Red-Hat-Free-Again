@@ -1,0 +1,46 @@
+From 4921c0c2040ffbe10facd320f6a718a3d42ad815 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Thu, 17 Feb 2022 22:42:29 -0700
+Subject: [PATCH 124/217] ndctl/test: make inject-smart.sh more tolerant of
+ decimal fields
+
+Some combinations of json-c/jq/other libraries seem to produce differing
+outputs for the final jq-filtered smart fields, in that some have a
+decimal "42.0" numeric field, where as in other combinations it is a
+simple "42" (still a numeric field, not string).
+
+This shouldn't matter in practice, but for this contrived test case, we
+need to make sure that "42" is treated the same as "42.0"
+
+Normalize all fields before comparing them to "%0.0f" so that the
+comparison doesn't result in superfluous failures.
+
+Reported-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ test/inject-smart.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/test/inject-smart.sh b/test/inject-smart.sh
+index 8b91360..046322b 100755
+--- a/test/inject-smart.sh
++++ b/test/inject-smart.sh
+@@ -105,13 +105,13 @@ get_field()
+ 	json="$($NDCTL list -b $bus -d $dimm -H)"
+ 	val="$(jq -r ".[].dimms[].health.$smart_listing" <<< $json)"
+ 	val="$(translate_val $val)"
+-	echo $val
++	printf "%0.0f\n" "$val"
+ }
+ 
+ verify()
+ {
+ 	local field="$1"
+-	local val="$2"
++	local val="$(printf "%0.0f\n" "$2")"
+ 
+ 	[[ "$val" == "$(get_field $field)" ]]
+ }
+-- 
+2.27.0
+

@@ -1,0 +1,110 @@
+commit 75b04a9bff709a49f55326b439851822dd630be6
+Author: Olga Kornievskaia <kolga@netapp.com>
+Date:   Mon Oct 16 11:45:54 2023 -0400
+
+    gssd: fix handling DNS lookup failure
+    
+    When the kernel does its first ever lookup for a given server ip it
+    sends down info for server, protocol, etc. On the gssd side as it
+    scans the pipefs structure and sees a new entry it reads that info
+    and creates a clp_info structure. At that time it also does
+    a DNS lookup of the provided ip to name using getnameinfo(),
+    this is saved in clp->servername for all other upcalls that is
+    down under that directory.
+    
+    If this 1st getnameinfo() results in a failed resolution for
+    whatever reason (a temporary DNS resolution problem), this cause
+    of all other future upcalls to fail.
+    
+    As a fix, this patch proposed to (1) save the server info that's
+    passed only in the initial pipefs new entry creation in the
+    clp_info structure, then (2) for the upcalls, if clp->servername
+    is NULL, then do the DNS lookup again and set all the needed
+    clp_info fields upon successful resolution.
+    
+    Signed-off-by: Olga Kornievskaia <kolga@netapp.com>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/utils/gssd/gssd.c b/utils/gssd/gssd.c
+index 833d8e0..ca9b326 100644
+--- a/utils/gssd/gssd.c
++++ b/utils/gssd/gssd.c
+@@ -365,6 +365,12 @@ gssd_read_service_info(int dirfd, struct clnt_info *clp)
+ 
+ fail:
+ 	printerr(0, "ERROR: failed to parse %s/info\n", clp->relpath);
++	clp->upcall_address = strdup(address);
++	clp->upcall_port = strdup(port);
++	clp->upcall_program = program;
++	clp->upcall_vers = version;
++	clp->upcall_protoname = strdup(protoname);
++	clp->upcall_service = strdup(service);
+ 	free(servername);
+ 	free(protoname);
+ 	clp->servicename = NULL;
+@@ -408,6 +414,16 @@ gssd_free_client(struct clnt_info *clp)
+ 	free(clp->servicename);
+ 	free(clp->servername);
+ 	free(clp->protocol);
++	if (!clp->servername) {
++		if (clp->upcall_address)
++			free(clp->upcall_address);
++		if (clp->upcall_port)
++			free(clp->upcall_port);
++		if (clp->upcall_protoname)
++			free(clp->upcall_protoname);
++		if (clp->upcall_service)
++			free(clp->upcall_service);
++	}
+ 	free(clp);
+ }
+ 
+@@ -446,6 +462,31 @@ gssd_clnt_gssd_cb(int UNUSED(fd), short UNUSED(which), void *data)
+ {
+ 	struct clnt_info *clp = data;
+ 
++	/* if there was a failure to translate IP to name for this server,
++	 * try again
++	 */
++	if (!clp->servername) {
++	        if (!gssd_addrstr_to_sockaddr((struct sockaddr *)&clp->addr,
++                                 clp->upcall_address, clp->upcall_port ?
++				 clp->upcall_port : "")) {
++			goto do_upcall;
++		}
++		clp->servername = gssd_get_servername(clp->upcall_address,
++				(struct sockaddr *)&clp->addr, clp->upcall_address);
++		if (!clp->servername)
++			goto do_upcall;
++
++		if (asprintf(&clp->servicename, "%s@%s", clp->upcall_service,
++					clp->servername) < 0) {
++			free(clp->servername);
++			clp->servername = NULL;
++			goto do_upcall;
++		}
++		clp->prog = clp->upcall_program;
++		clp->vers = clp->upcall_vers;
++		clp->protocol = strdup(clp->upcall_protoname);
++	}
++do_upcall:
+ 	handle_gssd_upcall(clp);
+ }
+ 
+diff --git a/utils/gssd/gssd.h b/utils/gssd/gssd.h
+index 519dc43..4e070ed 100644
+--- a/utils/gssd/gssd.h
++++ b/utils/gssd/gssd.h
+@@ -86,6 +86,12 @@ struct clnt_info {
+ 	int			gssd_fd;
+ 	struct event		*gssd_ev;
+ 	struct			sockaddr_storage addr;
++	char			*upcall_address;
++	char			*upcall_port;
++	int			upcall_program;
++	int			upcall_vers;
++	char			*upcall_protoname;
++	char			*upcall_service;
+ };
+ 
+ struct clnt_upcall_info {

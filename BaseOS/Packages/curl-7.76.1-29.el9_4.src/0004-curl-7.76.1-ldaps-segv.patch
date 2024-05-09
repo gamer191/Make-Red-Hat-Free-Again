@@ -1,0 +1,44 @@
+From 39b68b3f82535d06e50443db4c191dbaa00df4eb Mon Sep 17 00:00:00 2001
+From: Patrick Monnerat <patrick@monnerat.net>
+Date: Fri, 23 Apr 2021 00:33:46 +0200
+Subject: [PATCH] vtls: reset ssl use flag upon negotiation failure
+
+Fixes the segfault in ldaps disconnect.
+
+Reported-by: Illarion Taev
+Fixes #6934
+Closes #6937
+
+Upstream-commit: a4554b2c5e7c5788c8198001598818599c60ff7d
+Signed-off-by: Kamil Dudka <kdudka@redhat.com>
+---
+ lib/vtls/vtls.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/lib/vtls/vtls.c b/lib/vtls/vtls.c
+index 22cfb88..fa8a6fa 100644
+--- a/lib/vtls/vtls.c
++++ b/lib/vtls/vtls.c
+@@ -315,6 +315,8 @@ Curl_ssl_connect(struct Curl_easy *data, struct connectdata *conn,
+ 
+   if(!result)
+     Curl_pgrsTime(data, TIMER_APPCONNECT); /* SSL is connected */
++  else
++    conn->ssl[sockindex].use = FALSE;
+ 
+   return result;
+ }
+@@ -338,7 +340,9 @@ Curl_ssl_connect_nonblocking(struct Curl_easy *data, struct connectdata *conn,
+   /* mark this is being ssl requested from here on. */
+   conn->ssl[sockindex].use = TRUE;
+   result = Curl_ssl->connect_nonblocking(data, conn, sockindex, done);
+-  if(!result && *done)
++  if(result)
++    conn->ssl[sockindex].use = FALSE;
++  else if(*done)
+     Curl_pgrsTime(data, TIMER_APPCONNECT); /* SSL is connected */
+   return result;
+ }
+-- 
+2.31.1
+

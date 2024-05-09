@@ -1,0 +1,40 @@
+From ec6817736968fb4683b9df0bd932c1a86dec0ba8 Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Wed, 4 Aug 2021 19:22:19 +0200
+Subject: [PATCH 4/6] INI: fix check for error code
+
+In case of fail `asprintf()` returns -1, not 1.
+
+Fixes following covscan issues:
+```
+Error: RESOURCE_LEAK (CWE-772): [#def1]
+ding-libs-0.6.1/ini/ini_configmod.c:869: alloc_arg: "asprintf" allocates memory that is stored into "strval". [Note: The source code implementation of the function has been overridden by a builtin model.]
+ding-libs-0.6.1/ini/ini_configmod.c:873: leaked_storage: Variable "strval" going out of scope leaks the storage it points to.
+ #  871|           TRACE_ERROR_NUMBER("Asprintf failed.", ret);
+ #  872|           /* The main reason is propbaly memory allocation */
+ #  873|->         return ENOMEM;
+ #  874|       }
+ #  875|
+```
+
+Reviewed-by: Pawel Polawski <ppolawsk@redhat.com>
+---
+ ini/ini_configmod.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ini/ini_configmod.c b/ini/ini_configmod.c
+index da4175c..88a7133 100644
+--- a/ini/ini_configmod.c
++++ b/ini/ini_configmod.c
+@@ -867,7 +867,7 @@ int ini_config_add_double_value(struct ini_cfgobj *ini_config,
+     TRACE_FLOW_ENTRY();
+ 
+     ret = asprintf(&strval, "%f", value);
+-    if (ret == 1) {
++    if (ret == -1) {
+         TRACE_ERROR_NUMBER("Asprintf failed.", ret);
+         /* The main reason is propbaly memory allocation */
+         return ENOMEM;
+-- 
+2.26.3
+

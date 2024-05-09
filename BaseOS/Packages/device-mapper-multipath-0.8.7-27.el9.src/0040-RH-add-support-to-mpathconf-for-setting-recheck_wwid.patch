@@ -1,0 +1,154 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Thu, 3 Feb 2022 13:26:18 -0600
+Subject: [PATCH] RH: add support to mpathconf for setting recheck_wwid
+
+mpathconf now supports --recheck_wwid <y|n> for setthing the
+recheck_wwid option
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/mpathconf   | 48 ++++++++++++++++++++++++++++++++++++++++---
+ multipath/mpathconf.8 |  9 ++++++++
+ 2 files changed, 54 insertions(+), 3 deletions(-)
+
+diff --git a/multipath/mpathconf b/multipath/mpathconf
+index 6e33fb99..319664b1 100644
+--- a/multipath/mpathconf
++++ b/multipath/mpathconf
+@@ -17,7 +17,7 @@
+ # This program was largely ripped off from lvmconf
+ #
+ 
+-unset ENABLE FIND FRIENDLY PROPERTY FOREIGN MODULE MULTIPATHD HAVE_DISABLE HAVE_WWID_DISABLE HAVE_FIND HAVE_BLACKLIST HAVE_EXCEPTIONS HAVE_DEFAULTS HAVE_FRIENDLY HAVE_PROPERTY HAVE_FOREIGN HAVE_MULTIPATHD HAVE_MODULE HAVE_OUTFILE SHOW_STATUS CHANGED_CONFIG WWID_LIST HAVE_OPTION OPTION_NAME OPTION_VALUE
++unset ENABLE FIND FRIENDLY PROPERTY FOREIGN MODULE MULTIPATHD HAVE_DISABLE HAVE_WWID_DISABLE HAVE_FIND HAVE_BLACKLIST HAVE_EXCEPTIONS HAVE_DEFAULTS HAVE_FRIENDLY HAVE_PROPERTY HAVE_FOREIGN HAVE_MULTIPATHD HAVE_MODULE HAVE_OUTFILE SHOW_STATUS CHANGED_CONFIG WWID_LIST HAVE_OPTION OPTION_NAME OPTION_VALUE HAVE_RECHECK_WWID RECHECK_WWID
+ 
+ DEFAULT_CONFIG="# device-mapper-multipath configuration file
+ 
+@@ -52,6 +52,7 @@ function usage
+ 	echo "Set find_multipaths (Default y): --find_multipaths <yes|no|strict|greedy|smart>"
+ 	echo "Set default property blacklist (Default n): --property_blacklist <y|n>"
+ 	echo "Set enable_foreign to show foreign devices (Default n): --enable_foreign <y|n>"
++	echo "Set recheck_wwid (Defaut n): --recheck_wwid <y|n>"
+ 	echo "Add/Change/Remove option in defaults section: --option <option_name>:<value>"
+ 	echo "Load the dm-multipath modules on enable (Default y): --with_module <y|n>"
+ 	echo "start/stop/reload multipathd (Default n): --with_multipathd <y|n>"
+@@ -145,6 +146,15 @@ function parse_args
+ 					exit 1
+ 				fi
+ 				;;
++			--recheck_wwid)
++				if [ -n "$2" ]; then
++					RECHECK_WWID=$2
++					shift 2
++				else
++					usage
++					exit 1
++				fi
++				;;
+ 			--find_multipaths)
+ 				if [ -n "$2" ]; then
+ 					FIND=$2
+@@ -223,7 +233,7 @@ function parse_args
+ 
+ function validate_args
+ {
+-	if [ "$ENABLE" = "0" ] && [ -n "$FRIENDLY" -o -n "$FIND" -o -n "$PROPERTY" -o -n "$MODULE" -o -n "$FOREIGN" -o -n "$OPTION_NAME" ]; then
++	if [ "$ENABLE" = "0" ] && [ -n "$FRIENDLY" -o -n "$FIND" -o -n "$PROPERTY" -o -n "$MODULE" -o -n "$FOREIGN" -o -n "$OPTION_NAME" -o -n "$RECHECK_WWID" ]; then
+ 		echo "ignoring extra parameters on disable"
+ 		FRIENDLY=""
+ 		FIND=""
+@@ -232,11 +242,16 @@ function validate_args
+ 		FOREIGN=""
+ 		OPTION_NAME=""
+ 		OPTION_VALUE=""
++		RECHECK_WWID=""
+ 	fi
+ 	if [ -n "$FRIENDLY" ] && [ "$FRIENDLY" != "y" -a "$FRIENDLY" != "n" ]; then
+ 		echo "--user_friendly_names must be either 'y' or 'n'"
+ 		exit 1
+ 	fi
++	if [ -n "$RECHECK_WWID" ] && [ "$RECHECK_WWID" != "y" -a "$RECHECK_WWID" != "n" ]; then
++		echo "--recheck_wwid must be either 'y' or 'n'"
++		exit 1
++	fi
+ 	if [ "$FIND" = "y" ]; then
+ 		FIND="yes"
+ 	elif [ "$FIND" = "n" ]; then
+@@ -265,7 +280,7 @@ function validate_args
+ 			OPTION_VALUE=\"$OPTION_VALUE\"
+ 		fi
+ 	fi
+-	if [ -z "$ENABLE" -a -z "$FIND" -a -z "$FRIENDLY" -a -z "$PROPERTY" -a -z "$FOREIGN" -a -z "$OPTION_NAME" ]; then
++	if [ -z "$ENABLE" -a -z "$FIND" -a -z "$FRIENDLY" -a -z "$PROPERTY" -a -z "$FOREIGN" -a -z "$OPTION_NAME" -a -z "$RECHECK_WWID" ]; then
+ 		SHOW_STATUS=1
+ 	fi
+ 	if [ -n "$MODULE" ] && [ "$MODULE" != "y" -a "$MODULE" != "n" ]; then
+@@ -367,6 +382,11 @@ if [ "$HAVE_DEFAULTS" = "1" ]; then
+ 	elif sed -n '/^defaults[[:space:]]*{/,/^}/ p' $TMPFILE | grep -q "^[[:space:]]*user_friendly_names[[:space:]][[:space:]]*\(no\|0\)" ; then
+ 		HAVE_FRIENDLY=0
+ 	fi
++	if sed -n '/^defaults[[:space:]]*{/,/^}/ p' $TMPFILE | grep -q "^[[:space:]]*recheck_wwid[[:space:]][[:space:]]*\(yes\|1\)" ; then
++		HAVE_RECHECK_WWID=1
++	elif sed -n '/^defaults[[:space:]]*{/,/^}/ p' $TMPFILE | grep -q "^[[:space:]]*recheck_wwid[[:space:]][[:space:]]*\(no\|0\)" ; then
++		HAVE_RECHECK_WWID=0
++	fi
+ 	if sed -n '/^defaults[[:space:]]*{/,/^}/ p' $TMPFILE | grep -q "^[[:space:]]*#[[:space:]]*enable_foreign" ; then
+ 		HAVE_FOREIGN=0
+ 	elif sed -n '/^defaults[[:space:]]*{/,/^}/ p' $TMPFILE | grep -q "^[[:space:]]*enable_foreign[[:space:]][[:space:]]*\"\.\*\"" ; then
+@@ -411,6 +431,11 @@ if [ -n "$SHOW_STATUS" ]; then
+ 	else
+ 		echo "user_friendly_names is enabled"
+ 	fi
++	if [ -z "$HAVE_RECHECK_WWID" -o "$HAVE_RECHECK_WWID" = 0 ]; then
++		echo "recheck_wwid is disabled"
++	else
++		echo "recheck_wwid is enabled"
++	fi
+ 	if [ -z "$HAVE_PROPERTY" -o "$HAVE_PROPERTY" = 0 ]; then
+ 		echo "default property blacklist is disabled"
+ 	else
+@@ -527,6 +552,23 @@ elif [ "$FRIENDLY" = "y" ]; then
+ 	fi
+ fi
+ 
++if [ "$RECHECK_WWID" = "n" ]; then
++	if [ "$HAVE_RECHECK_WWID" = 1 ]; then
++		sed -i '/^defaults[[:space:]]*{/,/^}/ s/^[[:space:]]*recheck_wwid[[:space:]][[:space:]]*\(yes\|1\)/	recheck_wwid no/' $TMPFILE
++		CHANGED_CONFIG=1
++	fi
++elif [ "$RECHECK_WWID" = "y" ]; then
++	if [ -z "$HAVE_RECHECK_WWID" ]; then
++		sed -i '/^defaults[[:space:]]*{/ a\
++	recheck_wwid yes
++' $TMPFILE
++		CHANGED_CONFIG=1
++	elif [ "$HAVE_RECHECK_WWID" = 0 ]; then
++		sed -i '/^defaults[[:space:]]*{/,/^}/ s/^[[:space:]]*recheck_wwid[[:space:]][[:space:]]*\(no\|0\)/	recheck_wwid yes/' $TMPFILE
++		CHANGED_CONFIG=1
++	fi
++fi
++
+ if [ "$PROPERTY" = "n" ]; then
+ 	if [ "$HAVE_PROPERTY" = 1 ]; then
+ 		sed -i '/^blacklist_exceptions[[:space:]]*{/,/^}/ s/^[[:space:]]*property[[:space:]][[:space:]]*\"(SCSI_IDENT_|ID_WWN)\"/#	property \"(SCSI_IDENT_|ID_WWN)\"/' $TMPFILE
+diff --git a/multipath/mpathconf.8 b/multipath/mpathconf.8
+index 496383b7..9c2fb835 100644
+--- a/multipath/mpathconf.8
++++ b/multipath/mpathconf.8
+@@ -77,6 +77,15 @@ to the
+ defaults section. If set to \fBn\fP, this removes the line, if present. This
+ command can be used along with any other command.
+ .TP
++.B --recheck_wwid \fP { \fBy\fP | \fBn\fP }
++If set to \fBy\fP, this adds the line
++.B recheck_wwid yes
++to the
++.B /etc/multipath.conf
++defaults section, or sets an existing line to \fByes\fP. If set to \fBn\fP, this
++sets an existing \fBrecheck_wwid\fP line to \fBno\fP. This command can be used
++along with any other command.
++.TP
+ .B --find_multipaths\fP { \fByes\fP | \fBno\fP | \fBstrict\fP | \fBgreedy\fP | \fBsmart\fP }
+ If set to \fB<value>\fP, this adds the line
+ .B find_multipaths <value>

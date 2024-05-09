@@ -1,0 +1,46 @@
+From 62f6cdaa36e1c9e8f39e1ca60d8e3049de6860bf Mon Sep 17 00:00:00 2001
+From: William Roberts <william.c.roberts@intel.com>
+Date: Mon, 27 Feb 2023 15:32:55 -0600
+Subject: [PATCH 13/17] readpublic: fix reading and writing serialized trs
+
+Fix reading and writing a serialized persistent ESYS_TR handles. This
+occurs becuase the TPM2_HANDLE is never set after loading and decisions
+are made on it.
+
+Fixes:
+tpm2_readpublic -t handle2.tr -c handle.tr
+ERROR: Can only output a serialized handle for persistent object handles
+ERROR: Unable to run tpm2_readpublic
+
+Signed-off-by: William Roberts <william.c.roberts@intel.com>
+---
+ lib/object.c | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/lib/object.c b/lib/object.c
+index c186a820..1279a8e5 100644
+--- a/lib/object.c
++++ b/lib/object.c
+@@ -15,7 +15,18 @@ static tool_rc do_ctx_file(ESYS_CONTEXT *ctx, const char *objectstr, FILE *f,
+     /* assign a dummy transient handle */
+     outobject->handle = TPM2_TRANSIENT_FIRST;
+     outobject->path = objectstr;
+-    return files_load_tpm_context_from_file(ctx, &outobject->tr_handle, f);
++    tool_rc rc = files_load_tpm_context_from_file(ctx, &outobject->tr_handle, f);
++    if (rc != tool_rc_success) {
++        return rc;
++    }
++
++    TSS2_RC rval = Esys_TR_GetTpmHandle(ctx, outobject->tr_handle, &outobject->handle);
++    if (rval != TPM2_RC_SUCCESS) {
++        LOG_ERR("Failed to acquire SAPI handle");
++        return tool_rc_general_error;
++    }
++
++    return tool_rc_success;
+ }
+ 
+ static tool_rc tpm2_util_object_load2(ESYS_CONTEXT *ctx, const char *objectstr,
+-- 
+2.40.1
+

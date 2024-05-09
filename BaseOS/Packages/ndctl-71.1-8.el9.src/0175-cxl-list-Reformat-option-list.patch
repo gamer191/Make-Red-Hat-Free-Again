@@ -1,0 +1,47 @@
+From 6a843797767868279a5197699a53154bbed5eb2a Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 14 Jul 2022 10:01:52 -0700
+Subject: [PATCH 175/217] cxl/list: Reformat option list
+
+Cleanup some spurious spaces and let clang-format re-layout the options.
+
+Link: https://lore.kernel.org/r/165781811294.1555691.6271986101970794441.stgit@dwillia2-xfh.jf.intel.com
+Reviewed-by: Davidlohr Bueso <dave@stgolabs.net>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/list.c | 9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/cxl/list.c b/cxl/list.c
+index 940782d..1b5f583 100644
+--- a/cxl/list.c
++++ b/cxl/list.c
+@@ -36,8 +36,7 @@ static const struct option options[] = {
+ 		   "filter by CXL endpoint device name(s)"),
+ 	OPT_BOOLEAN('E', "endpoints", &param.endpoints,
+ 		    "include CXL endpoint info"),
+-	OPT_STRING('d', "decoder", &param.decoder_filter,
+-		   "decoder device name",
++	OPT_STRING('d', "decoder", &param.decoder_filter, "decoder device name",
+ 		   "filter by CXL decoder device name(s) / class"),
+ 	OPT_BOOLEAN('D', "decoders", &param.decoders,
+ 		    "include CXL decoder info"),
+@@ -45,11 +44,11 @@ static const struct option options[] = {
+ 		    "include CXL target data with decoders or ports"),
+ 	OPT_BOOLEAN('i', "idle", &param.idle, "include disabled devices"),
+ 	OPT_BOOLEAN('u', "human", &param.human,
+-		    "use human friendly number formats "),
++		    "use human friendly number formats"),
+ 	OPT_BOOLEAN('H', "health", &param.health,
+-		    "include memory device health information "),
++		    "include memory device health information"),
+ 	OPT_BOOLEAN('I', "partition", &param.partition,
+-		    "include memory device partition information "),
++		    "include memory device partition information"),
+ #ifdef ENABLE_DEBUG
+ 	OPT_BOOLEAN(0, "debug", &debug, "debug list walk"),
+ #endif
+-- 
+2.27.0
+

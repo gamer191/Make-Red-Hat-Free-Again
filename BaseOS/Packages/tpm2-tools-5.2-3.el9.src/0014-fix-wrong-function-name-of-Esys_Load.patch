@@ -1,0 +1,29 @@
+From f1515918ebba36a540432425f7cd01ca3c44aaac Mon Sep 17 00:00:00 2001
+From: yuxiaojun <yuxiaojun@uniontech.com>
+Date: Wed, 1 Feb 2023 11:47:40 +0800
+Subject: [PATCH 14/17] fix:wrong function name of "Esys_Load"
+
+LOG_PERR(Eys_Load, rval);
+The first parameter in the function should be Esys_Load.
+
+Signed-off-by: yuxiaojun <yuxiaojun@uniontech.com>
+---
+ lib/tpm2.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/tpm2.c b/lib/tpm2.c
+index d91072ae..27f101e9 100644
+--- a/lib/tpm2.c
++++ b/lib/tpm2.c
+@@ -1921,7 +1921,7 @@ tpm2_load_free_name1:
+             parent_object_session_handle, ESYS_TR_NONE, ESYS_TR_NONE, in_private,
+             in_public, object_handle);
+     if (rval != TPM2_RC_SUCCESS) {
+-        LOG_PERR(Eys_Load, rval);
++        LOG_PERR(Esys_Load, rval);
+         return tool_rc_from_tpm(rval);
+     }
+ 
+-- 
+2.40.1
+

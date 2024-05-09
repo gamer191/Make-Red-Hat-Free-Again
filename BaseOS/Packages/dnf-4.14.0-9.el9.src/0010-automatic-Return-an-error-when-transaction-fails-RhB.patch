@@ -1,0 +1,39 @@
+From e62164e450c05d626e4ca2b5dc2728939686b423 Mon Sep 17 00:00:00 2001
+From: Jan Kolarik <jkolarik@redhat.com>
+Date: Thu, 20 Apr 2023 10:10:14 +0000
+Subject: [PATCH] automatic: Return an error when transaction fails
+ (RhBug:2170093)
+
+In case of no global error occurred within the transaction, we still need to check state of individual transaction items for any failure.
+
+This is matching the logic in `BaseCli.do_transaction` method, where the error is emitted after printing the transaction summary.
+
+= changelog =
+msg: automatic: Return an error when transaction fails
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2170093
+---
+ dnf/automatic/main.py | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/dnf/automatic/main.py b/dnf/automatic/main.py
+index 756531e7..f6f4049b 100644
+--- a/dnf/automatic/main.py
++++ b/dnf/automatic/main.py
+@@ -351,6 +351,13 @@ def main(args):
+ 
+             gpgsigcheck(base, trans.install_set)
+             base.do_transaction()
++
++            # In case of no global error occurred within the transaction,
++            # we need to check state of individual transaction items.
++            for tsi in trans:
++                if tsi.state == libdnf.transaction.TransactionItemState_ERROR:
++                    raise dnf.exceptions.Error(_('Transaction failed'))
++
+             emitters.notify_applied()
+             emitters.commit()
+ 
+-- 
+2.40.1
+

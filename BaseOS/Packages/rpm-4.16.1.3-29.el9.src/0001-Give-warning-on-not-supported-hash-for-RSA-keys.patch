@@ -1,0 +1,40 @@
+From 48546ffc0a3f3eb15bfd439a19fc9722eaea592f Mon Sep 17 00:00:00 2001
+From: Florian Festi <ffesti@redhat.com>
+Date: Tue, 28 Jun 2022 12:50:54 +0200
+Subject: [PATCH] Give warning on not supported hash for RSA keys
+
+This can happen when old keys are used on systems that have disabled SHA1
+e.g. for FIPS requirements.
+
+This is less than ideal but there is currently no way to pass a meaningful
+error code up to rpmtsImportPubkey. rpmPubkeyNew just returns a valid key
+or NULL.
+
+See rhbz#2069877
+---
+ rpmio/digest_openssl.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/rpmio/digest_openssl.c b/rpmio/digest_openssl.c
+index a28a13acc..2ec5140f1 100644
+--- a/rpmio/digest_openssl.c
++++ b/rpmio/digest_openssl.c
+@@ -4,6 +4,7 @@
+ #include <openssl/rsa.h>
+ #include <openssl/dsa.h>
+ #include <rpm/rpmpgp.h>
++#include <rpm/rpmlog.h>
+ 
+ #include "rpmio/digest.h"
+ 
+@@ -483,6 +484,7 @@ static int pgpVerifySigRSA(pgpDigAlg pgpkey, pgpDigAlg pgpsig,
+ 
+     ret = EVP_PKEY_CTX_set_signature_md(pkey_ctx, getEVPMD(hash_algo));
+     if (ret < 0) {
++	rpmlog(RPMLOG_WARNING, "Signature not supported. Hash algorithm %s not available.\n", pgpValString(PGPVAL_HASHALGO, hash_algo));
+         rc = 1;
+         goto done;
+     }
+-- 
+2.36.1
+

@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Thu, 26 Oct 2023 13:24:34 -0400
+Subject: [PATCH] multipath-tools: add HPE Alletra 9000 NVMe to hardware table
+
+Add config to match configuration in 0.9.6 release
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index 22ff1881..78ac7988 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -119,6 +119,14 @@ static struct hwentry default_hw[] = {
+ 		.dev_loss      = MAX_DEV_LOSS_TMO,
+ 		.vpd_vendor_id = VPD_VP_HP3PAR,
+ 	},
++	{
++		/* Alletra 9000 NVMe */
++		.vendor        = "NVME",
++		.product       = "HPE Alletra",
++		.pgpolicy      = GROUP_BY_PRIO,
++		.pgfailback    = -FAILBACK_IMMEDIATE,
++		.no_path_retry = NO_PATH_RETRY_QUEUE,
++	},
+ 	{
+ 		/* RA8000 / ESA12000 */
+ 		.vendor        = "DEC",

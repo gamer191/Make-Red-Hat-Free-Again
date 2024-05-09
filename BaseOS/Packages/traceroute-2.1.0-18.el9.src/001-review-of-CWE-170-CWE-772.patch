@@ -1,0 +1,57 @@
+From 4bbfd43121e4c1f59074b1b0def9804c1890b2dc Mon Sep 17 00:00:00 2001
+From: Jan Macku <jamacku@redhat.com>
+Date: Mon, 19 Jul 2021 09:48:19 +0200
+Subject: [PATCH] review of CWE-170, CWE-772
+
+Resolves: #1938887
+---
+ libsupp/clif.c          | 2 ++
+ traceroute/traceroute.c | 7 ++++++-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/libsupp/clif.c b/libsupp/clif.c
+index 4ef20e4..60ec291 100644
+--- a/libsupp/clif.c
++++ b/libsupp/clif.c
+@@ -229,10 +229,12 @@ static void err_bad_arg (const CLIF_option *optn, char c, int n) {
+ 
+ 	if (c) {
+ 	    s = show_short (&tmp);	/*  always without arg...  */
++	    /* coverity[buffer_size_warning] - not a bug, s ends with '\0', see line 97 */
+ 	    strncpy (ss, s, sizeof (ss));
+ 	    s = show_short (optn);
+ 	} else {
+ 	    s = show_long (&tmp);	/*  always without arg...  */
++	    /* coverity[buffer_size_warning] - not a bug, s ends with '\0', see line 97 */
+ 	    strncpy (ss, s, sizeof (ss));
+ 	    s = show_long (optn);
+ 	}
+diff --git a/traceroute/traceroute.c b/traceroute/traceroute.c
+index 4be9b24..0a29e36 100644
+--- a/traceroute/traceroute.c
++++ b/traceroute/traceroute.c
+@@ -217,8 +217,12 @@ static int getaddr (const char *name, sockaddr_any *addr) {
+ 	}
+ 	if (!ai)  ai = res;	/*  anything...  */
+ 
+-	if (ai->ai_addrlen > sizeof (*addr))
++	if (ai->ai_addrlen > sizeof (*addr)) {
++		/* Avoid of leaking res (CWE-772) */
++		freeaddrinfo (res);
+ 		return -1;	/*  paranoia   */
++	}
++
+ 	memcpy (addr, ai->ai_addr, ai->ai_addrlen);
+ 
+ 	freeaddrinfo (res);
+@@ -244,6 +248,7 @@ static void make_fd_used (int fd) {
+ 	    close (nfd);
+ 	}
+ 
++	/* coverity[leaked_handle] - not a bug, see line 665 */
+ 	return;
+ }
+ 
+-- 
+2.31.1
+

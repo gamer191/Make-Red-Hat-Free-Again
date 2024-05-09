@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 31 Jan 2023 09:58:55 -0600
+Subject: [PATCH] libmultipath: select resize action even if reload is forced
+
+The ACT_RESIZE action is the same as the ACT_RELOAD action, except that
+it flushes outstanding IO because the device size is changing and
+the new size might be too small for some of the outstanding IO. If we've
+detected a size change, and a forced reload is requested, we still need
+to flush the IO because the reload will change the device size.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/configure.c | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/libmultipath/configure.c b/libmultipath/configure.c
+index 09d7de0f..c91a8139 100644
+--- a/libmultipath/configure.c
++++ b/libmultipath/configure.c
+@@ -769,11 +769,6 @@ void select_action (struct multipath *mpp, const struct _vector *curmp,
+ 		return;
+ 	}
+ 
+-	if (force_reload) {
+-		mpp->force_udev_reload = 1;
+-		select_reload_action(mpp, "forced by user");
+-		return;
+-	}
+ 	if (cmpp->size != mpp->size) {
+ 		mpp->force_udev_reload = 1;
+ 		mpp->action = ACT_RESIZE;
+@@ -782,6 +777,12 @@ void select_action (struct multipath *mpp, const struct _vector *curmp,
+ 		return;
+ 	}
+ 
++	if (force_reload) {
++		mpp->force_udev_reload = 1;
++		select_reload_action(mpp, "forced by user");
++		return;
++	}
++
+ 	if (!is_udev_ready(cmpp) && count_active_paths(mpp) > 0) {
+ 		mpp->force_udev_reload = 1;
+ 		select_reload_action(mpp, "udev incomplete");

@@ -1,0 +1,32 @@
+From 8f457dc414ec27178828c86533910958542ce73d Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:52:15 -0800
+Subject: [PATCH 091/217] cxl/json: Cleanup object leak false positive
+
+As written it is a leak of the json object to return if devname is NULL.
+However, the devname can not be NULL because the memdev would not have been
+enumerated. Drop the error checking.
+
+Link: https://lore.kernel.org/r/164298553566.3021641.11858634436119663877.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/json.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cxl/json.c b/cxl/json.c
+index 97ed76b..3ef9f76 100644
+--- a/cxl/json.c
++++ b/cxl/json.c
+@@ -190,7 +190,7 @@ struct json_object *util_cxl_memdev_to_json(struct cxl_memdev *memdev,
+ 	struct json_object *jdev, *jobj;
+ 
+ 	jdev = json_object_new_object();
+-	if (!devname || !jdev)
++	if (!jdev)
+ 		return NULL;
+ 
+ 	jobj = json_object_new_string(devname);
+-- 
+2.27.0
+

@@ -1,0 +1,28 @@
+From 136cb8f1d3bedc79343cad51ed744d69f5508adf Mon Sep 17 00:00:00 2001
+From: orbea <orbea@riseup.net>
+Date: Fri, 1 Oct 2021 14:57:47 -0700
+Subject: [PATCH] freedesktop_generate.sh: Don't hardcode ninja
+
+Another ninja implementation that works is samurai
+
+https://github.com/michaelforney/samurai
+---
+ data/freedesktop_generate.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/data/freedesktop_generate.sh b/data/freedesktop_generate.sh
+index ff13e75..62ccffa 100755
+--- a/data/freedesktop_generate.sh
++++ b/data/freedesktop_generate.sh
+@@ -3,7 +3,7 @@
+ src_root="$1"
+ build_root="$2"
+ 
+-ninja -C "${build_root}" shared-mime-info-gmo
++${NINJA:-ninja} -C "${build_root}" shared-mime-info-gmo
+ 
+ itstool \
+     --its "${src_root}/data/its/shared-mime-info.its" \
+-- 
+2.37.3
+

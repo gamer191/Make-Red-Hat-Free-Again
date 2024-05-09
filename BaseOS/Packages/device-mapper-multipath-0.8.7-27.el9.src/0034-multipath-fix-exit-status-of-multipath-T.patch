@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Fri, 22 Oct 2021 12:58:11 +0200
+Subject: [PATCH] multipath: fix exit status of multipath -T
+
+We must set the return value in configure().
+
+Signed-off-by: Martin Wilck <mwilck@suse.com>
+Reviewed-by: Benjamin Marzinski <bmarzins@redhat.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/main.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/multipath/main.c b/multipath/main.c
+index 748e7902..80fa68e5 100644
+--- a/multipath/main.c
++++ b/multipath/main.c
+@@ -606,6 +606,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
+ 
+ 		dump_config(conf, hwes, curmp);
+ 		vector_free(hwes);
++		r = RTVL_OK;
+ 		goto out;
+ 	}
+ 

@@ -1,0 +1,194 @@
+From 691cd249750b505753680d2a766280698ce25b75 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:52:10 -0800
+Subject: [PATCH 090/217] json: Add support for json_object_new_uint64()
+
+Recent versions of json-c add a proper u64 type. However since ndctl still
+needs to build against older json-c add build infrastructure to fallback to
+s64.
+
+Link: https://lore.kernel.org/r/164298553057.3021641.17232869374733997747.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ config.h.meson |  3 +++
+ cxl/json.c     |  6 +++---
+ daxctl/json.c  |  2 +-
+ meson.build    |  6 ++++++
+ ndctl/dimm.c   |  2 +-
+ ndctl/json.c   | 10 +++++-----
+ util/json.c    |  2 +-
+ util/json.h    | 13 ++++++++++++-
+ 8 files changed, 32 insertions(+), 12 deletions(-)
+
+diff -up ndctl-71.1/config.h.meson.orig ndctl-71.1/config.h.meson
+--- ndctl-71.1/config.h.meson.orig	2022-10-07 17:40:36.698914113 -0400
++++ ndctl-71.1/config.h.meson	2022-10-07 17:41:24.043075305 -0400
+@@ -88,6 +88,9 @@
+ /* Define to 1 if you have the `__secure_getenv' function. */
+ #mesondefine HAVE___SECURE_GETENV
+ 
++/* Define to 1 if you have json_object_new_uint64 in json-c */
++#mesondefine HAVE_JSON_U64
++
+ /* Define to the sub-directory where libtool stores uninstalled libraries. */
+ #mesondefine LT_OBJDIR
+ 
+diff -up ndctl-71.1/cxl/json.c.orig ndctl-71.1/cxl/json.c
+--- ndctl-71.1/cxl/json.c.orig	2022-10-07 17:40:36.668914011 -0400
++++ ndctl-71.1/cxl/json.c	2022-10-07 17:41:24.043075305 -0400
+@@ -159,17 +159,17 @@ static struct json_object *util_cxl_memd
+ 	}
+ 
+ 	field = cxl_cmd_health_info_get_dirty_shutdowns(cmd);
+-	jobj = json_object_new_int64(field);
++	jobj = util_json_new_u64(field);
+ 	if (jobj)
+ 		json_object_object_add(jhealth, "dirty_shutdowns", jobj);
+ 
+ 	field = cxl_cmd_health_info_get_volatile_errors(cmd);
+-	jobj = json_object_new_int64(field);
++	jobj = util_json_new_u64(field);
+ 	if (jobj)
+ 		json_object_object_add(jhealth, "volatile_errors", jobj);
+ 
+ 	field = cxl_cmd_health_info_get_pmem_errors(cmd);
+-	jobj = json_object_new_int64(field);
++	jobj = util_json_new_u64(field);
+ 	if (jobj)
+ 		json_object_object_add(jhealth, "pmem_errors", jobj);
+ 
+diff -up ndctl-71.1/daxctl/json.c.orig ndctl-71.1/daxctl/json.c
+--- ndctl-71.1/daxctl/json.c.orig	2022-10-07 17:40:36.671914021 -0400
++++ ndctl-71.1/daxctl/json.c	2022-10-07 17:41:24.043075305 -0400
+@@ -190,7 +190,7 @@ struct json_object *util_daxctl_region_t
+ 
+ 	align = daxctl_region_get_align(region);
+ 	if (align < ULONG_MAX) {
+-		jobj = json_object_new_int64(align);
++		jobj = util_json_new_u64(align);
+ 		if (!jobj)
+ 			goto err;
+ 		json_object_object_add(jregion, "align", jobj);
+diff -up ndctl-71.1/meson.build.orig ndctl-71.1/meson.build
+--- ndctl-71.1/meson.build.orig	2022-10-07 17:40:36.720914188 -0400
++++ ndctl-71.1/meson.build	2022-10-07 17:41:24.044075308 -0400
+@@ -240,6 +240,12 @@ foreach ident : ['secure_getenv', '__sec
+   conf.set10('HAVE_' + ident.to_upper(), cc.has_function(ident))
+ endforeach
+ 
++conf.set10('HAVE_JSON_U64',
++  cc.has_function('json_object_new_uint64',
++    prefix : '''#include <json-c/json.h>''',
++    dependencies : json,
++  )
++)
+ 
+ ndctlconf_dir = sysconfdir / 'ndctl'
+ ndctlconf = ndctlconf_dir / 'monitor.conf'
+diff -up ndctl-71.1/ndctl/dimm.c.orig ndctl-71.1/ndctl/dimm.c
+--- ndctl-71.1/ndctl/dimm.c.orig	2022-10-07 17:40:36.673914028 -0400
++++ ndctl-71.1/ndctl/dimm.c	2022-10-07 17:41:24.044075308 -0400
+@@ -168,7 +168,7 @@ static struct json_object *dump_label_js
+ 			break;
+ 		json_object_object_add(jlabel, "isetcookie", jobj);
+ 
+-		jobj = json_object_new_int64(le64_to_cpu(nslabel.lbasize));
++		jobj = util_json_new_u64(le64_to_cpu(nslabel.lbasize));
+ 		if (!jobj)
+ 			break;
+ 		json_object_object_add(jlabel, "lbasize", jobj);
+diff -up ndctl-71.1/ndctl/json.c.orig ndctl-71.1/ndctl/json.c
+--- ndctl-71.1/ndctl/json.c.orig	2022-10-07 17:40:36.675914034 -0400
++++ ndctl-71.1/ndctl/json.c	2022-10-07 17:41:24.044075308 -0400
+@@ -357,7 +357,7 @@ static struct json_object *util_##type##
+ 		int64_t align;					\
+ 								\
+ 		align = get_elem(arg, i);			\
+-		jobj = json_object_new_int64(align);		\
++		jobj = util_json_new_u64(align);		\
+ 		if (!jobj)					\
+ 			goto err;				\
+ 		json_object_array_add(arr, jobj);		\
+@@ -550,7 +550,7 @@ struct json_object *util_region_badblock
+ 		if (!jbb)
+ 			goto err_array;
+ 
+-		jobj = json_object_new_int64(bb->offset);
++		jobj = util_json_new_u64(bb->offset);
+ 		if (!jobj)
+ 			goto err;
+ 		json_object_object_add(jbb, "offset", jobj);
+@@ -604,7 +604,7 @@ static struct json_object *util_namespac
+ 		if (!jbb)
+ 			goto err_array;
+ 
+-		jobj = json_object_new_int64(bb->offset);
++		jobj = util_json_new_u64(bb->offset);
+ 		if (!jobj)
+ 			goto err;
+ 		json_object_object_add(jbb, "offset", jobj);
+@@ -682,7 +682,7 @@ static struct json_object *dev_badblocks
+ 		if (!jbb)
+ 			goto err_array;
+ 
+-		jobj = json_object_new_int64(offset);
++		jobj = util_json_new_u64(offset);
+ 		if (!jobj)
+ 			goto err;
+ 		json_object_object_add(jbb, "offset", jobj);
+@@ -972,7 +972,7 @@ struct json_object *util_namespace_to_js
+ 	}
+ 
+ 	if (align) {
+-		jobj = json_object_new_int64(align);
++		jobj = util_json_new_u64(align);
+ 		if (!jobj)
+ 			goto err;
+ 		json_object_object_add(jndns, "align", jobj);
+diff -up ndctl-71.1/util/json.c.orig ndctl-71.1/util/json.c
+--- ndctl-71.1/util/json.c.orig	2022-10-07 17:40:36.682914058 -0400
++++ ndctl-71.1/util/json.c	2022-10-07 17:41:24.045075312 -0400
+@@ -82,7 +82,7 @@ struct json_object *util_json_object_siz
+ struct json_object *util_json_object_hex(unsigned long long val,
+ 		unsigned long flags)
+ {
+-	struct json_object *jobj = json_object_new_int64(val);
++	struct json_object *jobj = util_json_new_u64(val);
+ 
+ 	if (jobj && (flags & UTIL_JSON_HUMAN))
+ 		json_object_set_serializer(jobj, display_hex, NULL, NULL);
+diff -up ndctl-71.1/util/json.h.orig ndctl-71.1/util/json.h
+--- ndctl-71.1/util/json.h.orig	2022-10-07 17:40:36.683914062 -0400
++++ ndctl-71.1/util/json.h	2022-10-07 17:41:24.046075315 -0400
+@@ -4,6 +4,7 @@
+ #define __UTIL_JSON_H__
+ #include <stdio.h>
+ #include <stdbool.h>
++#include <json-c/json.h>
+ 
+ enum util_json_flags {
+ 	UTIL_JSON_IDLE		= (1 << 0),
+@@ -19,11 +20,21 @@ enum util_json_flags {
+ 	UTIL_JSON_HEALTH	= (1 << 10),
+ };
+ 
+-struct json_object;
+ void util_display_json_array(FILE *f_out, struct json_object *jarray,
+ 		unsigned long flags);
+ struct json_object *util_json_object_size(unsigned long long size,
+ 		unsigned long flags);
+ struct json_object *util_json_object_hex(unsigned long long val,
+ 		unsigned long flags);
++#if HAVE_JSON_U64
++static inline struct json_object *util_json_new_u64(unsigned long long val)
++{
++	return json_object_new_uint64(val);
++}
++#else /* fallback to signed */
++static inline struct json_object *util_json_new_u64(unsigned long long val)
++{
++	return json_object_new_int64(val);
++}
++#endif /* HAVE_JSON_U64 */
+ #endif /* __UTIL_JSON_H__ */

@@ -1,0 +1,29 @@
+From be0d06e3f382d8ddcf7b870d58ed1cc9576e065a Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Wed, 24 Jan 2024 09:54:19 +0100
+Subject: libmount: improve act file close
+
+Addresses: https://issues.redhat.com/browse/RHEL-14612
+Upstream: http://github.com/util-linux/util-linux/commit/630dd235bce560476e0e3a92984091f1e50157c1
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libmount/src/tab_update.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/libmount/src/tab_update.c b/libmount/src/tab_update.c
+index 7b088c025..8a50b5a01 100644
+--- a/libmount/src/tab_update.c
++++ b/libmount/src/tab_update.c
+@@ -1084,7 +1084,8 @@ fail:
+ 	DBG(UPDATE, ul_debugobj(upd, "act file failed [rc=%d]", rc));
+ 	mnt_unlock_file(upd->lock);
+ 	unlink(upd->act_filename);
+-	close(upd->act_fd);
++	if (upd->act_fd >= 0)
++		close(upd->act_fd);
+ 	upd->act_fd = -1;
+ 	return rc;
+ }
+-- 
+2.43.0
+

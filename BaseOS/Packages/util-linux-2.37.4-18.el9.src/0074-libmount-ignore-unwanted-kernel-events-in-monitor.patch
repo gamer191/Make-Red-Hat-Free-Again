@@ -1,0 +1,180 @@
+From e8de2e75d712dd9a750bde130b4367546b46a0bd Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Mon, 22 Jan 2024 13:04:44 +0100
+Subject: libmount: ignore unwanted kernel events in monitor
+
+If the mount operation requires multiple steps, it's optimal for the
+libmount monitor to ignore the steps until we get a complete mount
+(reported by the utab.event file).
+
+This commit adds a new API function, mnt_monitor_veil_kernel(), to
+ignore unwanted kernel mount events.
+
+Note that this only makes sense when the application monitors kernel
+and userspace events simultaneously.
+
+Addresses: https://issues.redhat.com/browse/RHEL-14612
+Upstream: http://github.com/util-linux/util-linux/commit/a2b5a4e0adf9543843bb0aef94d21e7105cf8159
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libmount/docs/libmount-sections.txt |  1 +
+ libmount/src/libmount.h.in          |  2 ++
+ libmount/src/libmount.sym           |  1 +
+ libmount/src/monitor.c              | 55 ++++++++++++++++++++++++++---
+ 4 files changed, 54 insertions(+), 5 deletions(-)
+
+diff --git a/libmount/docs/libmount-sections.txt b/libmount/docs/libmount-sections.txt
+index d9263b8ad..43bb80f1c 100644
+--- a/libmount/docs/libmount-sections.txt
++++ b/libmount/docs/libmount-sections.txt
+@@ -449,5 +449,6 @@ mnt_monitor_get_fd
+ mnt_monitor_close_fd
+ mnt_monitor_next_change
+ mnt_monitor_event_cleanup
++mnt_monitor_veil_kernel
+ mnt_monitor_wait
+ </SECTION>
+diff --git a/libmount/src/libmount.h.in b/libmount/src/libmount.h.in
+index a51ac1ea5..b57b6bcd6 100644
+--- a/libmount/src/libmount.h.in
++++ b/libmount/src/libmount.h.in
+@@ -671,6 +671,8 @@ extern int mnt_monitor_enable_kernel(struct libmnt_monitor *mn, int enable);
+ extern int mnt_monitor_enable_userspace(struct libmnt_monitor *mn,
+ 				int enable, const char *filename);
+ 
++extern int mnt_monitor_veil_kernel(struct libmnt_monitor *mn, int enable);
++
+ extern int mnt_monitor_get_fd(struct libmnt_monitor *mn);
+ extern int mnt_monitor_close_fd(struct libmnt_monitor *mn);
+ extern int mnt_monitor_wait(struct libmnt_monitor *mn, int timeout);
+diff --git a/libmount/src/libmount.sym b/libmount/src/libmount.sym
+index 88bce5c4b..13071b9cd 100644
+--- a/libmount/src/libmount.sym
++++ b/libmount/src/libmount.sym
+@@ -368,4 +368,5 @@ MOUNT_2_37 {
+ MOUNT_2_40 {
+ 	mnt_ref_lock;
+ 	mnt_unref_lock;
++	mnt_monitor_veil_kernel;
+ } MOUNT_2_37;
+diff --git a/libmount/src/monitor.c b/libmount/src/monitor.c
+index 040a5ee11..b5cc7e768 100644
+--- a/libmount/src/monitor.c
++++ b/libmount/src/monitor.c
+@@ -64,6 +64,8 @@ struct libmnt_monitor {
+ 	int			fd;		/* public monitor file descriptor */
+ 
+ 	struct list_head	ents;
++
++	unsigned int		kernel_veiled: 1;
+ };
+ 
+ struct monitor_opers {
+@@ -469,12 +471,28 @@ err:
+ 	return rc;
+ }
+ 
++static int kernel_event_verify(struct libmnt_monitor *mn,
++			       struct monitor_entry *me)
++{
++	int status = 1;
++
++	if (!mn || !me || me->fd < 0)
++		return 0;
++
++	if (mn->kernel_veiled && access(MNT_PATH_UTAB ".act", F_OK) == 0) {
++		status = 0;
++		DBG(MONITOR, ul_debugobj(mn, "kernel event veiled"));
++	}
++	return status;
++}
++
+ /*
+  * kernel monitor operations
+  */
+ static const struct monitor_opers kernel_opers = {
+ 	.op_get_fd		= kernel_monitor_get_fd,
+ 	.op_close_fd		= kernel_monitor_close_fd,
++	.op_event_verify	= kernel_event_verify
+ };
+ 
+ /**
+@@ -543,6 +561,28 @@ err:
+ 	return rc;
+ }
+ 
++/**
++ * mnt_monitor_veil_kernel:
++ * @mn: monitor instance
++ * @enable: 1 or 0
++ *
++ * Force monitor to ignore kernel events if the same mount/umount operation
++ * will generate an userspace event later. The kernel-only mount operation will
++ * be not affected.
++ *
++ * Return: 0 on success and <0 on error.
++ *
++ * Since: 2.40
++ */
++int mnt_monitor_veil_kernel(struct libmnt_monitor *mn, int enable)
++{
++	if (!mn)
++		return -EINVAL;
++
++	mn->kernel_veiled = enable ? 1 : 0;
++	return 0;
++}
++
+ /*
+  * Add/Remove monitor entry to/from monitor epoll.
+  */
+@@ -850,6 +890,8 @@ static struct libmnt_monitor *create_test_monitor(int argc, char *argv[])
+ 				warn("failed to initialize kernel monitor");
+ 				goto err;
+ 			}
++		} else if (strcmp(argv[i], "veil") == 0) {
++			mnt_monitor_veil_kernel(mn, 1);
+ 		}
+ 	}
+ 	if (i == 1) {
+@@ -896,12 +938,14 @@ static int __test_epoll(struct libmnt_test *ts, int argc, char *argv[], int clea
+ 		goto done;
+ 	}
+ 
+-	printf("waiting for changes...\n");
+ 	do {
+ 		const char *filename = NULL;
+ 		struct epoll_event events[1];
+-		int n = epoll_wait(efd, events, 1, -1);
++		int n;
++
++		printf("waiting for changes...\n");
+ 
++		n = epoll_wait(efd, events, 1, -1);
+ 		if (n < 0) {
+ 			rc = -errno;
+ 			warn("polling error");
+@@ -958,6 +1002,7 @@ static int test_wait(struct libmnt_test *ts, int argc, char *argv[])
+ 		while (mnt_monitor_next_change(mn, &filename, NULL) == 0)
+ 			printf(" %s: change detected\n", filename);
+ 
++		printf("waiting for changes...\n");
+ 	}
+ 	mnt_unref_monitor(mn);
+ 	return 0;
+@@ -966,9 +1011,9 @@ static int test_wait(struct libmnt_test *ts, int argc, char *argv[])
+ int main(int argc, char *argv[])
+ {
+ 	struct libmnt_test tss[] = {
+-		{ "--epoll", test_epoll, "<userspace kernel ...>  monitor in epoll" },
+-		{ "--epoll-clean", test_epoll_cleanup, "<userspace kernel ...>  monitor in epoll and clean events" },
+-		{ "--wait",  test_wait,  "<userspace kernel ...>  monitor wait function" },
++		{ "--epoll", test_epoll, "<userspace kernel veil ...>  monitor in epoll" },
++		{ "--epoll-clean", test_epoll_cleanup, "<userspace kernel veil ...>  monitor in epoll and clean events" },
++		{ "--wait",  test_wait,  "<userspace kernel veil ...>  monitor wait function" },
+ 		{ NULL }
+ 	};
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,32 @@
+From f1503ab6e898430b80017c0f8347860f3a74d5bb Mon Sep 17 00:00:00 2001
+From: Florian Festi <ffesti@redhat.com>
+Date: Mon, 11 Dec 2023 15:50:15 +0100
+Subject: [PATCH] Print full path if file removal fails
+
+For normal debug output the basename of the files are sufficient as when
+debugging is enabled the directories are also printed. But here the
+warning is given without a debug flag so we need the full context right
+there.
+---
+ lib/fsm.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/fsm.c b/lib/fsm.c
+index fcd764648..2189bd84c 100644
+--- a/lib/fsm.c
++++ b/lib/fsm.c
+@@ -1174,9 +1174,9 @@ int rpmPackageFilesRemove(rpmts ts, rpmte te, rpmfiles files,
+ 
+ 	    if (rc) {
+ 		int lvl = strict_erasures ? RPMLOG_ERR : RPMLOG_WARNING;
+-		rpmlog(lvl, _("%s %s: remove failed: %s\n"),
++		rpmlog(lvl, _("%s %s%s: remove failed: %s\n"),
+ 			S_ISDIR(fp->sb.st_mode) ? _("directory") : _("file"),
+-			fp->fpath, strerror(errno));
++			rpmfiDN(fi), fp->fpath, strerror(errno));
+             }
+         }
+ 
+-- 
+2.43.0
+

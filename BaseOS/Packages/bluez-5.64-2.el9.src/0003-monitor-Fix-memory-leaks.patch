@@ -1,0 +1,38 @@
+From 6f02010ce0043ec2e17eb15f2a1dd42f6c64e223 Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:07 +0530
+Subject: [PATCH BlueZ 03/12] monitor: Fix memory leaks
+
+While performing static tool analysis using coverity
+found following reports for resouse leak
+
+bluez-5.64/monitor/jlink.c:111: leaked_storage: Variable "so"
+going out of scope leaks the storage it points to.
+
+bluez-5.64/monitor/jlink.c:113: leaked_storage: Variable "so"
+going out of scope leaks the storage it points to.
+---
+ monitor/jlink.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/monitor/jlink.c b/monitor/jlink.c
+index 9aaa4ebd8..f1d8ce660 100644
+--- a/monitor/jlink.c
++++ b/monitor/jlink.c
+@@ -107,9 +107,12 @@ int jlink_init(void)
+ 			!jlink.tif_select || !jlink.setspeed ||
+ 			!jlink.connect || !jlink.getsn ||
+ 			!jlink.emu_getproductname ||
+-			!jlink.rtterminal_control || !jlink.rtterminal_read)
++			!jlink.rtterminal_control || !jlink.rtterminal_read) {
++		dlclose(so);
+ 		return -EIO;
++	}
+ 
++	dlclose(so);
+ 	return 0;
+ }
+ 
+-- 
+2.26.2
+

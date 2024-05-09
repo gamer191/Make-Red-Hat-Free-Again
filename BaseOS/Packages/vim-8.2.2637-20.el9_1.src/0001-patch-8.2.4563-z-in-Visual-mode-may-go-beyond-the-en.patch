@@ -1,0 +1,39 @@
+diff -up vim82/src/spellsuggest.c.cve0943 vim82/src/spellsuggest.c
+--- vim82/src/spellsuggest.c.cve0943	2022-03-28 20:48:07.079197805 +0200
++++ vim82/src/spellsuggest.c	2022-03-28 20:48:07.101197522 +0200
+@@ -501,6 +501,10 @@ spell_suggest(int count)
+ 	    curwin->w_cursor.col = VIsual.col;
+ 	++badlen;
+ 	end_visual_mode();
++	// make sure we don't include the NUL at the end of the line
++	line = ml_get_curline();
++	if (badlen > STRLEN(line) - curwin->w_cursor.col)
++	    badlen = STRLEN(line) - curwin->w_cursor.col;
+     }
+     // Find the start of the badly spelled word.
+     else if (spell_move_to(curwin, FORWARD, TRUE, TRUE, NULL) == 0
+diff -up vim82/src/testdir/test_spell.vim.cve0943 vim82/src/testdir/test_spell.vim
+--- vim82/src/testdir/test_spell.vim.cve0943	2022-03-28 20:48:07.102197509 +0200
++++ vim82/src/testdir/test_spell.vim	2022-03-28 20:49:05.038452974 +0200
+@@ -441,6 +441,21 @@ func Test_spellsuggest_expr_errors()
+   delfunc MySuggest3
+ endfunc
+ 
++func Test_spellsuggest_visual_end_of_line()
++  let enc_save = &encoding
++  set encoding=iso8859
++
++  " This was reading beyond the end of the line.
++  norm R00000000000
++  sil norm 0
++  sil! norm i00000)
++  sil! norm i00000)
++  call feedkeys("\<CR>")
++  norm z=
++
++  let &encoding = enc_save
++endfunc
++
+ func Test_spellinfo()
+   new
+   let runtime = substitute($VIMRUNTIME, '\\', '/', 'g')

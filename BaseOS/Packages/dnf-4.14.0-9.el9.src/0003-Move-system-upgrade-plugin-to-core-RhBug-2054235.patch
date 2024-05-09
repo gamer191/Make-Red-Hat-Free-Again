@@ -1,0 +1,31 @@
+From e5732ab22f092bb3fc6ce6e8f94aad72f3654383 Mon Sep 17 00:00:00 2001
+From: Jan Kolarik <jkolarik@redhat.com>
+Date: Wed, 31 Aug 2022 07:49:39 +0200
+Subject: [PATCH 1/2] Move system-upgrade plugin to core (RhBug:2054235)
+
+Just doc fix.
+
+= changelog =
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2054235
+---
+ doc/command_ref.rst | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/doc/command_ref.rst b/doc/command_ref.rst
+index 996ae3b4..f39f2c71 100644
+--- a/doc/command_ref.rst
++++ b/doc/command_ref.rst
+@@ -189,8 +189,7 @@ Options
+ ``--downloaddir=<path>, --destdir=<path>``
+     Redirect downloaded packages to provided directory. The option has to be used together with the \-\
+     :ref:`-downloadonly <downloadonly-label>` command line option, with the
+-    ``download``, ``modulesync`` or ``reposync`` commands (dnf-plugins-core) or with the ``system-upgrade`` command
+-    (dnf-plugins-extras).
++    ``download``, ``modulesync``, ``reposync`` or ``system-upgrade`` commands (dnf-plugins-core).
+ 
+ .. _downloadonly-label:
+ 
+-- 
+2.38.1
+

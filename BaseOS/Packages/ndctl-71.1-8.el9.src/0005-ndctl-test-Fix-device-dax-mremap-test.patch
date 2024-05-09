@@ -1,0 +1,40 @@
+From 6694afe31dd67d186199a58d2252be5ea3472692 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Tue, 12 Jan 2021 23:15:09 -0800
+Subject: [PATCH 005/217] ndctl/test: Fix device-dax mremap() test
+
+The test_dax_remap() test is a regression check for mishandling of mremap()
+in the presence of pmd_devmap(). My understanding is that it was a fuzzing
+condition not something an application would want to do in practice.
+
+On recent kernels with commit 73d5e0629919 ("mremap: check if it's possible
+to split original vma"), the test fails for device-dax. That seems an
+equally acceptable result of attempting this remap, so update the test
+rather than ask the kernel to preserve the old behaviour.
+
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+Link: https://lore.kernel.org/r/161052210936.1804207.17896246772670985157.stgit@dwillia2-desk3.amr.corp.intel.com
+---
+ test/dax-pmd.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/test/dax-pmd.c b/test/dax-pmd.c
+index b1251db..7648e34 100644
+--- a/test/dax-pmd.c
++++ b/test/dax-pmd.c
+@@ -69,6 +69,11 @@ int test_dax_remap(struct ndctl_test *test, int dax_fd, unsigned long align, voi
+ 
+ 	remap = mremap(addr, REMAP_SIZE, REMAP_SIZE, MREMAP_MAYMOVE|MREMAP_FIXED, anon);
+ 
++	if (remap == MAP_FAILED) {
++		fprintf(stderr, "%s: mremap failed, that's ok too\n", __func__);
++		return 0;
++	}
++
+ 	if (remap != anon) {
+ 		rc = -ENXIO;
+ 		perror("mremap");
+-- 
+2.27.0
+

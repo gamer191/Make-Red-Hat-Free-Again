@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 3 Nov 2023 11:13:04 -0400
+Subject: [PATCH] RH: multipath: add mpathcleanup man page
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/Makefile       |  3 +++
+ multipath/mpathcleanup.8 | 24 ++++++++++++++++++++++++
+ 2 files changed, 27 insertions(+)
+ create mode 100644 multipath/mpathcleanup.8
+
+diff --git a/multipath/Makefile b/multipath/Makefile
+index 1fc04c8d..cdfa160b 100644
+--- a/multipath/Makefile
++++ b/multipath/Makefile
+@@ -19,6 +19,7 @@ $(EXEC): $(OBJS) $(multipathdir)/libmultipath.so $(mpathcmddir)/libmpathcmd.so
+ 	$(GZIP) $(EXEC).8 > $(EXEC).8.gz
+ 	$(GZIP) $(EXEC).conf.5 > $(EXEC).conf.5.gz
+ 	$(GZIP) mpathconf.8 > mpathconf.8.gz
++	$(GZIP) mpathcleanup.8 > mpathcleanup.8.gz
+ 
+ install:
+ 	$(INSTALL_PROGRAM) -d $(DESTDIR)$(bindir)
+@@ -35,6 +36,7 @@ install:
+ 	$(INSTALL_PROGRAM) -d $(DESTDIR)$(man5dir)
+ 	$(INSTALL_PROGRAM) -m 644 $(EXEC).conf.5.gz $(DESTDIR)$(man5dir)
+ 	$(INSTALL_PROGRAM) -m 644 mpathconf.8.gz $(DESTDIR)$(man8dir)
++	$(INSTALL_PROGRAM) -m 644 mpathcleanup.8.gz $(DESTDIR)$(man8dir)
+ 
+ uninstall:
+ 	$(RM) $(DESTDIR)$(bindir)/$(EXEC)
+@@ -45,6 +47,7 @@ uninstall:
+ 	$(RM) $(DESTDIR)$(man8dir)/$(EXEC).8.gz
+ 	$(RM) $(DESTDIR)$(man5dir)/$(EXEC).conf.5.gz
+ 	$(RM) $(DESTDIR)$(man8dir)/mpathconf.8.gz
++	$(RM) $(DESTDIR)$(man8dir)/mpathcleanup.8.gz
+ 
+ clean: dep_clean
+ 	$(RM) core *.o $(EXEC) *.gz multipath.rules tmpfiles.conf
+diff --git a/multipath/mpathcleanup.8 b/multipath/mpathcleanup.8
+new file mode 100644
+index 00000000..184c35c9
+--- /dev/null
++++ b/multipath/mpathcleanup.8
+@@ -0,0 +1,24 @@
++.TH MPATHCLEANUP 8 "November 2023" "" "Linux Administrator's Manual"
++.SH NAME
++mpathcleanup - A tool to remove a multipath device and its scsi path devices
++.SH SYNOPSIS
++.B mpathcleanup
++[\fB\-h\fR] [\fB\-\-flush\fR] \fBdevice\fR
++.SH DESCRIPTION
++\fBmpathcleanup\fR is a utility that attempts to remove a multipath device and
++its underlying paths. It only works for multipath devices built on top of scsi
++devices.
++.SH OPTIONS
++.TP
++.B \-\-flush
++Disable queueing on the multipath device and flush the path devices before
++removing.
++.TP
++\fB\-h\fR|\fB\-\-help\fR
++Display help text.
++.SH "SEE ALSO"
++.BR multipath.conf (5),
++.BR multipath (8),
++.BR multipathd (8)
++.SH AUTHOR
++Benjamin Marzinski <bmarzins@redhat.com>

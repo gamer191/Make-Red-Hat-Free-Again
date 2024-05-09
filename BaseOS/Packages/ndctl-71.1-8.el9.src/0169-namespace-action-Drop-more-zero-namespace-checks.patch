@@ -1,0 +1,116 @@
+From 2f3851912624e9ede3132cd3749b4f60a348b1d4 Mon Sep 17 00:00:00 2001
+From: Michal Suchanek <msuchanek@suse.de>
+Date: Thu, 10 Mar 2022 14:31:06 +0100
+Subject: [PATCH 169/217] namespace-action: Drop more zero namespace checks
+
+With seed namespaces caught early on with
+commit 9bd2994 ("ndctl/namespace: Skip seed namespaces when processing all namespaces.")
+commit 07011a3 ("ndctl/namespace: Suppress -ENXIO when processing all namespaces.")
+the function-specific checks are no longer needed and can be dropped.
+
+Reverts commit fb13dfb ("zero_info_block: skip seed devices")
+Reverts commit fe626a8 ("ndctl/namespace: Fix disable-namespace accounting relative to seed devices")
+
+Link: https://lore.kernel.org/r/20220310133106.GA106734@kunlun.suse.cz
+Fixes: 80e0d88 ("namespace-action: Drop zero namespace checks.")
+Fixes: fb13dfb ("zero_info_block: skip seed devices")
+Fixes: fe626a8 ("ndctl/namespace: Fix disable-namespace accounting relative to seed devices")
+Signed-off-by: Michal Suchanek <msuchanek@suse.de>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ ndctl/lib/libndctl.c |  7 +------
+ ndctl/namespace.c    | 11 ++++-------
+ ndctl/region.c       |  2 +-
+ 3 files changed, 6 insertions(+), 14 deletions(-)
+
+diff --git a/ndctl/lib/libndctl.c b/ndctl/lib/libndctl.c
+index ccca8b5..110d8a5 100644
+--- a/ndctl/lib/libndctl.c
++++ b/ndctl/lib/libndctl.c
+@@ -4593,7 +4593,6 @@ NDCTL_EXPORT int ndctl_namespace_disable_safe(struct ndctl_namespace *ndns)
+ 	const char *bdev = NULL;
+ 	int fd, active = 0;
+ 	char path[50];
+-	unsigned long long size = ndctl_namespace_get_size(ndns);
+ 
+ 	if (pfn && ndctl_pfn_is_enabled(pfn))
+ 		bdev = ndctl_pfn_get_block_device(pfn);
+@@ -4630,11 +4629,7 @@ NDCTL_EXPORT int ndctl_namespace_disable_safe(struct ndctl_namespace *ndns)
+ 				devname);
+ 		return -EBUSY;
+ 	} else {
+-		if (size == 0)
+-			/* No disable necessary due to no capacity allocated */
+-			return 1;
+-		else
+-			ndctl_namespace_disable_invalidate(ndns);
++		ndctl_namespace_disable_invalidate(ndns);
+ 	}
+ 
+ 	return 0;
+diff --git a/ndctl/namespace.c b/ndctl/namespace.c
+index 257b58c..722f13a 100644
+--- a/ndctl/namespace.c
++++ b/ndctl/namespace.c
+@@ -1054,9 +1054,6 @@ static int zero_info_block(struct ndctl_namespace *ndns)
+ 	void *buf = NULL, *read_buf = NULL;
+ 	char path[50];
+ 
+-	if (ndctl_namespace_get_size(ndns) == 0)
+-		return 1;
+-
+ 	ndctl_namespace_set_raw_mode(ndns, 1);
+ 	rc = ndctl_namespace_enable(ndns);
+ 	if (rc < 0) {
+@@ -1130,7 +1127,7 @@ static int namespace_prep_reconfig(struct ndctl_region *region,
+ 	}
+ 
+ 	rc = ndctl_namespace_disable_safe(ndns);
+-	if (rc < 0)
++	if (rc)
+ 		return rc;
+ 
+ 	ndctl_namespace_set_enforce_mode(ndns, NDCTL_NS_MODE_RAW);
+@@ -1426,7 +1423,7 @@ static int dax_clear_badblocks(struct ndctl_dax *dax)
+ 		return -ENXIO;
+ 
+ 	rc = ndctl_namespace_disable_safe(ndns);
+-	if (rc < 0) {
++	if (rc) {
+ 		error("%s: unable to disable namespace: %s\n", devname,
+ 			strerror(-rc));
+ 		return rc;
+@@ -1450,7 +1447,7 @@ static int pfn_clear_badblocks(struct ndctl_pfn *pfn)
+ 		return -ENXIO;
+ 
+ 	rc = ndctl_namespace_disable_safe(ndns);
+-	if (rc < 0) {
++	if (rc) {
+ 		error("%s: unable to disable namespace: %s\n", devname,
+ 			strerror(-rc));
+ 		return rc;
+@@ -1473,7 +1470,7 @@ static int raw_clear_badblocks(struct ndctl_namespace *ndns)
+ 		return -ENXIO;
+ 
+ 	rc = ndctl_namespace_disable_safe(ndns);
+-	if (rc < 0) {
++	if (rc) {
+ 		error("%s: unable to disable namespace: %s\n", devname,
+ 			strerror(-rc));
+ 		return rc;
+diff --git a/ndctl/region.c b/ndctl/region.c
+index e499546..33828b0 100644
+--- a/ndctl/region.c
++++ b/ndctl/region.c
+@@ -71,7 +71,7 @@ static int region_action(struct ndctl_region *region, enum device_action mode)
+ 	case ACTION_DISABLE:
+ 		ndctl_namespace_foreach(region, ndns) {
+ 			rc = ndctl_namespace_disable_safe(ndns);
+-			if (rc < 0)
++			if (rc)
+ 				return rc;
+ 		}
+ 		rc = ndctl_region_disable_invalidate(region);
+-- 
+2.27.0
+

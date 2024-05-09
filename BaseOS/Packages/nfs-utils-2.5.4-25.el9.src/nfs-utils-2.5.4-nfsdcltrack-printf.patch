@@ -1,0 +1,86 @@
+diff -up nfs-utils-2.5.4/utils/nfsdcltrack/nfsdcltrack.c.orig nfs-utils-2.5.4/utils/nfsdcltrack/nfsdcltrack.c
+--- nfs-utils-2.5.4/utils/nfsdcltrack/nfsdcltrack.c.orig	2021-06-10 14:07:47.000000000 -0400
++++ nfs-utils-2.5.4/utils/nfsdcltrack/nfsdcltrack.c	2021-08-18 13:44:11.839124879 -0400
+@@ -507,7 +507,7 @@ cltrack_gracedone(const char *timestr)
+ {
+ 	int ret;
+ 	char *tail;
+-	time_t gracetime;
++	uint64_t gracetime;
+ 
+ 
+ 	ret = sqlite_prepare_dbh(storagedir);
+diff -up nfs-utils-2.5.4/utils/nfsdcltrack/sqlite.c.orig nfs-utils-2.5.4/utils/nfsdcltrack/sqlite.c
+--- nfs-utils-2.5.4/utils/nfsdcltrack/sqlite.c.orig	2021-06-10 14:07:47.000000000 -0400
++++ nfs-utils-2.5.4/utils/nfsdcltrack/sqlite.c	2021-08-18 13:48:16.264408309 -0400
+@@ -48,6 +48,7 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+ #include <sqlite3.h>
++#include <stdint.h>
+ #include <linux/limits.h>
+ 
+ #include "xlog.h"
+@@ -539,7 +540,7 @@ out_err:
+  * remove any client records that were not reclaimed since grace_start.
+  */
+ int
+-sqlite_remove_unreclaimed(time_t grace_start)
++sqlite_remove_unreclaimed(uint64_t grace_start)
+ {
+ 	int ret;
+ 	char *err = NULL;
+diff -up nfs-utils-2.5.4/utils/nfsdcltrack/sqlite.h.orig nfs-utils-2.5.4/utils/nfsdcltrack/sqlite.h
+--- nfs-utils-2.5.4/utils/nfsdcltrack/sqlite.h.orig	2021-06-10 14:07:47.000000000 -0400
++++ nfs-utils-2.5.4/utils/nfsdcltrack/sqlite.h	2021-08-18 13:44:11.839124879 -0400
+@@ -26,7 +26,7 @@ int sqlite_insert_client(const unsigned
+ int sqlite_remove_client(const unsigned char *clname, const size_t namelen);
+ int sqlite_check_client(const unsigned char *clname, const size_t namelen,
+ 				const bool has_session);
+-int sqlite_remove_unreclaimed(const time_t grace_start);
++int sqlite_remove_unreclaimed(const uint64_t grace_start);
+ int sqlite_query_reclaiming(const time_t grace_start);
+ 
+ #endif /* _SQLITE_H */
+diff --git a/utils/nfsdcltrack/nfsdcltrack.c b/utils/nfsdcltrack/nfsdcltrack.c
+index 2f8bea81..7c1c4bcc 100644
+--- a/utils/nfsdcltrack/nfsdcltrack.c
++++ b/utils/nfsdcltrack/nfsdcltrack.c
+@@ -33,6 +33,7 @@
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <fcntl.h>
++#include <inttypes.h>
+ #include <unistd.h>
+ #include <libgen.h>
+ #include <sys/inotify.h>
+@@ -525,7 +526,7 @@ cltrack_gracedone(const char *timestr)
+ 	if (*tail)
+ 		return -EINVAL;
+ 
+-	xlog(D_GENERAL, "%s: grace done. gracetime=%ld", __func__, gracetime);
++	xlog(D_GENERAL, "%s: grace done. gracetime=%"PRIu64, __func__, gracetime);
+ 
+ 	ret = sqlite_remove_unreclaimed(gracetime);
+ 
+diff --git a/utils/nfsdcltrack/sqlite.c b/utils/nfsdcltrack/sqlite.c
+index b6573544..78c22af8 100644
+--- a/utils/nfsdcltrack/sqlite.c
++++ b/utils/nfsdcltrack/sqlite.c
+@@ -46,6 +46,7 @@
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <fcntl.h>
++#include <inttypes.h>
+ #include <unistd.h>
+ #include <sqlite3.h>
+ #include <stdint.h>
+@@ -545,7 +546,7 @@ sqlite_remove_unreclaimed(uint64_t grace_start)
+ 	int ret;
+ 	char *err = NULL;
+ 
+-	ret = snprintf(buf, sizeof(buf), "DELETE FROM clients WHERE time < %ld",
++	ret = snprintf(buf, sizeof(buf), "DELETE FROM clients WHERE time < %"PRIu64,
+ 			grace_start);
+ 	if (ret < 0) {
+ 		return ret;

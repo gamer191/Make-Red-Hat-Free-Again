@@ -1,0 +1,46 @@
+From 89ce4e7ca592f5abafc3f25aeaa07d36a7b43a61 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Tue, 14 Nov 2023 11:37:48 +0200
+Subject: [PATCH] Fix wrong return code on O_DIRECTORY open of invalid symlink
+
+The dir argument to fsmOpenpath() is supposed to be a rough O_DIRECTORY
+equivalent, and if the path is actually a misowned symlink it should
+return ENOTDIR instead of ELOOP. Makes the resulting error messages
+at least a little more comprehensible.
+---
+ lib/fsm.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/lib/fsm.c b/lib/fsm.c
+index 51f439ef3..091e90554 100644
+--- a/lib/fsm.c
++++ b/lib/fsm.c
+@@ -304,6 +304,7 @@ static int fsmOpenat(int dirfd, const char *path, int flags, int dir)
+     struct stat lsb, sb;
+     int sflags = flags | O_NOFOLLOW;
+     int fd = openat(dirfd, path, sflags);
++    int ffd = fd;
+ 
+     /*
+      * Only ever follow symlinks by root or target owner. Since we can't
+@@ -312,7 +313,7 @@ static int fsmOpenat(int dirfd, const char *path, int flags, int dir)
+      * it could've only been the link owner or root.
+      */
+     if (fd < 0 && errno == ELOOP && flags != sflags) {
+-	int ffd = openat(dirfd, path, flags);
++	ffd = openat(dirfd, path, flags);
+ 	if (ffd >= 0) {
+ 	    if (fstatat(dirfd, path, &lsb, AT_SYMLINK_NOFOLLOW) == 0) {
+ 		if (fstat(ffd, &sb) == 0) {
+@@ -327,7 +328,7 @@ static int fsmOpenat(int dirfd, const char *path, int flags, int dir)
+     }
+ 
+     /* O_DIRECTORY equivalent */
+-    if (dir && fd >= 0 && fstat(fd, &sb) == 0 && !S_ISDIR(sb.st_mode)) {
++    if (dir && ((fd != ffd) || (fd >= 0 && fstat(fd, &sb) == 0 && !S_ISDIR(sb.st_mode)))) {
+ 	errno = ENOTDIR;
+ 	fsmClose(&fd);
+     }
+-- 
+2.43.0
+

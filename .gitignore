@@ -10,7 +10,10 @@ AppStream (most packages)/Packages/libreoffice-7.1.8.1-12.el9_3.src/libreoffice-
 AppStream (most packages)/Packages/mingw-*
 AppStream (most packages)/Packages/open*
 AppStream (most packages)/Packages/qt5-*
-BaseOS
+BaseOS/Packages/g*
+BaseOS/Packages/k*
+BaseOS/Packages/l*
+BaseOS/Packages/p*
 
 # this .tar file is too big for Github (over 100mb), and contains symbolic links making it hard to extract using Windows. I'll add it back later (using my Linux VM)
 AppStream (most packages)/Packages/ceph-16.2.4-5.el9.src/ceph-16.2.4.tar

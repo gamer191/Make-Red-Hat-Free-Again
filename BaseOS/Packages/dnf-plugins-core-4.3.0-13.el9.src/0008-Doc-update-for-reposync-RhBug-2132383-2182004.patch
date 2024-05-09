@@ -1,0 +1,34 @@
+From 52c980f191993b61a42438a478d1e5629ea36c9f Mon Sep 17 00:00:00 2001
+From: Jaroslav Mracek <jmracek@redhat.com>
+Date: Mon, 27 Mar 2023 10:24:59 +0200
+Subject: [PATCH] Documentation update for reposync (RhBug:2132383,2182004)
+
+The update describe the behavior when `-n` and `--download-metadata`
+is used.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=2132383
+https://bugzilla.redhat.com/show_bug.cgi?id=2182004
+---
+ doc/reposync.rst | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/doc/reposync.rst b/doc/reposync.rst
+index 0df00b9..bbf714c 100644
+--- a/doc/reposync.rst
++++ b/doc/reposync.rst
+@@ -46,7 +46,11 @@ All general DNF options are accepted. Namely, the ``--repoid`` option can be use
+     Delete local packages no longer present in repository.
+ 
+ ``--download-metadata``
+-    Download all repository metadata. Downloaded copy is instantly usable as a repository, no need to run createrepo_c on it.
++    Download all repository metadata. Downloaded copy is instantly usable as a repository, no need to run createrepo_c
++    on it. When the option is used with `--newest-only`, only latest packages will be downloaded, but metadata will
++    still contain older packages. It might be useful to update metadata using `createrepo_c --update` to remove
++    the packages with missing RPM files from metadata. Otherwise, DNF ends with an error due to the missing files
++    whenever it tries to download older packages.
+ 
+ ``-g, --gpgcheck``
+     Remove packages that fail GPG signature checking after downloading. Exit code is ``1`` if at least one package was removed.
+-- 
+2.40.1
+

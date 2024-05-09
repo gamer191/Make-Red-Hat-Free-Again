@@ -1,0 +1,34 @@
+From 024d652e16dd9e3bd1ecdfce4d6f7a8cb498ba42 Mon Sep 17 00:00:00 2001
+From: Kinga Tanska <kinga.tanska@intel.com>
+Date: Tue, 12 Sep 2023 04:27:01 +0200
+Subject: [PATCH 143/165] Assemble: fix redundant memory free
+
+Commit e9fb93af0f76 ("Fix memory leak in file Assemble")
+fixes few memory leaks in Assemble, but it introduces
+problem with assembling RAID volume. It was caused by
+clearing metadata too fast, not only on fail in
+select_devices() function.
+This commit removes redundant memory free.
+
+Signed-off-by: Kinga Tanska <kinga.tanska@intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ Assemble.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/Assemble.c b/Assemble.c
+index 61e8cd17..5be58e40 100644
+--- a/Assemble.c
++++ b/Assemble.c
+@@ -428,8 +428,6 @@ static int select_devices(struct mddev_dev *devlist,
+ 
+ 			/* make sure we finished the loop */
+ 			tmpdev = NULL;
+-			free(st);
+-			st = NULL;
+ 			goto loop;
+ 		} else {
+ 			content = *contentp;
+-- 
+2.40.1
+

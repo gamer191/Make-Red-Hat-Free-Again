@@ -1,0 +1,45 @@
+--- freetype-2.10.4/builds/unix/freetype-config.in
++++ freetype-2.10.4/builds/unix/freetype-config.in
+@@ -32,9 +32,6 @@ cflags=`%PKG_CONFIG% --cflags freetype2`
+ dynamic_libs=`pkgconf --libs freetype2`
+ static_libs=`pkgconf --static --libs freetype2`
+ 
+-orig_prefix=$prefix
+-orig_exec_prefix=$exec_prefix
+-
+ orig_includedir=$includedir
+ orig_libdir=$libdir
+ 
+--- freetype-2.10.4/ft2demos-2.10.4/src/ftbench.c
++++ freetype-2.10.4/ft2demos-2.10.4/src/ftbench.c
+@@ -749,6 +749,7 @@
+         {
+           fprintf( stderr,
+                    "couldn't allocate memory to pre-load font file\n" );
++          fclose( file );
+ 
+           return 1;
+         }
+@@ -758,9 +759,12 @@
+           fprintf( stderr, "read error\n" );
+           free( memory_file );
+           memory_file = NULL;
++          fclose( file );
+ 
+           return 1;
+         }
++
++        fclose( file );
+       }
+ 
+       error = FT_New_Memory_Face( lib,
+--- freetype-2.10.4/ft2demos-2.10.4/src/ftgrid.c
++++ freetype-2.10.4/ft2demos-2.10.4/src/ftgrid.c
+@@ -662,6 +662,7 @@
+         break;
+ 
+       default:
++        free( t );
+         return;
+     }
+ 

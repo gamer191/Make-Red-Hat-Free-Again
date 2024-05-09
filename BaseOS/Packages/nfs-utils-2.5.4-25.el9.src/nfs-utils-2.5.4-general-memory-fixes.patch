@@ -1,0 +1,131 @@
+diff --git a/support/nfsidmap/nss.c b/support/nfsidmap/nss.c
+index 669760b7..0f43076e 100644
+--- a/support/nfsidmap/nss.c
++++ b/support/nfsidmap/nss.c
+@@ -365,10 +365,8 @@ static int _nss_name_to_gid(char *name, gid_t *gid, int dostrip)
+ out_buf:
+ 	free(buf);
+ out_name:
+-	if (dostrip)
+-		free(localname);
+-	if (get_reformat_group())
+-		free(ref_name);
++	free(localname);
++	free(ref_name);
+ out:
+ 	return err;
+ }
+diff --git a/support/nfsidmap/regex.c b/support/nfsidmap/regex.c
+index fdbb2e2f..958b4ac8 100644
+--- a/support/nfsidmap/regex.c
++++ b/support/nfsidmap/regex.c
+@@ -157,6 +157,7 @@ again:
+ 	IDMAP_LOG(4, ("regexp_getpwnam: name '%s' mapped to '%s'",
+ 		  name, localname));
+ 
++	free(localname);
+ 	*err_p = 0;
+ 	return pw;
+ 
+diff --git a/utils/gssd/gssd.c b/utils/gssd/gssd.c
+index 4113cbab..833d8e01 100644
+--- a/utils/gssd/gssd.c
++++ b/utils/gssd/gssd.c
+@@ -1016,7 +1016,7 @@ read_gss_conf(void)
+ 		keytabfile = s;
+ 	s = conf_get_str("gssd", "cred-cache-directory");
+ 	if (s)
+-		ccachedir = s;
++		ccachedir = strdup(s);
+ 	s = conf_get_str("gssd", "preferred-realm");
+ 	if (s)
+ 		preferred_realm = s;
+@@ -1070,7 +1070,8 @@ main(int argc, char *argv[])
+ 				keytabfile = optarg;
+ 				break;
+ 			case 'd':
+-				ccachedir = optarg;
++				free(ccachedir);
++				ccachedir = strdup(optarg);
+ 				break;
+ 			case 't':
+ 				context_timeout = atoi(optarg);
+@@ -1133,7 +1134,6 @@ main(int argc, char *argv[])
+ 	}
+ 
+ 	if (ccachedir) {
+-		char *ccachedir_copy;
+ 		char *ptr;
+ 
+ 		for (ptr = ccachedir, i = 2; *ptr; ptr++)
+@@ -1141,8 +1141,7 @@ main(int argc, char *argv[])
+ 				i++;
+ 
+ 		ccachesearch = malloc(i * sizeof(char *));
+-	       	ccachedir_copy = strdup(ccachedir);
+-		if (!ccachedir_copy || !ccachesearch) {
++		if (!ccachesearch) {
+ 			printerr(0, "malloc failure\n");
+ 			exit(EXIT_FAILURE);
+ 		}
+@@ -1274,6 +1273,7 @@ main(int argc, char *argv[])
+ 
+ 	free(preferred_realm);
+ 	free(ccachesearch);
++	free(ccachedir);
+ 
+ 	return rc < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+ }
+diff --git a/utils/gssd/krb5_util.c b/utils/gssd/krb5_util.c
+index c5f1152e..6d059f33 100644
+--- a/utils/gssd/krb5_util.c
++++ b/utils/gssd/krb5_util.c
+@@ -1129,6 +1129,12 @@ query_krb5_ccache(const char* cred_cache, char **ret_princname,
+ 			    *str = '\0';
+ 			    *ret_princname = strdup(princstring);
+ 			    *ret_realm = strdup(str+1);
++			    if (!*ret_princname || !*ret_realm) {
++				    free(*ret_princname);
++				    free(*ret_realm);
++				    *ret_princname = NULL;
++				    *ret_realm = NULL;
++			    }
+ 		    }
+ 		    k5_free_unparsed_name(context, princstring);
+ 		}
+@@ -1350,15 +1356,19 @@ gssd_get_krb5_machine_cred_list(char ***list)
+ 		if (retval)
+ 			continue;
+ 		if (i + 1 > listsize) {
++			char **tmplist;
+ 			listsize += listinc;
+-			l = (char **)
++			tmplist = (char **)
+ 				realloc(l, listsize * sizeof(char *));
+-			if (l == NULL) {
++			if (tmplist == NULL) {
++				gssd_free_krb5_machine_cred_list(l);
+ 				retval = ENOMEM;
+ 				goto out_lock;
+ 			}
++			l = tmplist;
+ 		}
+ 		if ((l[i++] = strdup(ple->ccname)) == NULL) {
++			gssd_free_krb5_machine_cred_list(l);
+ 			retval = ENOMEM;
+ 			goto out_lock;
+ 		}
+diff --git a/utils/mountd/rmtab.c b/utils/mountd/rmtab.c
+index 2da97615..752fdb66 100644
+--- a/utils/mountd/rmtab.c
++++ b/utils/mountd/rmtab.c
+@@ -233,6 +233,9 @@ mountlist_list(void)
+ 			m->ml_directory = strdup(rep->r_path);
+ 
+ 			if (m->ml_hostname == NULL || m->ml_directory == NULL) {
++				free(m->ml_hostname);
++				free(m->ml_directory);
++				free(m);
+ 				mountlist_freeall(mlist);
+ 				mlist = NULL;
+ 				xlog(L_ERROR, "%s: memory allocation failed",

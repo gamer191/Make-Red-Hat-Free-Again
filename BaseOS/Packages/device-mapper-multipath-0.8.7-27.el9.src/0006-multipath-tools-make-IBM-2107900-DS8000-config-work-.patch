@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Date: Tue, 28 Sep 2021 18:52:10 +0200
+Subject: [PATCH] multipath-tools: make IBM/2107900 (DS8000) config work with
+ alua and multibus
+
+ALUA is supported since the beginning:
+https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/scsi/device_handler/scsi_dh_alua.c?id=057ea7c9683c3d684128cced796f03c179ecf1c2#n683
+
+... the DS8000 is an Asymmetric Logical Unit Access (ALUA) capable storage array,
+pag#160(144): https://www.redbooks.ibm.com/redbooks/pdfs/sg248887.pdf
+
+kernel log:
+https://marc.info/?l=linux-scsi&m=156407413807511&q=mbox
+
+Cc: Martin Wilck <mwilck@suse.com>
+Cc: Benjamin Marzinski <bmarzins@redhat.com>
+Cc: Christophe Varoqui <christophe.varoqui@opensvc.com>
+Cc: DM-DEVEL ML <dm-devel@redhat.com>
+Signed-off-by: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index 72f81c60..f115c4f9 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -656,7 +656,8 @@ static struct hwentry default_hw[] = {
+ 		.vendor        = "IBM",
+ 		.product       = "^2107900",
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+-		.pgpolicy      = MULTIBUS,
++		.pgpolicy      = GROUP_BY_PRIO,
++		.pgfailback    = -FAILBACK_IMMEDIATE,
+ 	},
+ 	{
+ 		// Storwize V5000 and V7000 lines / SAN Volume Controller (SVC) / Flex System V7000 /

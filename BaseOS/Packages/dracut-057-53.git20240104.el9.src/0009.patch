@@ -1,0 +1,61 @@
+From 96116c784edda6675c80fdf95823188c72b28652 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Mon, 18 Jul 2022 16:29:27 +0200
+Subject: [PATCH] fix(98dracut-systemd): partly revert "emergency mode: use
+ sulogin"
+
+Partly reverts 32f68c1f9ac3720e8ce4b95a09c0ce680d5da786
+In RHEL we don't want to have a password to log in into emergency mode.
+
+RHEL-only
+
+Resolves: #2057365
+---
+ modules.d/98dracut-systemd/dracut-emergency.sh | 2 +-
+ modules.d/98dracut-systemd/module-setup.sh     | 2 --
+ modules.d/99base/module-setup.sh               | 8 ++------
+ 3 files changed, 3 insertions(+), 9 deletions(-)
+
+diff --git a/modules.d/98dracut-systemd/dracut-emergency.sh b/modules.d/98dracut-systemd/dracut-emergency.sh
+index c6637a5c..48062f49 100755
+--- a/modules.d/98dracut-systemd/dracut-emergency.sh
++++ b/modules.d/98dracut-systemd/dracut-emergency.sh
+@@ -34,7 +34,7 @@ if getargbool 1 rd.shell -d -y rdshell || getarg rd.break -d rdbreak; then
+     done < /proc/consoles
+     [ -f /etc/profile ] && . /etc/profile
+     [ -z "$PS1" ] && export PS1="$_name:\${PWD}# "
+-    exec sulogin -e
++    exec sh -i -l
+ else
+     export hook="shutdown-emergency"
+     warn "$action has failed. To debug this issue add \"rd.shell rd.debug\" to the kernel command line."
+diff --git a/modules.d/98dracut-systemd/module-setup.sh b/modules.d/98dracut-systemd/module-setup.sh
+index b7da86db..6fb26efa 100755
+--- a/modules.d/98dracut-systemd/module-setup.sh
++++ b/modules.d/98dracut-systemd/module-setup.sh
+@@ -51,6 +51,4 @@ install() {
+     done
+ 
+     inst_simple "$moddir/dracut-tmpfiles.conf" "$tmpfilesdir/dracut-tmpfiles.conf"
+-
+-    inst_multiple sulogin
+ }
+diff --git a/modules.d/99base/module-setup.sh b/modules.d/99base/module-setup.sh
+index 10a44d91..3fa2659a 100755
+--- a/modules.d/99base/module-setup.sh
++++ b/modules.d/99base/module-setup.sh
+@@ -30,12 +30,8 @@ install() {
+     fi
+ 
+     # add common users in /etc/passwd, it will be used by nfs/ssh currently
+-    # use password for hostonly images to facilitate secure sulogin in emergency console
+-    [[ $hostonly ]] && pwshadow='x'
+-    grep '^root:' "$initdir/etc/passwd" 2> /dev/null || echo "root:$pwshadow:0:0::/root:/bin/sh" >> "$initdir/etc/passwd"
+-    grep '^nobody:' "$dracutsysrootdir"/etc/passwd >> "$initdir/etc/passwd"
+-
+-    [[ $hostonly ]] && grep '^root:' "$dracutsysrootdir"/etc/shadow >> "$initdir/etc/shadow"
++    grep '^root:' "$initdir/etc/passwd" 2> /dev/null || echo 'root:x:0:0::/root:/bin/sh' >> "$initdir/etc/passwd"
++    grep '^nobody:' /etc/passwd >> "$initdir/etc/passwd"
+ 
+     # install our scripts and hooks
+     inst_script "$moddir/init.sh" "/init"

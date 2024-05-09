@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 12 Jan 2022 12:26:12 -0600
+Subject: [PATCH] libmultipath: fix disassemble status for
+ historical-service-time PS
+
+The historical-service-time path selector prints out 2 path group status
+arguments. This is the only path selector that uses the group status
+arguments. All the others only have path status arguments.
+disassemble_status() was expecting the number of group status arguments
+to always be zero, causing it to fail at disassembling the status of
+devices that use historical-service-time path selector. Now multipath
+actually checks the number of group arguments, and skips them.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/dmparser.c | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/libmultipath/dmparser.c b/libmultipath/dmparser.c
+index 4ba7f339..bc311421 100644
+--- a/libmultipath/dmparser.c
++++ b/libmultipath/dmparser.c
+@@ -437,9 +437,19 @@ int disassemble_status(const char *params, struct multipath *mpp)
+ 		FREE(word);
+ 
+ 		/*
+-		 * PG Status (discarded, would be '0' anyway)
++		 * Path Selector Group Arguments
+ 		 */
+-		p += get_word(p, NULL);
++		p += get_word(p, &word);
++
++		if (!word)
++			return 1;
++
++		num_pg_args = atoi(word);
++		free(word);
++
++		/* Ignore ps group arguments */
++		for (j = 0; j < num_pg_args; j++)
++			p += get_word(p, NULL);
+ 
+ 		p += get_word(p, &word);
+ 

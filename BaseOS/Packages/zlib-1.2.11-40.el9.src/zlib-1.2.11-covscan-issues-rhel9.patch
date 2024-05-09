@@ -1,0 +1,65 @@
+From 1e56dd1e7285d3026092ba794078edb290b4c1b1 Mon Sep 17 00:00:00 2001
+From: Ondrej Dubaj <odubaj@redhat.com>
+Date: Mon, 15 Mar 2021 13:06:35 +0100
+Subject: [PATCH] fixed isues found by covscan
+
+---
+ contrib/minizip/mztools.c | 8 ++++++++
+ contrib/minizip/zip.c     | 4 ++--
+ deflate.c                 | 5 +++--
+ 3 files changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/contrib/minizip/mztools.c b/contrib/minizip/mztools.c
+index 96891c2..1197928 100644
+--- a/contrib/minizip/mztools.c
++++ b/contrib/minizip/mztools.c
+@@ -286,6 +286,14 @@ uLong* bytesRecovered;
+     }
+   } else {
+     err = Z_STREAM_ERROR;
++    if(fpZip != NULL)
++      fclose(fpZip);
++
++    if(fpOut != NULL)
++      fclose(fpOut);
++
++    if(fpOutCD != NULL)
++      fclose(fpOutCD);
+   }
+   return err;
+ }
+diff --git a/contrib/minizip/zip.c b/contrib/minizip/zip.c
+index 44e88a9..a753c17 100644
+--- a/contrib/minizip/zip.c
++++ b/contrib/minizip/zip.c
+@@ -526,8 +526,8 @@ local ZPOS64_T zip64local_SearchCentralDir(const zlib_filefunc64_32_def* pzlib_f
+         break;
+       }
+ 
+-      if (uPosFound!=0)
+-        break;
++    if (uPosFound!=0)
++      break;
+   }
+   TRYFREE(buf);
+   return uPosFound;
+diff --git a/deflate.c b/deflate.c
+index 085abbe..3963e79 100644
+--- a/deflate.c
++++ b/deflate.c
+@@ -203,9 +203,10 @@ local const config configuration_table[10] = {
+  * Initialize the hash table (avoiding 64K overflow for 16 bit systems).
+  * prev[] will be initialized on the fly.
+  */
+-#define CLEAR_HASH(s) \
++#define CLEAR_HASH(s) do { \
+     s->head[s->hash_size-1] = NIL; \
+-    zmemzero((Bytef *)s->head, (unsigned)(s->hash_size-1)*sizeof(*s->head));
++    zmemzero((Bytef *)s->head, (unsigned)(s->hash_size-1)*sizeof(*s->head)); \
++} while (0)
+ 
+ /* ===========================================================================
+  * Slide the hash table when sliding the window down (could be avoided with 32
+-- 
+2.26.0
+

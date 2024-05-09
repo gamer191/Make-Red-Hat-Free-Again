@@ -1,0 +1,223 @@
+From 8b5b941093521dd18fcc99659b3e3b1b9e9456b7 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Wed, 5 Jan 2022 13:32:58 -0800
+Subject: [PATCH 083/217] build: Add meson rpmbuild support
+
+Beyond being a prerequisite for removing autotools support, this capability
+served as validation that the meson conversion generated all the same files
+as autotools and installed them to the same expected locations.
+
+The procedure to use the rpmbuild.sh script is:
+
+    meson setup build
+    meson compile -C build rhel/ndctl.spec
+    ./rpmbuild.sh build/rhel/ndctl.spec
+
+Link: https://lore.kernel.org/r/164141837841.3990253.11379060834465142446.stgit@dwillia2-desk3.amr.corp.intel.com
+Tested-by: Alison Schofield <alison.schofield@intel.com>
+Tested-by: Vaibhav Jain <vaibhav@linux.ibm.com>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ .gitignore       |  2 +-
+ Makefile.am      |  2 ++
+ meson.build      |  6 ++++++
+ ndctl.spec.in    | 23 +++++++++++++++++++++++
+ rhel/meson.build | 23 +++++++++++++++++++++++
+ rpmbuild.sh      |  5 ++++-
+ sles/meson.build | 36 ++++++++++++++++++++++++++++++++++++
+ 7 files changed, 95 insertions(+), 2 deletions(-)
+ create mode 100644 rhel/meson.build
+ create mode 100644 sles/meson.build
+
+diff -up ndctl-71.1/.gitignore.orig ndctl-71.1/.gitignore
+--- ndctl-71.1/.gitignore.orig	2022-10-07 16:34:40.712445112 -0400
++++ ndctl-71.1/.gitignore	2022-10-07 16:34:52.832486377 -0400
+@@ -35,7 +35,7 @@ daxctl/lib/libdaxctl.pc
+ ndctl/config.h
+ ndctl/lib/libndctl.pc
+ ndctl/ndctl
+-rhel/
++rhel/ndctl.spec
+ sles/ndctl.spec
+ version.m4
+ *.swp
+diff -up ndctl-71.1/Makefile.am.orig ndctl-71.1/Makefile.am
+--- ndctl-71.1/Makefile.am.orig	2022-10-07 16:34:40.687445027 -0400
++++ ndctl-71.1/Makefile.am	2022-10-07 16:34:52.832486377 -0400
+@@ -22,6 +22,7 @@ noinst_SCRIPTS = rhel/ndctl.spec sles/nd
+ CLEANFILES += $(noinst_SCRIPTS)
+ 
+ do_rhel_subst = sed -e 's,VERSION,$(VERSION),g' \
++            -e 's,MESON,0,g' \
+             -e 's,DAX_DNAME,daxctl-devel,g' \
+             -e 's,CXL_DNAME,cxl-devel,g' \
+             -e 's,DNAME,ndctl-devel,g' \
+@@ -31,6 +32,7 @@ do_rhel_subst = sed -e 's,VERSION,$(VERS
+ 	    -e 's,LNAME,ndctl-libs,g'
+ 
+ do_sles_subst = sed -e 's,VERSION,$(VERSION),g' \
++            -e 's,MESON,0,g' \
+             -e 's,DAX_DNAME,libdaxctl-devel,g' \
+             -e 's,CXL_DNAME,libcxl-devel,g' \
+             -e 's,DNAME,libndctl-devel,g' \
+diff -up ndctl-71.1/meson.build.orig ndctl-71.1/meson.build
+--- ndctl-71.1/meson.build.orig	2022-10-07 16:34:40.715445122 -0400
++++ ndctl-71.1/meson.build	2022-10-07 16:34:52.833486380 -0400
+@@ -278,3 +278,9 @@ if get_option('docs').enabled()
+ endif
+ subdir('test')
+ subdir('contrib')
++
++# only support spec file generation from git builds
++if version_tag == ''
++  subdir('rhel')
++  subdir('sles')
++endif
+diff -up ndctl-71.1/ndctl.spec.in.orig ndctl-71.1/ndctl.spec.in
+--- ndctl-71.1/ndctl.spec.in.orig	2022-10-07 16:34:40.645444884 -0400
++++ ndctl-71.1/ndctl.spec.in	2022-10-07 16:34:52.833486380 -0400
+@@ -6,14 +6,20 @@ License:	GPLv2
+ Url:		https://github.com/pmem/ndctl
+ Source0:	https://github.com/pmem/%{name}/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
+ 
++%define with_meson MESON
+ Requires:	LNAME%{?_isa} = %{version}-%{release}
+ Requires:	DAX_LNAME%{?_isa} = %{version}-%{release}
+ Requires:	CXL_LNAME%{?_isa} = %{version}-%{release}
+ BuildRequires:	autoconf
+ %if 0%{?rhel} < 9
+ BuildRequires:	asciidoc
++%if !%{with_meson}
+ %define asciidoc --disable-asciidoctor
++%endif
+ %else
++%if %{with_meson}
++%define asciidoctor -Dasciidoctor=enabled
++%endif
+ BuildRequires:	rubygem-asciidoctor
+ %endif
+ BuildRequires:	xmlto
+@@ -28,6 +34,10 @@ BuildRequires:	pkgconfig(bash-completion
+ BuildRequires:	pkgconfig(systemd)
+ BuildRequires:	keyutils-libs-devel
+ 
++%if %{with_meson}
++BuildRequires:	meson
++%endif
++
+ %description
+ Utility library for managing the "libnvdimm" subsystem.  The "libnvdimm"
+ subsystem defines a kernel device model and control message interface for
+@@ -115,17 +125,30 @@ libcxl is a library for enumerating and
+ %setup -q ndctl-%{version}
+ 
+ %build
++%if %{with_meson}
++%meson %{?asciidoctor} -Dversion-tag=%{version}
++%meson_build
++%else
+ echo %{version} > version
+ ./autogen.sh
+ %configure --disable-static --disable-silent-rules %{?asciidoc}
+ make %{?_smp_mflags}
++%endif
+ 
+ %install
++%if %{with_meson}
++%meson_install
++%else
+ %make_install
+ find $RPM_BUILD_ROOT -name '*.la' -exec rm -f {} ';'
++%endif
+ 
+ %check
++%if %{with_meson}
++%meson_test
++%else
+ make check
++%endif
+ 
+ %ldconfig_scriptlets -n LNAME
+ 
+diff -up ndctl-71.1/rhel/meson.build.orig ndctl-71.1/rhel/meson.build
+--- ndctl-71.1/rhel/meson.build.orig	2022-10-07 16:34:52.834486384 -0400
++++ ndctl-71.1/rhel/meson.build	2022-10-07 16:34:52.834486384 -0400
+@@ -0,0 +1,23 @@
++rhel_spec1 = vcs_tag(
++    input : '../ndctl.spec.in',
++    output : 'ndctl.spec.in',
++    command: vcs_tagger,
++    replace_string : 'VERSION',
++)
++
++rhel_spec2 = custom_target('ndctl.spec',
++  command : [
++    'sed', '-e', 's,MESON,1,g',
++	   '-e', 's,DAX_DNAME,daxctl-devel,g',
++	   '-e', 's,CXL_DNAME,cxl-devel,g',
++	   '-e', 's,DNAME,ndctl-devel,g',
++	   '-e', '/^%defattr.*/d',
++	   '-e', 's,DAX_LNAME,daxctl-libs,g',
++	   '-e', 's,CXL_LNAME,cxl-libs,g',
++	   '-e', 's,LNAME,ndctl-libs,g',
++	   '@INPUT@'
++  ],
++  input : rhel_spec1,
++  output : 'ndctl.spec',
++  capture : true,
++)
+diff -up ndctl-71.1/rpmbuild.sh.orig ndctl-71.1/rpmbuild.sh
+--- ndctl-71.1/rpmbuild.sh.orig	2020-12-22 16:44:57.000000000 -0500
++++ ndctl-71.1/rpmbuild.sh	2022-10-07 16:34:52.834486384 -0400
+@@ -1,6 +1,9 @@
+ #!/bin/bash
++
++spec=${1:-$(dirname $0)/rhel/ndctl.spec)}
++
+ pushd $(dirname $0) >/dev/null
+ [ ! -d ~/rpmbuild/SOURCES ] && echo "rpmdev tree not found" && exit 1
+ ./make-git-snapshot.sh
+ popd > /dev/null
+-rpmbuild -ba $(dirname $0)/rhel/ndctl.spec
++rpmbuild --nocheck -ba $spec
+diff -up ndctl-71.1/sles/meson.build.orig ndctl-71.1/sles/meson.build
+--- ndctl-71.1/sles/meson.build.orig	2022-10-07 16:34:52.836486391 -0400
++++ ndctl-71.1/sles/meson.build	2022-10-07 16:34:52.835486387 -0400
+@@ -0,0 +1,36 @@
++sles_spec1 = vcs_tag(
++    input : '../ndctl.spec.in',
++    output : 'ndctl.spec.sles.in',
++    command: vcs_tagger,
++    replace_string : 'VERSION',
++)
++
++header = files('header')
++
++sles_spec2 = custom_target('ndctl.spec.in',
++  command : [
++    'cat', header, '@INPUT@',
++  ],
++  input : sles_spec1,
++  output : 'ndctl.spec.in',
++  capture : true,
++)
++
++sles_spec3 = custom_target('ndctl.spec',
++  command : [
++    'sed', '-e', 's,MESON,1,g',
++           '-e', 's,DAX_DNAME,libdaxctl-devel,g',
++           '-e', 's,CXL_DNAME,libcxl-devel,g',
++           '-e', 's,DNAME,libndctl-devel,g',
++           '-e', 's,%license,%doc,g',
++           '-e', 's,\(^License:.*GPL\)v2,\1-2.0,g',
++           '-e', 's,DAX_LNAME,libdaxctl@0@,g'.format(LIBDAXCTL_CURRENT - LIBDAXCTL_AGE),
++           '-e', 's,CXL_LNAME,libcxl@0@,g'.format(LIBCXL_CURRENT - LIBCXL_AGE),
++           '-e', 's,LNAME,libndctl@0@,g'.format(LIBNDCTL_CURRENT - LIBNDCTL_AGE),
++	   '@INPUT@'
++  ],
++
++  input : sles_spec2,
++  output : 'ndctl.spec',
++  capture : true,
++)

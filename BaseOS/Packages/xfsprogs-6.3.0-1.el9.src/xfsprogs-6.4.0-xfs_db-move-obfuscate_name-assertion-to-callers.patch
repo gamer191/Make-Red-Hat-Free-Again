@@ -1,0 +1,56 @@
+From cb8c70b017e30d4004373300bce488a9687166ac Mon Sep 17 00:00:00 2001
+From: "Darrick J. Wong" <djwong@kernel.org>
+Date: Mon, 5 Jun 2023 08:36:38 -0700
+Subject: [PATCH] xfs_db: move obfuscate_name assertion to callers
+
+Currently, obfuscate_name asserts that the hash of the new name is the
+same as the old name.  To enable bug fixes in the next patch, move this
+assertion to the callers.
+
+Signed-off-by: Darrick J. Wong <djwong@kernel.org>
+Reviewed-by: Christoph Hellwig <hch@lst.de>
+Signed-off-by: Carlos Maiolino <cem@kernel.org>
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+---
+ db/metadump.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/db/metadump.c b/db/metadump.c
+index 27d1df43..317ff728 100644
+--- a/db/metadump.c
++++ b/db/metadump.c
+@@ -882,7 +882,6 @@ obfuscate_name(
+ 		*first ^= 0x10;
+ 		ASSERT(!is_invalid_char(*first));
+ 	}
+-	ASSERT(libxfs_da_hashname(name, name_len) == hash);
+ }
+ 
+ /*
+@@ -1208,6 +1207,7 @@ generate_obfuscated_name(
+ 
+ 	hash = libxfs_da_hashname(name, namelen);
+ 	obfuscate_name(hash, namelen, name);
++	ASSERT(hash == libxfs_da_hashname(name, namelen));
+ 
+ 	/*
+ 	 * Make sure the name is not something already seen.  If we
+@@ -1321,6 +1321,7 @@ obfuscate_path_components(
+ 			namelen = strnlen((char *)comp, len);
+ 			hash = libxfs_da_hashname(comp, namelen);
+ 			obfuscate_name(hash, namelen, comp);
++			ASSERT(hash == libxfs_da_hashname(comp, namelen));
+ 			break;
+ 		}
+ 		namelen = slash - (char *)comp;
+@@ -1332,6 +1333,7 @@ obfuscate_path_components(
+ 		}
+ 		hash = libxfs_da_hashname(comp, namelen);
+ 		obfuscate_name(hash, namelen, comp);
++		ASSERT(hash == libxfs_da_hashname(comp, namelen));
+ 		comp += namelen + 1;
+ 		len -= namelen + 1;
+ 	}
+-- 
+2.41.0
+

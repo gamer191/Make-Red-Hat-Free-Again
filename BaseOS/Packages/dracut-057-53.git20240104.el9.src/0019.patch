@@ -1,0 +1,425 @@
+From 8aa62b8cb28a41d4739633aee9b02e40dc4a75d0 Mon Sep 17 00:00:00 2001
+From: Matt Coleman <matt@datto.com>
+Date: Fri, 23 Sep 2022 19:28:25 -0400
+Subject: [PATCH] feat(dmsquash-live): add new dmsquash-live-autooverlay module
+
+Adapt to test properly with the CentOS Stream 9 container too.
+
+(cherry picked from commit a3c67d27e75223bb45df19f850d246ced9a09938)
+
+Co-authored-by: Neal Gompa <ngompa@datto.com>
+
+Resolves: #2135060
+---
+ .github/workflows/integration.yml                  |   1 +
+ man/dracut.cmdline.7.asc                           |   4 +
+ .../create-overlay-genrules.sh                     |  10 ++
+ .../90dmsquash-live-autooverlay/create-overlay.sh  | 119 +++++++++++++++++++++
+ .../90dmsquash-live-autooverlay/module-setup.sh    |  25 +++++
+ pkgbuild/dracut.spec                               |   3 +-
+ test/TEST-16-DMSQUASH/create-root.sh               |  12 ++-
+ test/TEST-16-DMSQUASH/test-init.sh                 |   6 ++
+ test/TEST-16-DMSQUASH/test.sh                      |  38 ++++++-
+ test/container/Dockerfile-Arch                     |   2 +-
+ test/container/Dockerfile-CentOS-9-Stream          |   2 +
+ test/container/Dockerfile-Debian                   |   1 +
+ test/container/Dockerfile-Fedora-latest            |   1 +
+ test/container/Dockerfile-OpenSuse-latest          |   2 +-
+ 14 files changed, 218 insertions(+), 8 deletions(-)
+
+diff --git a/.github/workflows/integration.yml b/.github/workflows/integration.yml
+index 40da300c..c22bf916 100644
+--- a/.github/workflows/integration.yml
++++ b/.github/workflows/integration.yml
+@@ -98,6 +98,7 @@ jobs:
+                         "11",
+                         "12",
+                         "13",
++                        "16",
+                         "17",
+                         "20",
+                         "21",
+diff --git a/man/dracut.cmdline.7.asc b/man/dracut.cmdline.7.asc
+index fda62fd1..40d13d83 100644
+--- a/man/dracut.cmdline.7.asc
++++ b/man/dracut.cmdline.7.asc
+@@ -1161,6 +1161,10 @@ rd.live.overlay=/dev/sdb1:persistent-overlay.img
+ rd.live.overlay=UUID=99440c1f-8daa-41bf-b965-b7240a8996f4
+ --
+ 
++**rd.live.overlay.cowfs=**__[btrfs|ext4|xfs]__::
++Specifies the filesystem to use when formatting the overlay partition.
++The default is ext4.
++
+ **rd.live.overlay.size=**__<size_MiB>__::
+ Specifies a non-persistent Device-mapper overlay size in MiB.  The default is
+ _32768_.
+diff --git a/modules.d/90dmsquash-live-autooverlay/create-overlay-genrules.sh b/modules.d/90dmsquash-live-autooverlay/create-overlay-genrules.sh
+new file mode 100755
+index 00000000..ed168d9f
+--- /dev/null
++++ b/modules.d/90dmsquash-live-autooverlay/create-overlay-genrules.sh
+@@ -0,0 +1,10 @@
++#!/bin/sh
++
++# shellcheck disable=SC2154
++case "$root" in
++    live:/dev/*)
++        printf 'SYMLINK=="%s", RUN+="/sbin/initqueue --settled --onetime --unique /sbin/create-overlay %s"\n' \
++            "${root#live:/dev/}" "${root#live:}" >> /etc/udev/rules.d/95-create-overlay.rules
++        wait_for_dev -n "${root#live:}"
++        ;;
++esac
+diff --git a/modules.d/90dmsquash-live-autooverlay/create-overlay.sh b/modules.d/90dmsquash-live-autooverlay/create-overlay.sh
+new file mode 100755
+index 00000000..c89bda2b
+--- /dev/null
++++ b/modules.d/90dmsquash-live-autooverlay/create-overlay.sh
+@@ -0,0 +1,119 @@
++#!/bin/sh
++
++type getarg > /dev/null 2>&1 || . /lib/dracut-lib.sh
++
++if getargbool 0 rd.live.debug -n -y rdlivedebug; then
++    exec > /tmp/create-overlay.$$.out
++    exec 2>> /tmp/create-overlay.$$.out
++    set -x
++fi
++
++gatherData() {
++    overlay=$(getarg rd.live.overlay)
++    if [ -z "$overlay" ]; then
++        info "Skipping overlay creation: kernel command line parameter 'rd.live.overlay' is not set"
++        exit 0
++    fi
++    # shellcheck disable=SC2086
++    if ! str_starts ${overlay} LABEL=; then
++        die "Overlay creation failed: the partition must be set by LABEL in the 'rd.live.overlay' kernel parameter"
++    fi
++
++    overlayLabel=${overlay#LABEL=}
++    # shellcheck disable=SC2086
++    if [ -b /dev/disk/by-label/${overlayLabel} ]; then
++        info "Skipping overlay creation: overlay already exists"
++        exit 0
++    fi
++
++    filesystem=$(getarg rd.live.overlay.cowfs)
++    [ -z "$filesystem" ] && filesystem="ext4"
++    if [ "$filesystem" != "ext4" ] && [ "$filesystem" != "xfs" ] && [ "$filesystem" != "btrfs" ]; then
++        die "Overlay creation failed: only ext4, xfs, and btrfs are supported in the 'rd.live.overlay.cowfs' kernel parameter"
++    fi
++
++    live_dir=$(getarg rd.live.dir)
++    [ -z "$live_dir" ] && live_dir="LiveOS"
++
++    [ -z "$1" ] && exit 1
++    rootDevice=$1
++
++    # The kernel command line's 'root=' parameter was parsed into the $root variable by the dmsquash-live module.
++    # $root contains the path to a symlink within /dev/disk/by-label, which points to a partition.
++    # This script needs that partition's parent block device.
++    # shellcheck disable=SC2046
++    # shellcheck disable=SC2086
++    rootDeviceAbsolutePath=$(readlink -f ${rootDevice})
++    rootDeviceSysfsPath=/sys/class/block/${rootDeviceAbsolutePath##*/}
++    if [ -f "${rootDeviceSysfsPath}/partition" ]; then
++        # shellcheck disable=SC2086
++        partition=$(cat ${rootDeviceSysfsPath}/partition)
++    else
++        partition=0
++    fi
++    # shellcheck disable=SC2086
++    readonly=$(cat ${rootDeviceSysfsPath}/ro)
++    # shellcheck disable=SC2086
++    if [ "$partition" != "1" ] || [ "$readonly" != "0" ]; then
++        info "Skipping overlay creation: unpartitioned or read-only media detected"
++        exit 0
++    fi
++    # shellcheck disable=SC2046
++    # shellcheck disable=SC2086
++    fullDriveSysfsPath=$(readlink -f ${rootDeviceSysfsPath}/..)
++    blockDevice=/dev/${fullDriveSysfsPath##*/}
++    currentPartitionCount=$(grep --count -E "${blockDevice#/dev/}[0-9]+" /proc/partitions)
++
++    # shellcheck disable=SC2086
++    freeSpaceStart=$(parted --script ${blockDevice} unit % print free \
++        | awk -v x=${currentPartitionCount} '$1 == x {getline; print $1}')
++    if [ -z "$freeSpaceStart" ]; then
++        info "Skipping overlay creation: there is no free space after the last partition"
++        exit 0
++    fi
++    partitionStart=$((${freeSpaceStart%.*} + 1))
++    if [ $partitionStart -eq 100 ]; then
++        info "Skipping overlay creation: there is not enough free space after the last partition"
++        exit 0
++    fi
++
++    overlayPartition=${blockDevice}$((currentPartitionCount + 1))
++
++    label=$(blkid --match-tag LABEL --output value "$rootDevice")
++    uuid=$(blkid --match-tag UUID --output value "$rootDevice")
++    if [ -z "$label" ] || [ -z "$uuid" ]; then
++        die "Overlay creation failed: failed to look up root device label and UUID"
++    fi
++}
++
++createPartition() {
++    # shellcheck disable=SC2086
++    parted --script --align optimal ${blockDevice} mkpart primary ${partitionStart}% 100%
++}
++
++createFilesystem() {
++    # shellcheck disable=SC2086
++    mkfs.${filesystem} -L ${overlayLabel} ${overlayPartition}
++
++    baseDir=/run/initramfs/create-overlayfs
++    mkdir -p ${baseDir}
++    # shellcheck disable=SC2086
++    mount -t auto ${overlayPartition} ${baseDir}
++
++    mkdir -p ${baseDir}/${live_dir}/ovlwork
++    # shellcheck disable=SC2086
++    mkdir ${baseDir}/${live_dir}/overlay-${label}-${uuid}
++
++    umount ${baseDir}
++    rm -r ${baseDir}
++}
++
++main() {
++    gatherData "$1"
++    createPartition
++    udevsettle
++    createFilesystem
++    udevsettle
++}
++
++main "$1"
+diff --git a/modules.d/90dmsquash-live-autooverlay/module-setup.sh b/modules.d/90dmsquash-live-autooverlay/module-setup.sh
+new file mode 100755
+index 00000000..c3712eba
+--- /dev/null
++++ b/modules.d/90dmsquash-live-autooverlay/module-setup.sh
+@@ -0,0 +1,25 @@
++#!/bin/bash
++
++check() {
++    # including a module dedicated to live environments in a host-only initrd doesn't make sense
++    [[ $hostonly ]] && return 1
++    return 255
++}
++
++depends() {
++    echo dmsquash-live
++    return 0
++}
++
++installkernel() {
++    instmods btrfs ext4 xfs
++}
++
++install() {
++    inst_multiple awk blkid cat grep mkdir mount parted readlink rmdir tr umount
++    inst_multiple -o mkfs.btrfs mkfs.ext4 mkfs.xfs
++    # shellcheck disable=SC2154
++    inst_hook pre-udev 25 "$moddir/create-overlay-genrules.sh"
++    inst_script "$moddir/create-overlay.sh" "/sbin/create-overlay"
++    dracut_need_initqueue
++}
+diff --git a/pkgbuild/dracut.spec b/pkgbuild/dracut.spec
+index 38de47b4..e148bbf7 100644
+--- a/pkgbuild/dracut.spec
++++ b/pkgbuild/dracut.spec
+@@ -138,7 +138,7 @@ Requires: %{name} >= %{version}-%{dist_free_release}
+ Requires: %{name} = %{version}-%{release}
+ %endif
+ Requires: %{name}-network = %{version}-%{release}
+-Requires: tar gzip coreutils bash device-mapper curl
++Requires: tar gzip coreutils bash device-mapper curl parted
+ %if 0%{?fedora}
+ Requires: fuse ntfs-3g
+ %endif
+@@ -461,6 +461,7 @@ echo 'dracut_rescue_image="yes"' > $RPM_BUILD_ROOT%{dracutlibdir}/dracut.conf.d/
+ %files live
+ %{dracutlibdir}/modules.d/99img-lib
+ %{dracutlibdir}/modules.d/90dmsquash-live
++%{dracutlibdir}/modules.d/90dmsquash-live-autooverlay
+ %{dracutlibdir}/modules.d/90dmsquash-live-ntfs
+ %{dracutlibdir}/modules.d/90livenet
+ 
+diff --git a/test/TEST-16-DMSQUASH/create-root.sh b/test/TEST-16-DMSQUASH/create-root.sh
+index 9bc1aa5d..c11e17e0 100755
+--- a/test/TEST-16-DMSQUASH/create-root.sh
++++ b/test/TEST-16-DMSQUASH/create-root.sh
+@@ -11,9 +11,17 @@ udevadm control --reload
+ set -e
+ 
+ udevadm settle
+-mkfs.ext4 -q -L dracut /dev/disk/by-id/ata-disk_root
++
++# create a single partition using 50% of the capacity of the image file created by test_setup() in test.sh
++sfdisk /dev/disk/by-id/ata-disk_root << EOF
++2048,161792
++EOF
++
++udevadm settle
++
++mkfs.ext4 -q -L dracut /dev/disk/by-id/ata-disk_root-part1
+ mkdir -p /root
+-mount /dev/disk/by-id/ata-disk_root /root
++mount /dev/disk/by-id/ata-disk_root-part1 /root
+ mkdir -p /root/run /root/testdir
+ echo "Creating squashfs"
+ mksquashfs /source /root/testdir/rootfs.img -quiet
+diff --git a/test/TEST-16-DMSQUASH/test-init.sh b/test/TEST-16-DMSQUASH/test-init.sh
+index 068e8f38..959fa25f 100755
+--- a/test/TEST-16-DMSQUASH/test-init.sh
++++ b/test/TEST-16-DMSQUASH/test-init.sh
+@@ -9,6 +9,12 @@ exec > /dev/console 2>&1
+ 
+ echo "dracut-root-block-success" | dd oflag=direct,dsync of=/dev/disk/by-id/ata-disk_marker
+ 
++if grep -qF ' rd.live.overlay=LABEL=persist ' /proc/cmdline; then
++    # Writing to a file in the root filesystem lets test_run() verify that the autooverlay module successfully created
++    # and formatted the overlay partition and that the dmsquash-live module used it when setting up the rootfs overlay.
++    echo "dracut-autooverlay-success" > /overlay-marker
++fi
++
+ export TERM=linux
+ export PS1='initramfs-test:\w\$ '
+ [ -f /etc/mtab ] || ln -sfn /proc/mounts /etc/mtab
+diff --git a/test/TEST-16-DMSQUASH/test.sh b/test/TEST-16-DMSQUASH/test.sh
+index 52029375..58d73b0d 100755
+--- a/test/TEST-16-DMSQUASH/test.sh
++++ b/test/TEST-16-DMSQUASH/test.sh
+@@ -5,8 +5,9 @@ TEST_DESCRIPTION="live root on a squash filesystem"
+ 
+ KVERSION="${KVERSION-$(uname -r)}"
+ 
+-# Uncomment this to debug failures
+-#DEBUGFAIL="rd.shell rd.debug loglevel=7"
++# Uncomment these to debug failures
++#DEBUGFAIL="rd.shell rd.debug rd.live.debug loglevel=7"
++#DEBUGTOOLS="setsid ls cat sfdisk"
+ 
+ test_run() {
+     dd if=/dev/zero of="$TESTDIR"/marker.img bs=1MiB count=1
+@@ -23,6 +24,27 @@ test_run() {
+         -initrd "$TESTDIR"/initramfs.testing
+ 
+     grep -U --binary-files=binary -F -m 1 -q dracut-root-block-success -- "$TESTDIR"/marker.img || return 1
++
++    rootPartitions=$(sfdisk -d "$TESTDIR"/root.img | grep -c 'root\.img[0-9]')
++    [ "$rootPartitions" -eq 1 ] || return 1
++
++    "$testdir"/run-qemu \
++        "${disk_args[@]}" \
++        -boot order=d \
++        -append "rd.live.image rd.live.overlay.overlayfs=1 rd.live.overlay=LABEL=persist rd.live.dir=testdir root=LABEL=dracut console=ttyS0,115200n81 quiet selinux=0 rd.info rd.shell=0 panic=1 oops=panic softlockup_panic=1 $DEBUGFAIL" \
++        -initrd "$TESTDIR"/initramfs.testing-autooverlay
++
++    rootPartitions=$(sfdisk -d "$TESTDIR"/root.img | grep -c 'root\.img[0-9]')
++    [ "$rootPartitions" -eq 2 ] || return 1
++
++    (
++        # Ensure that this test works when run with the `V=1` parameter, which runs the script with `set -o pipefail`.
++        set +o pipefail
++
++        # Verify that the string "dracut-autooverlay-success" occurs in the second partition in the image file.
++        dd if="$TESTDIR"/root.img bs=1MiB skip=80 status=none \
++            | grep -U --binary-files=binary -F -m 1 -q dracut-autooverlay-success
++    ) || return 1
+ }
+ 
+ test_setup() {
+@@ -49,7 +71,7 @@ test_setup() {
+         ln -s dracut-util "${initdir}/usr/bin/dracut-getarg"
+         ln -s dracut-util "${initdir}/usr/bin/dracut-getargs"
+ 
+-        inst_multiple mkdir ln dd stty mount poweroff
++        inst_multiple mkdir ln dd stty mount poweroff grep "$DEBUGTOOLS"
+ 
+         cp -a -- /etc/ld.so.conf* "$initdir"/etc
+         ldconfig -r "$initdir"
+@@ -115,6 +137,16 @@ test_setup() {
+         --force "$TESTDIR"/initramfs.testing "$KVERSION" || return 1
+ 
+     ls -sh "$TESTDIR"/initramfs.testing
++
++    "$basedir"/dracut.sh -l -i "$TESTDIR"/overlay / \
++        --modules "dmsquash-live-autooverlay qemu" \
++        --omit "rngd" \
++        --drivers "ext4 sd_mod" \
++        --no-hostonly --no-hostonly-cmdline \
++        --force "$TESTDIR"/initramfs.testing-autooverlay "$KVERSION" || return 1
++
++    ls -sh "$TESTDIR"/initramfs.testing-autooverlay
++
+     rm -rf -- "$TESTDIR"/overlay
+ }
+ 
+diff --git a/test/container/Dockerfile-Arch b/test/container/Dockerfile-Arch
+index ac1513a1..4112cc5b 100644
+--- a/test/container/Dockerfile-Arch
++++ b/test/container/Dockerfile-Arch
+@@ -12,7 +12,7 @@ RUN pacman --noconfirm -Sy \
+     linux dash strace dhclient asciidoc cpio pigz squashfs-tools \
+     qemu btrfs-progs mdadm dmraid nfs-utils nfsidmap lvm2 nbd \
+     dhcp networkmanager multipath-tools vi tcpdump open-iscsi \
+-    git shfmt shellcheck astyle which base-devel && yes | pacman  -Scc
++    git shfmt shellcheck astyle which base-devel glibc parted && yes | pacman -Scc
+ 
+ RUN useradd -m build
+ RUN su build -c 'cd && git clone https://aur.archlinux.org/perl-config-general.git && cd perl-config-general && makepkg -s --noconfirm'
+diff --git a/test/container/Dockerfile-CentOS-9-Stream b/test/container/Dockerfile-CentOS-9-Stream
+index c9a96020..abcc067e 100644
+--- a/test/container/Dockerfile-CentOS-9-Stream
++++ b/test/container/Dockerfile-CentOS-9-Stream
+@@ -33,8 +33,10 @@ RUN dnf -y install --enablerepo crb --setopt=install_weak_deps=False \
+     make \
+     mdadm \
+     nfs-utils \
++    parted \
+     pigz \
+     rpm-build \
++    squashfs-tools \
+     strace \
+     sudo \
+     tar \
+diff --git a/test/container/Dockerfile-Debian b/test/container/Dockerfile-Debian
+index b4c1704e..15eb9958 100644
+--- a/test/container/Dockerfile-Debian
++++ b/test/container/Dockerfile-Debian
+@@ -42,6 +42,7 @@ RUN apt-get update -y -qq && apt-get upgrade -y -qq && DEBIAN_FRONTEND=nonintera
+     network-manager \
+     nfs-common \
+     open-iscsi \
++    parted \
+     pigz \
+     pkg-config \
+     procps \
+diff --git a/test/container/Dockerfile-Fedora-latest b/test/container/Dockerfile-Fedora-latest
+index 87c749f9..a38a72ef 100644
+--- a/test/container/Dockerfile-Fedora-latest
++++ b/test/container/Dockerfile-Fedora-latest
+@@ -49,6 +49,7 @@ RUN dnf -y install --setopt=install_weak_deps=False \
+     which \
+     ShellCheck \
+     shfmt \
++    parted \
+     && dnf -y update && dnf clean all
+ 
+ # Set default command
+diff --git a/test/container/Dockerfile-OpenSuse-latest b/test/container/Dockerfile-OpenSuse-latest
+index 637d50c6..9aaf07b1 100644
+--- a/test/container/Dockerfile-OpenSuse-latest
++++ b/test/container/Dockerfile-OpenSuse-latest
+@@ -13,7 +13,7 @@ RUN dnf -y install --setopt=install_weak_deps=False \
+     strace libkmod-devel gcc bzip2 xz tar wget rpm-build make git bash-completion \
+     sudo kernel dhcp-client qemu-kvm /usr/bin/qemu-system-$(uname -m) e2fsprogs \
+     tcpdump iproute iputils kbd NetworkManager btrfsprogs tgt dbus-broker \
+-    iscsiuio open-iscsi which ShellCheck procps pigz \
++    iscsiuio open-iscsi which ShellCheck procps pigz parted squashfs \
+     && dnf -y update && dnf clean all
+ 
+ RUN shfmt_version=3.2.4; wget "https://github.com/mvdan/sh/releases/download/v${shfmt_version}/shfmt_v${shfmt_version}_linux_amd64" -O /usr/local/bin/shfmt \

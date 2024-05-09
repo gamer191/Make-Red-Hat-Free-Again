@@ -1,0 +1,39 @@
+From d70c640aecc30e9216dc1a614a207e85c8732036 Mon Sep 17 00:00:00 2001
+From: Colin Walters <walters@verbum.org>
+Date: Thu, 27 May 2021 16:19:27 -0400
+Subject: [PATCH] Avoid memory leak if --args is specified multiple times
+
+Found by a static analyzer.
+
+```
+bubblewrap-0.4.1/bubblewrap.c:1500: overwrite_var: Overwriting "opt_args_data" in "opt_args_data = load_file_data(the_fd, &data_len)" leaks the storage that "opt_args_data" points to.
+ # 1498|              * keep allocated until exit time, since its argv entries get used
+ # 1499|              * by the other cases in parse_args_recurse() when we recurse. */
+ # 1500|->           opt_args_data = load_file_data (the_fd, &data_len);
+ # 1501|             if (opt_args_data == NULL)
+ # 1502|               die_with_error ("Can't read --args data");
+```
+---
+ bubblewrap.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/bubblewrap.c b/bubblewrap.c
+index 771e1ea..56ac07c 100644
+--- a/bubblewrap.c
++++ b/bubblewrap.c
+@@ -1494,6 +1494,12 @@ parse_args_recurse (int          *argcp,
+           if (argv[1][0] == 0 || endptr[0] != 0 || the_fd < 0)
+             die ("Invalid fd: %s", argv[1]);
+ 
++          /* Specifying --args multiple times doesn't work; this just pacifies
++           * a static analyzer which pointed out the memory leak
++           */
++          if (opt_args_data != NULL)
++            free (opt_args_data);
++
+           /* opt_args_data is essentially a recursive argv array, which we must
+            * keep allocated until exit time, since its argv entries get used
+            * by the other cases in parse_args_recurse() when we recurse. */
+-- 
+2.31.1
+

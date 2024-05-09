@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Mon, 18 Dec 2023 16:30:42 -0500
+Subject: [PATCH] libmultipath: avoid temporarily enabling queueing on reload
+
+Instead of always enabling queueing when a map is reloaded with
+no_path_retry set to a positive number, check if the map has timed out
+in recovery mode, and only enable queueing if it has not. This saves
+multipathd from having to disable queueing on the map immediately after
+the reload.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/dmparser.c | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/libmultipath/dmparser.c b/libmultipath/dmparser.c
+index 16377c54..1ea2d619 100644
+--- a/libmultipath/dmparser.c
++++ b/libmultipath/dmparser.c
+@@ -61,9 +61,19 @@ int assemble_map(struct multipath *mp, char **params)
+ 	nr_priority_groups = VECTOR_SIZE(mp->pg);
+ 	initial_pg_nr = (nr_priority_groups ? mp->bestpg : 0);
+ 
+-	if (mp->no_path_retry != NO_PATH_RETRY_UNDEF  &&
+-	    mp->no_path_retry != NO_PATH_RETRY_FAIL) {
++	switch (mp->no_path_retry) {
++	case NO_PATH_RETRY_UNDEF:
++	case NO_PATH_RETRY_FAIL:
++		break;
++	default:
++		/* don't enable queueing if no_path_retry has timed out */
++		if (mp->in_recovery && mp->retry_tick == 0 &&
++		    count_active_paths(mp) == 0)
++			break;
++		/* fallthrough */
++	case NO_PATH_RETRY_QUEUE:
+ 		add_feature(&mp->features, no_path_retry);
++		break;
+ 	}
+ 	if (mp->retain_hwhandler == RETAIN_HWHANDLER_ON &&
+ 	    get_linux_version_code() < KERNEL_VERSION(4, 3, 0))

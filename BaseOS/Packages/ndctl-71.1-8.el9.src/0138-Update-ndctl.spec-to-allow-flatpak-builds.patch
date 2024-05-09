@@ -1,0 +1,41 @@
+From cd41a4dc6af9b48045b0aa46669d560faeb134e2 Mon Sep 17 00:00:00 2001
+From: Jay W <git.jaydoubleu@gmail.com>
+Date: Tue, 15 Feb 2022 00:45:00 +0000
+Subject: [PATCH 138/217] Update ndctl.spec to allow flatpak builds
+
+This will allow ndctl to be build as dependency for some flatpak builds
+on fedora systems.
+See also: https://docs.fedoraproject.org/en-US/flatpak/troubleshooting/#_uncompressed_manual_pages
+
+Link: https://github.com/pmem/ndctl/pull/192
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ ndctl.spec.in | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/ndctl.spec.in b/ndctl.spec.in
+index 9ca831e..cfcafa2 100644
+--- a/ndctl.spec.in
++++ b/ndctl.spec.in
+@@ -38,6 +38,9 @@ subsystem defines a kernel device model and control message interface for
+ platform NVDIMM resources like those defined by the ACPI 6+ NFIT (NVDIMM
+ Firmware Interface Table).
+ 
++%if 0%{?flatpak}
++%global _udevrulesdir %{_prefix}/lib/udev/rules.d
++%endif
+ 
+ %package -n DNAME
+ Summary:	Development files for libndctl
+@@ -231,7 +234,7 @@ fi
+ %{_libdir}/libcxl.so
+ %{_libdir}/pkgconfig/libcxl.pc
+ %{_mandir}/man3/cxl*
+-%{_mandir}/man3/libcxl.3.gz
++%{_mandir}/man3/libcxl.3*
+ 
+ 
+ %changelog
+-- 
+2.27.0
+

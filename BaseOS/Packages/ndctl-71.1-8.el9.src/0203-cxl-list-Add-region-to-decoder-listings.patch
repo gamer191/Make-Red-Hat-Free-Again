@@ -1,0 +1,140 @@
+From dba61cf8bb9bb96cde8dcf2c9a2dcc663074698b Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Fri, 5 Aug 2022 13:38:08 -0700
+Subject: [PATCH 203/217] cxl/list: Add region to decoder listings
+
+While decoders can be matched with regions by physical address, or filtered
+by region, it is also useful to get a plain listing of the association.
+
+Link: https://lore.kernel.org/r/165973188860.1528532.17427805440366364536.stgit@dwillia2-xfh.jf.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/lib/libcxl.txt |  7 +++++++
+ cxl/json.c                       |  8 ++++++++
+ cxl/lib/libcxl.c                 | 34 ++++++++++++++++++++++++++++++++
+ cxl/lib/libcxl.sym               |  1 +
+ cxl/libcxl.h                     |  1 +
+ 5 files changed, 51 insertions(+)
+
+diff --git a/Documentation/cxl/lib/libcxl.txt b/Documentation/cxl/lib/libcxl.txt
+index 50b0c9c..6756d2f 100644
+--- a/Documentation/cxl/lib/libcxl.txt
++++ b/Documentation/cxl/lib/libcxl.txt
+@@ -398,6 +398,7 @@ int cxl_decoder_set_dpa_size(struct cxl_decoder *decoder, unsigned long long siz
+ const char *cxl_decoder_get_devname(struct cxl_decoder *decoder);
+ int cxl_decoder_get_id(struct cxl_decoder *decoder);
+ int cxl_decoder_get_nr_targets(struct cxl_decoder *decoder);
++struct cxl_region *cxl_decoder_get_region(struct cxl_decoder *decoder);
+ 
+ enum cxl_decoder_target_type {
+        CXL_DECODER_TTYPE_UNKNOWN,
+@@ -446,6 +447,12 @@ Platform firmware may setup the CXL decode hierarchy before the OS
+ boots, and may additionally require that the OS not change the decode
+ settings. This property is indicated by the cxl_decoder_is_locked() API.
+ 
++When a decoder is associated with a region cxl_decoder_get_region()
++returns that region object. Note that it is only applicable to switch
++and endpoint decoders as root decoders have a 1:N relationship with
++regions.  Use cxl_region_foreach() for the similar functionality for
++root decoders.
++
+ ==== TARGETS
+ A root or switch level decoder takes an SPA (system-physical-address) as
+ input and routes it to a downstream port. Which downstream port depends
+diff --git a/cxl/json.c b/cxl/json.c
+index ada1dbe..c3d9299 100644
+--- a/cxl/json.c
++++ b/cxl/json.c
+@@ -442,6 +442,7 @@ struct json_object *util_cxl_decoder_to_json(struct cxl_decoder *decoder,
+ 	const char *devname = cxl_decoder_get_devname(decoder);
+ 	struct cxl_port *port = cxl_decoder_get_port(decoder);
+ 	struct json_object *jdecoder, *jobj;
++	struct cxl_region *region;
+ 	u64 val, size;
+ 
+ 	jdecoder = json_object_new_object();
+@@ -486,6 +487,13 @@ struct json_object *util_cxl_decoder_to_json(struct cxl_decoder *decoder,
+ 		}
+ 	}
+ 
++	region = cxl_decoder_get_region(decoder);
++	if (region) {
++		jobj = json_object_new_string(cxl_region_get_devname(region));
++		if (jobj)
++			json_object_object_add(jdecoder, "region", jobj);
++	}
++
+ 	if (size == 0) {
+ 		jobj = json_object_new_string("disabled");
+ 		if (jobj)
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index c7dc2b0..ff85b23 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -2124,6 +2124,40 @@ cxl_decoder_get_interleave_ways(struct cxl_decoder *decoder)
+ 	return decoder->interleave_ways;
+ }
+ 
++CXL_EXPORT struct cxl_region *
++cxl_decoder_get_region(struct cxl_decoder *decoder)
++{
++	struct cxl_port *port = cxl_decoder_get_port(decoder);
++	struct cxl_ctx *ctx = cxl_decoder_get_ctx(decoder);
++	char *path = decoder->dev_buf;
++	char buf[SYSFS_ATTR_SIZE];
++	struct cxl_region *region;
++	struct cxl_decoder *iter;
++	int rc;
++
++	if (cxl_port_is_root(port))
++		return NULL;
++
++	sprintf(path, "%s/region", decoder->dev_path);
++	rc = sysfs_read_attr(ctx, path, buf);
++	if (rc < 0) {
++		err(ctx, "failed to read region name: %s\n", strerror(-rc));
++		return NULL;
++	}
++
++	if (strcmp(buf, "") == 0)
++		return NULL;
++
++	while (!cxl_port_is_root(port))
++		port = cxl_port_get_parent(port);
++
++	cxl_decoder_foreach(port, iter)
++		cxl_region_foreach(iter, region)
++			if (strcmp(cxl_region_get_devname(region), buf) == 0)
++				return region;
++	return NULL;
++}
++
+ CXL_EXPORT struct cxl_region *
+ cxl_decoder_create_pmem_region(struct cxl_decoder *decoder)
+ {
+diff --git a/cxl/lib/libcxl.sym b/cxl/lib/libcxl.sym
+index 549f88d..385a8f0 100644
+--- a/cxl/lib/libcxl.sym
++++ b/cxl/lib/libcxl.sym
+@@ -214,4 +214,5 @@ global:
+ 	cxl_decoder_get_interleave_granularity;
+ 	cxl_decoder_get_interleave_ways;
+ 	cxl_decoder_get_max_available_extent;
++	cxl_decoder_get_region;
+ } LIBCXL_2;
+diff --git a/cxl/libcxl.h b/cxl/libcxl.h
+index 61c7fc4..2498fa1 100644
+--- a/cxl/libcxl.h
++++ b/cxl/libcxl.h
+@@ -201,6 +201,7 @@ bool cxl_decoder_is_locked(struct cxl_decoder *decoder);
+ unsigned int
+ cxl_decoder_get_interleave_granularity(struct cxl_decoder *decoder);
+ unsigned int cxl_decoder_get_interleave_ways(struct cxl_decoder *decoder);
++struct cxl_region *cxl_decoder_get_region(struct cxl_decoder *decoder);
+ struct cxl_region *cxl_decoder_create_pmem_region(struct cxl_decoder *decoder);
+ struct cxl_decoder *cxl_decoder_get_by_name(struct cxl_ctx *ctx,
+ 					    const char *ident);
+-- 
+2.27.0
+

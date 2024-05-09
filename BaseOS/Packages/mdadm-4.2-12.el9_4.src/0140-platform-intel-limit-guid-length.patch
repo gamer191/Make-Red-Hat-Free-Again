@@ -1,0 +1,55 @@
+From 5ccd457b29809bee442749b5f66ac27ebba4a72d Mon Sep 17 00:00:00 2001
+From: Kinga Tanska <kinga.tanska@intel.com>
+Date: Thu, 11 May 2023 04:55:13 +0200
+Subject: [PATCH 140/165] platform-intel: limit guid length
+
+Moving GUID_STR_MAX to header to use it as
+a length limitation for snprintf function.
+
+Signed-off-by: Kinga Tanska <kinga.tanska@intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ platform-intel.c | 3 ---
+ platform-intel.h | 5 ++++-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/platform-intel.c b/platform-intel.c
+index eb6e1b7e..ef90c3fd 100644
+--- a/platform-intel.c
++++ b/platform-intel.c
+@@ -510,9 +510,6 @@ static const struct imsm_orom *find_imsm_hba_orom(struct sys_dev *hba)
+ 	return get_orom_by_device_id(hba->dev_id);
+ }
+ 
+-#define GUID_STR_MAX	37  /* according to GUID format:
+-			     * xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" */
+-
+ #define EFI_GUID(a, b, c, d0, d1, d2, d3, d4, d5, d6, d7) \
+ ((struct efi_guid) \
+ {{ (a) & 0xff, ((a) >> 8) & 0xff, ((a) >> 16) & 0xff, ((a) >> 24) & 0xff, \
+diff --git a/platform-intel.h b/platform-intel.h
+index 2c0f4e39..ba97fb04 100644
+--- a/platform-intel.h
++++ b/platform-intel.h
+@@ -19,6 +19,9 @@
+ #include <asm/types.h>
+ #include <strings.h>
+ 
++/* according to GUID format: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" */
++#define GUID_STR_MAX	37
++
+ /* The IMSM Capability (IMSM AHCI and ISCU OROM/EFI variable) Version Table definition */
+ struct imsm_orom {
+ 	__u8 signature[4];
+@@ -229,7 +232,7 @@ extern struct orom_entry *orom_entries;
+ 
+ static inline char *guid_str(char *buf, struct efi_guid guid)
+ {
+-	sprintf(buf, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
++	snprintf(buf, GUID_STR_MAX, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+ 		 guid.b[3], guid.b[2], guid.b[1], guid.b[0],
+ 		 guid.b[5], guid.b[4], guid.b[7], guid.b[6],
+ 		 guid.b[8], guid.b[9], guid.b[10], guid.b[11],
+-- 
+2.40.1
+

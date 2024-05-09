@@ -1,0 +1,64 @@
+From 1441c57837b71bf861081c33bb9270c65cdb5e5c Mon Sep 17 00:00:00 2001
+From: Jakub Jelen <jjelen@redhat.com>
+Date: Fri, 8 Sep 2023 10:50:02 +0200
+Subject: [PATCH 1/2] Avoid unsing uninitialized value exp while dumping expiry
+
+reported by coverity scan
+
+Signed-off-by: Jakub Jelen <jjelen@redhat.com>
+---
+ src/eng_back.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/eng_back.c b/src/eng_back.c
+index 022b3ea..cb7d18c 100644
+--- a/src/eng_back.c
++++ b/src/eng_back.c
+@@ -105,6 +105,7 @@ static void dump_expiry(ENGINE_CTX *ctx, int level,
+ 
+ 	if (!cert || !cert->x509 || !(exp = X509_get0_notAfter(cert->x509))) {
+ 		ctx_log(ctx, level, "none");
++		return;
+ 	}
+ 
+ 	if ((bio = BIO_new(BIO_s_mem())) == NULL) {
+-- 
+2.41.0
+
+
+From 0de198f15a592adb656ea9f0e308a3508512050b Mon Sep 17 00:00:00 2001
+From: Jakub Jelen <jjelen@redhat.com>
+Date: Fri, 8 Sep 2023 11:29:01 +0200
+Subject: [PATCH 2/2] Remove dead code
+
+reported by coverity scan
+
+Signed-off-by: Jakub Jelen <jjelen@redhat.com>
+---
+ src/eng_back.c | 10 ++--------
+ 1 file changed, 2 insertions(+), 8 deletions(-)
+
+diff --git a/src/eng_back.c b/src/eng_back.c
+index cb7d18c..28b3292 100644
+--- a/src/eng_back.c
++++ b/src/eng_back.c
+@@ -498,14 +498,8 @@ static void *ctx_try_load_object(ENGINE_CTX *ctx,
+ 
+ 	if (matched_count == 0) {
+ 		if (match_tok) {
+-			if (found_slot) {
+-				ctx_log(ctx, 0, "The %s was not found on token %s\n",
+-					object_typestr, found_slot->token->label[0] ?
+-					found_slot->token->label : "no label");
+-			} else {
+-				ctx_log(ctx, 0, "No matching initialized token was found for %s\n",
+-					object_typestr);
+-			}
++			ctx_log(ctx, 0, "No matching initialized token was found for %s\n",
++				object_typestr);
+ 			goto error;
+ 		}
+ 
+-- 
+2.41.0
+

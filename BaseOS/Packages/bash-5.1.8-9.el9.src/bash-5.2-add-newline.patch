@@ -1,0 +1,12 @@
+diff --git a/lib/readline/rltty.c b/lib/readline/rltty.c
+--- a/lib/readline/rltty.c
++++ b/lib/readline/rltty.c
+@@ -694,6 +694,8 @@ rl_deprep_terminal (void)
+       fprintf (rl_outstream, BRACK_PASTE_FINI);
+       if (_rl_eof_found)
+  	fprintf (rl_outstream, "\n");
++      else if (_rl_echoing_p == 0)
++ 	fprintf (rl_outstream, "\n");
+     }
+ 
+   if (_rl_enable_keypad)

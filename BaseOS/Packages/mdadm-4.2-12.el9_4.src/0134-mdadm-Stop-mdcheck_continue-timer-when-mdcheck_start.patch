@@ -1,0 +1,41 @@
+From 1ab341e5ce0cb01a1533a2c36e5b69eabf12bf95 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Fri, 25 Aug 2023 20:55:41 +0800
+Subject: [PATCH 134/165] mdadm: Stop mdcheck_continue timer when mdcheck_start
+ service can finish check
+
+mdcheck_continue is triggered by mdcheck_start timer. It's used to
+continue check action if the raid is too big and mdcheck_start
+service can't finish check action. If mdcheck start can finish check
+action, it doesn't need to mdcheck continue service anymore. So stop
+it when mdcheck start service can finish check action.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Acked-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ misc/mdcheck | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/misc/mdcheck b/misc/mdcheck
+index 700c3e25..f87999d3 100644
+--- a/misc/mdcheck
++++ b/misc/mdcheck
+@@ -140,7 +140,13 @@ do
+ 		echo $a > $fl
+ 		any=yes
+ 	done
+-	if [ -z "$any" ]; then exit 0; fi
++	# mdcheck_continue.timer is started by mdcheck_start.timer.
++	# When the check action can be finished in mdcheck_start.service,
++	# it doesn't need mdcheck_continue anymore.
++	if [ -z "$any" ]; then
++		systemctl stop mdcheck_continue.timer
++		exit 0;
++	fi
+ 	sleep 120
+ done
+ 
+-- 
+2.40.1
+

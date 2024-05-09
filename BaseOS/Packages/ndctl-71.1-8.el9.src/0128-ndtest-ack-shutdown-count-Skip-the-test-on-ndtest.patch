@@ -1,0 +1,41 @@
+From 6e85cac1958f920f231b94ff570ac0e434595b7d Mon Sep 17 00:00:00 2001
+From: Shivaprasad G Bhat <sbhat@linux.ibm.com>
+Date: Tue, 25 Jan 2022 02:34:25 +0530
+Subject: [PATCH 128/217] ndtest/ack-shutdown-count: Skip the test on ndtest
+
+The PAPR has non-latched dirty shutdown implementation.
+The test is enabling/disabling the LSS latch which is
+irrelavent from PAPR pov. Skip the test.
+
+Link: https://lore.kernel.org/r/20220124210425.1493410-1-vaibhav@linux.ibm.com
+Signed-off-by: Shivaprasad G Bhat <sbhat@linux.ibm.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ test/ack-shutdown-count-set.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/test/ack-shutdown-count-set.c b/test/ack-shutdown-count-set.c
+index a9e95c6..f091a40 100644
+--- a/test/ack-shutdown-count-set.c
++++ b/test/ack-shutdown-count-set.c
+@@ -117,6 +117,7 @@ static int test_ack_shutdown_count_set(int loglevel, struct ndctl_test *test,
+ 
+ int main(int argc, char *argv[])
+ {
++	char *test_env = getenv("NDCTL_TEST_FAMILY");
+ 	struct ndctl_test *test = ndctl_test_new(0);
+ 	struct ndctl_ctx *ctx;
+ 	int rc;
+@@ -126,6 +127,9 @@ int main(int argc, char *argv[])
+ 		return EXIT_FAILURE;
+ 	}
+ 
++	if (test_env && strcmp(test_env, "PAPR") == 0)
++		return ndctl_test_result(test, 77);
++
+ 	rc = ndctl_new(&ctx);
+ 	if (rc)
+ 		return ndctl_test_result(test, rc);
+-- 
+2.27.0
+

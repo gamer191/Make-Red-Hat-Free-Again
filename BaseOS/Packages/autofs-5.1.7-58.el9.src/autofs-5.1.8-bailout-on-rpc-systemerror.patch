@@ -1,0 +1,34 @@
+autofs-5.1.8 - bailout on rpc systemerror
+
+From: Ian Kent <raven@themaw.net>
+
+If there's a system error (eg. oversize packet received) just give up
+since redoing the call would likely end up with the same error.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG      |    1 +
+ lib/rpc_subs.c |    2 ++
+ 2 files changed, 3 insertions(+)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -99,6 +99,7 @@
+ - make NFS version check flags consistent.
+ - refactor get_nfs_info().
+ - also require TCP_REQUESTED when setting NFS port.
++- bailout on rpc systemerror.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/lib/rpc_subs.c
++++ autofs-5.1.7/lib/rpc_subs.c
+@@ -1200,6 +1200,8 @@ static int rpc_get_exports_proto(struct
+ 				 info->timeout);
+ 		if (status == RPC_SUCCESS)
+ 			break;
++		if (status == RPC_SYSTEMERROR)
++			break;
+ 		if (++vers_entry > 2)
+ 			break;
+ 		CLNT_CONTROL(client, CLSET_VERS,

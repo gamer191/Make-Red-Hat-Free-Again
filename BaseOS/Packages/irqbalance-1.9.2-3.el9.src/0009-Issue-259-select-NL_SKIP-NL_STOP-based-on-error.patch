@@ -1,0 +1,35 @@
+From 0e9acb608588aaeb998bdf5f47019ce7a61cc81e Mon Sep 17 00:00:00 2001
+From: Neil Horman <neil.horman@privafy.com>
+Date: Thu, 9 Mar 2023 07:54:47 -0500
+Subject: [PATCH 09/13] Issue 259: select NL_SKIP / NL_STOP based on error
+
+the handle_error function for thermal should skip EINTR errors, but stop
+for everything else
+---
+ thermal.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/thermal.c b/thermal.c
+index a45568a..035e0ad 100644
+--- a/thermal.c
++++ b/thermal.c
+@@ -190,12 +190,14 @@ static int handle_groupid(struct nl_msg *msg, void *arg)
+ static int handle_error(struct sockaddr_nl *sk_addr __attribute__((unused)),
+ 			struct nlmsgerr *err, void *arg)
+ {
+-	if (arg) {
++	int rc = (err->error == NLE_INTR) ? NL_SKIP : NL_STOP;
++
++	if (arg && err->error != NLE_INTR) {
+ 		log(TO_ALL, LOG_INFO, "thermal: received a netlink error (%s).\n",
+ 		    nl_geterror(err->error));
+ 		*((int *)arg) = err->error;
+ 	}
+-	return NL_SKIP;
++	return rc;
+ }
+ 
+ static int handle_end(struct nl_msg *msg __attribute__((unused)), void *arg)
+-- 
+2.33.1
+

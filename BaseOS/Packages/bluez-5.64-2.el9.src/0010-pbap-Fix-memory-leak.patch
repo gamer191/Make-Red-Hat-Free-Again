@@ -1,0 +1,34 @@
+From 06d3c7429ad6bdf6eef1bcedee327e74a33c40bf Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:15 +0530
+Subject: [PATCH BlueZ 10/12] pbap: Fix memory leak
+
+Reported by coverity tool as follows:
+
+bluez-5.64/obexd/client/pbap.c:929: leaked_storage: Variable "apparam"
+going out of scope leaks the storage it points to.
+---
+ obexd/client/pbap.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/obexd/client/pbap.c b/obexd/client/pbap.c
+index 1a2bacc9f..1ed8c68ec 100644
+--- a/obexd/client/pbap.c
++++ b/obexd/client/pbap.c
+@@ -925,10 +925,11 @@ static DBusMessage *pbap_search(DBusConnection *connection,
+ 		return g_dbus_create_error(message,
+ 				ERROR_INTERFACE ".InvalidArguments", NULL);
+ 
+-	if (dbus_message_iter_get_arg_type(&args) != DBUS_TYPE_STRING)
++	if (dbus_message_iter_get_arg_type(&args) != DBUS_TYPE_STRING) {
++		g_obex_apparam_free(apparam);
+ 		return g_dbus_create_error(message,
+ 				ERROR_INTERFACE ".InvalidArguments", NULL);
+-
++	}
+ 	dbus_message_iter_get_basic(&args, &value);
+ 	dbus_message_iter_next(&args);
+ 
+-- 
+2.26.2
+

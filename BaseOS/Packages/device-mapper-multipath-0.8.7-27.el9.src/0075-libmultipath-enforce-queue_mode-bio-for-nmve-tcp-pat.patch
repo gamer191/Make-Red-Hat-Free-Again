@@ -1,0 +1,111 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 7 Oct 2022 12:35:44 -0500
+Subject: [PATCH] libmultipath: enforce queue_mode bio for nmve:tcp paths
+
+nvme:tcp devices set BLK_MQ_F_BLOCKING (they are the only block devices
+which multipath supports that do so), meaning that block_mq expects that
+they can block at certain points while servicing a request.  However,
+due to the way device-mapper sets up its queue, it is not able to set
+BLK_MQ_F_BLOCKING when it includes paths that set this flag.  Patches
+were written to address this issue but they were rejected upstream
+
+https://lore.kernel.org/linux-block/YcH%2FE4JNag0QYYAa@infradead.org/T/#t
+
+The proposed solution was to have multipath use the bio queue_mode for
+multipath devices that include nvme:tcp paths.
+
+Multipath devices now automatically add the "queue_mode bio" feature if
+they include nvme:tcp paths.  If a multipath devices was created with
+"queue_mode rq", it will disallow the addition of nvme:tcp paths.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/configure.c   | 17 ++++++++++++++++-
+ libmultipath/structs_vec.c |  7 +++++++
+ multipath/multipath.conf.5 |  4 +++-
+ 3 files changed, 26 insertions(+), 2 deletions(-)
+
+diff --git a/libmultipath/configure.c b/libmultipath/configure.c
+index c6803b40..193bf27d 100644
+--- a/libmultipath/configure.c
++++ b/libmultipath/configure.c
+@@ -296,6 +296,7 @@ static int wait_for_pending_paths(struct multipath *mpp,
+ int setup_map(struct multipath *mpp, char **params, struct vectors *vecs)
+ {
+ 	struct pathgroup * pgp;
++	struct path *pp;
+ 	struct config *conf;
+ 	int i, n_paths, marginal_pathgroups;
+ 	char *save_attr;
+@@ -311,6 +312,14 @@ int setup_map(struct multipath *mpp, char **params, struct vectors *vecs)
+ 	if (mpp->disable_queueing && VECTOR_SIZE(mpp->paths) != 0)
+ 		mpp->disable_queueing = 0;
+ 
++	/* Force QUEUE_MODE_BIO for maps with nvme:tcp paths */
++	vector_foreach_slot(mpp->paths, pp, i) {
++		if (pp->bus == SYSFS_BUS_NVME &&
++		    pp->sg_id.proto_id == NVME_PROTOCOL_TCP) {
++			mpp->queue_mode = QUEUE_MODE_BIO;
++			break;
++		}
++	}
+ 	/*
+ 	 * If this map was created with add_map_without_path(),
+ 	 * mpp->hwe might not be set yet.
+@@ -1191,6 +1200,13 @@ int coalesce_paths (struct vectors *vecs, vector mpvec, char *refwwid,
+ 			continue;
+ 		}
+ 
++		cmpp = find_mp_by_wwid(curmp, pp1->wwid);
++		if (cmpp && cmpp->queue_mode == QUEUE_MODE_RQ &&
++		    pp1->bus == SYSFS_BUS_NVME && pp1->sg_id.proto_id ==
++		    NVME_PROTOCOL_TCP) {
++			orphan_path(pp1, "nvme:tcp path not allowed with request queue_mode multipath device");
++			continue;
++		}
+ 		/*
+ 		 * at this point, we know we really got a new mp
+ 		 */
+@@ -1229,7 +1245,6 @@ int coalesce_paths (struct vectors *vecs, vector mpvec, char *refwwid,
+ 		}
+ 		verify_paths(mpp);
+ 
+-		cmpp = find_mp_by_wwid(curmp, mpp->wwid);
+ 		if (cmpp)
+ 			mpp->queue_mode = cmpp->queue_mode;
+ 		if (setup_map(mpp, &params, vecs)) {
+diff --git a/libmultipath/structs_vec.c b/libmultipath/structs_vec.c
+index 85d97ac1..4a32b405 100644
+--- a/libmultipath/structs_vec.c
++++ b/libmultipath/structs_vec.c
+@@ -262,6 +262,13 @@ int adopt_paths(vector pathvec, struct multipath *mpp)
+ 			}
+ 			if (pp->initialized == INIT_REMOVED)
+ 				continue;
++			if (mpp->queue_mode == QUEUE_MODE_RQ &&
++			    pp->bus == SYSFS_BUS_NVME &&
++			    pp->sg_id.proto_id == NVME_PROTOCOL_TCP) {
++				condlog(2, "%s: mulitpath device %s created with request queue_mode. Unable to add nvme:tcp paths",
++					pp->dev, mpp->alias);
++				continue;
++			}
+ 			if (!mpp->paths && !(mpp->paths = vector_alloc()))
+ 				goto err;
+ 
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index 7af53588..01904feb 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -472,7 +472,9 @@ Before kernel 4.20 The default depends on the kernel parameter
+ \fBdm_mod.use_blk_mq\fR. It is \fImq\fR if the latter is set, and \fIrq\fR
+ otherwise. Since kernel 4.20, \fIrq\fR and \fImq\fR both correspond to
+ block-multiqueue. Once a multipath device has been created, its queue_mode
+-cannot be changed.
++cannot be changed. \fInvme:tcp\fR paths are only supported in multipath
++devices with queue_mode set to \fIbio\fR. multipath will automatically
++set this when creating a device with \fInvme:tcp\fR paths.
+ .TP
+ The default is: \fB<unset>\fR
+ .RE

@@ -1,0 +1,205 @@
+From aa022d33418021da81a51bc9656931c54043b10b Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:54:50 -0800
+Subject: [PATCH 120/217] cxl/list: Support filtering memdevs by decoders
+
+In order to filter memdevs by decoders all the ports in the hierarchy need
+to be iterated, so introduce cxl_port_foreach_all() that starts at the bus
+and does a depth first iteration of all the descendant ports.
+
+Link: https://lore.kernel.org/r/164298569017.3021641.15558596583530530035.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ .clang-format                    |  1 +
+ Documentation/cxl/cxl-list.txt   | 13 +++++++++
+ Documentation/cxl/lib/libcxl.txt | 11 ++++++++
+ cxl/filter.c                     | 48 ++++++++++++++++++++++++++++++++
+ cxl/lib/libcxl.c                 | 13 +++++++++
+ cxl/libcxl.h                     |  6 ++++
+ 6 files changed, 92 insertions(+)
+
+diff --git a/.clang-format b/.clang-format
+index c753487..6aabcb6 100644
+--- a/.clang-format
++++ b/.clang-format
+@@ -84,6 +84,7 @@ ForEachMacros:
+   - 'cxl_target_foreach'
+   - 'cxl_dport_foreach'
+   - 'cxl_endpoint_foreach'
++  - 'cxl_port_foreach_all'
+   - 'daxctl_dev_foreach'
+   - 'daxctl_mapping_foreach'
+   - 'daxctl_region_foreach'
+diff --git a/Documentation/cxl/cxl-list.txt b/Documentation/cxl/cxl-list.txt
+index e1299d9..04e831e 100644
+--- a/Documentation/cxl/cxl-list.txt
++++ b/Documentation/cxl/cxl-list.txt
+@@ -61,6 +61,19 @@ one or more memdevs. For example:
+   }
+ ]
+ ----
++Additionally, when provisioning new interleave configurations it is
++useful to know which memdevs can be referenced by a given decoder like a
++root decoder:
++----
++# cxl list -Mu -d decoder0.0
++{
++  "memdev":"mem0",
++  "pmem_size":"256.00 MiB (268.44 MB)",
++  "ram_size":0,
++  "serial":"0",
++  "host":"0000:35:00.0"
++}
++----
+ 
+ The --human option in addition to reformatting some fields to more human
+ friendly strings also unwraps the array to reduce the number of lines of
+diff --git a/Documentation/cxl/lib/libcxl.txt b/Documentation/cxl/lib/libcxl.txt
+index 2e8570d..5ad3027 100644
+--- a/Documentation/cxl/lib/libcxl.txt
++++ b/Documentation/cxl/lib/libcxl.txt
+@@ -219,10 +219,18 @@ struct cxl_port *cxl_port_get_parent(struct cxl_port *port);
+ struct cxl_ctx *cxl_port_get_ctx(struct cxl_port *port);
+ const char *cxl_port_get_host(struct cxl_port *port);
+ struct cxl_port *cxl_decoder_get_port(struct cxl_decoder *decoder);
++struct cxl_port *cxl_port_get_next_all(struct cxl_port *port,
++                                       const struct cxl_port *top);
+ 
+ #define cxl_port_foreach(parent, port)                                      \
+        for (port = cxl_port_get_first(parent); port != NULL;                \
+             port = cxl_port_get_next(port))
++
++#define cxl_port_foreach_all(top, port)                                        \
++       for (port = cxl_port_get_first(top); port != NULL;                     \
++            port = cxl_port_get_next_all(port, top))
++
++
+ ----
+ A bus object encapsulates a CXL port object. Use cxl_bus_get_port() to
+ use generic port APIs on root objects.
+@@ -236,6 +244,9 @@ that hierarchy via cxl_port_get_bus().
+ The host of a port is the corresponding device name of the PCIe Root
+ Port, or Switch Upstream Port with CXL capabilities.
+ 
++The cxl_port_foreach_all() helper does a depth first iteration of all
++ports beneath the 'top' port argument.
++
+ === PORT: Attributes
+ ----
+ const char *cxl_port_get_devname(struct cxl_port *port);
+diff --git a/cxl/filter.c b/cxl/filter.c
+index 05ede91..c972545 100644
+--- a/cxl/filter.c
++++ b/cxl/filter.c
+@@ -441,6 +441,51 @@ util_cxl_decoder_filter_by_memdev(struct cxl_decoder *decoder,
+ 	return NULL;
+ }
+ 
++static bool __memdev_filter_by_decoder(struct cxl_memdev *memdev,
++				       struct cxl_port *port, const char *ident)
++{
++	struct cxl_decoder *decoder;
++	struct cxl_endpoint *endpoint;
++
++	cxl_decoder_foreach(port, decoder) {
++		if (!util_cxl_decoder_filter(decoder, ident))
++			continue;
++		if (cxl_decoder_get_target_by_memdev(decoder, memdev))
++			return true;
++	}
++
++	cxl_endpoint_foreach(port, endpoint)
++		if (__memdev_filter_by_decoder(
++			    memdev, cxl_endpoint_get_port(endpoint), ident))
++			return true;
++	return false;
++}
++
++static struct cxl_memdev *
++util_cxl_memdev_filter_by_decoder(struct cxl_memdev *memdev, const char *ident)
++{
++	struct cxl_ctx *ctx = cxl_memdev_get_ctx(memdev);
++	struct cxl_bus *bus;
++
++	if (!ident)
++		return memdev;
++
++	cxl_bus_foreach(ctx, bus) {
++		struct cxl_port *port, *top;
++
++		port = cxl_bus_get_port(bus);
++		if (__memdev_filter_by_decoder(memdev, port, ident))
++			return memdev;
++
++		top = port;
++		cxl_port_foreach_all(top, port)
++			if (__memdev_filter_by_decoder(memdev, port, ident))
++				return memdev;
++	}
++
++	return NULL;
++}
++
+ static unsigned long params_to_flags(struct cxl_filter_params *param)
+ {
+ 	unsigned long flags = 0;
+@@ -599,6 +644,9 @@ static void walk_endpoints(struct cxl_port *port, struct cxl_filter_params *p,
+ 			if (!util_cxl_memdev_filter(memdev, p->memdev_filter,
+ 						    p->serial_filter))
+ 				continue;
++			if (!util_cxl_memdev_filter_by_decoder(
++				    memdev, p->decoder_filter))
++				continue;
+ 			if (!p->idle && !cxl_memdev_is_enabled(memdev))
+ 				continue;
+ 			jobj = util_cxl_memdev_to_json(memdev, flags);
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index d7a3f10..4ebb8b9 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -1257,6 +1257,19 @@ CXL_EXPORT struct cxl_port *cxl_port_get_next(struct cxl_port *port)
+ 	return list_next(&parent_port->child_ports, port, list);
+ }
+ 
++CXL_EXPORT struct cxl_port *cxl_port_get_next_all(struct cxl_port *port,
++						  const struct cxl_port *top)
++{
++	struct cxl_port *child, *iter = port;
++
++	child = cxl_port_get_first(iter);
++	if (child)
++		return child;
++	while (!cxl_port_get_next(iter) && iter->parent && iter->parent != top)
++		iter = iter->parent;
++	return cxl_port_get_next(iter);
++}
++
+ CXL_EXPORT const char *cxl_port_get_devname(struct cxl_port *port)
+ {
+ 	return devpath_to_devname(port->dev_path);
+diff --git a/cxl/libcxl.h b/cxl/libcxl.h
+index 07f4a31..874c381 100644
+--- a/cxl/libcxl.h
++++ b/cxl/libcxl.h
+@@ -94,11 +94,17 @@ struct cxl_bus *cxl_port_get_bus(struct cxl_port *port);
+ const char *cxl_port_get_host(struct cxl_port *port);
+ bool cxl_port_hosts_memdev(struct cxl_port *port, struct cxl_memdev *memdev);
+ int cxl_port_get_nr_dports(struct cxl_port *port);
++struct cxl_port *cxl_port_get_next_all(struct cxl_port *port,
++				       const struct cxl_port *top);
+ 
+ #define cxl_port_foreach(parent, port)                                         \
+ 	for (port = cxl_port_get_first(parent); port != NULL;                  \
+ 	     port = cxl_port_get_next(port))
+ 
++#define cxl_port_foreach_all(top, port)                                        \
++	for (port = cxl_port_get_first(top); port != NULL;                     \
++	     port = cxl_port_get_next_all(port, top))
++
+ struct cxl_dport;
+ struct cxl_dport *cxl_dport_get_first(struct cxl_port *port);
+ struct cxl_dport *cxl_dport_get_next(struct cxl_dport *dport);
+-- 
+2.27.0
+

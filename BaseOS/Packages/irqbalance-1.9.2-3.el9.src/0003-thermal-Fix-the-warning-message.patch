@@ -1,0 +1,33 @@
+From 178cf3b4311fab38b9731fc929feecf45b7cb2f0 Mon Sep 17 00:00:00 2001
+From: "Chang S. Bae" <chang.seok.bae@intel.com>
+Date: Fri, 18 Nov 2022 10:14:15 -0800
+Subject: [PATCH 03/13] thermal: Fix the warning message
+
+The commit febe697ac321 ("change the log level in thermal.c from error to
+warning") happens to insert an unneeded message: "thermald may not be
+running."
+
+This is not true because the events come from the kernel and Netlink has
+the multicast subscription model. So it has nothing to do with thermald.
+
+Signed-off-by: Chang S. Bae <chang.seok.bae@intel.com>
+---
+ thermal.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/thermal.c b/thermal.c
+index 10e1083..7cd0807 100644
+--- a/thermal.c
++++ b/thermal.c
+@@ -99,7 +99,7 @@ static gboolean prepare_netlink(void)
+ 
+ 	rc = genl_connect(sock);
+ 	if (rc) {
+-		log(TO_ALL, LOG_INFO, "thermal: socket bind failed, thermald may not be running.\n");
++		log(TO_ALL, LOG_INFO, "thermal: socket bind failed.\n");
+ 		return TRUE;
+ 	}
+ 
+-- 
+2.33.1
+

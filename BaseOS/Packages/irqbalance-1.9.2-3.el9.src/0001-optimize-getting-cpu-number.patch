@@ -1,0 +1,26 @@
+From 7c18ffc9d0187d4d1983a53bb166aacad2a87dcc Mon Sep 17 00:00:00 2001
+From: qyu <chinyu0704@icloud.com>
+Date: Mon, 7 Nov 2022 17:01:38 +0800
+Subject: [PATCH 01/13] optimize getting cpu number
+
+cpu number has already been parsed and saved in cpunr, remove redudant  strtoul().
+---
+ cputree.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cputree.c b/cputree.c
+index eb1981e..d66be55 100644
+--- a/cputree.c
++++ b/cputree.c
+@@ -315,7 +315,7 @@ static void do_one_cpu(char *path)
+ 
+ 	cpu->obj_type = OBJ_TYPE_CPU;
+ 
+-	cpu->number = strtoul(&path[27], NULL, 10);
++	cpu->number = cpunr;
+ 
+ 	cpu_set(cpu->number, cpu_online_map);
+ 	
+-- 
+2.33.1
+

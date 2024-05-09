@@ -1,0 +1,41 @@
+From ec58df436c7ecaa04a9a4a8f72615c59739f890d Mon Sep 17 00:00:00 2001
+From: Pavel Valena <pvalena@redhat.com>
+Date: Wed, 16 Feb 2022 02:42:11 +0100
+Subject: [PATCH] build(spec): do not use recommends for base packages
+
+rhel-only
+Resolves: rhbz#1947892
+---
+ pkgbuild/dracut.spec | 11 ++++-------
+ 1 file changed, 4 insertions(+), 7 deletions(-)
+
+diff --git a/pkgbuild/dracut.spec b/pkgbuild/dracut.spec
+index 71b7421c..38de47b4 100644
+--- a/pkgbuild/dracut.spec
++++ b/pkgbuild/dracut.spec
+@@ -71,20 +71,17 @@ Requires: kmod
+ Requires: sed
+ Requires: xz
+ Requires: gzip
++Requires: hardlink
++Requires: pigz
++Requires: kpartx
+ 
+ %if 0%{?fedora} || 0%{?rhel}
+-Recommends: memstrack
+-Recommends: hardlink
+-Recommends: pigz
+-Recommends: kpartx
++Suggests: memstrack
+ Requires: util-linux >= 2.21
+ Requires: systemd >= 219
+ Requires: systemd-udev >= 219
+ Requires: procps-ng
+ %else
+-Requires: hardlink
+-Requires: gzip
+-Requires: kpartx
+ Requires: udev > 166
+ Requires: util-linux-ng >= 2.21
+ %endif
+

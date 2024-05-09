@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 16 Jan 2024 20:19:12 -0500
+Subject: [PATCH] multipathd: fix auto-resize configuration
+
+The code acted like AUTO_RESIZE_UNDEFINED didn't exist, but since
+conf->auto_resize was never set to AUTO_RESIZE_NEVER, the default was in
+fact AUTO_RESIZE_UNDEFINED, which ended up getting treated like
+AUTO_RESIZE_GROW_SHRINK. Remove AUTO_RESIZE_UNDEFINED and explicitly
+default auto_resize tp AUTO_RESIZE_NEVER.
+
+Fixes: 981b83ad1 ("multipathd: Add auto_resize config option")
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/config.c  | 1 +
+ libmultipath/structs.h | 1 -
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libmultipath/config.c b/libmultipath/config.c
+index 61b0dd51..f31200a3 100644
+--- a/libmultipath/config.c
++++ b/libmultipath/config.c
+@@ -940,6 +940,7 @@ int _init_config (const char *file, struct config *conf)
+ 	conf->retrigger_tries = DEFAULT_RETRIGGER_TRIES;
+ 	conf->retrigger_delay = DEFAULT_RETRIGGER_DELAY;
+ 	conf->uev_wait_timeout = DEFAULT_UEV_WAIT_TIMEOUT;
++	conf->auto_resize = DEFAULT_AUTO_RESIZE;
+ 	conf->remove_retries = 0;
+ 	conf->ghost_delay = DEFAULT_GHOST_DELAY;
+ 	conf->all_tg_pt = DEFAULT_ALL_TG_PT;
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index 8c2d7131..d2ad4867 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -168,7 +168,6 @@ enum queue_mode_states {
+ };
+ 
+ enum auto_resize_state {
+-	AUTO_RESIZE_UNDEF = 0,
+ 	AUTO_RESIZE_NEVER,
+ 	AUTO_RESIZE_GROW_ONLY,
+ 	AUTO_RESIZE_GROW_SHRINK,

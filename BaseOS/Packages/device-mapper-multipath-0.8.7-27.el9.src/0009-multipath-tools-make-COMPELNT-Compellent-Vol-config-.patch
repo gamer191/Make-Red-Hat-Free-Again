@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Date: Tue, 28 Sep 2021 22:15:56 +0200
+Subject: [PATCH] multipath-tools: make "COMPELNT/Compellent Vol" config work
+ with alua and multibus
+
+ALUA is needed by SAS arrays, pag#124:
+https://downloads.dell.com/manuals/all-products/esuprt_solutions_int/esuprt_solutions_int_solutions_resources/general-solution-resources_white-papers2_en-us.pdf
+
+Cc: Sean McGinnis <sean_mcginnis@dell.com>
+Cc: Martin Wilck <mwilck@suse.com>
+Cc: Benjamin Marzinski <bmarzins@redhat.com>
+Cc: Christophe Varoqui <christophe.varoqui@opensvc.com>
+Cc: DM-DEVEL ML <dm-devel@redhat.com>
+Signed-off-by: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index 4e8b52ff..7fc5bc04 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -368,7 +368,8 @@ static struct hwentry default_hw[] = {
+ 		 */
+ 		.vendor        = "COMPELNT",
+ 		.product       = "Compellent Vol",
+-		.pgpolicy      = MULTIBUS,
++		.pgpolicy      = GROUP_BY_PRIO,
++		.pgfailback    = -FAILBACK_IMMEDIATE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 	},
+ 	{

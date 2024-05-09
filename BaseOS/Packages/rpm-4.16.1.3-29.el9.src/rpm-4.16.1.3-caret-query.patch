@@ -1,0 +1,24 @@
+From 4420c78beb86cc67392274bf351478a3375626a2 Mon Sep 17 00:00:00 2001
+From: yangchenguang <89123114+yangchenguang94@users.noreply.github.com>
+Date: Wed, 13 Jul 2022 16:52:07 +0800
+Subject: [PATCH] Fix query arguments with ^ not working
+
+when querying packages in the RPM database.
+
+Rersolves: #2104
+---
+ lib/rpmdb.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/rpmdb.c b/lib/rpmdb.c
+index fa8f3c9b9c..fd2b0671ae 100644
+--- a/lib/rpmdb.c
++++ b/lib/rpmdb.c
+@@ -1133,6 +1133,7 @@ static char * mireDup(rpmTagVal tag, rpmMireMode *modep,
+ 	    switch (*s) {
+ 	    case '.':
+ 	    case '+':
++	    case '^':
+ 		if (!brackets) *t++ = '\\';
+ 		break;
+ 	    case '*':

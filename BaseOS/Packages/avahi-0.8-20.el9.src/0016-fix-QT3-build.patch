@@ -1,0 +1,29 @@
+From 66a684b988052664669158819fc123469b714f50 Mon Sep 17 00:00:00 2001
+From: Rex Dieter <rdieter@gmail.com>
+Date: Tue, 17 Nov 2020 16:42:00 -0600
+Subject: [PATCH 16/16] fix QT3 build
+
+recent commit d1e71b320d96d0f213ecb0885c8313039a09f693 adding QT5
+support added a new conditional
+but failed to actually set the define.  This commit adds that to
+allow successful build when enabling QT3 support
+---
+ avahi-qt/Makefile.am | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/avahi-qt/Makefile.am b/avahi-qt/Makefile.am
+index 09ce7ca..b404810 100644
+--- a/avahi-qt/Makefile.am
++++ b/avahi-qt/Makefile.am
+@@ -38,7 +38,7 @@ libavahi_qt3_la_SOURCES = \
+ qt-watch.moc3: qt-watch.cpp
+ 	$(AM_V_GEN)$(MOC_QT3) $^ > $@
+ 
+-libavahi_qt3_la_CPPFLAGS = $(AM_CFLAGS) $(QT3_CFLAGS) $(VISIBILITY_HIDDEN_CFLAGS)
++libavahi_qt3_la_CPPFLAGS = $(AM_CFLAGS) $(QT3_CFLAGS) -DQT3 $(VISIBILITY_HIDDEN_CFLAGS)
+ libavahi_qt3_la_LIBADD = $(AM_LDADD) ../avahi-common/libavahi-common.la $(QT3_LIBS)
+ libavahi_qt3_la_LDFLAGS = $(AM_LDFLAGS) -export-dynamic -version-info $(LIBAVAHI_QT3_VERSION_INFO)
+ endif
+-- 
+2.28.0
+

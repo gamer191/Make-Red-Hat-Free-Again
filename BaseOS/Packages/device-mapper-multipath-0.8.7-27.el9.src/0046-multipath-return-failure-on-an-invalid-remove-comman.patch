@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 30 Mar 2022 15:14:56 -0500
+Subject: [PATCH] multipath: return failure on an invalid remove command
+
+When "multipath -f" is run on a device that doesn't exist or isn't a
+multipath device, the command will not remove any device, but it will
+still return success.  Multiple functions rely on _dm_flush_map()
+returning success when called with name that doesn't match any
+multipath device. So before calling _dm_flush_map(), call dm_is_mpath(),
+to check if the device exists and is a multipath device, and return
+failure if it's not.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com
+---
+ multipath/main.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/multipath/main.c b/multipath/main.c
+index 80fa68e5..41d01c7e 100644
+--- a/multipath/main.c
++++ b/multipath/main.c
+@@ -1111,6 +1111,11 @@ main (int argc, char *argv[])
+ 	if (retries < 0)
+ 		retries = conf->remove_retries;
+ 	if (cmd == CMD_FLUSH_ONE) {
++		if (dm_is_mpath(dev) != 1) {
++			condlog(0, "%s is not a multipath device", dev);
++			r = RTVL_FAIL;
++			goto out;
++		}
+ 		r = dm_suspend_and_flush_map(dev, retries) ?
+ 		    RTVL_FAIL : RTVL_OK;
+ 		goto out;

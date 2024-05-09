@@ -1,0 +1,73 @@
+diff -up diffutils-3.7/lib/freopen-safer.c.me diffutils-3.7/lib/freopen-safer.c
+--- diffutils-3.7/lib/freopen-safer.c.me	2021-03-24 15:38:27.785170510 +0100
++++ diffutils-3.7/lib/freopen-safer.c	2021-03-24 15:39:56.389523872 +0100
+@@ -49,6 +49,7 @@ protect_fd (int fd)
+         }
+       return false;
+     }
++  /* coverity[leaked_handle : FALSE] */
+   return true;
+ }
+ 
+diff -up diffutils-3.7/lib/regex_internal.c.me diffutils-3.7/lib/regex_internal.c
+--- diffutils-3.7/lib/regex_internal.c.me	2021-03-24 15:45:12.934308141 +0100
++++ diffutils-3.7/lib/regex_internal.c	2021-03-24 15:48:06.165592478 +0100
+@@ -1724,6 +1724,7 @@ create_cd_newstate (const re_dfa_t *dfa,
+ 		}
+ 	      if (re_node_set_init_copy (newstate->entrance_nodes, nodes)
+ 		  != REG_NOERROR)
++		/* coverity[leaked_storage : FALSE] */
+ 		return NULL;
+ 	      nctx_nodes = 0;
+ 	      newstate->has_constraint = 1;
+diff -up diffutils-3.7/src/analyze.c.me diffutils-3.7/src/analyze.c
+--- diffutils-3.7/src/analyze.c.me	2021-03-24 17:16:35.560137760 +0100
++++ diffutils-3.7/src/analyze.c	2021-03-24 17:18:02.298846273 +0100
+@@ -688,6 +688,7 @@ diff_2_files (struct comparison *cmp)
+       for (f = 0; f < 2; f++)
+ 	{
+ 	  free (cmp->file[f].equivs);
++     /* coverity[offset_free : FALSE] */
+ 	  free (cmp->file[f].linbuf + cmp->file[f].linbuf_base);
+ 	}
+ 
+diff -up diffutils-3.7/src/diff3.c.me diffutils-3.7/src/diff3.c
+--- diffutils-3.7/src/diff3.c.me	2021-03-24 17:18:21.317231331 +0100
++++ diffutils-3.7/src/diff3.c	2021-03-24 17:22:54.217398657 +0100
+@@ -795,6 +795,7 @@ using_to_diff3_block (struct diff_block
+ 			      D_LINEARRAY (result, FILEC) + result_offset,
+ 			      D_LENARRAY (result, FILEC) + result_offset,
+ 			      D_NUMLINES (ptr, FC)))
++	  /* coverity[leaked_storage : FALSE] */
+ 	  return 0;
+       }
+ 
+@@ -824,6 +825,7 @@ using_to_diff3_block (struct diff_block
+ 				D_LINEARRAY (result, FILE0 + d) + result_offset,
+ 				D_LENARRAY (result, FILE0 + d) + result_offset,
+ 				D_NUMLINES (ptr, FO)))
++	    /* coverity[leaked_storage : FALSE] */
+ 	    return 0;
+ 
+ 	  /* Catch the lines between here and the next diff */
+diff -up diffutils-3.7/src/sdiff.c.me diffutils-3.7/src/sdiff.c
+--- diffutils-3.7/src/sdiff.c.me	2021-03-24 17:24:37.022988328 +0100
++++ diffutils-3.7/src/sdiff.c	2021-03-24 17:25:39.145495628 +0100
+@@ -1169,5 +1169,6 @@ temporary_file (void)
+   fd = mkstemp (buf);
+   if (0 <= fd)
+     tmpname = buf;
++  /* coverity[leaked_storage : FALSE] */
+   return fd;
+ }
+diff -up diffutils-3.7/src/util.c.me diffutils-3.7/src/util.c
+--- diffutils-3.7/src/util.c.me	2021-03-24 17:25:51.419067091 +0100
++++ diffutils-3.7/src/util.c	2021-03-24 17:36:28.882404028 +0100
+@@ -699,6 +699,7 @@ parse_diff_color (void)
+         }
+       colors_enabled = false;
+     }
++/* coverity[leaked_storage : FALSE] */
+ }
+ 
+ static void

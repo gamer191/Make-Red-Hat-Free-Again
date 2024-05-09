@@ -1,0 +1,39 @@
+From 3e912f878de8d310bd06199e03602c63d2b60dba Mon Sep 17 00:00:00 2001
+From: Radek Vykydal <rvykydal@redhat.com>
+Date: Tue, 20 Dec 2022 16:40:23 +0100
+Subject: [PATCH] fix(network-manager): allow running nm-run.sh multiple times
+
+This partially reverts
+https://github.com/redhat-plumbers/dracut-rhel9/commit/77630365aed201a729c73a9ffda0733a75f3fee4
+
+Anaconda needs to be able to run nm-run.sh to trigger online hooks again
+after kickstart is fetched from storage and network is configured
+accordingly.
+
+rhel-only
+Resolves: rhbz#2157082
+---
+ modules.d/35network-manager/nm-run.sh | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/modules.d/35network-manager/nm-run.sh b/modules.d/35network-manager/nm-run.sh
+index 7d8d61fa..6110733d 100755
+--- a/modules.d/35network-manager/nm-run.sh
++++ b/modules.d/35network-manager/nm-run.sh
+@@ -2,11 +2,12 @@
+ 
+ type source_hook > /dev/null 2>&1 || . /lib/dracut-lib.sh
+ 
+-if [ -e /tmp/nm.done ]; then
+-    return
+-fi
+-
+ if [ -z "$DRACUT_SYSTEMD" ]; then
++
++    if [ -e /tmp/nm.done ]; then
++        return
++    fi
++
+     # Only start NM if networking is needed
+     if [ -e /run/NetworkManager/initrd/neednet ]; then
+         for i in /usr/lib/NetworkManager/system-connections/* \

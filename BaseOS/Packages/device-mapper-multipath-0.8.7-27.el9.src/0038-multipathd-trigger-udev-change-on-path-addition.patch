@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Mon, 17 Jan 2022 16:46:18 -0600
+Subject: [PATCH] multipathd: trigger udev change on path addition
+
+When a multipath device is created for the first time, there is a window
+where some path devices way be added to the multipath device, but never
+claimed in udev. This can allow other device owners, like lvm, to think
+they can use the device.
+
+When a multipath device is first created, all the existing paths that
+are not claimed by multipath have a uevent triggered so that they can
+get claimed. After that, multipath assumes all future paths added to the
+multipath device will have been claimed by multipath, since the device's
+WWID is now in the wwids file.  This doesn't work for any paths that
+have already been processed by the multipath.rules udev rules before
+the multipath device was created.
+
+To close this window, when path device is added, and a matching
+multipath device already exists, multipathd now checks if the device is
+claimed by multipath, and if not, triggers a uevent to claim it.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/libmultipath.version | 5 +++++
+ multipathd/main.c                 | 2 ++
+ 2 files changed, 7 insertions(+)
+
+diff --git a/libmultipath/libmultipath.version b/libmultipath/libmultipath.version
+index dd1b4122..0d89e9e1 100644
+--- a/libmultipath/libmultipath.version
++++ b/libmultipath/libmultipath.version
+@@ -292,3 +292,8 @@ LIBMULTIPATH_9.1.0 {
+ global:
+ 	sysfs_get_ro;
+ } LIBMULTIPATH_9.0.0;
++
++LIBMULTIPATH_9.1.1 {
++global:
++	trigger_path_udev_change;
++} LIBMULTIPATH_9.1.0;
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 6145e512..5def5301 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -1062,6 +1062,8 @@ ev_add_path (struct path * pp, struct vectors * vecs, int need_do_map)
+ 		free_path(pp);
+ 		return 1;
+ 	}
++	if (mpp)
++		trigger_path_udev_change(pp, true);
+ 	if (mpp && mpp->wait_for_udev &&
+ 	    (pathcount(mpp, PATH_UP) > 0 ||
+ 	     (pathcount(mpp, PATH_GHOST) > 0 &&

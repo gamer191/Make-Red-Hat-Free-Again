@@ -1,0 +1,4 @@
+Patch0001: 0001-Show-usage-instead-of-aborting-on-bad-flags.patch
+Patch0002: 0002-mokutil-bugfix-del-unused-opt-s.patch
+Patch0003: 0003-Fix-leak-of-list-in-delete_data_from_req_var.patch
+Patch0004: 0004-Fix-leak-of-fd-in-mok_get_variable.patch

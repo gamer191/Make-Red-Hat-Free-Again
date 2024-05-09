@@ -1,0 +1,15 @@
+diff --git a/execute_cmd.c b/execute_cmd.c
+--- a/execute_cmd.c
++++ b/execute_cmd.c
+@@ -5496,11 +5496,7 @@ execute_disk_command (words, redirects, command_line, pipe_in, pipe_out,
+     {
+       /* If we're optimizing out the fork (implicit `exec'), decrement the
+ 	 shell level like `exec' would do. */
+-#if 0 /* TAG: bash-5.2 psmith 10/11/2020 */
+       if (nofork && pipe_in == NO_PIPE && pipe_out == NO_PIPE && (subshell_environment & SUBSHELL_PIPE) == 0)
+-#else
+-      if (nofork && pipe_in == NO_PIPE && pipe_out == NO_PIPE)
+-#endif
+ 	adjust_shell_level (-1);
+ 
+       maybe_make_export_env ();

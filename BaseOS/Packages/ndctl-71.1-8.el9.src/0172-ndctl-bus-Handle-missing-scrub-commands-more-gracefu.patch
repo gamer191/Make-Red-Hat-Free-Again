@@ -1,0 +1,83 @@
+From 3e17210345482ec9795f1046c766564d3b8a0795 Mon Sep 17 00:00:00 2001
+From: Tarun Sahu <tsahu@linux.ibm.com>
+Date: Mon, 2 May 2022 12:34:54 +0530
+Subject: [PATCH 172/217] ndctl/bus: Handle missing scrub commands more
+ gracefully
+
+Buses that don't have nfit support return "No such file or directory"
+for start-scrub/wait-scrub command.
+
+Presently, non-nfit support buses do not support start-scrub/ wait-scrub
+operation. This patch is to handle these commands more gracefully by
+returning" Operation not supported".
+
+This has been tested on PPC64le lpar with nvdimm that does not support
+scrub.
+
+Previously:
+  $ ./ndctl start-scrub ndbus0
+  error starting scrub: No such file or directory
+
+Now:
+  $ ./ndctl start-scrub ndbus0
+  error starting scrub: Operation not supported
+
+- Invalid ndbus
+  $ sudo ./ndctl start-scrub ndbus5
+  error starting scrub: No such device or address
+
+Link: https://lore.kernel.org/r/20220502070454.179153-1-tsahu@linux.ibm.com
+Tested-by: Vaibhav Jain <vaibhav@linux.ibm.com>
+Reviewed-by: Vaibhav Jain <vaibhav@linux.ibm.com>
+Signed-off-by: Tarun Sahu <tsahu@linux.ibm.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ ndctl/lib/libndctl.c | 18 ++++++++++++++----
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/ndctl/lib/libndctl.c b/ndctl/lib/libndctl.c
+index 110d8a5..ad54f06 100644
+--- a/ndctl/lib/libndctl.c
++++ b/ndctl/lib/libndctl.c
+@@ -938,10 +938,14 @@ static void *add_bus(void *parent, int id, const char *ctl_base)
+ 	if (!bus->wait_probe_path)
+ 		goto err_read;
+ 
+-	sprintf(path, "%s/device/nfit/scrub", ctl_base);
+-	bus->scrub_path = strdup(path);
+-	if (!bus->scrub_path)
+-		goto err_read;
++	if (ndctl_bus_has_nfit(bus)) {
++		sprintf(path, "%s/device/nfit/scrub", ctl_base);
++		bus->scrub_path = strdup(path);
++		if (!bus->scrub_path)
++			goto err_read;
++	} else {
++		bus->scrub_path = NULL;
++	}
+ 
+ 	sprintf(path, "%s/device/firmware/activate", ctl_base);
+ 	if (sysfs_read_attr(ctx, path, buf) < 0)
+@@ -1377,6 +1381,9 @@ NDCTL_EXPORT int ndctl_bus_start_scrub(struct ndctl_bus *bus)
+ 	struct ndctl_ctx *ctx = ndctl_bus_get_ctx(bus);
+ 	int rc;
+ 
++	if (bus->scrub_path == NULL)
++		return -EOPNOTSUPP;
++
+ 	rc = sysfs_write_attr(ctx, bus->scrub_path, "1\n");
+ 
+ 	/*
+@@ -1447,6 +1454,9 @@ NDCTL_EXPORT int ndctl_bus_poll_scrub_completion(struct ndctl_bus *bus,
+ 	char in_progress;
+ 	int fd = 0, rc;
+ 
++	if (bus->scrub_path == NULL)
++		return -EOPNOTSUPP;
++
+ 	fd = open(bus->scrub_path, O_RDONLY|O_CLOEXEC);
+ 	if (fd < 0)
+ 		return -errno;
+-- 
+2.27.0
+

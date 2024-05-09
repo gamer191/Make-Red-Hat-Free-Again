@@ -1,0 +1,87 @@
+From 9d0fb58f3b1314678564b4ac7bfb19942acc8926 Mon Sep 17 00:00:00 2001
+From: Yu Kuai <yukuai3@huawei.com>
+Date: Mon, 29 May 2023 21:28:22 +0800
+Subject: [PATCH 147/165] tests: add a regression test for raid456 deadlock
+
+The deadlock is described in [1], as the last patch described, it's
+fixed first by [2], however this fix will be reverted and the deadlock
+is supposed to be fixed by [3].
+
+[1] https://lore.kernel.org/linux-raid/5ed54ffc-ce82-bf66-4eff-390cb23bc1ac@molgen.mpg.de/T/#t
+[2] https://lore.kernel.org/linux-raid/20220621031129.24778-1-guoqing.jiang@linux.dev/
+[3] https://lore.kernel.org/linux-raid/20230322064122.2384589-5-yukuai1@huaweicloud.com/
+
+Signed-off-by: Yu Kuai <yukuai3@huawei.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ tests/24raid456deadlock | 58 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 58 insertions(+)
+ create mode 100644 tests/24raid456deadlock
+
+diff --git a/tests/24raid456deadlock b/tests/24raid456deadlock
+new file mode 100644
+index 00000000..80e6e97e
+--- /dev/null
++++ b/tests/24raid456deadlock
+@@ -0,0 +1,58 @@
++devs="$dev0 $dev1 $dev2 $dev3 $dev4 $dev5"
++runtime=120
++pid=""
++old=`cat /proc/sys/vm/dirty_background_ratio`
++
++test_write_action()
++{
++	while true; do
++		echo check > /sys/block/md0/md/sync_action &> /dev/null
++		sleep 0.1
++		echo idle > /sys/block/md0/md/sync_action &> /dev/null
++	done
++}
++
++test_write_back()
++{
++	fio -filename=$md0 -bs=4k -rw=write -numjobs=1 -name=test \
++		-time_based -runtime=$runtime &> /dev/null
++}
++
++set_up_test()
++{
++	fio -h &> /dev/null || die "fio not found"
++
++	# create a simple raid6
++	mdadm -Cv -R -n 6 -l6 $md0 $devs --assume-clean || die "create raid6 failed"
++
++	# trigger dirty pages write back
++	echo 0 > /proc/sys/vm/dirty_background_ratio
++}
++
++clean_up_test()
++{
++	echo $old > /proc/sys/vm/dirty_background_ratio
++
++	pkill -9 fio
++	kill -9 $pid
++
++	sleep 1
++
++	if ps $pid | tail -1 | awk '{print $3}' | grep D; then
++		die "thread that is writing sysfs is stuck in D state, deadlock is triggered"
++	fi
++	mdadm -S $md0
++}
++
++trap 'clean_up_test' EXIT
++
++set_up_test || die "set up test failed"
++
++test_write_back &
++
++test_write_action &
++pid="$!"
++
++sleep $runtime
++
++exit 0
+-- 
+2.40.1
+

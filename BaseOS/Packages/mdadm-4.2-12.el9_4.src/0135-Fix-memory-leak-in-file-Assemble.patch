@@ -1,0 +1,90 @@
+From e9fb93af0f769d147a13e86ab4e5d0aeb935e9fc Mon Sep 17 00:00:00 2001
+From: Guanqin Miao <miaoguanqin@huawei.com>
+Date: Mon, 24 Apr 2023 16:06:34 +0800
+Subject: [PATCH 135/165] Fix memory leak in file Assemble
+
+When we test mdadm with asan, we found some memory leaks in Assemble.c
+We fix these memory leaks based on code logic.
+
+v2: Set st = NULL before jumping to loop
+
+Signed-off-by: Guanqin Miao <miaoguanqin@huawei.com>
+Signed-off-by: Li Xiao Keng <lixiaokeng@huawei.com>
+Acked-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ Assemble.c | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/Assemble.c b/Assemble.c
+index 49804941..61e8cd17 100644
+--- a/Assemble.c
++++ b/Assemble.c
+@@ -341,8 +341,10 @@ static int select_devices(struct mddev_dev *devlist,
+ 				st->ss->free_super(st);
+ 			dev_policy_free(pol);
+ 			domain_free(domains);
+-			if (tst)
++			if (tst) {
+ 				tst->ss->free_super(tst);
++				free(tst);
++			}
+ 			return -1;
+ 		}
+ 
+@@ -417,6 +419,7 @@ static int select_devices(struct mddev_dev *devlist,
+ 				st->ss->free_super(st);
+ 				dev_policy_free(pol);
+ 				domain_free(domains);
++				free(st);
+ 				return -1;
+ 			}
+ 			if (c->verbose > 0)
+@@ -425,6 +428,8 @@ static int select_devices(struct mddev_dev *devlist,
+ 
+ 			/* make sure we finished the loop */
+ 			tmpdev = NULL;
++			free(st);
++			st = NULL;
+ 			goto loop;
+ 		} else {
+ 			content = *contentp;
+@@ -533,6 +538,7 @@ static int select_devices(struct mddev_dev *devlist,
+ 				st->ss->free_super(st);
+ 				dev_policy_free(pol);
+ 				domain_free(domains);
++				free(tst);
+ 				return -1;
+ 			}
+ 			tmpdev->used = 1;
+@@ -546,8 +552,10 @@ static int select_devices(struct mddev_dev *devlist,
+ 		}
+ 		dev_policy_free(pol);
+ 		pol = NULL;
+-		if (tst)
++		if (tst) {
+ 			tst->ss->free_super(tst);
++			free(tst);
++		}
+ 	}
+ 
+ 	/* Check if we found some imsm spares but no members */
+@@ -839,6 +847,7 @@ static int load_devices(struct devs *devices, char *devmap,
+ 				close(mdfd);
+ 				free(devices);
+ 				free(devmap);
++				free(best);
+ 				*stp = st;
+ 				return -1;
+ 			}
+@@ -1950,6 +1959,7 @@ out:
+ 	} else if (mdfd >= 0)
+ 		close(mdfd);
+ 
++	free(best);
+ 	/* '2' means 'OK, but not started yet' */
+ 	if (rv == -1) {
+ 		free(devices);
+-- 
+2.40.1
+

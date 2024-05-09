@@ -1,0 +1,149 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 2 Feb 2022 17:00:21 -0600
+Subject: [PATCH] RH: add support to mpathconf for setting arbitrary default
+ options
+
+mpathconf now supports --option <name>:[<value>] for setting, changing,
+or removing options from the defaults section of multipath.conf.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/mpathconf   | 58 ++++++++++++++++++++++++++++++++++++++++---
+ multipath/mpathconf.8 |  7 ++++++
+ 2 files changed, 62 insertions(+), 3 deletions(-)
+
+diff --git a/multipath/mpathconf b/multipath/mpathconf
+index 0de6b121..6e33fb99 100644
+--- a/multipath/mpathconf
++++ b/multipath/mpathconf
+@@ -17,7 +17,7 @@
+ # This program was largely ripped off from lvmconf
+ #
+ 
+-unset ENABLE FIND FRIENDLY PROPERTY FOREIGN MODULE MULTIPATHD HAVE_DISABLE HAVE_WWID_DISABLE HAVE_FIND HAVE_BLACKLIST HAVE_EXCEPTIONS HAVE_DEFAULTS HAVE_FRIENDLY HAVE_PROPERTY HAVE_FOREIGN HAVE_MULTIPATHD HAVE_MODULE HAVE_OUTFILE SHOW_STATUS CHANGED_CONFIG WWID_LIST
++unset ENABLE FIND FRIENDLY PROPERTY FOREIGN MODULE MULTIPATHD HAVE_DISABLE HAVE_WWID_DISABLE HAVE_FIND HAVE_BLACKLIST HAVE_EXCEPTIONS HAVE_DEFAULTS HAVE_FRIENDLY HAVE_PROPERTY HAVE_FOREIGN HAVE_MULTIPATHD HAVE_MODULE HAVE_OUTFILE SHOW_STATUS CHANGED_CONFIG WWID_LIST HAVE_OPTION OPTION_NAME OPTION_VALUE
+ 
+ DEFAULT_CONFIG="# device-mapper-multipath configuration file
+ 
+@@ -52,6 +52,7 @@ function usage
+ 	echo "Set find_multipaths (Default y): --find_multipaths <yes|no|strict|greedy|smart>"
+ 	echo "Set default property blacklist (Default n): --property_blacklist <y|n>"
+ 	echo "Set enable_foreign to show foreign devices (Default n): --enable_foreign <y|n>"
++	echo "Add/Change/Remove option in defaults section: --option <option_name>:<value>"
+ 	echo "Load the dm-multipath modules on enable (Default y): --with_module <y|n>"
+ 	echo "start/stop/reload multipathd (Default n): --with_multipathd <y|n>"
+ 	echo "select output file (Default /etc/multipath.conf): --outfile <FILE>"
+@@ -162,6 +163,20 @@ function parse_args
+ 					exit 1
+ 				fi
+ 				;;
++			--option)
++				if [ -n "$2" ]; then
++					OPTION_NAME=$(echo $2 | cut -s -f1 -d:)
++					OPTION_VALUE=$(echo $2 | cut -s -f2 -d:)
++					if [ -z "$OPTION_NAME" ]; then
++						usage
++						exit 1
++					fi
++					shift 2
++				else
++					usage
++					exit 1
++				fi
++				;;
+ 			--enable_foreign)
+ 				if [ -n "$2" ]; then
+ 					FOREIGN=$2
+@@ -208,12 +223,15 @@ function parse_args
+ 
+ function validate_args
+ {
+-	if [ "$ENABLE" = "0" ] && [ -n "$FRIENDLY" -o -n "$FIND" -o -n "$PROPERTY" -o -n "$MODULE" ]; then
++	if [ "$ENABLE" = "0" ] && [ -n "$FRIENDLY" -o -n "$FIND" -o -n "$PROPERTY" -o -n "$MODULE" -o -n "$FOREIGN" -o -n "$OPTION_NAME" ]; then
+ 		echo "ignoring extra parameters on disable"
+ 		FRIENDLY=""
+ 		FIND=""
+ 		PROPERTY=""
+ 		MODULE=""
++		FOREIGN=""
++		OPTION_NAME=""
++		OPTION_VALUE=""
+ 	fi
+ 	if [ -n "$FRIENDLY" ] && [ "$FRIENDLY" != "y" -a "$FRIENDLY" != "n" ]; then
+ 		echo "--user_friendly_names must be either 'y' or 'n'"
+@@ -235,7 +253,19 @@ function validate_args
+ 		echo "--enable_foreign must be either 'y' or 'n'"
+ 		exit 1
+ 	fi
+-	if [ -z "$ENABLE" -a -z "$FIND" -a -z "$FRIENDLY" -a -z "$PROPERTY" -a -z "$FOREIGN" ]; then
++	if [ -n "$OPTION_NAME" ]; then
++		if [[ $OPTION_NAME =~ [[:space:]]|#|\"|!|\{|\} ]]; then
++			echo "--option name \"$OPTION_NAME\" is invalid"
++			exit 1
++		elif [[ $OPTION_VALUE =~ \"|#|!|\{|\} ]]; then
++			echo "--option value \"$OPTION_VALUE\" is invalid"
++			exit 1
++		fi
++		if [[ $OPTION_VALUE =~ [[:space:]] ]]; then
++			OPTION_VALUE=\"$OPTION_VALUE\"
++		fi
++	fi
++	if [ -z "$ENABLE" -a -z "$FIND" -a -z "$FRIENDLY" -a -z "$PROPERTY" -a -z "$FOREIGN" -a -z "$OPTION_NAME" ]; then
+ 		SHOW_STATUS=1
+ 	fi
+ 	if [ -n "$MODULE" ] && [ "$MODULE" != "y" -a "$MODULE" != "n" ]; then
+@@ -348,6 +378,13 @@ if [ "$HAVE_DEFAULTS" = "1" ]; then
+ 	elif sed -n '/^defaults[[:space:]]*{/,/^}/ p' $TMPFILE | grep -q "^[[:space:]]*enable_foreign" ; then
+ 		HAVE_FOREIGN=3
+ 	fi
++	if [ -n "$OPTION_NAME" ]; then
++		if sed -n '/^defaults[[:space:]]*{/,/^}/ p' $TMPFILE | grep -q '^[[:space:]]*'"$OPTION_NAME"'[[:space:]][[:space:]]*'"$OPTION_VALUE" ; then
++			HAVE_OPTION=1
++		elif sed -n '/^defaults[[:space:]]*{/,/^}/ p' $TMPFILE | grep -q '^[[:space:]]*'"$OPTION_NAME"'\([[:space:]].*\)\?$' ; then
++			HAVE_OPTION=0
++		fi
++	fi
+ fi
+ 
+ if [ "$HAVE_EXCEPTIONS" = "1" ]; then
+@@ -532,6 +569,21 @@ elif [ "$FOREIGN" = "y" ]; then
+ 	fi
+ fi
+ 
++if [ -n "$OPTION_NAME" -a -n "$OPTION_VALUE" ]; then
++	if [ -z "$HAVE_OPTION" ]; then
++		sed -i '/^defaults[[:space:]]*{/ a\
++	'"$OPTION_NAME"' '"$OPTION_VALUE"'
++' $TMPFILE
++		CHANGED_CONFIG=1
++	elif [ "$HAVE_OPTION" = 0 ]; then
++		sed -i '/^defaults[[:space:]]*{/,/^}/ s/^[[:space:]]*'"$OPTION_NAME"'\([[:space:]].*\)\?$/	'"$OPTION_NAME"' '"$OPTION_VALUE"'/' $TMPFILE
++		CHANGED_CONFIG=1
++	fi
++elif [ -n "$OPTION_NAME" -a -n "$HAVE_OPTION" ]; then
++	sed -i '/^defaults[[:space:]]*{/,/^}/{/^[[:space:]]*'"$OPTION_NAME"'\([[:space:]].*\)\?$/d}' $TMPFILE
++	CHANGED_CONFIG=1
++fi
++
+ if [ -f "$OUTPUTFILE" ]; then
+ 	cp $OUTPUTFILE $OUTPUTFILE.old
+ 	if [ $? != 0 ]; then
+diff --git a/multipath/mpathconf.8 b/multipath/mpathconf.8
+index a14d831e..496383b7 100644
+--- a/multipath/mpathconf.8
++++ b/multipath/mpathconf.8
+@@ -101,6 +101,13 @@ to the
+ defaults section. if set to \fBn\fP, this removes the line, if present. This
+ command can be used along with any other command.
+ .TP
++.B --option \fB<option_name>:[<value>]\fP
++Sets the defaults section option \fB<option_name>\fP to \fB<value>\fP. If the
++option was not previously set in the defaults section, it is added. If it was
++set, its value is changed to \fB<value>\fP. If \fB<value>\fP is left blank,
++then the option is removed from the defaults section, if was set there. This
++command can be used along with any other command.
++.TP
+ .B --outfile \fB<filename>\fP
+ Write the resulting multipath configuration to \fB<filename>\fP instead of
+ \fB/etc/multipath.conf\fP.

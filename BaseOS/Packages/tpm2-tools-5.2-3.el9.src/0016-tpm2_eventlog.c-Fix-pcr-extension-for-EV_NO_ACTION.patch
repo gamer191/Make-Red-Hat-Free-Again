@@ -1,0 +1,159 @@
+From 2f6a737efddce480803c02a5e3b65ce739c6acf2 Mon Sep 17 00:00:00 2001
+From: Juergen Repp <juergen_repp@web.de>
+Date: Tue, 28 Mar 2023 17:29:36 +0200
+Subject: [PATCH 16/17] tpm2_eventlog.c Fix pcr extension for EV_NO_ACTION
+
+EV_NO_ACTION events should not be extended to PCR registers.
+Fixes: #3224
+
+Signed-off-by: Juergen Repp <juergen_repp@web.de>
+---
+ lib/tpm2_eventlog.c            | 14 +++++++++-----
+ lib/tpm2_eventlog.h            |  2 +-
+ test/unit/test_tpm2_eventlog.c | 15 ++++++++-------
+ 3 files changed, 18 insertions(+), 13 deletions(-)
+
+diff --git a/lib/tpm2_eventlog.c b/lib/tpm2_eventlog.c
+index 1b59eeeb..e2e27f02 100644
+--- a/lib/tpm2_eventlog.c
++++ b/lib/tpm2_eventlog.c
+@@ -30,7 +30,8 @@ bool digest2_accumulator_callback(TCG_DIGEST2 const *digest, size_t size,
+  * hold the digest. The size of the digest is passed to the callback in the
+  * 'size' parameter.
+  */
+-bool foreach_digest2(tpm2_eventlog_context *ctx, unsigned pcr_index, TCG_DIGEST2 const *digest, size_t count, size_t size) {
++bool foreach_digest2(tpm2_eventlog_context *ctx, UINT32 eventType, unsigned pcr_index,
++                     TCG_DIGEST2 const *digest, size_t count, size_t size) {
+ 
+     if (digest == NULL) {
+         LOG_ERR("digest cannot be NULL");
+@@ -80,7 +81,8 @@ bool foreach_digest2(tpm2_eventlog_context *ctx, unsigned pcr_index, TCG_DIGEST2
+             LOG_WARN("PCR%d algorithm %d unsupported", pcr_index, alg);
+         }
+ 
+-        if (pcr && !tpm2_openssl_pcr_extend(alg, pcr, digest->Digest, alg_size)) {
++        if (eventType != EV_NO_ACTION && pcr &&
++            !tpm2_openssl_pcr_extend(alg, pcr, digest->Digest, alg_size)) {
+             LOG_ERR("PCR%d extend failed", pcr_index);
+             return false;
+         }
+@@ -179,7 +181,8 @@ bool parse_event2(TCG_EVENT_HEADER2 const *eventhdr, size_t buf_size,
+         .data = digests_size,
+         .digest2_cb = digest2_accumulator_callback,
+     };
+-    ret = foreach_digest2(&ctx, eventhdr->PCRIndex,
++    ret = foreach_digest2(&ctx, eventhdr->EventType,
++                          eventhdr->PCRIndex, 
+                           eventhdr->Digests, eventhdr->DigestCount,
+                           buf_size - sizeof(*eventhdr));
+     if (ret != true) {
+@@ -216,7 +219,7 @@ bool parse_sha1_log_event(tpm2_eventlog_context *ctx, TCG_EVENT const *event, si
+     *event_size = sizeof(*event);
+ 
+     pcr = ctx->sha1_pcrs[ event->pcrIndex];
+-    if (pcr) {
++    if (event->eventType != EV_NO_ACTION && pcr) {
+         tpm2_openssl_pcr_extend(TPM2_ALG_SHA1, pcr, &event->digest[0], 20);
+         ctx->sha1_used |= (1 << event->pcrIndex);
+     }
+@@ -451,7 +454,8 @@ bool foreach_event2(tpm2_eventlog_context *ctx, TCG_EVENT_HEADER2 const *eventhd
+         }
+ 
+         /* digest callback foreach digest */
+-        ret = foreach_digest2(ctx, eventhdr->PCRIndex, eventhdr->Digests, eventhdr->DigestCount, digests_size);
++        ret = foreach_digest2(ctx, eventhdr->EventType, eventhdr->PCRIndex,
++                              eventhdr->Digests, eventhdr->DigestCount, digests_size);
+         if (ret != true) {
+             return false;
+         }
+diff --git a/lib/tpm2_eventlog.h b/lib/tpm2_eventlog.h
+index 2a91ed60..f141e806 100644
+--- a/lib/tpm2_eventlog.h
++++ b/lib/tpm2_eventlog.h
+@@ -44,7 +44,7 @@ bool digest2_accumulator_callback(TCG_DIGEST2 const *digest, size_t size,
+                                   void *data);
+ 
+ bool parse_event2body(TCG_EVENT2 const *event, UINT32 type);
+-bool foreach_digest2(tpm2_eventlog_context *ctx, unsigned pcr_index,
++bool foreach_digest2(tpm2_eventlog_context *ctx, UINT32 eventType, unsigned pcr_index,
+                      TCG_DIGEST2 const *event_hdr, size_t count, size_t size);
+ bool parse_event2(TCG_EVENT_HEADER2 const *eventhdr, size_t buf_size,
+                   size_t *event_size, size_t *digests_size);
+diff --git a/test/unit/test_tpm2_eventlog.c b/test/unit/test_tpm2_eventlog.c
+index ebf50e80..e48404d8 100644
+--- a/test/unit/test_tpm2_eventlog.c
++++ b/test/unit/test_tpm2_eventlog.c
+@@ -27,7 +27,7 @@ static void test_foreach_digest2_null(void **state){
+     (void)state;
+     tpm2_eventlog_context ctx = {0};
+ 
+-    assert_false(foreach_digest2(&ctx, 0, NULL, 0, sizeof(TCG_DIGEST2)));
++    assert_false(foreach_digest2(&ctx, 0, 0, NULL, 0, sizeof(TCG_DIGEST2)));
+ }
+ static void test_foreach_digest2_size(void **state) {
+ 
+@@ -36,7 +36,7 @@ static void test_foreach_digest2_size(void **state) {
+     TCG_DIGEST2 *digest = (TCG_DIGEST2*)buf;
+     tpm2_eventlog_context ctx = { .digest2_cb = foreach_digest2_test_callback };
+ 
+-    assert_false(foreach_digest2(&ctx, 0, digest, 1, sizeof(TCG_DIGEST2) - 1));
++    assert_false(foreach_digest2(&ctx, 0, 0, digest, 1, sizeof(TCG_DIGEST2) - 1));
+ }
+ static void test_foreach_digest2(void **state) {
+ 
+@@ -47,7 +47,7 @@ static void test_foreach_digest2(void **state) {
+     will_return(foreach_digest2_test_callback, true);
+ 
+     tpm2_eventlog_context ctx = { .digest2_cb = foreach_digest2_test_callback };
+-    assert_true(foreach_digest2(&ctx, 0, digest, 1, TCG_DIGEST2_SHA1_SIZE));
++    assert_true(foreach_digest2(&ctx, 0, 0, digest, 1, TCG_DIGEST2_SHA1_SIZE));
+ }
+ static void test_foreach_digest2_cbnull(void **state){
+ 
+@@ -56,7 +56,7 @@ static void test_foreach_digest2_cbnull(void **state){
+     TCG_DIGEST2* digest = (TCG_DIGEST2*)buf;
+ 
+     tpm2_eventlog_context ctx = {0};
+-    assert_true(foreach_digest2(&ctx, 0, digest, 1, TCG_DIGEST2_SHA1_SIZE));
++    assert_true(foreach_digest2(&ctx, 0, 0, digest, 1, TCG_DIGEST2_SHA1_SIZE));
+ }
+ static void test_sha1(void **state){
+ 
+@@ -73,7 +73,7 @@ static void test_sha1(void **state){
+     memcpy(digest->Digest, "the magic words are:", TPM2_SHA1_DIGEST_SIZE);
+ 
+     tpm2_eventlog_context ctx = {0};
+-    assert_true(foreach_digest2(&ctx, pcr_index, digest, 1, TCG_DIGEST2_SHA1_SIZE));
++    assert_true(foreach_digest2(&ctx, 0, pcr_index, digest, 1, TCG_DIGEST2_SHA1_SIZE));
+     assert_memory_equal(ctx.sha1_pcrs[pcr_index], sha1sum, sizeof(sha1sum));
+ }
+ static void test_sha256(void **state){
+@@ -93,7 +93,7 @@ static void test_sha256(void **state){
+     memcpy(digest->Digest, "The Magic Words are Squeamish Ossifrage, for RSA-129 (from 1977)", TPM2_SHA256_DIGEST_SIZE);
+ 
+     tpm2_eventlog_context ctx = {0};
+-    assert_true(foreach_digest2(&ctx, pcr_index, digest, 1, TCG_DIGEST2_SHA256_SIZE));
++    assert_true(foreach_digest2(&ctx, 0, pcr_index, digest, 1, TCG_DIGEST2_SHA256_SIZE));
+     assert_memory_equal(ctx.sha256_pcrs[pcr_index], sha256sum, sizeof(sha256sum));
+ }
+ static void test_foreach_digest2_cbfail(void **state){
+@@ -105,7 +105,7 @@ static void test_foreach_digest2_cbfail(void **state){
+     will_return(foreach_digest2_test_callback, false);
+ 
+     tpm2_eventlog_context ctx = { .digest2_cb = foreach_digest2_test_callback };
+-    assert_false(foreach_digest2(&ctx, 0, digest, 1, TCG_DIGEST2_SHA1_SIZE));
++    assert_false(foreach_digest2(&ctx, 0, 0, digest, 1, TCG_DIGEST2_SHA1_SIZE));
+ }
+ static void test_digest2_accumulator_callback(void **state) {
+ 
+@@ -292,6 +292,7 @@ static void test_foreach_event2_parse_event2body_fail(void **state){
+ 
+     eventhdr->DigestCount = 1;
+     eventhdr->EventType = EV_EFI_VARIABLE_BOOT;
++    eventhdr->PCRIndex = 0;
+     digest->AlgorithmId = TPM2_ALG_SHA1;
+     event->EventSize = 1;
+ 
+-- 
+2.40.1
+

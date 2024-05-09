@@ -1,0 +1,129 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Mon, 15 Nov 2021 10:54:35 -0600
+Subject: [PATCH] multipathd: avoid unnecessary path read-only reloads
+
+A mulitpath device can only be reloaded read/write when all paths are
+read/write. Also, whenever a read-only device is rescanned, the scsi
+subsystem will first unconditionally issue a uevent with DISK_RO=0
+before checking the read-only status, and if it the device is still
+read-only, issuing another uevent with DISK_RO=1. These uevents cause
+pointless reloads when read-only paths are rescanned. To avoid this,
+check to see if all paths are read/write before changing a multipath
+device from read-only to read/write.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/libmultipath.version |  5 +++++
+ libmultipath/sysfs.c              | 22 ++++++++++++++++++++++
+ libmultipath/sysfs.h              |  1 +
+ multipathd/main.c                 | 31 ++++++++++++++++++++++++++++++-
+ 4 files changed, 58 insertions(+), 1 deletion(-)
+
+diff --git a/libmultipath/libmultipath.version b/libmultipath/libmultipath.version
+index eb5b5b55..dd1b4122 100644
+--- a/libmultipath/libmultipath.version
++++ b/libmultipath/libmultipath.version
+@@ -287,3 +287,8 @@ global:
+ local:
+ 	*;
+ };
++
++LIBMULTIPATH_9.1.0 {
++global:
++	sysfs_get_ro;
++} LIBMULTIPATH_9.0.0;
+diff --git a/libmultipath/sysfs.c b/libmultipath/sysfs.c
+index 9ff145f2..24c12b6a 100644
+--- a/libmultipath/sysfs.c
++++ b/libmultipath/sysfs.c
+@@ -236,6 +236,28 @@ sysfs_get_size (struct path *pp, unsigned long long * size)
+ 	return 0;
+ }
+ 
++int
++sysfs_get_ro (struct path *pp)
++{
++	int ro;
++	char buff[3]; /* Either "0\n\0" or "1\n\0" */
++
++	if (!pp->udev)
++		return -1;
++
++	if (sysfs_attr_get_value(pp->udev, "ro", buff, sizeof(buff)) <= 0) {
++		condlog(3, "%s: Cannot read ro attribute in sysfs", pp->dev);
++		return -1;
++	}
++
++	if (sscanf(buff, "%d\n", &ro) != 1 || ro < 0 || ro > 1) {
++		condlog(3, "%s: Cannot parse ro attribute", pp->dev);
++		return -1;
++	}
++
++	return ro;
++}
++
+ int sysfs_check_holders(char * check_devt, char * new_devt)
+ {
+ 	unsigned int major, new_minor, table_minor;
+diff --git a/libmultipath/sysfs.h b/libmultipath/sysfs.h
+index 72b39ab2..c948c467 100644
+--- a/libmultipath/sysfs.h
++++ b/libmultipath/sysfs.h
+@@ -13,6 +13,7 @@ ssize_t sysfs_attr_get_value(struct udev_device *dev, const char *attr_name,
+ ssize_t sysfs_bin_attr_get_value(struct udev_device *dev, const char *attr_name,
+ 				 unsigned char * value, size_t value_len);
+ int sysfs_get_size (struct path *pp, unsigned long long * size);
++int sysfs_get_ro(struct path *pp);
+ int sysfs_check_holders(char * check_devt, char * new_devt);
+ bool sysfs_is_multipathed(struct path *pp, bool set_wwid);
+ #endif
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 1defeaf1..6145e512 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -1324,6 +1324,35 @@ fail:
+ 	return REMOVE_PATH_MAP_ERROR;
+ }
+ 
++static bool
++needs_ro_update(struct multipath *mpp, int ro)
++{
++	struct pathgroup * pgp;
++	struct path * pp;
++	unsigned int i, j;
++	struct dm_info *dmi = NULL;
++
++	if (!mpp || ro < 0)
++		return false;
++	dm_get_info(mpp->alias, &dmi);
++	if (!dmi) /* assume we do need to reload the device */
++		return true;
++	if (dmi->read_only == ro) {
++		free(dmi);
++		return false;
++	}
++	free(dmi);
++	if (ro == 1)
++		return true;
++	vector_foreach_slot (mpp->pg, pgp, i) {
++		vector_foreach_slot (pgp->paths, pp, j) {
++			if (sysfs_get_ro(pp) == 1)
++				return false;
++		}
++	}
++	return true;
++}
++
+ static int
+ uev_update_path (struct uevent *uev, struct vectors * vecs)
+ {
+@@ -1388,7 +1417,7 @@ uev_update_path (struct uevent *uev, struct vectors * vecs)
+ 		}
+ 
+ 		ro = uevent_get_disk_ro(uev);
+-		if (mpp && ro >= 0) {
++		if (needs_ro_update(mpp, ro)) {
+ 			condlog(2, "%s: update path write_protect to '%d' (uevent)", uev->kernel, ro);
+ 
+ 			if (mpp->wait_for_udev)

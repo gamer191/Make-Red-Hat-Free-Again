@@ -1,0 +1,90 @@
+From f85c6c12d6fd9014d54cd0e3d791223723a29cdd Mon Sep 17 00:00:00 2001
+From: Alexander Monakov <amonakov@ispras.ru>
+Date: Sat, 21 Jan 2023 12:25:25 +0300
+Subject: [PATCH 06/13] ui: do not force black background
+
+Avoid repainting the entire terminal window with black background.
+Instead, invoke 'use_default_colors' and use color index -1 to keep
+user-configured background and foreground colors.
+
+For pairs 1, 2, 3, 8, 9, 10, simply change background index to -1.
+Keep pair 4, but enable the 'bold' attribute for text to improve
+legibility. For pair 5 (white on red) use default foreground, and
+instead of pair 6 (red on white) use reverse of pair 5 with bold.
+
+This substantially improves legibility of the UI on a terminal
+configured with a light background for me.
+---
+ ui/ui.c | 27 ++++++++++++++-------------
+ 1 file changed, 14 insertions(+), 13 deletions(-)
+
+diff --git a/ui/ui.c b/ui/ui.c
+index 897371b..bee6868 100644
+--- a/ui/ui.c
++++ b/ui/ui.c
+@@ -45,7 +45,7 @@ void show_footer()
+ 	while(strlen(footer) != (size_t)COLS - 1) {
+ 		snprintf(footer + strlen(footer), COLS - strlen(footer), " ");
+ 	}
+-	attrset(COLOR_PAIR(4));
++	attrset(COLOR_PAIR(4) | A_BOLD);
+ 	mvprintw(LINES - 1, 0, "%s", footer);
+ }
+ 
+@@ -73,7 +73,7 @@ char * check_control_in_sleep_input(int max_len, int column_offest, int line_off
+ 				mvaddch(line_offset, column_offest + iteration, ' ');
+ 			}
+ 			move(line_offset, column_offest + iteration);
+-			attrset(COLOR_PAIR(6));
++			attrset(COLOR_PAIR(5) | A_REVERSE | A_BOLD);
+ 			break;
+ 		case 27:
+ 			free(input_to);
+@@ -93,7 +93,7 @@ int get_valid_sleep_input(int column_offest)
+ 	while(1) {
+ 		attrset(COLOR_PAIR(5));
+ 		mvprintw(2, column_offest, "			");
+-		attrset(COLOR_PAIR(6));
++		attrset(COLOR_PAIR(5) | A_REVERSE | A_BOLD);
+ 		refresh();
+ 		move(2, column_offest);
+ 		curs_set(1);
+@@ -115,7 +115,7 @@ int get_valid_sleep_input(int column_offest)
+ 			break;
+ 		} else {
+ 			new_sleep = setup.sleep;
+-			attrset(COLOR_PAIR(4));
++			attrset(COLOR_PAIR(4) | A_BOLD);
+ 			mvprintw(LINES - 2, 1,
+ 				"Invalid input: %s								",
+ 				input);
+@@ -705,16 +705,17 @@ void init()
+ 	echo();
+ 	if(has_colors()) {
+ 		start_color();
+-		init_pair(1, COLOR_RED, COLOR_BLACK);
+-		init_pair(2, COLOR_YELLOW, COLOR_BLACK);
+-		init_pair(3, COLOR_GREEN, COLOR_BLACK);
++		use_default_colors();
++		init_pair(1, COLOR_RED, -1);
++		init_pair(2, COLOR_YELLOW, -1);
++		init_pair(3, COLOR_GREEN, -1);
+ 		init_pair(4, COLOR_WHITE, COLOR_BLUE);
+-		init_pair(5, COLOR_WHITE, COLOR_RED);
+-		init_pair(6, COLOR_RED, COLOR_WHITE);
+-		init_pair(7, COLOR_BLACK, COLOR_CYAN);
+-		init_pair(8, COLOR_BLUE, COLOR_BLACK);
+-		init_pair(9, COLOR_CYAN, COLOR_BLACK);
+-		init_pair(10, COLOR_MAGENTA, COLOR_BLACK);
++		init_pair(5, -1, COLOR_RED);
++		/* Pair 6 is unused */
++		/* Pair 7 is unused */
++		init_pair(8, COLOR_BLUE, -1);
++		init_pair(9, COLOR_CYAN, -1);
++		init_pair(10, COLOR_MAGENTA, -1);
+ 	}
+ 
+ 	offset = 0;
+-- 
+2.33.1
+

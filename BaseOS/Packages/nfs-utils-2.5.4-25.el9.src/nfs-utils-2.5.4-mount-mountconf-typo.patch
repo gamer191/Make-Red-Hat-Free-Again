@@ -1,0 +1,30 @@
+commit 608591ddf1ee59c4dda82ceca3f27c90486c5618
+Author: Yongcheng Yang <yongcheng.yang@gmail.com>
+Date:   Wed Apr 5 12:11:53 2023 -0400
+
+    nfsmount.conf: Fix typo of the attribute name
+    
+    Signed-off-by: Yongcheng Yang <yongcheng.yang@gmail.com>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/utils/mount/nfsmount.conf b/utils/mount/nfsmount.conf
+index 342063f..c498eb8 100644
+--- a/utils/mount/nfsmount.conf
++++ b/utils/mount/nfsmount.conf
+@@ -59,13 +59,13 @@
+ # acregmin=30
+ #
+ # The Maximum time (in seconds) file attributes are cached
+-# acregmin=60
++# acregmax=60
+ #
+ # The minimum time (in seconds) directory attributes are cached
+-# acregmin=30
++# acdirmin=30
+ #
+ # The Maximum time (in seconds) directory attributes are cached
+-# acregmin=60
++# acdirmax=60
+ #
+ # Enable Access  Control  Lists
+ # Acl=False

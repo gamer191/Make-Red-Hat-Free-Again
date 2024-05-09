@@ -1,0 +1,156 @@
+From dd58d43458943d20ff063850670bf54a5242c9c5 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Sun, 6 Mar 2022 23:39:25 -0700
+Subject: [PATCH 148/217] ndctl: release v73
+
+This release incorporates functionality up to the 5.17 kernel.
+
+Highlights include full CXL topology walk and filtering in cxl-list, a
+new cxl-cli command to set memdev partitioning info, several unit test
+fixes, conversion of the build system to meson, smart error injection
+enhancements for 'papr' NVDIMMs, and RPM spec fixes to support config
+file migration, and flatpak builds.
+
+Commands:
+  cxl-list: full topology walk and filtering
+  cxl-set-partition: new command to set memdev partitions
+  cxl{enable,disable}-port: new commands
+  cxl{enable,disable}-memdev: new commands
+
+Tests:
+  Deprecate BLK aperture support
+  inject-smart.sh: increase tolerance for decimal formatted fields
+
+APIs:
+  ndctl_dimm_refresh_flags
+  cxl_bus_get_ctx
+  cxl_bus_get_devname
+  cxl_bus_get_first
+  cxl_bus_get_id
+  cxl_bus_get_next
+  cxl_bus_get_port
+  cxl_bus_get_provider
+  cxl_cmd_identify_get_persistent_only_size
+  cxl_cmd_identify_get_total_size
+  cxl_cmd_identify_get_volatile_only_size
+  cxl_cmd_new_get_partition
+  cxl_cmd_new_set_partition
+  cxl_cmd_partition_get_active_persistent_size
+  cxl_cmd_partition_get_active_volatile_size
+  cxl_cmd_partition_get_next_persistent_size
+  cxl_cmd_partition_get_next_volatile_size
+  cxl_cmd_partition_set_mode
+  cxl_decoder_get_ctx
+  cxl_decoder_get_devname
+  cxl_decoder_get_first
+  cxl_decoder_get_id
+  cxl_decoder_get_next
+  cxl_decoder_get_nr_targets
+  cxl_decoder_get_port
+  cxl_decoder_get_resource
+  cxl_decoder_get_size
+  cxl_decoder_get_target_by_memdev
+  cxl_decoder_get_target_by_position
+  cxl_decoder_get_target_type
+  cxl_decoder_is_accelmem_capable
+  cxl_decoder_is_locked
+  cxl_decoder_is_mem_capable
+  cxl_decoder_is_pmem_capable
+  cxl_decoder_is_volatile_capable
+  cxl_dport_get_devname
+  cxl_dport_get_first
+  cxl_dport_get_id
+  cxl_dport_get_next
+  cxl_dport_get_physical_node
+  cxl_dport_get_port
+  cxl_dport_maps_memdev
+  cxl_endpoint_get_bus
+  cxl_endpoint_get_ctx
+  cxl_endpoint_get_devname
+  cxl_endpoint_get_first
+  cxl_endpoint_get_host
+  cxl_endpoint_get_id
+  cxl_endpoint_get_memdev
+  cxl_endpoint_get_next
+  cxl_endpoint_get_parent
+  cxl_endpoint_get_port
+  cxl_endpoint_is_enabled
+  cxl_memdev_disable_invalidate
+  cxl_memdev_enable
+  cxl_memdev_get_bus
+  cxl_memdev_get_endpoint
+  cxl_memdev_get_host
+  cxl_memdev_get_numa_node
+  cxl_memdev_get_serial
+  cxl_memdev_is_enabled
+  cxl_port_disable_invalidate
+  cxl_port_enable
+  cxl_port_get_bus
+  cxl_port_get_bus
+  cxl_port_get_ctx
+  cxl_port_get_devname
+  cxl_port_get_dport_by_memdev
+  cxl_port_get_first
+  cxl_port_get_host
+  cxl_port_get_id
+  cxl_port_get_next
+  cxl_port_get_next_all
+  cxl_port_get_nr_dports
+  cxl_port_get_parent
+  cxl_port_hosts_memdev
+  cxl_port_is_enabled
+  cxl_port_is_endpoint
+  cxl_port_is_root
+  cxl_port_is_switch
+  cxl_port_to_bus
+  cxl_port_to_endpoint
+  cxl_target_get_decoder
+  cxl_target_get_devname
+  cxl_target_get_first
+  cxl_target_get_id
+  cxl_target_get_next
+  cxl_target_get_physical_node
+  cxl_target_get_position
+  cxl_target_maps_memdev
+---
+ meson.build | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index f25ec6c..42e11aa 100644
+--- a/meson.build
++++ b/meson.build
+@@ -1,5 +1,5 @@
+ project('ndctl', 'c',
+-  version : '72',
++  version : '73',
+   license : [
+     'GPL-2.0',
+     'LGPL-2.1',
+@@ -270,17 +270,17 @@ config_h = configure_file(
+ )
+ add_project_arguments('-include', 'config.h', language : 'c')
+ 
+-LIBNDCTL_CURRENT=25
+-LIBNDCTL_REVISION=1
+-LIBNDCTL_AGE=19
++LIBNDCTL_CURRENT=26
++LIBNDCTL_REVISION=0
++LIBNDCTL_AGE=20
+ 
+ LIBDAXCTL_CURRENT=6
+-LIBDAXCTL_REVISION=0
++LIBDAXCTL_REVISION=1
+ LIBDAXCTL_AGE=5
+ 
+-LIBCXL_CURRENT=1
++LIBCXL_CURRENT=2
+ LIBCXL_REVISION=0
+-LIBCXL_AGE=0
++LIBCXL_AGE=1
+ 
+ root_inc = include_directories(['.', 'ndctl', ])
+ 
+-- 
+2.27.0
+

@@ -1,0 +1,31 @@
+From 28fc84168646910a9271ebe1a12b1571e14f5900 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Thu, 7 Sep 2023 16:57:44 +0800
+Subject: [PATCH 159/165] mdadm/tests: Fix regular expression failure
+
+The test fails because of the regular expression.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ tests/06name | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/06name b/tests/06name
+index 4d5e824d..86eaab69 100644
+--- a/tests/06name
++++ b/tests/06name
+@@ -3,8 +3,8 @@ set -x
+ # create an array with a name
+ 
+ mdadm -CR $md0 -l0 -n2 --metadata=1 --name="Fred" $dev0 $dev1
+-mdadm -E $dev0 | grep 'Name : [^:]*:Fred ' > /dev/null || exit 1
+-mdadm -D $md0 | grep 'Name : [^:]*:Fred ' > /dev/null || exit 1
++mdadm -E $dev0 | grep 'Name : Fred' > /dev/null || exit 1
++mdadm -D $md0 | grep 'Name : Fred' > /dev/null || exit 1
+ mdadm -S $md0
+ 
+ mdadm -A $md0 --name="Fred" $devlist
+-- 
+2.40.1
+

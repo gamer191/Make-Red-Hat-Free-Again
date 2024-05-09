@@ -1,0 +1,29 @@
+From 39b638526d9a45d54d2d6e3f175fd7eb057ef8f0 Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:13 +0530
+Subject: [PATCH BlueZ 09/12] obex-client: Fix leaked_handle
+
+While performing static tool analysis using coverity found following
+reports for resouse leak
+
+bluez-5.64/tools/obex-client-tool.c:315: leaked_handle: Handle variable
+"sk" going out of scope leaks the handle.
+---
+ tools/obex-client-tool.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/tools/obex-client-tool.c b/tools/obex-client-tool.c
+index ab9332896..cb0e41247 100644
+--- a/tools/obex-client-tool.c
++++ b/tools/obex-client-tool.c
+@@ -312,6 +312,7 @@ static GIOChannel *unix_connect(GObexTransportType transport)
+ 	if (connect(sk, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+ 		err = errno;
+ 		g_printerr("connect: %s (%d)\n", strerror(err), err);
++		close(sk);
+ 		return NULL;
+ 	}
+ 
+-- 
+2.26.2
+

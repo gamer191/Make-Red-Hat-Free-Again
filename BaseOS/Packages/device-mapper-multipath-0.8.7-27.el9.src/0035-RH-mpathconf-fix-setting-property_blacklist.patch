@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Mon, 13 Dec 2021 14:26:30 -0600
+Subject: [PATCH] RH: mpathconf: fix setting property_blacklist
+
+If there was no blacklist_exceptions section, setting property_blacklist
+didn't work correctly. Fix it.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/mpathconf | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/multipath/mpathconf b/multipath/mpathconf
+index c00d2555..0de6b121 100644
+--- a/multipath/mpathconf
++++ b/multipath/mpathconf
+@@ -496,7 +496,15 @@ if [ "$PROPERTY" = "n" ]; then
+ 		CHANGED_CONFIG=1
+ 	fi
+ elif [ "$PROPERTY" = "y" ]; then
+-	if [ -z "$HAVE_PROPERTY" ]; then
++	if [ -z "$HAVE_PROPERTY" -a -z "$HAVE_EXCEPTIONS" ]; then
++		cat >> $TMPFILE << _EOF_
++
++blacklist_exceptions {
++	property "(SCSI_IDENT_|ID_WWN)"
++}
++_EOF_
++		CHANGED_CONFIG=1
++	elif [ -z "$HAVE_PROPERTY" ]; then
+ 		sed -i '/^blacklist_exceptions[[:space:]]*{/ a\
+ 	property "(SCSI_IDENT_|ID_WWN)"
+ ' $TMPFILE

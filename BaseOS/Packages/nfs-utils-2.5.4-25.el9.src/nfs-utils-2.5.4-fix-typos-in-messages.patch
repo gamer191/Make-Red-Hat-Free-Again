@@ -1,0 +1,199 @@
+diff --git a/support/export/v4root.c b/support/export/v4root.c
+index c12a7d85..826cc219 100644
+--- a/support/export/v4root.c
++++ b/support/export/v4root.c
+@@ -135,7 +135,7 @@ v4root_support(void)
+ 	if (!warned) {
+ 		xlog(L_WARNING, "Kernel does not have pseudo root support.");
+ 		xlog(L_WARNING, "NFS v4 mounts will be disabled unless fsid=0");
+-		xlog(L_WARNING, "is specfied in /etc/exports file.");
++		xlog(L_WARNING, "is specified in /etc/exports file.");
+ 		warned++;
+ 	}
+ 	return 0;
+diff --git a/systemd/nfs-blkmap.service b/systemd/nfs-blkmap.service
+index 6aa45ba1..57181632 100644
+--- a/systemd/nfs-blkmap.service
++++ b/systemd/nfs-blkmap.service
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=pNFS block layout mapping daemon
++Documentation=man:blkmapd(8)
+ DefaultDependencies=no
+ Conflicts=umount.target
+ After=rpc_pipefs.target
+diff --git a/systemd/nfs-idmapd.service b/systemd/nfs-idmapd.service
+index f38fe527..bf6f4ded 100644
+--- a/systemd/nfs-idmapd.service
++++ b/systemd/nfs-idmapd.service
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=NFSv4 ID-name mapping service
++Documentation=man:idmapd(8)
+ DefaultDependencies=no
+ Requires=rpc_pipefs.target
+ After=rpc_pipefs.target local-fs.target
+diff --git a/systemd/nfs-mountd.service b/systemd/nfs-mountd.service
+index e8ece533..4618fab1 100644
+--- a/systemd/nfs-mountd.service
++++ b/systemd/nfs-mountd.service
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=NFS Mount Daemon
++Documentation=man:rpc.mountd(8)
+ DefaultDependencies=no
+ Requires=proc-fs-nfsd.mount
+ Wants=network-online.target
+diff --git a/systemd/nfs-server.service b/systemd/nfs-server.service
+index 41479169..58bc0917 100644
+--- a/systemd/nfs-server.service
++++ b/systemd/nfs-server.service
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=NFS server and services
++Documentation=man:rpc.nfsd(8) man:exportfs(8)
+ DefaultDependencies=no
+ Requires=network.target proc-fs-nfsd.mount
+ Requires=nfs-mountd.service
+diff --git a/systemd/nfsdcld.service b/systemd/nfsdcld.service
+index a32d2430..3ced5658 100644
+--- a/systemd/nfsdcld.service
++++ b/systemd/nfsdcld.service
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=NFSv4 Client Tracking Daemon
++Documentation=man:nfsdcld(8)
+ DefaultDependencies=no
+ Conflicts=umount.target
+ Requires=rpc_pipefs.target proc-fs-nfsd.mount
+diff --git a/systemd/rpc-gssd.service.in b/systemd/rpc-gssd.service.in
+index 6807db35..38382ed3 100644
+--- a/systemd/rpc-gssd.service.in
++++ b/systemd/rpc-gssd.service.in
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=RPC security service for NFS client and server
++Documentation=man:rpc.gssd(8)
+ DefaultDependencies=no
+ Conflicts=umount.target
+ Requires=rpc_pipefs.target
+diff --git a/systemd/rpc-statd-notify.service b/systemd/rpc-statd-notify.service
+index aad4c0d2..962f18b2 100644
+--- a/systemd/rpc-statd-notify.service
++++ b/systemd/rpc-statd-notify.service
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=Notify NFS peers of a restart
++Documentation=man:sm-notify(8) man:rpc.statd(8)
+ DefaultDependencies=no
+ Wants=network-online.target
+ After=local-fs.target network-online.target nss-lookup.target
+diff --git a/systemd/rpc-statd.service b/systemd/rpc-statd.service
+index 392750da..660ed861 100644
+--- a/systemd/rpc-statd.service
++++ b/systemd/rpc-statd.service
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=NFS status monitor for NFSv2/3 locking.
++Documentation=man:rpc.statd(8)
+ DefaultDependencies=no
+ Conflicts=umount.target
+ Requires=nss-lookup.target rpcbind.socket
+diff --git a/systemd/rpc-svcgssd.service b/systemd/rpc-svcgssd.service
+index cb2bcd4f..401fba11 100644
+--- a/systemd/rpc-svcgssd.service
++++ b/systemd/rpc-svcgssd.service
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=RPC security service for NFS server
++Documentation=man:rpc.svcgssd(8)
+ DefaultDependencies=no
+ After=local-fs.target
+ PartOf=nfs-server.service
+diff --git a/utils/exportfs/exports.man b/utils/exportfs/exports.man
+index 83dd6807..e5fb10f5 100644
+--- a/utils/exportfs/exports.man
++++ b/utils/exportfs/exports.man
+@@ -298,7 +298,7 @@ set.
+ 
+ The
+ .I nocrossmnt
+-option can explictly disable
++option can explicitly disable
+ .I crossmnt
+ if it was previously set.  This is rarely useful.
+ .TP
+diff --git a/utils/mount/mount_libmount.c b/utils/mount/mount_libmount.c
+index aa4ac5c3..fd6cb2cb 100644
+--- a/utils/mount/mount_libmount.c
++++ b/utils/mount/mount_libmount.c
+@@ -442,7 +442,7 @@ int main(int argc, char *argv[])
+ 	mnt_init_debug(0);
+ 	cxt = mnt_new_context();
+ 	if (!cxt) {
+-		nfs_error(_("Can't initilize libmount: %s"),
++		nfs_error(_("Can't initialize libmount: %s"),
+ 					strerror(errno));
+ 		rc = EX_FAIL;
+ 		goto done;
+diff --git a/utils/mount/nfs.man b/utils/mount/nfs.man
+index dfc31a5d..fe1ad354 100644
+--- a/utils/mount/nfs.man
++++ b/utils/mount/nfs.man
+@@ -967,7 +967,7 @@ Some server features misbehave in the face of a migration-compatible
+ identification string.
+ The
+ .B nomigration
+-option retains the use of a traditional client indentification string
++option retains the use of a traditional client identification string
+ which is compatible with legacy NFS servers.
+ This is also the behavior if neither option is specified.
+ A client's open and lock state cannot be migrated transparently
+@@ -1810,7 +1810,7 @@ auxiliary services such as the NLM service can choose
+ any unused port number at random.
+ .P
+ Common firewall configurations block the well-known rpcbind port.
+-In the absense of an rpcbind service,
++In the absence of an rpcbind service,
+ the server administrator fixes the port number
+ of NFS-related services so that the firewall
+ can allow access to specific NFS service ports.
+diff --git a/utils/mount/nfsmount.conf.man b/utils/mount/nfsmount.conf.man
+index 73c3e118..7d4a33c9 100644
+--- a/utils/mount/nfsmount.conf.man
++++ b/utils/mount/nfsmount.conf.man
+@@ -43,7 +43,7 @@ and will be shifted to lower case before being passed to the filesystem.
+ .PP
+ Boolean mount options which do not need an equals sign must be given as
+ .RI \[dq] option =True".
+-Instead of preceeding such an option with
++Instead of preceding such an option with
+ .RB \[dq] no \[dq]
+ its negation must be given as
+ .RI \[dq] option =False".
+diff --git a/utils/nfsdcld/nfsdcld.man b/utils/nfsdcld/nfsdcld.man
+index 861f1c49..ee6e9dcf 100644
+--- a/utils/nfsdcld/nfsdcld.man
++++ b/utils/nfsdcld/nfsdcld.man
+@@ -198,7 +198,7 @@ initialize client tracking in the following order:  First, the \fBnfsdcld\fR upc
+ the \fBnfsdcltrack\fR usermodehelper upcall.  Finally, the legacy client tracking.
+ .PP
+ This daemon should be run as root, as the pipe that it uses to communicate
+-with the kernel is only accessable by root. The daemon however does drop all
++with the kernel is only accessible by root. The daemon however does drop all
+ superuser capabilities after starting. Because of this, the \fIstoragedir\fR
+ should be owned by root, and be readable and writable by owner.
+ .PP
+diff --git a/utils/nfsdcltrack/nfsdcltrack.man b/utils/nfsdcltrack/nfsdcltrack.man
+index cc24b7a2..3905ba46 100644
+--- a/utils/nfsdcltrack/nfsdcltrack.man
++++ b/utils/nfsdcltrack/nfsdcltrack.man
+@@ -80,7 +80,7 @@ section.  For example:
+ .br
+   storagedir = /shared/nfs/nfsdcltrack
+ .in -5
+-Debuging to syslog can also be enabled by setting "debug = 1" in this file.
++Debugging to syslog can also be enabled by setting "debug = 1" in this file.
+ .SH "LEGACY TRANSITION MECHANISM"
+ .IX Header "LEGACY TRANSITION MECHANISM"
+ The Linux kernel NFSv4 server has historically tracked this information

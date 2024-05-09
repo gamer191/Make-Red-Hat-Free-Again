@@ -1,0 +1,32 @@
+From 4bd100a8c97cfd9592be74af2e4699a2ab6d2f34 Mon Sep 17 00:00:00 2001
+From: Michal Suchanek <msuchanek@suse.de>
+Date: Thu, 10 Mar 2022 14:30:35 +0100
+Subject: [PATCH 167/217] daxctl: Fix kernel option typo in "Soft Reservation"
+ theory of operation
+
+Link: https://lore.kernel.org/r/20220310133035.GA106666@kunlun.suse.cz
+Fixes: 8f4e42c ("daxctl: Add "Soft Reservation" theory of operation")
+Signed-off-by: Michal Suchanek <msuchanek@suse.de>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/daxctl/daxctl-reconfigure-device.txt | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Documentation/daxctl/daxctl-reconfigure-device.txt b/Documentation/daxctl/daxctl-reconfigure-device.txt
+index 385c0c5..09691d2 100644
+--- a/Documentation/daxctl/daxctl-reconfigure-device.txt
++++ b/Documentation/daxctl/daxctl-reconfigure-device.txt
+@@ -91,8 +91,8 @@ details.
+ Outside of the NUMA performance details linked above the other method to
+ detect the presence of "Soft Reserved" memory is to dump /proc/iomem and
+ look for "Soft Reserved" ranges. If the kernel was not built with
+-CONFIG_EFI_SOFTRESERVE, predates the introduction of
+-CONFIG_EFI_SOFTRESERVE (v5.5), or was booted with the efi=nosoftreserve
++CONFIG_EFI_SOFT_RESERVE, predates the introduction of
++CONFIG_EFI_SOFT_RESERVE (v5.5), or was booted with the efi=nosoftreserve
+ command line then device-dax will not attach and the expectation is that
+ the memory shows up as a memory-only NUMA node. Otherwise the memory
+ shows up as a device-dax instance and DAXCTL(1) can be used to
+-- 
+2.27.0
+

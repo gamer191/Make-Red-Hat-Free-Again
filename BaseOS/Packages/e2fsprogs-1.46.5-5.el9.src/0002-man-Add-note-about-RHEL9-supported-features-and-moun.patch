@@ -1,0 +1,133 @@
+From 149067bb91ba7b3be60a1cdd326ae253176816c6 Mon Sep 17 00:00:00 2001
+From: Lukas Czerner <lczerner@redhat.com>
+Date: Wed, 18 Dec 2019 11:03:37 +0100
+Subject: [PATCH 3/4] man: Add note about RHEL9 supported features and mount
+ options
+
+Signed-off-by: Lukas Czerner <lczerner@redhat.com>
+---
+ misc/ext4.5.in   | 48 ++++++++++++++++++++++++++++++++++++++++++++++++
+ misc/mke2fs.8.in | 48 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 96 insertions(+)
+
+diff --git a/misc/ext4.5.in b/misc/ext4.5.in
+index 1db61a5f..634a6f51 100644
+--- a/misc/ext4.5.in
++++ b/misc/ext4.5.in
+@@ -19,6 +19,54 @@ previously intended for use with the ext2 and ext3 file systems can be
+ mounted using the ext4 file system driver, and indeed in many modern
+ Linux distributions, the ext4 file system driver has been configured
+ to handle mount requests for ext2 and ext3 file systems.
++.SH RED HAT ENTERPRISE LINUX 9
++The Ext4 file system is fully supported by Red Hat when using default
++mke2fs and mount options. In addition, the following non-default mke2fs
++features and mount options are also fully supported.
++.SH "Non-default features:"
++project
++.br
++quota
++.br
++mmp
++.br
++.SH "Non-default mount options:"
++bsddf|minixdf
++.br
++grpid|bsdgroups and nogrpid|sysvgroups
++.br
++resgid=n and resuid=n
++.br
++errors={continue|remount-ro|panic}
++.br
++commit=nrsec
++.br
++max_batch_time=usec
++.br
++min_batch_time=usec
++.br
++grpquota|noquota|quota|usrquota
++.br
++prjquota
++.br
++dax
++.br
++lazytime|nolazytime
++.br
++discard|nodiscard
++.br
++init_itable|noinit_itable
++.br
++jqfmt={vfsold|vfsv0|vfsv1}
++.br
++usrjquota=aquota.user|grpjquota=aquota.group
++.PP
++For more information on features and mount options, see the
++.BR ext4
++man page. Ext4 features and mount options not listed above may not be
++fully supported by Red Hat.  If your workload requires a feature or mount
++option that is not fully in this Red Hat release, contact Red Hat support
++to evaluate it for inclusion in our supported list.
+ .SH FILE SYSTEM FEATURES
+ A file system formatted for ext2, ext3, or ext4 can have some
+ collection of the following file system feature flags enabled.  Some of
+diff --git a/misc/mke2fs.8.in b/misc/mke2fs.8.in
+index e6bfc6d6..b4d44af5 100644
+--- a/misc/mke2fs.8.in
++++ b/misc/mke2fs.8.in
+@@ -204,6 +204,54 @@ overridden by the options listed below, are controlled by the
+ configuration file.  See the
+ .BR mke2fs.conf (5)
+ manual page for more details.
++.SH RED HAT ENTERPRISE LINUX 9
++The Ext4 file system is fully supported by Red Hat when using default
++mke2fs and mount options. In addition, the following non-default mke2fs
++features and mount options are also fully supported.
++.SH "Non-default features:"
++project
++.br
++quota
++.br
++mmp
++.br
++.SH "Non-default mount options:"
++bsddf|minixdf
++.br
++grpid|bsdgroups and nogrpid|sysvgroups
++.br
++resgid=n and resuid=n
++.br
++errors={continue|remount-ro|panic}
++.br
++commit=nrsec
++.br
++max_batch_time=usec
++.br
++min_batch_time=usec
++.br
++grpquota|noquota|quota|usrquota
++.br
++prjquota
++.br
++dax
++.br
++lazytime|nolazytime
++.br
++discard|nodiscard
++.br
++init_itable|noinit_itable
++.br
++jqfmt={vfsold|vfsv0|vfsv1}
++.br
++usrjquota=aquota.user|grpjquota=aquota.group
++.PP
++For more information on features and mount options, see the
++.BR ext4
++man page. Ext4 features and mount options not listed above may not be
++fully supported by Red Hat.  If your workload requires a feature or mount
++option that is not fully in this Red Hat release, contact Red Hat support
++to evaluate it for inclusion in our supported list.
+ .SH OPTIONS
+ .TP
+ .BI \-b " block-size"
+-- 
+2.31.1
+

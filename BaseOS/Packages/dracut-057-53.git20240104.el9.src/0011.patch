@@ -1,0 +1,32 @@
+From 58a310fdbfc1a7e07703c6ab9b21c43a73330a92 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Mon, 15 Aug 2022 16:32:51 +0200
+Subject: [PATCH] fix(drm): add video drivers needed on hyper-v and similar
+
+Due to non-availability of Hyper-V video driver hyperv_drm in kdump
+initramfs, the console seems to be in hang state with no text over it.
+
+We should also go through the /sys/bus/vmbus/devices and include drivers
+referenced there.
+
+(cherry picked from commit 85149b85961aa535a3c61d492cd3594794e5cc3f)
+
+Resolves: #2099502
+---
+ modules.d/50drm/module-setup.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules.d/50drm/module-setup.sh b/modules.d/50drm/module-setup.sh
+index cff0550c..1fb38677 100755
+--- a/modules.d/50drm/module-setup.sh
++++ b/modules.d/50drm/module-setup.sh
+@@ -31,7 +31,7 @@ installkernel() {
+     if [[ $hostonly ]]; then
+         local i modlink modname
+ 
+-        for i in /sys/bus/{pci/devices,platform/devices,virtio/devices,soc/devices/soc?}/*/modalias; do
++        for i in /sys/bus/{pci/devices,platform/devices,virtio/devices,soc/devices/soc?,vmbus/devices}/*/modalias; do
+             [[ -e $i ]] || continue
+             [[ -n $(< "$i") ]] || continue
+             # shellcheck disable=SC2046
+

@@ -1,0 +1,6 @@
+W: [FAILED]	././tests/shell/testcases/cache/0010_implicit_chain_0
+W: [FAILED]	././tests/shell/testcases/chains/0021prio_0
+W: [FAILED]	././tests/shell/testcases/chains/0041chain_binding_0
+W: [FAILED]	././tests/shell/testcases/maps/typeof_integer_0
+W: [FAILED]	././tests/shell/testcases/maps/typeof_raw_0
+W: [FAILED]	././tests/shell/testcases/sets/typeof_raw_0

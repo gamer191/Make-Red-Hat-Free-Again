@@ -1,0 +1,46 @@
+From b4262c8e65a4f5aa931b5451535084297968949d Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 14 Jul 2022 10:01:58 -0700
+Subject: [PATCH 176/217] cxl/list: Emit endpoint decoders filtered by memdev
+
+For example, dump all the endpoint decoders from memdev 'mem8'.
+
+    cxl list -Di -m 8 -d endpoint
+
+Link: https://lore.kernel.org/r/165781811836.1555691.1997564050287016121.stgit@dwillia2-xfh.jf.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/filter.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/cxl/filter.c b/cxl/filter.c
+index 66fd742..2f88a9d 100644
+--- a/cxl/filter.c
++++ b/cxl/filter.c
+@@ -428,7 +428,9 @@ util_cxl_decoder_filter_by_memdev(struct cxl_decoder *decoder,
+ 				  const char *ident, const char *serial)
+ {
+ 	struct cxl_ctx *ctx = cxl_decoder_get_ctx(decoder);
++	struct cxl_endpoint *endpoint;
+ 	struct cxl_memdev *memdev;
++	struct cxl_port *port;
+ 
+ 	if (!ident && !serial)
+ 		return decoder;
+@@ -438,6 +440,12 @@ util_cxl_decoder_filter_by_memdev(struct cxl_decoder *decoder,
+ 			continue;
+ 		if (cxl_decoder_get_target_by_memdev(decoder, memdev))
+ 			return decoder;
++		port = cxl_decoder_get_port(decoder);
++		if (!port || !cxl_port_is_endpoint(port))
++			continue;
++		endpoint = cxl_port_to_endpoint(port);
++		if (cxl_endpoint_get_memdev(endpoint) == memdev)
++			return decoder;
+ 	}
+ 
+ 	return NULL;
+-- 
+2.27.0
+

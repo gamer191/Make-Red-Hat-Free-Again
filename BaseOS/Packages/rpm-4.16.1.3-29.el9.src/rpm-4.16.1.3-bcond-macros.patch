@@ -1,0 +1,217 @@
+From 7b1fc619a5c828828dad7c1f61f525d957b9e2c5 Mon Sep 17 00:00:00 2001
+From: Petr Viktorin <pviktori@redhat.com>
+Date: Wed, 27 Jan 2021 17:32:51 +0100
+Subject: [PATCH] Add %bcond macro for defining build conditionals
+
+Move documentation from comments to reference manual
+Fixes: https://github.com/rpm-software-management/rpm/issues/941
+
+(cherry picked from commit a99b6373af0774f4bef62aa89defc84cfcacc078)
+---
+ macros.in                        | 54 +++++++----------------
+ tests/Makefile.am                |  1 +
+ tests/data/SPECS/bcondtest.spec  | 33 +++++++++++++++
+ tests/rpmbuild.at                | 73 ++++++++++++++++++++++++++++++++
+ 5 files changed, 157 insertions(+), 42 deletions(-)
+ create mode 100644 tests/data/SPECS/bcondtest.spec
+
+diff --git a/macros.in b/macros.in
+index 7c458f5d8a..35462c933c 100644
+--- a/macros.in
++++ b/macros.in
+@@ -78,47 +78,25 @@
+ %defined()	%{expand:%%{?%{1}:1}%%{!?%{1}:0}}
+ %undefined()	%{expand:%%{?%{1}:0}%%{!?%{1}:1}}
+ 
+-# Shorthand for %{defined with_...}
++# Handle conditional builds.
++# (see 'conditionalbuilds' in the manual)
++#
++# Internally, the `--with foo` option defines the macro `_with_foo` and the
++# `--without foo` option defines the macro `_without_foo`.
++# Based on those and a default (used when neither is given), bcond macros
++# define the macro `with_foo`, which should later be checked:
++
++%bcond()	%[ (%2)\
++    ? "%{expand:%%{!?_without_%{1}:%%global with_%{1} 1}}"\
++    : "%{expand:%%{?_with_%{1}:%%global with_%{1} 1}}"\
++]
++%bcond_with()		%bcond %{1} 0
++%bcond_without()	%bcond %{1} 1
++
++# Shorthands for %{defined with_...}:
+ %with()		%{expand:%%{?with_%{1}:1}%%{!?with_%{1}:0}}
+ %without()	%{expand:%%{?with_%{1}:0}%%{!?with_%{1}:1}}
+ 
+-# Handle conditional builds. %bcond_with is for case when feature is
+-# default off and needs to be activated with --with ... command line
+-# switch. %bcond_without is for the dual case.
+-#
+-# %bcond_with foo defines symbol with_foo if --with foo was specified on
+-# command line.
+-# %bcond_without foo defines symbol with_foo if --without foo was *not*
+-# specified on command line.
+-#
+-# For example (spec file):
+-#
+-# (at the beginning)
+-# %bcond_with extra_fonts
+-# %bcond_without static
+-# (and later)
+-# %if %{with extra_fonts}
+-# ...
+-# %else
+-# ...
+-# %endif
+-# %if ! %{with static}
+-# ...
+-# %endif
+-# %if %{with static}
+-# ...
+-# %endif
+-# %{?with_static: ... }
+-# %{!?with_static: ... }
+-# %{?with_extra_fonts: ... }
+-# %{!?with_extra_fonts: ... }
+-
+-#
+-# The bottom line: never use without_foo, _with_foo nor _without_foo, only
+-# with_foo. This way changing default set of bconds for given spec is just
+-# a matter of changing single line in it and syntax is more readable.
+-%bcond_with()		%{expand:%%{?_with_%{1}:%%global with_%{1} 1}}
+-%bcond_without()	%{expand:%%{!?_without_%{1}:%%global with_%{1} 1}}
+ #
+ #==============================================================================
+ # ---- Required rpmrc macros.
+diff --git a/tests/Makefile.am b/tests/Makefile.am
+index 66cee3273b..6d41ef93c5 100644
+--- a/tests/Makefile.am
++++ b/tests/Makefile.am
+@@ -40,6 +40,7 @@ EXTRA_DIST += $(TESTSUITE_AT)
+ 
+ ## testsuite data
+ EXTRA_DIST += data/SPECS/attrtest.spec
++EXTRA_DIST += data/SPECS/bcondtest.spec
+ EXTRA_DIST += data/SPECS/buildrequires.spec
+ EXTRA_DIST += data/SPECS/docmiss.spec
+ EXTRA_DIST += data/SPECS/hello.spec
+diff --git a/tests/data/SPECS/bcondtest.spec b/tests/data/SPECS/bcondtest.spec
+new file mode 100644
+index 0000000000..7172a31d29
+--- /dev/null
++++ b/tests/data/SPECS/bcondtest.spec
+@@ -0,0 +1,33 @@
++Name:           bcondtest
++Version:        1.0
++Release:        1
++Group:          Testing
++License:        CC0
++BuildArch:      noarch
++Summary:        Test package for the bcond macro
++
++%bcond normally_on 1
++%bcond normally_off 0
++%bcond both_features %[%{with normally_on} && %{with normally_off}]
++
++%if %{with normally_on}
++Provides:       has_bcond(normally_on)
++%endif
++%if %{with normally_off}
++Provides:       has_bcond(normally_off)
++%endif
++%if %{with both_features}
++Provides:       has_bcond(both_features)
++%endif
++
++%description
++%{summary}
++
++%install
++mkdir -p %{buildroot}/opt
++touch %{buildroot}/opt/file
++
++%files
++/opt/file
++
++%changelog
+diff --git a/tests/rpmbuild.at b/tests/rpmbuild.at
+index 30d8e6895d..f378a4af2a 100644
+--- a/tests/rpmbuild.at
++++ b/tests/rpmbuild.at
+@@ -1801,3 +1801,76 @@ runroot rpmbuild -ba --quiet      \
+ [],
+ [])
+ AT_CLEANUP
++
++AT_SETUP([bcond macro])
++AT_KEYWORDS([bcond build])
++RPMDB_INIT
++
++# basic bcond behavior with --eval
++AT_CHECK([
++runroot rpm \
++	--eval "%bcond normally_on 1" \
++	--eval "%bcond normally_off 0" \
++	--eval "%bcond both_features %[[%{with normally_on} && %{with normally_off}]]" \
++	--eval "%{with normally_on}" \
++	--eval "%{with normally_off}" \
++	--eval "%{with both_features}"
++],
++[0],
++[
++
++
++1
++0
++0
++],
++[])
++
++# bcond behavior, without CLI options
++AT_CHECK([
++runroot rpmbuild -bb --quiet /data/SPECS/bcondtest.spec
++runroot rpm -q --provides -p /build/RPMS/noarch/bcondtest-1.0-1.noarch.rpm |
++    grep has_bcond | sort
++],
++[0],
++[has_bcond(normally_on)
++],
++[])
++
++# bcond behavior, --with
++AT_CHECK([
++runroot rpmbuild -bb --quiet --with normally_on --with normally_off \
++    /data/SPECS/bcondtest.spec
++runroot rpm -q --provides -p /build/RPMS/noarch/bcondtest-1.0-1.noarch.rpm |
++    grep has_bcond | sort
++],
++[0],
++[has_bcond(both_features)
++has_bcond(normally_off)
++has_bcond(normally_on)
++],
++[])
++
++# bcond behavior, --without
++AT_CHECK([
++runroot rpmbuild -bb --quiet --without normally_on --without normally_off \
++    /data/SPECS/bcondtest.spec
++runroot rpm -q --provides -p /build/RPMS/noarch/bcondtest-1.0-1.noarch.rpm |
++    grep has_bcond | sort
++],
++[0],
++[],
++[])
++
++# bcond behavior, CLI overriding a complex defailt
++AT_CHECK([
++runroot rpmbuild -bb --quiet --with both_features /data/SPECS/bcondtest.spec
++runroot rpm -q --provides -p /build/RPMS/noarch/bcondtest-1.0-1.noarch.rpm |
++    grep has_bcond | sort
++],
++[0],
++[has_bcond(both_features)
++has_bcond(normally_on)
++],
++[])
++AT_CLEANUP

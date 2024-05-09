@@ -1,0 +1,52 @@
+autofs-5.1.8 - get rid of strlen call in handle_packet_missing_direct()
+
+From: Ian Kent <raven@themaw.net>
+
+There is a length field in struct mapent, use it.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG       |    1 +
+ daemon/direct.c |    7 +++----
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -142,6 +142,7 @@
+ - eliminate realpath from mount of submount.
+ - eliminate root param from autofs mount and umount.
+ - remove redundant fstat from do_mount_direct().
++- get rid of strlen call in handle_packet_missing_direct().
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/direct.c
++++ autofs-5.1.7/daemon/direct.c
+@@ -1288,7 +1288,7 @@ int handle_packet_missing_direct(struct
+ 	char buf[MAX_ERR_BUF];
+ 	int status = 0;
+ 	struct timespec wait;
+-	int ioctlfd, len, state;
++	int ioctlfd, state;
+ 	unsigned int kver_major = get_kver_major();
+ 	unsigned int kver_minor = get_kver_minor();
+ 
+@@ -1390,8 +1390,7 @@ int handle_packet_missing_direct(struct
+ 		return 0;
+ 	}
+ 
+-	len = strlen(me->key);
+-	if (len >= PATH_MAX) {
++	if (me->len >= PATH_MAX) {
+ 		error(ap->logopt, "direct mount path too long %s", me->key);
+ 		ops->send_fail(ap->logopt,
+ 			       ioctlfd, pkt->wait_queue_token, -ENAMETOOLONG);
+@@ -1430,7 +1429,7 @@ int handle_packet_missing_direct(struct
+ 	mt->ioctlfd = ioctlfd;
+ 	mt->mc = mc;
+ 	strcpy(mt->name, me->key);
+-	mt->len = len;
++	mt->len = me->len;
+ 	mt->dev = me->dev;
+ 	mt->type = NFY_MOUNT;
+ 	mt->uid = pkt->uid;

@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 13 Apr 2022 23:27:40 -0500
+Subject: [PATCH] libmultipath: fix eh_deadline documentation
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ multipath/multipath.conf.5 | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index 58ad5c9c..47404545 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -1637,6 +1637,8 @@ section:
+ .TP
+ .B dev_loss_tmo
+ .TP
++.B eh_deadline
++.TP
+ .B flush_on_last_del
+ .TP
+ .B user_friendly_names
+@@ -1723,6 +1725,8 @@ the values are taken from the \fIdevices\fR or \fIdefaults\fR sections:
+ .TP
+ .B dev_loss_tmo
+ .TP
++.B eh_deadline
++.TP
+ .B user_friendly_names
+ .TP
+ .B retain_attached_hw_handler

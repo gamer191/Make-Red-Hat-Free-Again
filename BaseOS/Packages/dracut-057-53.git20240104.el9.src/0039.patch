@@ -1,0 +1,24 @@
+From aaffb39dc86b674501cb447c7fef5dd40aad85fb Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Mon, 14 Aug 2023 11:25:19 +0200
+Subject: [PATCH] fix(dracut): there can be \ at the end on line in awk script
+
+Related: #2158155
+---
+ dracut.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dracut.sh b/dracut.sh
+index 1ff51bb1..30dfb229 100755
+--- a/dracut.sh
++++ b/dracut.sh
+@@ -2592,7 +2592,7 @@ if [[ $uefi == yes ]]; then
+             printf "%s " "$(< "$conf")" >> "$uefi_outdir/cmdline.txt"
+         done
+     fi
+-
++    # shellcheck disable=SC1004
+     offs=$(objdump -h "$uefi_stub" 2> /dev/null | gawk 'NF==7 {size=strtonum("0x"$3);\
+                 offset=strtonum("0x"$4)} END {print size + offset}')
+     if [[ $offs -eq 0 ]]; then
+

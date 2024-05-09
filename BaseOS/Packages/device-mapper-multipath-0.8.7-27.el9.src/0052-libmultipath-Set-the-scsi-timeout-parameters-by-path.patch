@@ -1,0 +1,497 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 13 Apr 2022 23:27:38 -0500
+Subject: [PATCH] libmultipath: Set the scsi timeout parameters by path
+
+Instead of dev_loss, fast_io_fail, and eh_deadline belonging to the
+multipath structure, have them belong to the path structure. This means
+that they are selected per path, and that sysfs_set_scsi_tmo() doesn't
+assume that all paths of a multipath device will have the same value.
+Currently they will all be the same, but a future patch will make it
+possible for paths to have different values based on their protocol.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/configure.c |   5 +-
+ libmultipath/discovery.c | 158 ++++++++++++++++++++-------------------
+ libmultipath/discovery.h |   2 +-
+ libmultipath/propsel.c   |  42 +++++------
+ libmultipath/propsel.h   |   6 +-
+ libmultipath/structs.c   |   1 -
+ libmultipath/structs.h   |   6 +-
+ 7 files changed, 112 insertions(+), 108 deletions(-)
+
+diff --git a/libmultipath/configure.c b/libmultipath/configure.c
+index 043e4232..70049f47 100644
+--- a/libmultipath/configure.c
++++ b/libmultipath/configure.c
+@@ -365,9 +365,6 @@ int setup_map(struct multipath *mpp, char **params, struct vectors *vecs)
+ 	select_mode(conf, mpp);
+ 	select_uid(conf, mpp);
+ 	select_gid(conf, mpp);
+-	select_fast_io_fail(conf, mpp);
+-	select_dev_loss(conf, mpp);
+-	select_eh_deadline(conf, mpp);
+ 	select_reservation_key(conf, mpp);
+ 	select_deferred_remove(conf, mpp);
+ 	select_marginal_path_err_sample_time(conf, mpp);
+@@ -383,7 +380,7 @@ int setup_map(struct multipath *mpp, char **params, struct vectors *vecs)
+ 	select_ghost_delay(conf, mpp);
+ 	select_flush_on_last_del(conf, mpp);
+ 
+-	sysfs_set_scsi_tmo(mpp, conf->checkint);
++	sysfs_set_scsi_tmo(conf, mpp);
+ 	marginal_pathgroups = conf->marginal_pathgroups;
+ 	pthread_cleanup_pop(1);
+ 
+diff --git a/libmultipath/discovery.c b/libmultipath/discovery.c
+index 6fb81c28..bcda8b09 100644
+--- a/libmultipath/discovery.c
++++ b/libmultipath/discovery.c
+@@ -596,13 +596,13 @@ sysfs_get_asymmetric_access_state(struct path *pp, char *buff, int buflen)
+ }
+ 
+ static int
+-sysfs_set_eh_deadline(struct multipath *mpp, struct path *pp)
++sysfs_set_eh_deadline(struct path *pp)
+ {
+ 	struct udev_device *hostdev;
+ 	char host_name[HOST_NAME_LEN], value[16];
+ 	int ret, len;
+ 
+-	if (mpp->eh_deadline == EH_DEADLINE_UNSET)
++	if (pp->eh_deadline == EH_DEADLINE_UNSET)
+ 		return 0;
+ 
+ 	sprintf(host_name, "host%d", pp->sg_id.host_no);
+@@ -611,12 +611,12 @@ sysfs_set_eh_deadline(struct multipath *mpp, struct path *pp)
+ 	if (!hostdev)
+ 		return 1;
+ 
+-	if (mpp->eh_deadline == EH_DEADLINE_OFF)
++	if (pp->eh_deadline == EH_DEADLINE_OFF)
+ 		len = sprintf(value, "off");
+-	else if (mpp->eh_deadline == EH_DEADLINE_ZERO)
++	else if (pp->eh_deadline == EH_DEADLINE_ZERO)
+ 		len = sprintf(value, "0");
+ 	else
+-		len = sprintf(value, "%d", mpp->eh_deadline);
++		len = sprintf(value, "%d", pp->eh_deadline);
+ 
+ 	ret = sysfs_attr_set_value(hostdev, "eh_deadline",
+ 				   value, len + 1);
+@@ -640,8 +640,8 @@ sysfs_set_rport_tmo(struct multipath *mpp, struct path *pp)
+ 	unsigned int tmo;
+ 	int ret;
+ 
+-	if (mpp->dev_loss == DEV_LOSS_TMO_UNSET &&
+-	    mpp->fast_io_fail == MP_FAST_IO_FAIL_UNSET)
++	if (pp->dev_loss == DEV_LOSS_TMO_UNSET &&
++	    pp->fast_io_fail == MP_FAST_IO_FAIL_UNSET)
+ 		return;
+ 
+ 	sprintf(rport_id, "rport-%d:%d-%d",
+@@ -683,14 +683,14 @@ sysfs_set_rport_tmo(struct multipath *mpp, struct path *pp)
+ 	 * then set fast_io_fail, and _then_ set dev_loss_tmo
+ 	 * to the correct value.
+ 	 */
+-	if (mpp->fast_io_fail != MP_FAST_IO_FAIL_UNSET &&
+-	    mpp->fast_io_fail != MP_FAST_IO_FAIL_ZERO &&
+-	    mpp->fast_io_fail != MP_FAST_IO_FAIL_OFF) {
++	if (pp->fast_io_fail != MP_FAST_IO_FAIL_UNSET &&
++	    pp->fast_io_fail != MP_FAST_IO_FAIL_ZERO &&
++	    pp->fast_io_fail != MP_FAST_IO_FAIL_OFF) {
+ 		/* Check if we need to temporarily increase dev_loss_tmo */
+-		if ((unsigned int)mpp->fast_io_fail >= tmo) {
++		if ((unsigned int)pp->fast_io_fail >= tmo) {
+ 			/* Increase dev_loss_tmo temporarily */
+ 			snprintf(value, sizeof(value), "%u",
+-				 (unsigned int)mpp->fast_io_fail + 1);
++				 (unsigned int)pp->fast_io_fail + 1);
+ 			ret = sysfs_attr_set_value(rport_dev, "dev_loss_tmo",
+ 						   value, strlen(value));
+ 			if (ret <= 0) {
+@@ -704,20 +704,20 @@ sysfs_set_rport_tmo(struct multipath *mpp, struct path *pp)
+ 				goto out;
+ 			}
+ 		}
+-	} else if (mpp->dev_loss > DEFAULT_DEV_LOSS_TMO &&
+-		mpp->no_path_retry != NO_PATH_RETRY_QUEUE) {
++	} else if (pp->dev_loss > DEFAULT_DEV_LOSS_TMO &&
++		   mpp->no_path_retry != NO_PATH_RETRY_QUEUE) {
+ 		condlog(2, "%s: limiting dev_loss_tmo to %d, since "
+ 			"fast_io_fail is not set",
+ 			rport_id, DEFAULT_DEV_LOSS_TMO);
+-		mpp->dev_loss = DEFAULT_DEV_LOSS_TMO;
++		pp->dev_loss = DEFAULT_DEV_LOSS_TMO;
+ 	}
+-	if (mpp->fast_io_fail != MP_FAST_IO_FAIL_UNSET) {
+-		if (mpp->fast_io_fail == MP_FAST_IO_FAIL_OFF)
++	if (pp->fast_io_fail != MP_FAST_IO_FAIL_UNSET) {
++		if (pp->fast_io_fail == MP_FAST_IO_FAIL_OFF)
+ 			sprintf(value, "off");
+-		else if (mpp->fast_io_fail == MP_FAST_IO_FAIL_ZERO)
++		else if (pp->fast_io_fail == MP_FAST_IO_FAIL_ZERO)
+ 			sprintf(value, "0");
+ 		else
+-			snprintf(value, 16, "%u", mpp->fast_io_fail);
++			snprintf(value, 16, "%u", pp->fast_io_fail);
+ 		ret = sysfs_attr_set_value(rport_dev, "fast_io_fail_tmo",
+ 					   value, strlen(value));
+ 		if (ret <= 0) {
+@@ -728,8 +728,8 @@ sysfs_set_rport_tmo(struct multipath *mpp, struct path *pp)
+ 					rport_id, value, -ret);
+ 		}
+ 	}
+-	if (mpp->dev_loss != DEV_LOSS_TMO_UNSET) {
+-		snprintf(value, 16, "%u", mpp->dev_loss);
++	if (pp->dev_loss != DEV_LOSS_TMO_UNSET) {
++		snprintf(value, 16, "%u", pp->dev_loss);
+ 		ret = sysfs_attr_set_value(rport_dev, "dev_loss_tmo",
+ 					   value, strlen(value));
+ 		if (ret <= 0) {
+@@ -745,15 +745,15 @@ out:
+ }
+ 
+ static void
+-sysfs_set_session_tmo(struct multipath *mpp, struct path *pp)
++sysfs_set_session_tmo(struct path *pp)
+ {
+ 	struct udev_device *session_dev = NULL;
+ 	char session_id[64];
+ 	char value[11];
+ 
+-	if (mpp->dev_loss != DEV_LOSS_TMO_UNSET)
++	if (pp->dev_loss != DEV_LOSS_TMO_UNSET)
+ 		condlog(3, "%s: ignoring dev_loss_tmo on iSCSI", pp->dev);
+-	if (mpp->fast_io_fail == MP_FAST_IO_FAIL_UNSET)
++	if (pp->fast_io_fail == MP_FAST_IO_FAIL_UNSET)
+ 		return;
+ 
+ 	sprintf(session_id, "session%d", pp->sg_id.transport_id);
+@@ -767,15 +767,15 @@ sysfs_set_session_tmo(struct multipath *mpp, struct path *pp)
+ 	condlog(4, "target%d:%d:%d -> %s", pp->sg_id.host_no,
+ 		pp->sg_id.channel, pp->sg_id.scsi_id, session_id);
+ 
+-	if (mpp->fast_io_fail != MP_FAST_IO_FAIL_UNSET) {
+-		if (mpp->fast_io_fail == MP_FAST_IO_FAIL_OFF) {
++	if (pp->fast_io_fail != MP_FAST_IO_FAIL_UNSET) {
++		if (pp->fast_io_fail == MP_FAST_IO_FAIL_OFF) {
+ 			condlog(3, "%s: can't switch off fast_io_fail_tmo "
+ 				"on iSCSI", pp->dev);
+-		} else if (mpp->fast_io_fail == MP_FAST_IO_FAIL_ZERO) {
++		} else if (pp->fast_io_fail == MP_FAST_IO_FAIL_ZERO) {
+ 			condlog(3, "%s: can't set fast_io_fail_tmo to '0'"
+ 				"on iSCSI", pp->dev);
+ 		} else {
+-			snprintf(value, 11, "%u", mpp->fast_io_fail);
++			snprintf(value, 11, "%u", pp->fast_io_fail);
+ 			if (sysfs_attr_set_value(session_dev, "recovery_tmo",
+ 						 value, strlen(value)) <= 0) {
+ 				condlog(3, "%s: Failed to set recovery_tmo, "
+@@ -788,14 +788,14 @@ sysfs_set_session_tmo(struct multipath *mpp, struct path *pp)
+ }
+ 
+ static void
+-sysfs_set_nexus_loss_tmo(struct multipath *mpp, struct path *pp)
++sysfs_set_nexus_loss_tmo(struct path *pp)
+ {
+ 	struct udev_device *parent, *sas_dev = NULL;
+ 	const char *end_dev_id = NULL;
+ 	char value[11];
+ 	static const char ed_str[] = "end_device-";
+ 
+-	if (!pp->udev || mpp->dev_loss == DEV_LOSS_TMO_UNSET)
++	if (!pp->udev || pp->dev_loss == DEV_LOSS_TMO_UNSET)
+ 		return;
+ 
+ 	for (parent = udev_device_get_parent(pp->udev);
+@@ -822,8 +822,8 @@ sysfs_set_nexus_loss_tmo(struct multipath *mpp, struct path *pp)
+ 	condlog(4, "target%d:%d:%d -> %s", pp->sg_id.host_no,
+ 		pp->sg_id.channel, pp->sg_id.scsi_id, end_dev_id);
+ 
+-	if (mpp->dev_loss != DEV_LOSS_TMO_UNSET) {
+-		snprintf(value, 11, "%u", mpp->dev_loss);
++	if (pp->dev_loss != DEV_LOSS_TMO_UNSET) {
++		snprintf(value, 11, "%u", pp->dev_loss);
+ 		if (sysfs_attr_set_value(sas_dev, "I_T_nexus_loss_timeout",
+ 					 value, strlen(value)) <= 0)
+ 			condlog(3, "%s: failed to update "
+@@ -835,47 +835,59 @@ sysfs_set_nexus_loss_tmo(struct multipath *mpp, struct path *pp)
+ }
+ 
+ int
+-sysfs_set_scsi_tmo (struct multipath *mpp, unsigned int checkint)
++sysfs_set_scsi_tmo (struct config *conf, struct multipath *mpp)
+ {
+ 	struct path *pp;
+ 	int i;
+-	unsigned int dev_loss_tmo = mpp->dev_loss;
+-	struct path *err_path = NULL;
++	unsigned int min_dev_loss = 0;
++	bool warn_dev_loss = false;
++	bool warn_fast_io_fail = false;
+ 
+ 	if (mpp->no_path_retry > 0) {
+ 		uint64_t no_path_retry_tmo =
+-			(uint64_t)mpp->no_path_retry * checkint;
++			(uint64_t)mpp->no_path_retry * conf->checkint;
+ 
+ 		if (no_path_retry_tmo > MAX_DEV_LOSS_TMO)
+-			no_path_retry_tmo = MAX_DEV_LOSS_TMO;
+-		if (no_path_retry_tmo > dev_loss_tmo)
+-			dev_loss_tmo = no_path_retry_tmo;
+-	} else if (mpp->no_path_retry == NO_PATH_RETRY_QUEUE) {
+-		dev_loss_tmo = MAX_DEV_LOSS_TMO;
+-	}
+-	if (mpp->dev_loss != DEV_LOSS_TMO_UNSET &&
+-	    mpp->dev_loss != dev_loss_tmo) {
+-		condlog(2, "%s: Using dev_loss_tmo=%u instead of %u because of no_path_retry setting",
+-			mpp->alias, dev_loss_tmo, mpp->dev_loss);
+-		mpp->dev_loss = dev_loss_tmo;
+-	}
+-	if (mpp->dev_loss != DEV_LOSS_TMO_UNSET &&
+-	    mpp->fast_io_fail != MP_FAST_IO_FAIL_UNSET &&
+-	    (unsigned int)mpp->fast_io_fail >= mpp->dev_loss) {
+-		condlog(3, "%s: turning off fast_io_fail (%d is not smaller than dev_loss_tmo)",
+-			mpp->alias, mpp->fast_io_fail);
+-		mpp->fast_io_fail = MP_FAST_IO_FAIL_OFF;
+-	}
+-	if (mpp->dev_loss == DEV_LOSS_TMO_UNSET &&
+-	    mpp->fast_io_fail == MP_FAST_IO_FAIL_UNSET &&
+-	    mpp->eh_deadline == EH_DEADLINE_UNSET)
+-		return 0;
++			min_dev_loss = MAX_DEV_LOSS_TMO;
++		else
++			min_dev_loss = no_path_retry_tmo;
++	} else if (mpp->no_path_retry == NO_PATH_RETRY_QUEUE)
++		min_dev_loss = MAX_DEV_LOSS_TMO;
+ 
+ 	vector_foreach_slot(mpp->paths, pp, i) {
+-		if (pp->bus != SYSFS_BUS_SCSI) {
+-			if (!err_path)
+-				err_path = pp;
++		select_fast_io_fail(conf, pp);
++		select_dev_loss(conf, pp);
++		select_eh_deadline(conf, pp);
++
++		if (pp->dev_loss == DEV_LOSS_TMO_UNSET &&
++		    pp->fast_io_fail == MP_FAST_IO_FAIL_UNSET &&
++		    pp->eh_deadline == EH_DEADLINE_UNSET)
++			continue;
++
++		if (pp->bus != SYSFS_BUS_SCSI)
++			continue;
++
++		sysfs_set_eh_deadline(pp);
++
++		if (pp->dev_loss == DEV_LOSS_TMO_UNSET &&
++		    pp->fast_io_fail == MP_FAST_IO_FAIL_UNSET)
+ 			continue;
++
++		if (pp->sg_id.proto_id != SCSI_PROTOCOL_FCP &&
++		    pp->sg_id.proto_id != SCSI_PROTOCOL_ISCSI &&
++		    pp->sg_id.proto_id != SCSI_PROTOCOL_SAS)
++			continue;
++
++		if (pp->dev_loss != DEV_LOSS_TMO_UNSET &&
++		    pp->dev_loss < min_dev_loss) {
++			warn_dev_loss = true;
++			pp->dev_loss = min_dev_loss;
++		}
++		if (pp->dev_loss != DEV_LOSS_TMO_UNSET &&
++		    pp->fast_io_fail > 0 &&
++		    (unsigned int)pp->fast_io_fail >= pp->dev_loss) {
++			warn_fast_io_fail = true;
++			pp->fast_io_fail = MP_FAST_IO_FAIL_OFF;
+ 		}
+ 
+ 		switch (pp->sg_id.proto_id) {
+@@ -883,25 +895,21 @@ sysfs_set_scsi_tmo (struct multipath *mpp, unsigned int checkint)
+ 			sysfs_set_rport_tmo(mpp, pp);
+ 			break;
+ 		case SCSI_PROTOCOL_ISCSI:
+-			sysfs_set_session_tmo(mpp, pp);
++			sysfs_set_session_tmo(pp);
+ 			break;
+ 		case SCSI_PROTOCOL_SAS:
+-			sysfs_set_nexus_loss_tmo(mpp, pp);
++			sysfs_set_nexus_loss_tmo(pp);
+ 			break;
+ 		default:
+-			if (!err_path)
+-				err_path = pp;
++			break;
+ 		}
+-		sysfs_set_eh_deadline(mpp, pp);
+-	}
+-
+-	if (err_path) {
+-		STRBUF_ON_STACK(proto_buf);
+-
+-		snprint_path_protocol(&proto_buf, err_path);
+-		condlog(2, "%s: setting dev_loss_tmo is unsupported for protocol %s",
+-			mpp->alias, get_strbuf_str(&proto_buf));
+ 	}
++	if (warn_dev_loss)
++		condlog(2, "%s: Raising dev_loss_tmo to %u because of no_path_retry setting",
++			mpp->alias, min_dev_loss);
++	if (warn_fast_io_fail)
++		condlog(3, "%s: turning off fast_io_fail (not smaller than dev_loss_tmo)",
++			mpp->alias);
+ 	return 0;
+ }
+ 
+diff --git a/libmultipath/discovery.h b/libmultipath/discovery.h
+index a5446b4d..b6eea258 100644
+--- a/libmultipath/discovery.h
++++ b/libmultipath/discovery.h
+@@ -42,7 +42,7 @@ int alloc_path_with_pathinfo (struct config *conf, struct udev_device *udevice,
+ int store_pathinfo (vector pathvec, struct config *conf,
+ 		    struct udev_device *udevice, int flag,
+ 		    struct path **pp_ptr);
+-int sysfs_set_scsi_tmo (struct multipath *mpp, unsigned int checkint);
++int sysfs_set_scsi_tmo (struct config *conf, struct multipath *mpp);
+ int sysfs_get_timeout(const struct path *pp, unsigned int *timeout);
+ int sysfs_get_host_pci_name(const struct path *pp, char *pci_name);
+ int sysfs_get_iscsi_ip_address(const struct path *pp, char *ip_address);
+diff --git a/libmultipath/propsel.c b/libmultipath/propsel.c
+index 677ab9e1..f146fe64 100644
+--- a/libmultipath/propsel.c
++++ b/libmultipath/propsel.c
+@@ -770,53 +770,53 @@ int select_minio(struct config *conf, struct multipath *mp)
+ 		return select_minio_bio(conf, mp);
+ }
+ 
+-int select_fast_io_fail(struct config *conf, struct multipath *mp)
++int select_fast_io_fail(struct config *conf, struct path *pp)
+ {
+ 	const char *origin;
+ 	STRBUF_ON_STACK(buff);
+ 
+-	mp_set_ovr(fast_io_fail);
+-	mp_set_hwe(fast_io_fail);
+-	mp_set_conf(fast_io_fail);
+-	mp_set_default(fast_io_fail, DEFAULT_FAST_IO_FAIL);
++	pp_set_ovr(fast_io_fail);
++	pp_set_hwe(fast_io_fail);
++	pp_set_conf(fast_io_fail);
++	pp_set_default(fast_io_fail, DEFAULT_FAST_IO_FAIL);
+ out:
+-	print_undef_off_zero(&buff, mp->fast_io_fail);
+-	condlog(3, "%s: fast_io_fail_tmo = %s %s", mp->alias,
++	print_undef_off_zero(&buff, pp->fast_io_fail);
++	condlog(3, "%s: fast_io_fail_tmo = %s %s", pp->dev,
+ 		get_strbuf_str(&buff), origin);
+ 	return 0;
+ }
+ 
+-int select_dev_loss(struct config *conf, struct multipath *mp)
++int select_dev_loss(struct config *conf, struct path *pp)
+ {
+ 	const char *origin;
+ 	STRBUF_ON_STACK(buff);
+ 
+-	mp_set_ovr(dev_loss);
+-	mp_set_hwe(dev_loss);
+-	mp_set_conf(dev_loss);
+-	mp->dev_loss = DEV_LOSS_TMO_UNSET;
++	pp_set_ovr(dev_loss);
++	pp_set_hwe(dev_loss);
++	pp_set_conf(dev_loss);
++	pp->dev_loss = DEV_LOSS_TMO_UNSET;
+ 	return 0;
+ out:
+-	print_dev_loss(&buff, mp->dev_loss);
+-	condlog(3, "%s: dev_loss_tmo = %s %s", mp->alias,
++	print_dev_loss(&buff, pp->dev_loss);
++	condlog(3, "%s: dev_loss_tmo = %s %s", pp->dev,
+ 		get_strbuf_str(&buff), origin);
+ 	return 0;
+ }
+ 
+-int select_eh_deadline(struct config *conf, struct multipath *mp)
++int select_eh_deadline(struct config *conf, struct path *pp)
+ {
+ 	const char *origin;
+ 	STRBUF_ON_STACK(buff);
+ 
+-	mp_set_ovr(eh_deadline);
+-	mp_set_hwe(eh_deadline);
+-	mp_set_conf(eh_deadline);
+-	mp->eh_deadline = EH_DEADLINE_UNSET;
++	pp_set_ovr(eh_deadline);
++	pp_set_hwe(eh_deadline);
++	pp_set_conf(eh_deadline);
++	pp->eh_deadline = EH_DEADLINE_UNSET;
+ 	/* not changing sysfs in default cause, so don't print anything */
+ 	return 0;
+ out:
+-	print_undef_off_zero(&buff, mp->eh_deadline);
+-	condlog(3, "%s: eh_deadline = %s %s", mp->alias,
++	print_undef_off_zero(&buff, pp->eh_deadline);
++	condlog(3, "%s: eh_deadline = %s %s", pp->dev,
+ 		get_strbuf_str(&buff), origin);
+ 	return 0;
+ }
+diff --git a/libmultipath/propsel.h b/libmultipath/propsel.h
+index 72a7e33c..152ca44c 100644
+--- a/libmultipath/propsel.h
++++ b/libmultipath/propsel.h
+@@ -16,9 +16,9 @@ int select_minio(struct config *conf, struct multipath *mp);
+ int select_mode(struct config *conf, struct multipath *mp);
+ int select_uid(struct config *conf, struct multipath *mp);
+ int select_gid(struct config *conf, struct multipath *mp);
+-int select_fast_io_fail(struct config *conf, struct multipath *mp);
+-int select_dev_loss(struct config *conf, struct multipath *mp);
+-int select_eh_deadline(struct config *conf, struct multipath *mp);
++int select_fast_io_fail(struct config *conf, struct path *pp);
++int select_dev_loss(struct config *conf, struct path *pp);
++int select_eh_deadline(struct config *conf, struct path *pp);
+ int select_reservation_key(struct config *conf, struct multipath *mp);
+ int select_retain_hwhandler (struct config *conf, struct multipath * mp);
+ int select_detect_prio(struct config *conf, struct path * pp);
+diff --git a/libmultipath/structs.c b/libmultipath/structs.c
+index d20e1eea..acd4cbeb 100644
+--- a/libmultipath/structs.c
++++ b/libmultipath/structs.c
+@@ -246,7 +246,6 @@ alloc_multipath (void)
+ 		mpp->bestpg = 1;
+ 		mpp->mpcontext = NULL;
+ 		mpp->no_path_retry = NO_PATH_RETRY_UNDEF;
+-		mpp->fast_io_fail = MP_FAST_IO_FAIL_UNSET;
+ 		dm_multipath_to_gen(mpp)->ops = &dm_gen_multipath_ops;
+ 	}
+ 	return mpp;
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index 618ff4fb..8a07d470 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -340,6 +340,9 @@ struct path {
+ 	int marginal;
+ 	int vpd_vendor_id;
+ 	int recheck_wwid;
++	int fast_io_fail;
++	unsigned int dev_loss;
++	int eh_deadline;
+ 	/* configlet pointers */
+ 	vector hwe;
+ 	struct gen_path generic_path;
+@@ -367,7 +370,6 @@ struct multipath {
+ 	int minio;
+ 	int flush_on_last_del;
+ 	int attribute_flags;
+-	int fast_io_fail;
+ 	int retain_hwhandler;
+ 	int deferred_remove;
+ 	bool in_recovery;
+@@ -385,8 +387,6 @@ struct multipath {
+ 	int needs_paths_uevent;
+ 	int ghost_delay;
+ 	int ghost_delay_tick;
+-	unsigned int dev_loss;
+-	int eh_deadline;
+ 	uid_t uid;
+ 	gid_t gid;
+ 	mode_t mode;

@@ -1,0 +1,47 @@
+From 3e4a66f0dfb02046f6d3375d637840b6da9c71d1 Mon Sep 17 00:00:00 2001
+From: michalbiesek <michal.biesek@intel.com>
+Date: Mon, 2 Dec 2019 11:21:03 +0100
+Subject: [PATCH 139/217] daxctl: provide safe versions of iteration API
+
+Add support for safe iterate through regions and devices
+
+Link: https://github.com/pmem/ndctl/pull/132
+Signed-off-by: Michal Biesek <michal.biesek@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ daxctl/libdaxctl.h | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/daxctl/libdaxctl.h b/daxctl/libdaxctl.h
+index 6b6c71f..6876037 100644
+--- a/daxctl/libdaxctl.h
++++ b/daxctl/libdaxctl.h
+@@ -93,12 +93,25 @@ int daxctl_memory_online_no_movable(struct daxctl_memory *mem);
+              dev != NULL; \
+              dev = daxctl_dev_get_next(dev))
+ 
++#define daxctl_dev_foreach_safe(region, dev, _dev) \
++        for (dev = daxctl_dev_get_first(region), \
++             _dev = dev ? daxctl_dev_get_next(dev) : NULL; \
++             dev != NULL; \
++             dev = _dev, \
++            _dev = _dev ? daxctl_dev_get_next(_dev) : NULL)
+ 
+ #define daxctl_region_foreach(ctx, region) \
+         for (region = daxctl_region_get_first(ctx); \
+              region != NULL; \
+              region = daxctl_region_get_next(region))
+ 
++#define daxctl_region_foreach_safe(ctx, region, _region) \
++        for (region = daxctl_region_get_first(ctx), \
++             _region = region ? daxctl_region_get_next(region) : NULL; \
++             region != NULL; \
++             region = _region, \
++            _region = _region ? daxctl_region_get_next(_region) : NULL)
++
+ struct daxctl_mapping;
+ struct daxctl_mapping *daxctl_mapping_get_first(struct daxctl_dev *dev);
+ struct daxctl_mapping *daxctl_mapping_get_next(struct daxctl_mapping *mapping);
+-- 
+2.27.0
+

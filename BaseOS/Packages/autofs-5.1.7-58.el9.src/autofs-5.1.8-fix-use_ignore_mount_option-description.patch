@@ -1,0 +1,56 @@
+autofs-5.1.8 - fix use_ignore_mount_option description
+
+From: Ian Kent <raven@themaw.net>
+
+Fix a couple of grammer problem with the configuration setting
+use_ignore_mount_option description.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG                      |    1 +
+ redhat/autofs.conf.default.in  |    4 ++--
+ samples/autofs.conf.default.in |    4 ++--
+ 3 files changed, 5 insertions(+), 4 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -133,6 +133,7 @@
+ - fix unterminated read in handle_cmd_pipe_fifo_message().
+ - fix memory leak in sasl_do_kinit()
+ - fix fix mount tree startup reconnect.
++- fix use_ignore_mount_option description.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/redhat/autofs.conf.default.in
++++ autofs-5.1.7/redhat/autofs.conf.default.in
+@@ -187,11 +187,11 @@ mount_nfs_default_protocol = 4
+ #disable_not_found_message = "no"
+ #
+ # use_ignore_mount_option - This option is used to enable the use of autofs
+-#			pseudo option "disable". This option is used as a
++#			pseudo option "ignore". This option is used as a
+ #			hint to user space that the mount entry should be
+ #			ommitted from mount table listings. The default is
+ #			"no" to avoid unexpected changes in behaviour and
+-#			so is an opt-in setting.
++#			is an opt-in setting.
+ #
+ #use_ignore_mount_option = no
+ #
+--- autofs-5.1.7.orig/samples/autofs.conf.default.in
++++ autofs-5.1.7/samples/autofs.conf.default.in
+@@ -186,11 +186,11 @@ browse_mode = no
+ #disable_not_found_message = "no"
+ #
+ # use_ignore_mount_option - This option is used to enable the use of autofs
+-#			pseudo option "disable". This option is used as a
++#			pseudo option "ignore". This option is used as a
+ #			hint to user space that the mount entry should be
+ #			ommitted from mount table listings. The default is
+ #			"no" to avoid unexpected changes in behaviour and
+-#			so is an opt-in setting.
++#			is an opt-in setting.
+ #
+ #use_ignore_mount_option = no
+ #

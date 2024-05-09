@@ -1,0 +1,54 @@
+autofs-5.1.8 - fix mount tree startup reconnect
+
+From: Ian Kent <raven@themaw.net>
+
+When reconnecting to an existing mount tree at startup trying to work
+out if we created the mountpoint directory uses the parent path of the
+current map entry.
+
+But if the current map entry has no parent we should use the map entry
+path.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG    |    1 +
+ lib/mounts.c |    8 +++++---
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -129,6 +129,7 @@
+ - add command pipe handling functions.
+ - switch to application wide command pipe.
+ - get rid of unused field submnt_count.
++- fix mount tree startup reconnect.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/lib/mounts.c
++++ autofs-5.1.7/lib/mounts.c
+@@ -2807,6 +2807,7 @@ static int remount_active_mount(struct a
+ int try_remount(struct autofs_point *ap, struct mapent *me, unsigned int type)
+ {
+ 	struct ioctl_ops *ops = get_ioctl_ops();
++	struct mapent *mapent;
+ 	const char *path;
+ 	int ret, fd;
+ 	dev_t devid;
+@@ -2841,12 +2842,13 @@ int try_remount(struct autofs_point *ap,
+ 	}
+ 
+ 	me->flags &= ~MOUNT_FLAG_DIR_CREATED;
++	mapent = IS_MM(me) ? MM_PARENT(me) : me;
+ 	/* Direct or offset mount, key is full path */
+-	if (MM_PARENT(me)->key[0] == '/') {
+-		if (!is_mounted(MM_PARENT(me)->key, MNTS_REAL))
++	if (mapent->key[0] == '/') {
++		if (!is_mounted(mapent->key, MNTS_REAL))
+ 			me->flags |= MOUNT_FLAG_DIR_CREATED;
+ 	} else {
+-		char *p_key = MM_PARENT(me)->key;
++		char *p_key = mapent->key;
+ 		char mp[PATH_MAX + 1];
+ 		int len;
+ 

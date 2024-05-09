@@ -1,0 +1,294 @@
+From 38e988643a085ee804b5274fc39bc8a4befe6106 Mon Sep 17 00:00:00 2001
+From: Theodore Ts'o <tytso@mit.edu>
+Date: Sat, 28 Jan 2023 01:22:29 -0500
+Subject: [PATCH] Change the xattr entry hash to use an unsighed char by
+ default
+
+Starting in Linux 6.2, char is forced to always unsigned when
+compiling the kernel, even on those platforms (such as x86) where char
+was traditionally signed.  This exposed a bug in ext4, where when
+calculating the extended attribute entry hash, we used a char value
+from the extended attribute name.  This resulted with the entry hash,
+which is stored on-disk, to variable depending on whether the plaform
+used a signed or unsigned char.
+
+Fortunately, the xattr names tend to be ASCII characters with the 8th
+bit zero, so it wasn't noticed two decades (this bugs dates back to
+the introduction of extended attribute support to ext2 in 2.5.46).
+However, when this change was made in v6.2-rc1, the inconsistency
+between the extended attribute hash calculated by e2fsprogs (which was
+still using a signed char on x86) was different from an x86 kernel,
+and this triggered a test failure in generic/454.
+
+This was fixed in kernel commit f3bbac32475b (" ext4: deal with legacy
+signed xattr name hash values"), where Linus decreed that it wasn't
+worth it to fix this the same way we had addressed has used by the
+dir_index feature.  Instead, starting in the 6.2 kernel, ext4 will
+accept both the hash calculated using signed and unsigned chars, but
+set the entry hash using the unsigned char.  This commit makes
+e2fsprogs follow suit.
+
+Signed-off-by: Theodore Ts'o <tytso@mit.edu>
+Signed-off-by: Carlos Maiolino <cmaiolino@redhat.com>
+---
+ e2fsck/pass1.c                    |  15 ++++--
+ lib/ext2fs/ext2fs.h               |   6 +++
+ lib/ext2fs/ext_attr.c             |  78 +++++++++++++++++++++++++-----
+ tests/f_ea_signed_hash/expect.1   |   7 +++
+ tests/f_ea_signed_hash/image.gz   | Bin 0 -> 1128 bytes
+ tests/f_ea_signed_hash/script     |   2 +
+ tests/f_ea_unsigned_hash/expect.1 |   7 +++
+ tests/f_ea_unsigned_hash/image.gz | Bin 0 -> 1321 bytes
+ tests/f_ea_unsigned_hash/script   |   2 +
+ 9 files changed, 102 insertions(+), 15 deletions(-)
+ create mode 100644 tests/f_ea_signed_hash/expect.1
+ create mode 100644 tests/f_ea_signed_hash/image.gz
+ create mode 100644 tests/f_ea_signed_hash/script
+ create mode 100644 tests/f_ea_unsigned_hash/expect.1
+ create mode 100644 tests/f_ea_unsigned_hash/image.gz
+ create mode 100644 tests/f_ea_unsigned_hash/script
+
+diff --git a/e2fsck/pass1.c b/e2fsck/pass1.c
+index bcf337c2..78540119 100644
+--- a/e2fsck/pass1.c
++++ b/e2fsck/pass1.c
+@@ -331,7 +331,7 @@ static problem_t check_large_ea_inode(e2fsck_t ctx,
+ 				      blk64_t *quota_blocks)
+ {
+ 	struct ext2_inode inode;
+-	__u32 hash;
++	__u32 hash, signed_hash;
+ 	errcode_t retval;
+ 
+ 	/* Check if inode is within valid range */
+@@ -343,7 +343,8 @@ static problem_t check_large_ea_inode(e2fsck_t ctx,
+ 
+ 	e2fsck_read_inode(ctx, entry->e_value_inum, &inode, "pass1");
+ 
+-	retval = ext2fs_ext_attr_hash_entry2(ctx->fs, entry, NULL, &hash);
++	retval = ext2fs_ext_attr_hash_entry3(ctx->fs, entry, NULL, &hash,
++					     &signed_hash);
+ 	if (retval) {
+ 		com_err("check_large_ea_inode", retval,
+ 			_("while hashing entry with e_value_inum = %u"),
+@@ -351,7 +352,7 @@ static problem_t check_large_ea_inode(e2fsck_t ctx,
+ 		fatal_error(ctx, 0);
+ 	}
+ 
+-	if (hash == entry->e_hash) {
++	if ((hash == entry->e_hash) || (signed_hash == entry->e_hash)) {
+ 		*quota_blocks = size_to_quota_blocks(ctx->fs,
+ 						     entry->e_value_size);
+ 	} else {
+@@ -495,7 +496,10 @@ static void check_ea_in_inode(e2fsck_t ctx, struct problem_context *pctx,
+ 			}
+ 
+ 			hash = ext2fs_ext_attr_hash_entry(entry,
+-							  start + entry->e_value_offs);
++						start + entry->e_value_offs);
++			if (entry->e_hash != 0 && entry->e_hash != hash)
++				hash = ext2fs_ext_attr_hash_entry_signed(entry,
++						start + entry->e_value_offs);
+ 
+ 			/* e_hash may be 0 in older inode's ea */
+ 			if (entry->e_hash != 0 && entry->e_hash != hash) {
+@@ -2573,6 +2577,9 @@ static int check_ext_attr(e2fsck_t ctx, struct problem_context *pctx,
+ 
+ 			hash = ext2fs_ext_attr_hash_entry(entry, block_buf +
+ 							  entry->e_value_offs);
++			if (entry->e_hash != hash)
++				hash = ext2fs_ext_attr_hash_entry_signed(entry,
++					block_buf + entry->e_value_offs);
+ 
+ 			if (entry->e_hash != hash) {
+ 				pctx->num = entry->e_hash;
+diff --git a/lib/ext2fs/ext2fs.h b/lib/ext2fs/ext2fs.h
+index 59f24ca9..b5477c10 100644
+--- a/lib/ext2fs/ext2fs.h
++++ b/lib/ext2fs/ext2fs.h
+@@ -1263,9 +1263,15 @@ extern errcode_t ext2fs_expand_dir(ext2_filsys fs, ext2_ino_t dir);
+ /* ext_attr.c */
+ extern __u32 ext2fs_ext_attr_hash_entry(struct ext2_ext_attr_entry *entry,
+ 					void *data);
++extern __u32 ext2fs_ext_attr_hash_entry_signed(struct ext2_ext_attr_entry *entry,
++					       void *data);
+ extern errcode_t ext2fs_ext_attr_hash_entry2(ext2_filsys fs,
+ 					     struct ext2_ext_attr_entry *entry,
+ 					     void *data, __u32 *hash);
++extern errcode_t ext2fs_ext_attr_hash_entry3(ext2_filsys fs,
++					     struct ext2_ext_attr_entry *entry,
++					     void *data, __u32 *hash,
++					     __u32 *signed_hash);
+ extern errcode_t ext2fs_read_ext_attr(ext2_filsys fs, blk_t block, void *buf);
+ extern errcode_t ext2fs_read_ext_attr2(ext2_filsys fs, blk64_t block,
+ 				       void *buf);
+diff --git a/lib/ext2fs/ext_attr.c b/lib/ext2fs/ext_attr.c
+index efe4d29f..5525045c 100644
+--- a/lib/ext2fs/ext_attr.c
++++ b/lib/ext2fs/ext_attr.c
+@@ -48,7 +48,8 @@ static errcode_t read_ea_inode_hash(ext2_filsys fs, ext2_ino_t ino, __u32 *hash)
+ __u32 ext2fs_ext_attr_hash_entry(struct ext2_ext_attr_entry *entry, void *data)
+ {
+ 	__u32 hash = 0;
+-	char *name = ((char *) entry) + sizeof(struct ext2_ext_attr_entry);
++	unsigned char *name = (((unsigned char *) entry) +
++			       sizeof(struct ext2_ext_attr_entry));
+ 	int n;
+ 
+ 	for (n = 0; n < entry->e_name_len; n++) {
+@@ -71,18 +72,51 @@ __u32 ext2fs_ext_attr_hash_entry(struct ext2_ext_attr_entry *entry, void *data)
+ 	return hash;
+ }
+ 
++__u32 ext2fs_ext_attr_hash_entry_signed(struct ext2_ext_attr_entry *entry,
++					void *data)
++{
++	__u32 hash = 0;
++	signed char *name = (((signed char *) entry) +
++			     sizeof(struct ext2_ext_attr_entry));
++	int n;
++
++	for (n = 0; n < entry->e_name_len; n++) {
++		hash = (hash << NAME_HASH_SHIFT) ^
++		       (hash >> (8*sizeof(hash) - NAME_HASH_SHIFT)) ^
++		       *name++;
++	}
++
++	/* The hash needs to be calculated on the data in little-endian. */
++	if (entry->e_value_inum == 0 && entry->e_value_size != 0) {
++		__u32 *value = (__u32 *)data;
++		for (n = (entry->e_value_size + EXT2_EXT_ATTR_ROUND) >>
++			 EXT2_EXT_ATTR_PAD_BITS; n; n--) {
++			hash = (hash << VALUE_HASH_SHIFT) ^
++			       (hash >> (8*sizeof(hash) - VALUE_HASH_SHIFT)) ^
++			       ext2fs_le32_to_cpu(*value++);
++		}
++	}
++
++	return hash;
++}
++
++
+ /*
+- * ext2fs_ext_attr_hash_entry2()
++ * ext2fs_ext_attr_hash_entry3()
+  *
+- * Compute the hash of an extended attribute.
+- * This version of the function supports hashing entries that reference
+- * external inodes (ea_inode feature).
++ * Compute the hash of an extended attribute.  This version of the
++ * function supports hashing entries that reference external inodes
++ * (ea_inode feature) as well as calculating the old legacy signed
++ * hash variant.
+  */
+-errcode_t ext2fs_ext_attr_hash_entry2(ext2_filsys fs,
++errcode_t ext2fs_ext_attr_hash_entry3(ext2_filsys fs,
+ 				      struct ext2_ext_attr_entry *entry,
+-				      void *data, __u32 *hash)
++				      void *data, __u32 *hash,
++				      __u32 *signed_hash)
+ {
+ 	*hash = ext2fs_ext_attr_hash_entry(entry, data);
++	if (signed_hash)
++		*signed_hash = ext2fs_ext_attr_hash_entry_signed(entry, data);
+ 
+ 	if (entry->e_value_inum) {
+ 		__u32 ea_inode_hash;
+@@ -96,10 +130,29 @@ errcode_t ext2fs_ext_attr_hash_entry2(ext2_filsys fs,
+ 		*hash = (*hash << VALUE_HASH_SHIFT) ^
+ 			(*hash >> (8*sizeof(*hash) - VALUE_HASH_SHIFT)) ^
+ 			ea_inode_hash;
++		if (signed_hash)
++			*signed_hash = (*signed_hash << VALUE_HASH_SHIFT) ^
++				(*signed_hash >> (8*sizeof(*hash) -
++						  VALUE_HASH_SHIFT)) ^
++				ea_inode_hash;
+ 	}
+ 	return 0;
+ }
+ 
++/*
++ * ext2fs_ext_attr_hash_entry2()
++ *
++ * Compute the hash of an extended attribute.
++ * This version of the function supports hashing entries that reference
++ * external inodes (ea_inode feature).
++ */
++errcode_t ext2fs_ext_attr_hash_entry2(ext2_filsys fs,
++				      struct ext2_ext_attr_entry *entry,
++				      void *data, __u32 *hash)
++{
++	return ext2fs_ext_attr_hash_entry3(fs, entry, data, hash, NULL);
++}
++
+ #undef NAME_HASH_SHIFT
+ #undef VALUE_HASH_SHIFT
+ 
+@@ -940,15 +993,18 @@ static errcode_t read_xattrs_from_buffer(struct ext2_xattr_handle *handle,
+ 
+ 		/* e_hash may be 0 in older inode's ea */
+ 		if (entry->e_hash != 0) {
+-			__u32 hash;
++			__u32 hash, signed_hash;
++
+ 			void *data = (entry->e_value_inum != 0) ?
+ 					0 : value_start + entry->e_value_offs;
+ 
+-			err = ext2fs_ext_attr_hash_entry2(handle->fs, entry,
+-							  data, &hash);
++			err = ext2fs_ext_attr_hash_entry3(handle->fs, entry,
++							  data, &hash,
++							  &signed_hash);
+ 			if (err)
+ 				return err;
+-			if (entry->e_hash != hash) {
++			if ((entry->e_hash != hash) &&
++			    (entry->e_hash != signed_hash)) {
+ 				struct ext2_inode child;
+ 
+ 				/* Check whether this is an old Lustre-style
+diff --git a/tests/f_ea_signed_hash/expect.1 b/tests/f_ea_signed_hash/expect.1
+new file mode 100644
+index 00000000..5f2b47ac
+--- /dev/null
++++ b/tests/f_ea_signed_hash/expect.1
+@@ -0,0 +1,7 @@
++Pass 1: Checking inodes, blocks, and sizes
++Pass 2: Checking directory structure
++Pass 3: Checking directory connectivity
++Pass 4: Checking reference counts
++Pass 5: Checking group summary information
++test_filesys: 16/24 files (0.0% non-contiguous), 29/200 blocks
++Exit status is 0
+diff --git a/tests/f_ea_signed_hash/script b/tests/f_ea_signed_hash/script
+new file mode 100644
+index 00000000..8ab2b9c6
+--- /dev/null
++++ b/tests/f_ea_signed_hash/script
+@@ -0,0 +1,2 @@
++ONE_PASS_ONLY="true"
++. $cmd_dir/run_e2fsck
+diff --git a/tests/f_ea_unsigned_hash/expect.1 b/tests/f_ea_unsigned_hash/expect.1
+new file mode 100644
+index 00000000..5f2b47ac
+--- /dev/null
++++ b/tests/f_ea_unsigned_hash/expect.1
+@@ -0,0 +1,7 @@
++Pass 1: Checking inodes, blocks, and sizes
++Pass 2: Checking directory structure
++Pass 3: Checking directory connectivity
++Pass 4: Checking reference counts
++Pass 5: Checking group summary information
++test_filesys: 16/24 files (0.0% non-contiguous), 29/200 blocks
++Exit status is 0
+diff --git a/tests/f_ea_unsigned_hash/script b/tests/f_ea_unsigned_hash/script
+new file mode 100644
+index 00000000..8ab2b9c6
+--- /dev/null
++++ b/tests/f_ea_unsigned_hash/script
+@@ -0,0 +1,2 @@
++ONE_PASS_ONLY="true"
++. $cmd_dir/run_e2fsck
+-- 
+2.39.3
+

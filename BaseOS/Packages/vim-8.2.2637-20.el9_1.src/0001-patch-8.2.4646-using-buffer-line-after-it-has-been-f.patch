@@ -1,0 +1,44 @@
+diff -up vim82/src/regexp_bt.c.cve1154 vim82/src/regexp_bt.c
+--- vim82/src/regexp_bt.c.cve1154	2022-04-25 15:22:28.367621755 +0200
++++ vim82/src/regexp_bt.c	2022-04-25 15:25:13.726340728 +0200
+@@ -3188,8 +3188,17 @@ regmatch(
+ 		int	mark = OPERAND(scan)[0];
+ 		int	cmp = OPERAND(scan)[1];
+ 		pos_T	*pos;
++		size_t	col = REG_MULTI ? rex.input - rex.line : 0;
+ 
+ 		pos = getmark_buf(rex.reg_buf, mark, FALSE);
++
++		// Line may have been freed, get it again.
++		if (REG_MULTI)
++		{
++		    rex.line = reg_getline(rex.lnum);
++		    rex.input = rex.line + col;
++		}
++
+ 		if (pos == NULL		     // mark doesn't exist
+ 			|| pos->lnum <= 0    // mark isn't set in reg_buf
+ 			|| (pos->lnum == rex.lnum + rex.reg_firstlnum
+diff -up vim82/src/testdir/test_regexp_latin.vim.cve1154 vim82/src/testdir/test_regexp_latin.vim
+--- vim82/src/testdir/test_regexp_latin.vim.cve1154	2022-04-25 15:22:28.368621752 +0200
++++ vim82/src/testdir/test_regexp_latin.vim	2022-04-25 15:26:57.515227712 +0200
+@@ -954,4 +954,19 @@ func Test_using_visual_position()
+   bwipe!
+ endfunc
+ 
++func Test_using_mark_position()
++  " this was using freed memory
++  " new engine
++  new
++  norm O0
++  call assert_fails("s/\\%')", 'E486:')
++  bwipe!
++
++  " old engine
++  new
++  norm O0
++  call assert_fails("s/\\%#=1\\%')", 'E486:')
++  bwipe!
++endfunc
++
+ " vim: shiftwidth=2 sts=2 expandtab

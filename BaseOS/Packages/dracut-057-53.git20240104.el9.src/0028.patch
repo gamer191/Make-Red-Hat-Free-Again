@@ -1,0 +1,26 @@
+From cd4d4282b5dd7d30af31c41faa807dcf8de01c29 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.de>
+Date: Sat, 17 Sep 2022 00:01:07 +0200
+Subject: [PATCH] fix(nvmf): no need to load the nvme module
+
+The module "nvme" is not required for NVMeoF.
+
+Resolves: #1933787
+---
+ modules.d/95nvmf/parse-nvmf-boot-connections.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules.d/95nvmf/parse-nvmf-boot-connections.sh b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+index 39923503..cfed5ae5 100755
+--- a/modules.d/95nvmf/parse-nvmf-boot-connections.sh
++++ b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+@@ -24,7 +24,7 @@ if getargbool 0 rd.nonvmf; then
+     return 0
+ fi
+ 
+-initqueue --onetime modprobe --all -b -q nvme nvme_tcp nvme_core nvme_fabrics
++initqueue --onetime modprobe --all -b -q nvme_tcp nvme_core nvme_fabrics
+ 
+ parse_nvmf_discover() {
+     traddr="none"
+

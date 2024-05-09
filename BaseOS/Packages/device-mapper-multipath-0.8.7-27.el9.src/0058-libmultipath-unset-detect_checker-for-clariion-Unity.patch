@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 10 May 2022 14:17:22 -0500
+Subject: [PATCH] libmultipath: unset detect_checker for clariion / Unity
+ arrays
+
+Dell EMC would like to always use the emc_clariion checker. Currently
+detect_checker will switch the checker to TUR for Unity arrays.
+This can cause problems on some setups with replicated Unity LUNs,
+which are handled correctly the the emc_checker, but not the TUR
+checker.
+
+Cc: vincent.chen1@dell.com
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index d7c487b1..22ff1881 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -343,6 +343,7 @@ static struct hwentry default_hw[] = {
+ 		.no_path_retry = (300 / DEFAULT_CHECKINT),
+ 		.checker_name  = EMC_CLARIION,
+ 		.prio_name     = PRIO_EMC,
++		.detect_checker = DETECT_CHECKER_OFF,
+ 	},
+ 	{
+ 		/* Invista / VPLEX */

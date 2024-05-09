@@ -1,0 +1,50 @@
+From 0a074c5d0813df405e7a5dd55493c78099094106 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.de>
+Date: Sat, 17 Sep 2022 00:24:38 +0200
+Subject: [PATCH] feat(nvmf): set rd.neednet=1 if tcp records encountered
+
+This is currently always the case for NBFT records.
+We can do this now, as we run before parse-ip-options.sh
+
+Resolves: #1933787
+---
+ modules.d/95nvmf/parse-nvmf-boot-connections.sh | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/modules.d/95nvmf/parse-nvmf-boot-connections.sh b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+index cc545ee0..6b26f762 100755
+--- a/modules.d/95nvmf/parse-nvmf-boot-connections.sh
++++ b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+@@ -62,7 +62,9 @@ parse_nvmf_discover() {
+         warn "traddr is mandatory for $trtype"
+         return 0
+     fi
+-    if [ "$trtype" = "fc" ]; then
++    if [ "$trtype" = "tcp" ]; then
++        : > /tmp/nvmf_needs_network
++    elif [ "$trtype" = "fc" ]; then
+         if [ "$traddr" = "auto" ]; then
+             rm /etc/nvme/discovery.conf
+             return 1
+@@ -71,7 +73,7 @@ parse_nvmf_discover() {
+             warn "host traddr is mandatory for fc"
+             return 0
+         fi
+-    elif [ "$trtype" != "rdma" ] && [ "$trtype" != "tcp" ]; then
++    elif [ "$trtype" != "rdma" ]; then
+         warn "unsupported transport $trtype"
+         return 0
+     fi
+@@ -100,6 +102,11 @@ for d in $(getargs rd.nvmf.discover -d nvmf.discover=); do
+     }
+ done
+ 
++if [ -e /tmp/nvmf_needs_network ]; then
++    echo "rd.neednet=1" > /etc/cmdline.d/nvmf-neednet.conf
++    rm -f /tmp/nvmf_needs_network
++fi
++
+ # Host NQN and host id are mandatory for NVMe-oF
+ if [ -f "/etc/nvme/hostnqn" ] && [ -f "/etc/nvme/hostid" ]; then
+ 
+

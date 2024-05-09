@@ -1,0 +1,144 @@
+From dd0f63246aa75d5f53b44cbc185e88833e79976e Mon Sep 17 00:00:00 2001
+From: Andre Boscatto <andreboscatto@gmail.com>
+Date: Wed, 7 Feb 2024 12:28:28 +0100
+Subject: [PATCH] sssd: adding mail as case insensitive
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves: https://github.com/SSSD/sssd/issues/7173
+
+Reviewed-by: Iker Pedrosa <ipedrosa@redhat.com>
+Reviewed-by: Tomáš Halman <thalman@redhat.com>
+(cherry picked from commit 945cebcf72ef53ea0368f19c09e710f7fff11b51)
+---
+ src/db/sysdb_init.c    |  7 ++++++
+ src/db/sysdb_private.h |  5 +++-
+ src/db/sysdb_upgrade.c | 56 ++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 67 insertions(+), 1 deletion(-)
+
+diff --git a/src/db/sysdb_init.c b/src/db/sysdb_init.c
+index c2ea6c369..38a9cd64a 100644
+--- a/src/db/sysdb_init.c
++++ b/src/db/sysdb_init.c
+@@ -603,6 +603,13 @@ static errno_t sysdb_domain_cache_upgrade(TALLOC_CTX *mem_ctx,
+         }
+     }
+ 
++    if (strcmp(version, SYSDB_VERSION_0_23) == 0) {
++        ret = sysdb_upgrade_23(sysdb, &version);
++        if (ret != EOK) {
++            goto done;
++        }
++    }
++
+     ret = EOK;
+ done:
+     sysdb->ldb = save_ldb;
+diff --git a/src/db/sysdb_private.h b/src/db/sysdb_private.h
+index 1f55007bc..63f7b5601 100644
+--- a/src/db/sysdb_private.h
++++ b/src/db/sysdb_private.h
+@@ -23,6 +23,7 @@
+ #ifndef __INT_SYS_DB_H__
+ #define __INT_SYS_DB_H__
+ 
++#define SYSDB_VERSION_0_24 "0.24"
+ #define SYSDB_VERSION_0_23 "0.23"
+ #define SYSDB_VERSION_0_22 "0.22"
+ #define SYSDB_VERSION_0_21 "0.21"
+@@ -47,7 +48,7 @@
+ #define SYSDB_VERSION_0_2 "0.2"
+ #define SYSDB_VERSION_0_1 "0.1"
+ 
+-#define SYSDB_VERSION SYSDB_VERSION_0_23
++#define SYSDB_VERSION SYSDB_VERSION_0_24
+ 
+ #define SYSDB_BASE_LDIF \
+      "dn: @ATTRIBUTES\n" \
+@@ -60,6 +61,7 @@
+      "objectclass: CASE_INSENSITIVE\n" \
+      "ipHostNumber: CASE_INSENSITIVE\n" \
+      "ipNetworkNumber: CASE_INSENSITIVE\n" \
++     "mail: CASE_INSENSITIVE\n" \
+      "\n" \
+      "dn: @INDEXLIST\n" \
+      "@IDXATTR: cn\n" \
+@@ -191,6 +193,7 @@ int sysdb_upgrade_19(struct sysdb_ctx *sysdb, const char **ver);
+ int sysdb_upgrade_20(struct sysdb_ctx *sysdb, const char **ver);
+ int sysdb_upgrade_21(struct sysdb_ctx *sysdb, const char **ver);
+ int sysdb_upgrade_22(struct sysdb_ctx *sysdb, const char **ver);
++int sysdb_upgrade_23(struct sysdb_ctx *sysdb, const char **ver);
+ 
+ int sysdb_ts_upgrade_01(struct sysdb_ctx *sysdb, const char **ver);
+ 
+diff --git a/src/db/sysdb_upgrade.c b/src/db/sysdb_upgrade.c
+index 346a1cb0b..56083e6be 100644
+--- a/src/db/sysdb_upgrade.c
++++ b/src/db/sysdb_upgrade.c
+@@ -2718,6 +2718,62 @@ done:
+     return ret;
+ }
+ 
++int sysdb_upgrade_23(struct sysdb_ctx *sysdb, const char **ver)
++{
++    TALLOC_CTX *tmp_ctx;
++    int ret;
++    struct ldb_message *msg;
++    struct upgrade_ctx *ctx;
++
++    tmp_ctx = talloc_new(NULL);
++    if (!tmp_ctx) {
++        return ENOMEM;
++    }
++
++    ret = commence_upgrade(sysdb, sysdb->ldb, SYSDB_VERSION_0_24, &ctx);
++    if (ret) {
++        return ret;
++    }
++
++    /* Add new indexes */
++    msg = ldb_msg_new(tmp_ctx);
++    if (!msg) {
++        ret = ENOMEM;
++        goto done;
++    }
++    msg->dn = ldb_dn_new(tmp_ctx, sysdb->ldb, "@ATTRIBUTES");
++    if (!msg->dn) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    /* Case insensitive search for mail */
++    ret = ldb_msg_add_empty(msg, SYSDB_USER_EMAIL, LDB_FLAG_MOD_ADD, NULL);
++    if (ret != LDB_SUCCESS) {
++        ret = ENOMEM;
++        goto done;
++    }
++    ret = ldb_msg_add_string(msg, SYSDB_USER_EMAIL, "CASE_INSENSITIVE");
++    if (ret != LDB_SUCCESS) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = ldb_modify(sysdb->ldb, msg);
++    if (ret != LDB_SUCCESS) {
++        ret = sysdb_error_to_errno(ret);
++        goto done;
++    }
++
++    /* conversion done, update version number */
++    ret = update_version(ctx);
++
++done:
++    ret = finish_upgrade(ret, &ctx, ver);
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
+ int sysdb_ts_upgrade_01(struct sysdb_ctx *sysdb, const char **ver)
+ {
+     struct upgrade_ctx *ctx;
+-- 
+2.41.0
+

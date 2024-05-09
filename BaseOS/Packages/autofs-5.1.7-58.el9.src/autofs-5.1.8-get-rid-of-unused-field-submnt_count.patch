@@ -1,0 +1,69 @@
+autofs-5.1.8 - get rid of unused field submnt_count
+
+From: Ian Kent <raven@themaw.net>
+
+The autofs mount point struct field submnt_count is present but not
+used, remove it.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG              |    1 +
+ daemon/automount.c     |    3 ---
+ daemon/master.c        |    1 -
+ include/automount.h    |    1 -
+ modules/mount_autofs.c |    2 --
+ 5 files changed, 1 insertion(+), 7 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -128,6 +128,7 @@
+ - use device id to locate autofs_point when setting log priotity.
+ - add command pipe handling functions.
+ - switch to application wide command pipe.
++- get rid of unused field submnt_count.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/automount.c
++++ autofs-5.1.7/daemon/automount.c
+@@ -1741,9 +1741,6 @@ static void handle_mounts_cleanup(void *
+ 	if (submount) {
+ 		struct mnt_list *mnt;
+ 
+-		/* We are finishing up */
+-		ap->parent->submnt_count--;
+-
+ 		/* Submount at ap->path belongs to parent submount list. */
+ 		mnts_remove_submount(ap->path);
+ 		/* Also remove from parent mounted list */
+--- autofs-5.1.7.orig/daemon/master.c
++++ autofs-5.1.7/daemon/master.c
+@@ -152,7 +152,6 @@ int master_add_autofs_point(struct maste
+ 
+ 	ap->parent = NULL;
+ 	ap->thid = 0;
+-	ap->submnt_count = 0;
+ 	ap->submount = submount;
+ 	INIT_LIST_HEAD(&ap->mounts);
+ 	INIT_LIST_HEAD(&ap->submounts);
+--- autofs-5.1.7.orig/include/automount.h
++++ autofs-5.1.7/include/automount.h
+@@ -566,7 +566,6 @@ struct autofs_point {
+ 	struct autofs_point *parent;	/* Owner of mounts list for submount */
+ 	struct list_head mounts;	/* List of autofs mounts at current level */
+ 	unsigned int submount;		/* Is this a submount */
+-	unsigned int submnt_count;	/* Number of submounts */
+ 	struct list_head submounts;	/* List of child submounts */
+ 	struct list_head amdmounts;	/* List of non submount amd mounts */
+ 	unsigned int shutdown;		/* Shutdown notification */
+--- autofs-5.1.7.orig/modules/mount_autofs.c
++++ autofs-5.1.7/modules/mount_autofs.c
+@@ -358,8 +358,6 @@ int mount_mount(struct autofs_point *ap,
+ 	}
+ 	nap->thid = thid;
+ 
+-	ap->submnt_count++;
+-
+ 	handle_mounts_startup_cond_destroy(&suc);
+ 
+ 	return 0;

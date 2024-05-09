@@ -1,0 +1,133 @@
+From c9c9db39354ea0c3f737378186318e9b7908e3a7 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Tue, 23 Aug 2022 18:44:35 -0600
+Subject: [PATCH 217/217] ndctl: release v74
+
+This release incorporates functionality up to the 6.0 kernel.
+
+Highlights include CXL region management, enhancements to cxl-list,
+cxl_test based unit tests for topology enumeration, and region and
+label operations, misc build fixes, iniparser include resolution,
+fixes in config parsing for ndctl-monitor, and misc documentation
+and unit test updates.
+
+Commands:
+  cxl-create-region: new command (also {enable,disable,destroy}-region)
+  cxl-list: add -v / -vv etc. options for verbosity control
+  cxl-list: new filtering options, endpoint decoder DPA listings
+  cxl-list: add decoder interleave settings, and mode
+  cxl-list: add port depth
+  cxl-list: Auto-enable 'single' mode for port listings
+  cxl-set-partition: Accept 'ram' as an alias for 'volatile'
+  cxl-disable-bus: new command
+  cxl-{reserve,free}-dpa: new commands
+  ndctl-xable-namespace: zero namespace fixes
+  ndctl-monitor: fix config parsing
+  daxctl-reconfigure-device: fix systemd escaping for policy config
+
+Tests:
+  cxl-topology.sh: new test for CXL topology enumeration
+  cxl-region-sysfs.sh: new test for the low-level CXL region ABI
+  cxl-create-region.sh: new test for region management
+  cxl-labels.sh: new test for label management commands
+
+APIs:
+  cxl_bus_disable_invalidate
+  cxl_decoder_create_pmem_region
+  cxl_decoder_get_by_name
+  cxl_decoder_get_dpa_resource
+  cxl_decoder_get_dpa_size
+  cxl_decoder_get_interleave_granularity
+  cxl_decoder_get_interleave_ways
+  cxl_decoder_get_last
+  cxl_decoder_get_max_available_extent
+  cxl_decoder_get_memdev
+  cxl_decoder_get_mode
+  cxl_decoder_get_prev
+  cxl_decoder_get_region
+  cxl_decoder_set_dpa_size
+  cxl_decoder_set_mode
+  cxl_mapping_get_decoder
+  cxl_mapping_get_first
+  cxl_mapping_get_next
+  cxl_mapping_get_position
+  cxl_mapping_get_region
+  cxl_port_get_depth
+  cxl_region_clear_all_targets
+  cxl_region_clear_target
+  cxl_region_decode_commit
+  cxl_region_decode_is_committed
+  cxl_region_decode_reset
+  cxl_region_delete
+  cxl_region_disable
+  cxl_region_enable
+  cxl_region_get_ctx
+  cxl_region_get_decoder
+  cxl_region_get_devname
+  cxl_region_get_first
+  cxl_region_get_id
+  cxl_region_get_interleave_granularity
+  cxl_region_get_interleave_ways
+  cxl_region_get_next
+  cxl_region_get_resource
+  cxl_region_get_size
+  cxl_region_get_target_decoder
+  cxl_region_get_uuid
+  cxl_region_is_enabled
+  cxl_region_set_interleave_granularity
+  cxl_region_set_interleave_ways
+  cxl_region_set_size
+  cxl_region_set_target
+  cxl_region_set_uuid
+---
+ git-version | 2 +-
+ meson.build | 8 ++++----
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/git-version b/git-version
+index bdea9a9..7d76fa1 100755
+--- a/git-version
++++ b/git-version
+@@ -19,7 +19,7 @@ dirty() {
+ 	fi
+ }
+ 
+-DEF_VER=72
++DEF_VER=74
+ 
+ LF='
+ '
+diff --git a/meson.build b/meson.build
+index 802b38c..20a646d 100644
+--- a/meson.build
++++ b/meson.build
+@@ -1,5 +1,5 @@
+ project('ndctl', 'c',
+-  version : '73',
++  version : '74',
+   license : [
+     'GPL-2.0',
+     'LGPL-2.1',
+@@ -292,16 +292,16 @@ config_h = configure_file(
+ add_project_arguments('-include', 'config.h', language : 'c')
+ 
+ LIBNDCTL_CURRENT=26
+-LIBNDCTL_REVISION=0
++LIBNDCTL_REVISION=1
+ LIBNDCTL_AGE=20
+ 
+ LIBDAXCTL_CURRENT=6
+ LIBDAXCTL_REVISION=1
+ LIBDAXCTL_AGE=5
+ 
+-LIBCXL_CURRENT=2
++LIBCXL_CURRENT=3
+ LIBCXL_REVISION=0
+-LIBCXL_AGE=1
++LIBCXL_AGE=2
+ 
+ root_inc = include_directories(['.', 'ndctl', ])
+ 
+-- 
+2.27.0
+

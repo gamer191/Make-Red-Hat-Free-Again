@@ -1,0 +1,48 @@
+From 470a64b190628574c28a266bdcf8960291463191 Mon Sep 17 00:00:00 2001
+From: Robin Jarry <rjarry@redhat.com>
+Date: Wed, 12 Jul 2023 08:51:08 +0200
+Subject: [PATCH 4/7] activate_mapping: make sure to catch all errors
+
+fprintf() is buffered and may not report an error which may be deferred
+when fflush() is called (either explicitly or internally by fclose()).
+
+Check for errors returned by fopen(), fprintf() and fclose() and add
+IRQ_FLAG_AFFINITY_UNMANAGED accordingly.
+
+Fixes: 55c5c321c73e ("arm64: Add irq aff change check For aarch64, ...")
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2184735
+Signed-off-by: Robin Jarry <rjarry@redhat.com>
+---
+ activate.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/activate.c b/activate.c
+index 6f8af27..a4112e0 100644
+--- a/activate.c
++++ b/activate.c
+@@ -75,16 +75,16 @@ static void activate_mapping(struct irq_info *info, void *data __attribute__((un
+ 	sprintf(buf, "/proc/irq/%i/smp_affinity", info->irq);
+ 	file = fopen(buf, "w");
+ 	if (!file)
+-		return;
++		goto error;
+ 
+ 	cpumask_scnprintf(buf, PATH_MAX, applied_mask);
+ 	ret = fprintf(file, "%s", buf);
+-	if (ret < 0) {
+-		log(TO_ALL, LOG_WARNING, "cannot change IRQ %i affinity, will never try again\n", info->irq);
+-		info->flags |= IRQ_FLAG_AFFINITY_UNMANAGED;
+-	}
+-	fclose(file);
++	if (fclose(file) || ret < 0)
++		goto error;
+ 	info->moved = 0; /*migration is done*/
++error:
++	log(TO_ALL, LOG_WARNING, "cannot change IRQ %i affinity, will never try again\n", info->irq);
++	info->flags |= IRQ_FLAG_AFFINITY_UNMANAGED;
+ }
+ 
+ void activate_mappings(void)
+-- 
+2.40.1
+

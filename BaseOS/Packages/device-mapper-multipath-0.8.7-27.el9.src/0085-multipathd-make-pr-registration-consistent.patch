@@ -1,0 +1,159 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 20 Dec 2022 17:41:10 -0600
+Subject: [PATCH] multipathd: make pr registration consistent
+
+multipathd was inconsistent on what it did with persistent reservations
+when a multipath device was created. If a multipath device with a
+configured reservation key was created during configure(), multipathd
+would try to read the registered keys using an active path. If it saw a
+matching key, it would set the prflag, but not attempt to register the
+key on any of the other paths.  This means that if a new path had
+appeared while multipathd was not running, it wouldn't register the key
+on this path.
+
+If the multipath device was created during ev_add_path(), multipathd
+would used the added path to check if there was a matching key and if
+there was, register the key only on the added path and then set the
+prflag. This could be problematic if the device was created with
+multiple paths, for instance because find_mutipaths was set to "yes" and
+a second path just appeared. In this case, if the device happened to be
+only registered on the second path, it would not get registered on the
+first path.
+
+If the multipath device was added to multipathd during a call to
+ev_add_map(), multipathd wouldn't set the prflag or register the key on
+any paths.
+
+After a device was created with the prflag set, if a new path appeared
+before the creation uevent, and multipathd was forced to delay adding
+it, when it finally updated the multipath device, the key would be
+registered on all paths, fixing any paths missed during creation.
+However, if a new path appeared after the creation uevent, the key would
+only be registered on that new path. Any paths that were missed on
+creation would stay missed.
+
+persistent key registration needs to be handled consistently.  This
+patch does so by making sure that however a multipath device is added to
+multipathd, it will check to see if the configured key is registered. If
+it is, multipathd will set the prflag and register the key on all the
+currently active paths.
+
+When a new path is added, multipathd will use it to check for active
+keys, as before. But if it finds a matching key and prflag isn't
+currently set, it will register the key on all paths.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ multipathd/main.c | 43 +++++++++++++++++++++++++++++--------------
+ 1 file changed, 29 insertions(+), 14 deletions(-)
+
+diff --git a/multipathd/main.c b/multipathd/main.c
+index a098f3c2..e7c17182 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -512,13 +512,26 @@ flush_map_nopaths(struct multipath *mpp, struct vectors *vecs) {
+ 	return false;
+ }
+ 
++static void
++pr_register_active_paths(struct multipath *mpp)
++{
++	unsigned int i, j;
++	struct path *pp;
++	struct pathgroup *pgp;
++
++	vector_foreach_slot (mpp->pg, pgp, i) {
++		vector_foreach_slot (pgp->paths, pp, j) {
++			if ((pp->state == PATH_UP) || (pp->state == PATH_GHOST))
++				mpath_pr_event_handle(pp);
++		}
++	}
++}
++
+ static int
+ update_map (struct multipath *mpp, struct vectors *vecs, int new_map)
+ {
+ 	int retries = 3;
+ 	char *params __attribute__((cleanup(cleanup_charp))) = NULL;
+-	struct path *pp;
+-	int i;
+ 
+ retry:
+ 	condlog(4, "%s: updating new map", mpp->alias);
+@@ -535,15 +548,6 @@ retry:
+ 
+ 	mpp->action = ACT_RELOAD;
+ 
+-	if (mpp->prflag) {
+-		vector_foreach_slot(mpp->paths, pp, i) {
+-			if ((pp->state == PATH_UP)  || (pp->state == PATH_GHOST)) {
+-				/* persistent reseravtion check*/
+-				mpath_pr_event_handle(pp);
+-			}
+-		}
+-	}
+-
+ 	if (setup_map(mpp, &params, vecs)) {
+ 		condlog(0, "%s: failed to setup new map in update", mpp->alias);
+ 		retries = -1;
+@@ -569,6 +573,11 @@ fail:
+ 
+ 	sync_map_state(mpp);
+ 
++	if (!mpp->prflag)
++		update_map_pr(mpp);
++	if (mpp->prflag)
++		pr_register_active_paths(mpp);
++
+ 	if (retries < 0)
+ 		condlog(0, "%s: failed reload in new map update", mpp->alias);
+ 	return 0;
+@@ -1073,6 +1082,7 @@ ev_add_path (struct path * pp, struct vectors * vecs, int need_do_map)
+ 	int start_waiter = 0;
+ 	int ret;
+ 	int ro;
++	unsigned char prflag = 0;
+ 
+ 	/*
+ 	 * need path UID to go any further
+@@ -1116,6 +1126,8 @@ rescan:
+ 
+ 		verify_paths(mpp);
+ 		mpp->action = ACT_RELOAD;
++		prflag = mpp->prflag;
++		mpath_pr_event_handle(pp);
+ 	} else {
+ 		if (!should_multipath(pp, vecs->pathvec, vecs->mpvec)) {
+ 			orphan_path(pp, "only one path");
+@@ -1134,9 +1146,6 @@ rescan:
+ 			goto fail; /* leave path added to pathvec */
+ 	}
+ 
+-	/* persistent reservation check*/
+-	mpath_pr_event_handle(pp);
+-
+ 	/* ro check - if new path is ro, force map to be ro as well */
+ 	ro = sysfs_get_ro(pp);
+ 	if (ro == 1)
+@@ -1201,6 +1210,10 @@ rescan:
+ 	sync_map_state(mpp);
+ 
+ 	if (retries >= 0) {
++		if (start_waiter)
++			update_map_pr(mpp);
++		if (mpp->prflag && !prflag)
++				pr_register_active_paths(mpp);
+ 		condlog(2, "%s [%s]: path added to devmap %s",
+ 			pp->dev, pp->dev_t, mpp->alias);
+ 		return 0;
+@@ -2745,6 +2758,8 @@ configure (struct vectors * vecs)
+ 		if (remember_wwid(mpp->wwid) == 1)
+ 			trigger_paths_udev_change(mpp, true);
+ 		update_map_pr(mpp);
++		if (mpp->prflag)
++			pr_register_active_paths(mpp);
+ 	}
+ 
+ 	/*

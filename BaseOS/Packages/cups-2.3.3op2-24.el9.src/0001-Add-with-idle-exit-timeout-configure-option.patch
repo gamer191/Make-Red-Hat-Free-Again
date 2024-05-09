@@ -1,0 +1,33 @@
+diff -up cups-2.3.3op2/conf/cupsd.conf.in.idleexittimeout cups-2.3.3op2/conf/cupsd.conf.in
+--- cups-2.3.3op2/conf/cupsd.conf.in.idleexittimeout	2021-02-01 22:10:25.000000000 +0100
++++ cups-2.3.3op2/conf/cupsd.conf.in	2021-11-29 11:37:02.426407322 +0100
+@@ -28,6 +28,9 @@ DefaultAuthType Basic
+ # Web interface setting...
+ WebInterface @CUPS_WEBIF@
+ 
++# Timeout after cupsd exits if idle (applied only if cupsd runs on-demand - with -l)
++IdleExitTimeout @EXIT_TIMEOUT@
++
+ # Restrict access to the server...
+ <Location />
+   Order allow,deny
+diff -up cups-2.3.3op2/config-scripts/cups-defaults.m4.idleexittimeout cups-2.3.3op2/config-scripts/cups-defaults.m4
+--- cups-2.3.3op2/config-scripts/cups-defaults.m4.idleexittimeout	2021-11-29 11:37:02.426407322 +0100
++++ cups-2.3.3op2/config-scripts/cups-defaults.m4	2021-11-29 11:39:16.629262421 +0100
+@@ -461,3 +461,16 @@ esac
+ 
+ AC_SUBST(CUPS_WEBIF)
+ AC_DEFINE_UNQUOTED(CUPS_DEFAULT_WEBIF, $CUPS_DEFAULT_WEBIF)
++
++dnl Set default value of IdleExitTimeout
++AC_ARG_WITH([idle_exit_timeout], AS_HELP_STRING([--with-idle-exit-timeout], [set the default value for IdleExitTimeout, default=60]), [
++    AS_IF([test "x$withval" = "xno"], [
++	EXIT_TIMEOUT=0
++    ], [
++	EXIT_TIMEOUT=$withval
++    ])
++], [
++    EXIT_TIMEOUT=60
++])
++
++AC_SUBST([EXIT_TIMEOUT])

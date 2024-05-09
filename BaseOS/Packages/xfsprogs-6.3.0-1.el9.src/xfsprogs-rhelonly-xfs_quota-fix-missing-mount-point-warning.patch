@@ -1,0 +1,91 @@
+From ea73527ddb9c9525e696efe0b0dc5f5c8326ec4a Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Wed, 11 Oct 2023 22:27:55 +0200
+Subject: [PATCH] xfs_quota: fix missing mount point warning
+
+When user have mounted an XFS volume, and defined project in
+/etc/projects file that points to a directory on a different volume,
+then:
+	`xfs_quota -xc "report -a" $path_to_mounted_volume'
+
+complains with:
+	"xfs_quota: cannot find mount point for path \
+`directory_from_projects': Invalid argument"
+
+unlike `xfs_quota -xc "report -a"' which works as expected and no
+warning is printed.
+
+This is happening because in the 1st call we pass to xfs_quota command
+the $path_to_mounted_volume argument which says to xfs_quota not to
+look for all mounted volumes on the system, but use only those passed
+to the command and ignore all others (This behavior is intended as an
+optimization for systems with huge number of mounted volumes). After
+that, while projects are initialized, the project's directories on
+other volumes are obviously not in searched subset of volumes and
+warning is printed.
+
+I propose to fix this behavior by conditioning the printing of warning
+only if all mounted volumes are searched.
+
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+---
+ libfrog/paths.c | 18 +++++++++++-------
+ 1 file changed, 11 insertions(+), 7 deletions(-)
+
+diff --git a/libfrog/paths.c b/libfrog/paths.c
+index abb29a237..d8c42163a 100644
+--- a/libfrog/paths.c
++++ b/libfrog/paths.c
+@@ -457,7 +457,8 @@ fs_table_insert_mount(
+ 
+ static int
+ fs_table_initialise_projects(
+-	char		*project)
++	char		*project,
++	bool		all_mps_initialised)
+ {
+ 	fs_project_path_t *path;
+ 	fs_path_t	*fs;
+@@ -473,8 +474,10 @@ fs_table_initialise_projects(
+ 			continue;
+ 		fs = fs_mount_point_from_path(path->pp_pathname);
+ 		if (!fs) {
+-			fprintf(stderr, _("%s: cannot find mount point for path `%s': %s\n"),
+-					progname, path->pp_pathname, strerror(errno));
++			if (all_mps_initialised)
++				fprintf(stderr,
++	_("%s: cannot find mount point for path `%s': %s\n"), progname,
++					path->pp_pathname, strerror(errno));
+ 			continue;
+ 		}
+ 		(void) fs_table_insert(path->pp_pathname, path->pp_prid,
+@@ -495,11 +498,12 @@ fs_table_initialise_projects(
+ 
+ static void
+ fs_table_insert_project(
+-	char		*project)
++	char		*project,
++	bool		all_mps_initialised)
+ {
+ 	int		error;
+ 
+-	error = fs_table_initialise_projects(project);
++	error = fs_table_initialise_projects(project, all_mps_initialised);
+ 	if (error)
+ 		fprintf(stderr, _("%s: cannot setup path for project %s: %s\n"),
+ 			progname, project, strerror(error));
+@@ -532,9 +536,9 @@ fs_table_initialise(
+ 	}
+ 	if (project_count) {
+ 		for (i = 0; i < project_count; i++)
+-			fs_table_insert_project(projects[i]);
++			fs_table_insert_project(projects[i], mount_count == 0);
+ 	} else {
+-		error = fs_table_initialise_projects(NULL);
++		error = fs_table_initialise_projects(NULL, mount_count == 0);
+ 		if (error)
+ 			goto out_error;
+ 	}
+-- 
+2.41.0
+

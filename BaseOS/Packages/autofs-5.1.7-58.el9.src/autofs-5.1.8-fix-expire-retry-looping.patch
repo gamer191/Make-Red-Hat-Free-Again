@@ -1,0 +1,83 @@
+autofs-5.1.8 - fix expire retry looping
+
+From: Ian Kent <raven@themaw.net>
+
+Commit aa6da48d1 (autofs-5.1.7 - eliminate count_mounts() from
+expire_proc_indirect()) stopped using the count_mounts() function
+in indirect mount expires because it can be a significant overhead
+and shouldn't be needed if the kernel expire dentry selection works
+as it should.
+
+Unfortunately there is a case where it doesn't work properly, when
+a USR1 signal is sent to the automount process it is meant to expire
+mounts regardless of the expire timeout. In this case if a mount has
+been propagated to a mount namespace and is held busy the mount will
+fail to umount and because setting the last used field of the mount
+dentry doesn't prevent the mount dentry from being selected for expire
+again immediately in this case automount will look continually.
+
+The problem occurs because the the kernel doesn't know how to check
+these propagated mounts for busyness and the init namespace automount
+process tries to expire the mount but fails and continues trying to
+expire the mount because the expire function assumes only mounts that
+are not busy will be selected for expire.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG           |    1 +
+ daemon/indirect.c   |   13 ++++++++++++-
+ include/automount.h |    2 +-
+ 3 files changed, 14 insertions(+), 2 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -156,6 +156,7 @@
+ - make open files limit configurable.
+ - fix some sss error return cases.
+ - fix incorrect matching of cached wildcard key.
++- fix expire retry looping.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/indirect.c
++++ autofs-5.1.7/daemon/indirect.c
+@@ -343,6 +343,7 @@ void *expire_proc_indirect(void *arg)
+ 	int offsets, submnts, count;
+ 	int ioctlfd, cur_state;
+ 	int status, ret, left;
++	int retries;
+ 
+ 	ea = (struct expire_args *) arg;
+ 
+@@ -490,9 +491,19 @@ void *expire_proc_indirect(void *arg)
+ 	 * If there are no more real mounts left we could still
+ 	 * have some offset mounts with no '/' offset or symlinks
+ 	 * so we need to umount or unlink them here.
++	 *
++	 * The dentry info last_used field is set to 'now' when a
++	 * dentry is selected for expire so that it isn't immediately
++	 * selected again if the expire fails. But this can't work
++	 * for immediate expires so the count_mounts() function must
++	 * be used to limit the number of expire iterations.
+ 	 */
+ 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cur_state);
+-	while (1) {
++	if (how == AUTOFS_EXP_IMMEDIATE)
++		retries = count_mounts(ap, ap->path, ap->dev);
++	else
++		retries = -1;
++	while (retries--) {
+ 		ret = ops->expire(ap->logopt, ap->ioctlfd, ap->path, how);
+ 		if (ret != 0 && errno == EAGAIN)
+ 			break;
+--- autofs-5.1.7.orig/include/automount.h
++++ autofs-5.1.7/include/automount.h
+@@ -141,7 +141,7 @@ struct autofs_point;
+ #define NEGATIVE_TIMEOUT	10
+ #define POSITIVE_TIMEOUT	120
+ #define UMOUNT_RETRIES		16
+-#define EXPIRE_RETRIES		3
++#define EXPIRE_RETRIES		1
+ 
+ struct mapent_cache {
+ 	pthread_rwlock_t rwlock;

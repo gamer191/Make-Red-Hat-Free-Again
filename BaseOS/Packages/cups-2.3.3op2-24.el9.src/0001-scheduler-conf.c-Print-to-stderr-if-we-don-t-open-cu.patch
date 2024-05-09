@@ -1,0 +1,36 @@
+From db9cecdd932e58c51d2d659f63415ad47d151717 Mon Sep 17 00:00:00 2001
+From: Zdenek Dohnal <zdohnal@redhat.com>
+Date: Fri, 1 Sep 2023 17:11:54 +0200
+Subject: [PATCH] scheduler/conf.c: Print to stderr if we don't open
+ cups-files.conf
+
+In case cupsd can't open the cups-files.conf, the error message is lost
+if journal and syslog don't exist or work on system (usually in
+containers).
+
+Log the error into stderr at this place to get the error message if
+needed.
+---
+ scheduler/conf.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/scheduler/conf.c b/scheduler/conf.c
+index b18535162..4fa7eb1df 100644
+--- a/scheduler/conf.c
++++ b/scheduler/conf.c
+@@ -811,11 +811,7 @@ cupsdReadConfiguration(void)
+     cupsdLogMessage(CUPSD_LOG_INFO, "No %s, using defaults.", CupsFilesFile);
+   else
+   {
+-#ifdef HAVE_SYSTEMD_SD_JOURNAL_H
+-    sd_journal_print(LOG_ERR, "Unable to open \"%s\" - %s", CupsFilesFile, strerror(errno));
+-#else
+-    syslog(LOG_LPR, "Unable to open \"%s\" - %s", CupsFilesFile, strerror(errno));
+-#endif /* HAVE_SYSTEMD_SD_JOURNAL_H */
++    fprintf(stderr, "Unable to read \"%s\" - %s\n", CupsFilesFile, strerror(errno));
+ 
+     return (0);
+   }
+-- 
+2.41.0
+

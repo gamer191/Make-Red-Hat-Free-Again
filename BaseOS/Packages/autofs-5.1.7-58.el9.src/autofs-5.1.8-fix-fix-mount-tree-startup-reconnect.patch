@@ -1,0 +1,45 @@
+autofs-5.1.8 - fix fix mount tree startup reconnect
+
+From: Ian Kent <raven@themaw.net>
+
+In function master_mount_mounts() commit 635b90eccee9 checks if the
+current top level mount is already running by using two things, if the
+mount handling thread id is set in the autofs mount point structure and
+if the mount point path is a mounted autofs file system.
+
+But the top level master map entry for a direct mount map is the
+reserved path "/-" and doesn't have an actual mount associated with it
+so a mounted check can't be used. But we know that top level mounts
+start in state ST_INIT and once that state is changed it never changes
+back to it. So using the presence of the mount handling thread id and
+the state not being ST_INIT is sufficient to know if this is a new
+mount or not.
+
+Fixes:  635b90eccee9 ("autofs-5.1.8 - fix mount tree startup reconnect")
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG       |    1 +
+ daemon/master.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -132,6 +132,7 @@
+ - fix mount tree startup reconnect.
+ - fix unterminated read in handle_cmd_pipe_fifo_message().
+ - fix memory leak in sasl_do_kinit()
++- fix fix mount tree startup reconnect.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/master.c
++++ autofs-5.1.7/daemon/master.c
+@@ -1553,7 +1553,7 @@ int master_mount_mounts(struct master *m
+ 		}
+ 		cache_unlock(nc);
+ cont:
+-		if (ap->thid && is_mounted(this->path, MNTS_AUTOFS))
++		if (ap->thid && ap->state != ST_INIT)
+ 			check_update_map_sources(this, master->readall);
+ 		else {
+ 			if (!master_do_mount(this)) {

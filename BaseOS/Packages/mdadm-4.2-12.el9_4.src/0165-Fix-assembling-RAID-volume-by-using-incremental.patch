@@ -1,0 +1,49 @@
+From d8d09c1633b2f06f88633ab960aa02b41a6bdfb6 Mon Sep 17 00:00:00 2001
+From: Pawel Piatkowski <pawel.piatkowski@intel.com>
+Date: Thu, 19 Oct 2023 16:35:25 +0200
+Subject: [PATCH 165/165] Fix assembling RAID volume by using incremental
+
+After change "mdadm: remove container_enough logic"
+IMSM volumes are started immediately. If volume is during
+reshape, then it will be blocked by block_subarray() during
+first mdadm -I <devname>. Assemble_container_content() for
+next disk will see the change because metadata version from
+sysfs and metadata doesn't match and will execute
+sysfs_set_array again. Then it fails to set same
+component_size, it is prohibited by kernel.
+
+If array is frozen then first sign from metadata version
+is different ("/" vs "-"), so exclude it from comparison.
+All we want is to double check that base properties are set
+and we don't need to call sysfs_set_array again.
+
+Signed-off-by: Pawel Piatkowski <pawel.piatkowski@intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ Assemble.c | 10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/Assemble.c b/Assemble.c
+index 5be58e40..0557a007 100644
+--- a/Assemble.c
++++ b/Assemble.c
+@@ -1990,12 +1990,10 @@ int assemble_container_content(struct supertype *st, int mdfd,
+ 		return 1;
+ 	}
+ 
+-	if (strcmp(sra->text_version, content->text_version) != 0) {
+-		if (content->array.major_version == -1 &&
+-		    content->array.minor_version == -2 &&
+-		    c->readonly &&
+-		    content->text_version[0] == '/')
+-			content->text_version[0] = '-';
++	/* Fill sysfs properties only if they are not set. Determine it by checking text_version
++	 * and ignoring special character on the first place.
++	 */
++	if (strcmp(sra->text_version + 1, content->text_version + 1) != 0) {
+ 		if (sysfs_set_array(content, 9003) != 0) {
+ 			sysfs_free(sra);
+ 			return 1;
+-- 
+2.40.1
+

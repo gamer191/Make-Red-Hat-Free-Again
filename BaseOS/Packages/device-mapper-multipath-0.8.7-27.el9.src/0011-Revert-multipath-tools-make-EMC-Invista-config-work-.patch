@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Wed, 20 Oct 2021 20:44:54 +0200
+Subject: [PATCH] Revert "multipath-tools: make EMC/Invista config work with
+ alua and multibus"
+
+This reverts commit 309ff281aaa07e862540d3d645a8263f3e9baaed.
+
+Mail from <Wayne.Berthiaume@dell.com>, 20210930:
+
+"OPM is no longer supported in the Dell VPLEX product. If we at Dell had
+wished to change the default device stanzas for any of our products they
+would have been done when the product and/or feature is released.
+Please remove this patch as well. It is not needed."
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index 763982cd..211087ad 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -350,9 +350,8 @@ static struct hwentry default_hw[] = {
+ 		.vendor        = "EMC",
+ 		.product       = "Invista",
+ 		.bl_product    = "LUNZ",
+-		.pgpolicy      = GROUP_BY_PRIO,
++		.pgpolicy      = MULTIBUS,
+ 		.no_path_retry = 5,
+-		.pgfailback    = -FAILBACK_IMMEDIATE,
+ 	},
+ 	{
+ 		/* XtremIO */

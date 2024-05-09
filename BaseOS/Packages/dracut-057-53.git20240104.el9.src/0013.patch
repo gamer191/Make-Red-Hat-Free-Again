@@ -1,0 +1,29 @@
+From bdd3fa585fcfa21f20d66f01568967c0d7a771d6 Mon Sep 17 00:00:00 2001
+From: Pavel Valena <pvalena@redhat.com>
+Date: Tue, 16 Aug 2022 15:21:05 +0200
+Subject: [PATCH] ci: pull request template
+
+rhel-only
+---
+ .github/pull_request_template.md | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/.github/pull_request_template.md b/.github/pull_request_template.md
+index ef281c3d..8fcf4d33 100644
+--- a/.github/pull_request_template.md
++++ b/.github/pull_request_template.md
+@@ -1,10 +1,5 @@
+-This pull request changes...
++<description/>
+ 
+-## Changes
++(cherry picked from commit ... )
+ 
+-## Checklist
+-- [ ] I have tested it locally
+-- [ ] I have reviewed and updated any documentation if relevant
+-- [ ] I am providing new code and test(s) for it
+-
+-Fixes #
++Resolves: #
+

@@ -1,0 +1,12 @@
+diff -up texinfo-6.7/tp/tests/run_parser_all.sh.orig texinfo-6.7/tp/tests/run_parser_all.sh
+--- texinfo-6.7/tp/tests/run_parser_all.sh.orig	2019-08-25 19:11:47.000000000 +0200
++++ texinfo-6.7/tp/tests/run_parser_all.sh	2021-02-02 14:36:15.290152957 +0100
+@@ -46,7 +46,7 @@ check_latex2html_and_tex4ht ()
+       if echo "$remaining" | grep '[-]init mediawiki.pm' >/dev/null; then
+        if test "$no_html2wiki" = 'yes' ; then
+          echo "S: (no html2wiki) $current"
+-         continue 2
++         return 2
+        fi
+       fi
+     fi

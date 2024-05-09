@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 10 Nov 2023 17:59:42 -0500
+Subject: [PATCH] multipathd: move resize_map() to multipathd/main.c
+
+No functional changes.
+
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipathd/cli_handlers.c | 29 -----------------------------
+ multipathd/main.c         | 29 +++++++++++++++++++++++++++++
+ multipathd/main.h         |  2 ++
+ 3 files changed, 31 insertions(+), 29 deletions(-)
+
+diff --git a/multipathd/cli_handlers.c b/multipathd/cli_handlers.c
+index b08b248f..53bebc8d 100644
+--- a/multipathd/cli_handlers.c
++++ b/multipathd/cli_handlers.c
+@@ -834,35 +834,6 @@ cli_reload(void *v, char **reply, int *len, void *data)
+ 	return reload_and_sync_map(mpp, vecs, 0);
+ }
+ 
+-int resize_map(struct multipath *mpp, unsigned long long size,
+-	       struct vectors * vecs)
+-{
+-	char *params __attribute__((cleanup(cleanup_charp))) = NULL;
+-	unsigned long long orig_size = mpp->size;
+-
+-	mpp->size = size;
+-	update_mpp_paths(mpp, vecs->pathvec);
+-	if (setup_map(mpp, &params, vecs) != 0) {
+-		condlog(0, "%s: failed to setup map for resize : %s",
+-			mpp->alias, strerror(errno));
+-		mpp->size = orig_size;
+-		return 1;
+-	}
+-	mpp->action = ACT_RESIZE;
+-	mpp->force_udev_reload = 1;
+-	if (domap(mpp, params, 1) == DOMAP_FAIL) {
+-		condlog(0, "%s: failed to resize map : %s", mpp->alias,
+-			strerror(errno));
+-		mpp->size = orig_size;
+-		return 1;
+-	}
+-	if (setup_multipath(vecs, mpp) != 0)
+-		return 2;
+-	sync_map_state(mpp);
+-
+-	return 0;
+-}
+-
+ int
+ cli_resize(void *v, char **reply, int *len, void *data)
+ {
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 075e7b13..d99cad72 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -1379,6 +1379,35 @@ needs_ro_update(struct multipath *mpp, int ro)
+ 	return true;
+ }
+ 
++int resize_map(struct multipath *mpp, unsigned long long size,
++	       struct vectors * vecs)
++{
++	char *params __attribute__((cleanup(cleanup_charp))) = NULL;
++	unsigned long long orig_size = mpp->size;
++
++	mpp->size = size;
++	update_mpp_paths(mpp, vecs->pathvec);
++	if (setup_map(mpp, &params, vecs) != 0) {
++		condlog(0, "%s: failed to setup map for resize : %s",
++			mpp->alias, strerror(errno));
++		mpp->size = orig_size;
++		return 1;
++	}
++	mpp->action = ACT_RESIZE;
++	mpp->force_udev_reload = 1;
++	if (domap(mpp, params, 1) == DOMAP_FAIL) {
++		condlog(0, "%s: failed to resize map : %s", mpp->alias,
++			strerror(errno));
++		mpp->size = orig_size;
++		return 1;
++	}
++	if (setup_multipath(vecs, mpp) != 0)
++		return 2;
++	sync_map_state(mpp);
++
++	return 0;
++}
++
+ static int
+ uev_update_path (struct uevent *uev, struct vectors * vecs)
+ {
+diff --git a/multipathd/main.h b/multipathd/main.h
+index bc1f938f..dbae4935 100644
+--- a/multipathd/main.h
++++ b/multipathd/main.h
+@@ -66,4 +66,6 @@ int reload_and_sync_map(struct multipath *mpp, struct vectors *vecs,
+ 
+ void handle_path_wwid_change(struct path *pp, struct vectors *vecs);
+ bool check_path_wwid_change(struct path *pp);
++int resize_map(struct multipath *mpp, unsigned long long size,
++	       struct vectors *vecs);
+ #endif /* MAIN_H */

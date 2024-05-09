@@ -1,0 +1,66 @@
+From b4233bca181580800b483a228ca5377efcfeb844 Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:05 +0530
+Subject: [PATCH BlueZ 01/12] client/gatt: Fix memory leak issues
+
+While performing the static tool analysis using coverity tool
+found following reports
+
+Error: RESOURCE_LEAK (CWE-772):
+bluez-5.64/client/gatt.c:1531: leaked_storage: Variable "service"
+going out of scope leaks the storage it points to.
+
+Error: RESOURCE_LEAK (CWE-772):
+bluez-5.64/client/gatt.c:2626: leaked_storage: Variable "chrc"
+going out of scope leaks the storage it points to.
+
+Error: RESOURCE_LEAK (CWE-772):
+bluez-5.64/client/gatt.c:2906: leaked_storage: Variable "desc"
+going out of scope leaks the storage it points to.
+---
+ client/gatt.c | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/client/gatt.c b/client/gatt.c
+index 13872c794..4c1efaf75 100644
+--- a/client/gatt.c
++++ b/client/gatt.c
+@@ -1527,8 +1527,10 @@ void gatt_register_service(DBusConnection *conn, GDBusProxy *proxy,
+ 
+ 	if (argc > 2) {
+ 		service->handle = parse_handle(argv[2]);
+-		if (!service->handle)
++		if (!service->handle) {
++			service_free(service);
+ 			return bt_shell_noninteractive_quit(EXIT_FAILURE);
++		}
+ 	}
+ 
+ 	if (g_dbus_register_interface(conn, service->path,
+@@ -2622,8 +2624,10 @@ void gatt_register_chrc(DBusConnection *conn, GDBusProxy *proxy,
+ 
+ 	if (argc > 3) {
+ 		chrc->handle = parse_handle(argv[3]);
+-		if (!chrc->handle)
++		if (!chrc->handle) {
++			chrc_free(chrc);
+ 			return bt_shell_noninteractive_quit(EXIT_FAILURE);
++		}
+ 	}
+ 
+ 	if (g_dbus_register_interface(conn, chrc->path, CHRC_INTERFACE,
+@@ -2902,8 +2906,10 @@ void gatt_register_desc(DBusConnection *conn, GDBusProxy *proxy,
+ 
+ 	if (argc > 3) {
+ 		desc->handle = parse_handle(argv[3]);
+-		if (!desc->handle)
++		if (!desc->handle) {
++			desc_free(desc);
+ 			return bt_shell_noninteractive_quit(EXIT_FAILURE);
++		}
+ 	}
+ 
+ 	if (g_dbus_register_interface(conn, desc->path, DESC_INTERFACE,
+-- 
+2.26.2
+

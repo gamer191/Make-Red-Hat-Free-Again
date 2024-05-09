@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Mon, 30 Jan 2023 19:54:19 -0600
+Subject: [PATCH] libmultipath: use select_reload_action in select_action
+
+Since we have a function to set the action to reload, use it.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/configure.c | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/libmultipath/configure.c b/libmultipath/configure.c
+index 193bf27d..09d7de0f 100644
+--- a/libmultipath/configure.c
++++ b/libmultipath/configure.c
+@@ -771,9 +771,7 @@ void select_action (struct multipath *mpp, const struct _vector *curmp,
+ 
+ 	if (force_reload) {
+ 		mpp->force_udev_reload = 1;
+-		mpp->action = ACT_RELOAD;
+-		condlog(3, "%s: set ACT_RELOAD (forced by user)",
+-			mpp->alias);
++		select_reload_action(mpp, "forced by user");
+ 		return;
+ 	}
+ 	if (cmpp->size != mpp->size) {
+@@ -786,9 +784,7 @@ void select_action (struct multipath *mpp, const struct _vector *curmp,
+ 
+ 	if (!is_udev_ready(cmpp) && count_active_paths(mpp) > 0) {
+ 		mpp->force_udev_reload = 1;
+-		mpp->action = ACT_RELOAD;
+-		condlog(3, "%s: set ACT_RELOAD (udev incomplete)",
+-			mpp->alias);
++		select_reload_action(mpp, "udev incomplete");
+ 		return;
+ 	}
+ 

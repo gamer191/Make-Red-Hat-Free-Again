@@ -1,0 +1,427 @@
+diff --git a/support/export/cache.c b/support/export/cache.c
+index a5823e92..396b3b73 100644
+--- a/support/export/cache.c
++++ b/support/export/cache.c
+@@ -932,6 +932,7 @@ static void write_fsloc(char **bp, int *blen, struct exportent *ep)
+ 	release_replicas(servers);
+ }
+ #endif
++
+ static void write_secinfo(char **bp, int *blen, struct exportent *ep, int flag_mask)
+ {
+ 	struct sec_entry *p;
+@@ -949,7 +950,20 @@ static void write_secinfo(char **bp, int *blen, struct exportent *ep, int flag_m
+ 		qword_addint(bp, blen, p->flav->fnum);
+ 		qword_addint(bp, blen, p->flags & flag_mask);
+ 	}
++}
++
++static void write_xprtsec(char **bp, int *blen, struct exportent *ep)
++{
++	struct xprtsec_entry *p;
++
++	for (p = ep->e_xprtsec; p->info; p++);
++	if (p == ep->e_xprtsec)
++		return;
+ 
++	qword_add(bp, blen, "xprtsec");
++	qword_addint(bp, blen, p - ep->e_xprtsec);
++	for (p = ep->e_xprtsec; p->info; p++)
++		qword_addint(bp, blen, p->info->number);
+ }
+ 
+ static int dump_to_cache(int f, char *buf, int blen, char *domain,
+@@ -992,6 +1006,7 @@ static int dump_to_cache(int f, char *buf, int blen, char *domain,
+ 			qword_add(&bp, &blen, "uuid");
+ 			qword_addhex(&bp, &blen, u, 16);
+ 		}
++		write_xprtsec(&bp, &blen, exp);
+ 		xlog(D_AUTH, "granted access to %s for %s",
+ 		     path, *domain == '$' ? domain+1 : domain);
+ 	} else {
+diff --git a/support/include/nfs/export.h b/support/include/nfs/export.h
+index 0eca828e..be5867cf 100644
+--- a/support/include/nfs/export.h
++++ b/support/include/nfs/export.h
+@@ -40,4 +40,18 @@
+ #define NFSEXP_OLD_SECINFO_FLAGS (NFSEXP_READONLY | NFSEXP_ROOTSQUASH \
+ 					| NFSEXP_ALLSQUASH)
+ 
++/*
++ * Transport layer security policies that are permitted to access
++ * an export
++ */
++#define NFSEXP_XPRTSEC_NONE	0x0001
++#define NFSEXP_XPRTSEC_TLS	0x0002
++#define NFSEXP_XPRTSEC_MTLS	0x0004
++
++#define NFSEXP_XPRTSEC_NUM	(3)
++
++#define NFSEXP_XPRTSEC_ALL	(NFSEXP_XPRTSEC_NONE | \
++				 NFSEXP_XPRTSEC_TLS | \
++				 NFSEXP_XPRTSEC_MTLS)
++
+ #endif /* _NSF_EXPORT_H */
+diff --git a/support/include/nfslib.h b/support/include/nfslib.h
+index 6faba71b..61c19933 100644
+--- a/support/include/nfslib.h
++++ b/support/include/nfslib.h
+@@ -62,6 +62,18 @@ struct sec_entry {
+ 	int flags;
+ };
+ 
++#define XPRTSECMODE_COUNT 3
++
++struct xprtsec_info {
++	const char		*name;
++	int			number;
++};
++
++struct xprtsec_entry {
++	const struct xprtsec_info *info;
++	int			flags;
++};
++
+ /*
+  * Data related to a single exports entry as returned by getexportent.
+  * FIXME: export options should probably be parsed at a later time to
+@@ -83,6 +95,7 @@ struct exportent {
+ 	char *          e_fslocdata;
+ 	char *		e_uuid;
+ 	struct sec_entry e_secinfo[SECFLAVOR_COUNT+1];
++	struct xprtsec_entry e_xprtsec[XPRTSECMODE_COUNT + 1];
+ 	unsigned int	e_ttl;
+ 	char *		e_realpath;
+ };
+@@ -99,6 +112,7 @@ struct rmtabent {
+ void			setexportent(char *fname, char *type);
+ struct exportent *	getexportent(int,int);
+ void 			secinfo_show(FILE *fp, struct exportent *ep);
++void			xprtsecinfo_show(FILE *fp, struct exportent *ep);
+ void			putexportent(struct exportent *xep);
+ void			endexportent(void);
+ struct exportent *	mkexportent(char *hname, char *path, char *opts);
+diff --git a/support/nfs/exports.c b/support/nfs/exports.c
+index ec6f8013..d36f7664 100644
+--- a/support/nfs/exports.c
++++ b/support/nfs/exports.c
+@@ -99,6 +99,7 @@ static void init_exportent (struct exportent *ee, int fromkernel)
+ 	ee->e_fslocmethod = FSLOC_NONE;
+ 	ee->e_fslocdata = NULL;
+ 	ee->e_secinfo[0].flav = NULL;
++	ee->e_xprtsec[0].info = NULL;
+ 	ee->e_nsquids = 0;
+ 	ee->e_nsqgids = 0;
+ 	ee->e_uuid = NULL;
+@@ -122,7 +123,7 @@ getexportent(int fromkernel, int fromexports)
+ 	if (first || (ok = getexport(exp, sizeof(exp))) == 0) {
+ 		has_default_opts = 0;
+ 		has_default_subtree_opts = 0;
+-	
++
+ 		init_exportent(&def_ee, fromkernel);
+ 
+ 		ok = getpath(def_ee.e_path, sizeof(def_ee.e_path));
+@@ -146,7 +147,7 @@ getexportent(int fromkernel, int fromexports)
+ 	if (exp[0] == '-' && !fromkernel) {
+ 		if (parseopts(exp + 1, &def_ee, 0, &has_default_subtree_opts) < 0)
+ 			return NULL;
+-		
++
+ 		has_default_opts = 1;
+ 
+ 		ok = getexport(exp, sizeof(exp));
+@@ -239,7 +240,6 @@ void secinfo_show(FILE *fp, struct exportent *ep)
+ 	if (ep->e_secinfo[0].flav == NULL)
+ 		secinfo_addflavor(find_flavor("sys"), ep);
+ 	for (p1=ep->e_secinfo; p1->flav; p1=p2) {
+-
+ 		fprintf(fp, ",sec=%s", p1->flav->flavour);
+ 		for (p2=p1+1; (p2->flav != NULL) && (p1->flags == p2->flags);
+ 								p2++) {
+@@ -249,6 +249,17 @@ void secinfo_show(FILE *fp, struct exportent *ep)
+ 	}
+ }
+ 
++void xprtsecinfo_show(FILE *fp, struct exportent *ep)
++{
++	struct xprtsec_entry *p1, *p2;
++
++	for (p1 = ep->e_xprtsec; p1->info; p1 = p2) {
++		fprintf(fp, ",xprtsec=%s", p1->info->name);
++		for (p2 = p1 + 1; p2->info && (p1->flags == p2->flags); p2++)
++			fprintf(fp, ":%s", p2->info->name);
++	}
++}
++
+ static void
+ fprintpath(FILE *fp, const char *path)
+ {
+@@ -345,6 +356,7 @@ putexportent(struct exportent *ep)
+ 	}
+ 	fprintf(fp, "anonuid=%d,anongid=%d", ep->e_anonuid, ep->e_anongid);
+ 	secinfo_show(fp, ep);
++	xprtsecinfo_show(fp, ep);
+ 	fprintf(fp, ")\n");
+ }
+ 
+@@ -483,6 +495,75 @@ static unsigned int parse_flavors(char *str, struct exportent *ep)
+ 	return out;
+ }
+ 
++static const struct xprtsec_info xprtsec_name2info[] = {
++	{ "none",	NFSEXP_XPRTSEC_NONE },
++	{ "tls",	NFSEXP_XPRTSEC_TLS },
++	{ "mtls",	NFSEXP_XPRTSEC_MTLS },
++	{ NULL,		0 }
++};
++
++static const struct xprtsec_info *find_xprtsec_info(const char *name)
++{
++	const struct xprtsec_info *info;
++
++	for (info = xprtsec_name2info; info->name; info++)
++		if (strcmp(info->name, name) == 0)
++			return info;
++	return NULL;
++}
++
++/*
++ * Append the given xprtsec mode to the exportent's e_xprtsec array,
++ * or do nothing if it's already there. Returns the index of flavor in
++ * the resulting array in any case.
++ */
++static int xprtsec_addmode(const struct xprtsec_info *info, struct exportent *ep)
++{
++	struct xprtsec_entry *p;
++
++	for (p = ep->e_xprtsec; p->info; p++)
++		if (p->info == info || p->info->number == info->number)
++			return p - ep->e_xprtsec;
++
++	if (p - ep->e_xprtsec >= XPRTSECMODE_COUNT) {
++		xlog(L_ERROR, "more than %d xprtsec modes on an export\n",
++			XPRTSECMODE_COUNT);
++		return -1;
++	}
++	p->info = info;
++	p->flags = ep->e_flags;
++	(p + 1)->info = NULL;
++	return p - ep->e_xprtsec;
++}
++
++/*
++ * @str is a colon seperated list of transport layer security modes.
++ * Their order is recorded in @ep, and a bitmap corresponding to the
++ * list is returned.
++ *
++ * A zero return indicates an error.
++ */
++static unsigned int parse_xprtsec(char *str, struct exportent *ep)
++{
++	unsigned int out = 0;
++	char *name;
++
++	while ((name = strsep(&str, ":"))) {
++		const struct xprtsec_info *info = find_xprtsec_info(name);
++		int bit;
++
++		if (!info) {
++			xlog(L_ERROR, "unknown xprtsec mode %s\n", name);
++			return 0;
++		}
++		bit = xprtsec_addmode(info, ep);
++		if (bit < 0)
++			return 0;
++		out |= 1 << bit;
++	}
++	return out;
++}
++
+ /* Sets the bits in @mask for the appropriate security flavor flags. */
+ static void setflags(int mask, unsigned int active, struct exportent *ep)
+ {
+@@ -621,7 +702,7 @@ parseopts(char *cp, struct exportent *ep, int warn, int *had_subtree_opt_ptr)
+ 			ep->e_anonuid = strtol(opt+8, &oe, 10);
+ 			if (opt[8]=='\0' || *oe != '\0') {
+ 				xlog(L_ERROR, "%s: %d: bad anonuid \"%s\"\n",
+-				     flname, flline, opt);	
++				     flname, flline, opt);
+ bad_option:
+ 				free(opt);
+ 				return -1;
+@@ -631,7 +712,7 @@ bad_option:
+ 			ep->e_anongid = strtol(opt+8, &oe, 10);
+ 			if (opt[8]=='\0' || *oe != '\0') {
+ 				xlog(L_ERROR, "%s: %d: bad anongid \"%s\"\n",
+-				     flname, flline, opt);	
++				     flname, flline, opt);
+ 				goto bad_option;
+ 			}
+ 		} else if (strncmp(opt, "squash_uids=", 12) == 0) {
+@@ -649,13 +730,13 @@ bad_option:
+ 				setflags(NFSEXP_FSID, active, ep);
+ 			} else {
+ 				ep->e_fsid = strtoul(opt+5, &oe, 0);
+-				if (opt[5]!='\0' && *oe == '\0') 
++				if (opt[5]!='\0' && *oe == '\0')
+ 					setflags(NFSEXP_FSID, active, ep);
+ 				else if (valid_uuid(opt+5))
+ 					ep->e_uuid = strdup(opt+5);
+ 				else {
+ 					xlog(L_ERROR, "%s: %d: bad fsid \"%s\"\n",
+-					     flname, flline, opt);	
++					     flname, flline, opt);
+ 					goto bad_option;
+ 				}
+ 			}
+@@ -688,6 +769,9 @@ bad_option:
+ 			active = parse_flavors(opt+4, ep);
+ 			if (!active)
+ 				goto bad_option;
++		} else if (strncmp(opt, "xprtsec=", 8) == 0) {
++			if (!parse_xprtsec(opt + 8, ep))
++				goto bad_option;
+ 		} else {
+ 			xlog(L_ERROR, "%s:%d: unknown keyword \"%s\"\n",
+ 					flname, flline, opt);
+@@ -709,7 +793,7 @@ out:
+ 	if (warn && !had_subtree_opt)
+ 		xlog(L_WARNING, "%s [%d]: Neither 'subtree_check' or 'no_subtree_check' specified for export \"%s:%s\".\n"
+ 				"  Assuming default behaviour ('no_subtree_check').\n"
+-		     		"  NOTE: this default has changed since nfs-utils version 1.0.x\n",
++				"  NOTE: this default has changed since nfs-utils version 1.0.x\n",
+ 
+ 				flname, flline,
+ 				ep->e_hostname, ep->e_path);
+diff --git a/utils/exportfs/exportfs.c b/utils/exportfs/exportfs.c
+index 6ba615d1..a87a7806 100644
+--- a/utils/exportfs/exportfs.c
++++ b/utils/exportfs/exportfs.c
+@@ -743,6 +743,7 @@ dump(int verbose, int export_format)
+ #endif
+ 			}
+ 			secinfo_show(stdout, ep);
++			xprtsecinfo_show(stdout, ep);
+ 			printf("%c\n", (c != '(')? ')' : ' ');
+ 		}
+ 	}
+diff --git a/utils/exportfs/exports.man b/utils/exportfs/exports.man
+index 54b3f877..83dd6807 100644
+--- a/utils/exportfs/exports.man
++++ b/utils/exportfs/exports.man
+@@ -125,7 +125,55 @@ In that case you may include multiple sec= options, and following options
+ will be enforced only for access using flavors listed in the immediately
+ preceding sec= option.  The only options that are permitted to vary in
+ this way are ro, rw, no_root_squash, root_squash, and all_squash.
++.SS Transport layer security
++The Linux NFS server allows the use of RPC-with-TLS (RFC 9289) to
++protect RPC traffic between itself and its clients.
++Alternately, administrators can secure NFS traffic using a VPN,
++or an ssh tunnel or similar mechanism, in a way that is transparent
++to the server.
+ .PP
++To enable the use of RPC-with-TLS, the server's administrator must
++install and configure
++.BR tlshd
++to handle transport layer security handshake requests from the local
++kernel.
++Clients can then choose to use RPC-with-TLS or they may continue
++operating without it.
++.PP
++Administrators may require the use of RPC-with-TLS to protect access
++to individual exports.
++This is particularly useful when using non-cryptographic security
++flavors such as
++.IR sec=sys .
++The
++.I xprtsec=
++option, followed by an unordered colon-delimited list of security policies,
++can restrict access to the export to only clients that have negotiated
++transport-layer security.
++Currently supported transport layer security policies include:
++.TP
++.IR none
++The server permits clients to access the export
++without the use of transport layer security.
++.TP
++.IR tls
++The server permits clients that have negotiated an RPC-with-TLS session
++without peer authentication (confidentiality only) to access the export.
++Clients are not required to offer an x.509 certificate
++when establishing a transport layer security session.
++.TP
++.IR mtls
++The server permits clients that have negotiated an RPC-with-TLS session
++with peer authentication to access the export.
++The server requires clients to offer an x.509 certificate
++when establishing a transport layer security session.
++.PP
++If RPC-with-TLS is configured and enabled and the
++.I xprtsec=
++option is not specified, the default setting for an export is
++.IR xprtsec=none:tls:mtls .
++With this setting, the server permits clients to use any transport
++layer security mechanism or none at all to access the export.
+ .SS General Options
+ .BR exportfs
+ understands the following export options:
+@@ -581,7 +629,8 @@ a character class wildcard match.
+ .BR netgroup (5),
+ .BR mountd (8),
+ .BR nfsd (8),
+-.BR showmount (8).
++.BR showmount (8),
++.BR tlshd (8).
+ .\".SH DIAGNOSTICS
+ .\"An error parsing the file is reported using syslogd(8) as level NOTICE from
+ .\"a DAEMON whenever
+diff --git a/utils/mount/nfs.man b/utils/mount/nfs.man
+index d9f34df3..dfc31a5d 100644
+--- a/utils/mount/nfs.man
++++ b/utils/mount/nfs.man
+@@ -574,7 +574,43 @@ The
+ .B sloppy
+ option is an alternative to specifying
+ .BR mount.nfs " -s " option.
+-
++.TP 1.5i
++.BI xprtsec= policy
++Specifies the use of transport layer security to protect NFS network
++traffic on behalf of this mount point.
++.I policy
++can be one of
++.BR none ,
++.BR tls ,
++or
++.BR mtls .
++.IP
++If
++.B none
++is specified,
++transport layer security is forced off, even if the NFS server supports
++transport layer security.
++If
++.B tls
++is specified, the client uses RPC-with-TLS to provide in-transit
++confidentiality.
++If
++.B mtls
++is specified, the client uses RPC-with-TLS to authenticate itself and
++to provide in-transit confidentiality.
++If either
++.B tls
++or
++.B mtls
++is specified and the server does not support RPC-with-TLS or peer
++authentication fails, the mount attempt fails.
++.IP
++If the
++.B xprtsec=
++option is not specified,
++the default behavior depends on the kernel version,
++but is usually equivalent to
++.BR "xprtsec=none" .
+ .SS "Options for NFS versions 2 and 3 only"
+ Use these options, along with the options in the above subsection,
+ for NFS versions 2 and 3 only.

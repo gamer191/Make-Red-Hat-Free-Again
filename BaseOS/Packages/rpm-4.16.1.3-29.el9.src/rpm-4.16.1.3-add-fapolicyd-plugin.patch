@@ -1,0 +1,334 @@
+commit 39595ccee321497dc3b08c7cab8a10304345429c
+Author: Radovan Sroka <rsroka@redhat.com>
+Date:   Tue Oct 27 16:18:04 2020 +0100
+
+    Added fapolicyd rpm plugin
+    
+    Fapolicyd (File Access Policy Daemon) implements application whitelisting
+    to decide file access rights. Applications that are known via a reputation
+    source are allowed access while unknown applications are not.
+    
+    The rpm plugin allows us to use rpm database as a source of trust.
+    We used dnf plugin since the beggining but it only provides notification
+    when transaction ends. With "integrity checking" requirement we need
+    a continual addition of files which are installed during the system
+    update. With fapolicyd rpm plugin we can allow using of recently
+    added/updated files in scriptlets during rpm transaction.
+    
+    The fapolicyd plugin gathers metadata of currently installed files.
+    It sends the information about files and about ongoing rpm transaction
+    to the fapolicyd daemon. The information is written to Linux pipe which
+    is placed in /var/run/fapolicyd/fapolicyd.fifo.
+    
+    The data format is "%s %lu %64s\n". [path, size, sha256]
+    
+    The fapolicyd rpm plugin can be enabled with "--with-fapolicyd"
+    configure option.
+    
+    Related PRs:
+    https://github.com/linux-application-whitelisting/fapolicyd/pull/105
+    https://github.com/linux-application-whitelisting/fapolicyd/pull/106
+    
+    Signed-off-by: Radovan Sroka <rsroka@redhat.com>
+
+    Backported into 4.16.1.3, together with commit
+    6d61b7118adcc14631b7ee5163a481472af940b8 (covscan fix)
+
+diff -up rpm-4.16.1.3/configure.ac.orig rpm-4.16.1.3/configure.ac
+--- rpm-4.16.1.3/configure.ac.orig	2021-03-22 11:05:07.311635968 +0100
++++ rpm-4.16.1.3/configure.ac	2021-07-22 16:18:29.352006782 +0200
+@@ -891,6 +891,14 @@ AS_IF([test "$enable_plugins" != no],[
+ AM_CONDITIONAL(IMA, [test "x$ac_cv_func_lsetxattr" = xyes])
+ 
+ #=================
++# Check for fapolicyd support
++AC_ARG_WITH(fapolicyd,
++AS_HELP_STRING([--with-fapolicyd],[build with File Access Policy Daemon support]),
++with_fapolicyd=$withval,
++with_fapolicyd=auto)
++AM_CONDITIONAL(FAPOLICYD,[test "$with_fapolicyd" = yes])
++
++#=================
+ # Check for audit library.
+ AC_ARG_WITH(audit,
+ AS_HELP_STRING([--with-audit],[Linux audit plugin]),
+diff -up rpm-4.16.1.3/doc/Makefile.am.orig rpm-4.16.1.3/doc/Makefile.am
+--- rpm-4.16.1.3/doc/Makefile.am.orig	2020-06-23 14:13:01.895628382 +0200
++++ rpm-4.16.1.3/doc/Makefile.am	2021-07-22 16:18:29.352006782 +0200
+@@ -25,6 +25,9 @@ endif
+ if IMA
+ man_man8_DATA += rpm-plugin-ima.8
+ endif
++if FAPOLICYD
++man_man8_DATA += rpm-plugin-fapolicyd.8
++endif
+ if SELINUX
+ man_man8_DATA += rpm-plugin-selinux.8
+ endif
+@@ -37,6 +40,8 @@ endif
+ EXTRA_DIST += rpm-plugins.8 rpm-plugin-prioreset.8 rpm-plugin-syslog.8 
+ EXTRA_DIST += rpm-plugin-audit.8 rpm-plugin-systemd-inhibit.8 
+ EXTRA_DIST += rpm-plugin-ima.8 rpm-plugin-selinux.8 rpm2archive.8
++EXTRA_DIST += rpm-plugin-fapolicyd.8
++
+ 
+ man_fr_man8dir = $(mandir)/fr/man8
+ man_fr_man8_DATA = fr/rpm.8
+diff -up rpm-4.16.1.3/doc/rpm-plugin-fapolicyd.8.orig rpm-4.16.1.3/doc/rpm-plugin-fapolicyd.8
+--- rpm-4.16.1.3/doc/rpm-plugin-fapolicyd.8.orig	2021-07-22 16:18:29.353006800 +0200
++++ rpm-4.16.1.3/doc/rpm-plugin-fapolicyd.8	2021-07-22 16:18:29.353006800 +0200
+@@ -0,0 +1,21 @@
++'\" t
++.TH "RPM-FAPOLICYD" "8" "28 Jan 2021" "Red Hat, Inc."
++.SH NAME
++rpm-plugin-fapolicyd \- Fapolicyd plugin for the RPM Package Manager
++
++.SH Description
++
++The plugin gathers metadata of currently installed files. It sends the
++information about files and about ongoing rpm transaction to the fapolicyd daemon.
++The information is written to Linux pipe which is placed in
++/var/run/fapolicyd/fapolicyd.fifo.
++
++.SH Configuration
++
++There are currently no options for this plugin in particular. See
++.BR rpm-plugins (8)
++on how to control plugins in general.
++
++.SH SEE ALSO
++.IR fapolicyd (8)
++.IR rpm-plugins (8)
+diff -up rpm-4.16.1.3/macros.in.orig rpm-4.16.1.3/macros.in
+--- rpm-4.16.1.3/macros.in.orig	2021-07-22 16:18:20.525844141 +0200
++++ rpm-4.16.1.3/macros.in	2021-07-22 16:19:36.196238525 +0200
+@@ -1208,6 +1208,7 @@ package or when debugging this package.\
+ %__transaction_selinux		%{__plugindir}/selinux.so
+ %__transaction_syslog		%{__plugindir}/syslog.so
+ %__transaction_ima		%{__plugindir}/ima.so
++%__transaction_fapolicyd	%{__plugindir}/fapolicyd.so
+ %__transaction_prioreset	%{__plugindir}/prioreset.so
+ %__transaction_audit		%{__plugindir}/audit.so
+ 
+diff -up rpm-4.16.1.3/Makefile.am.orig rpm-4.16.1.3/Makefile.am
+--- rpm-4.16.1.3/Makefile.am.orig	2021-07-22 16:18:29.350006745 +0200
++++ rpm-4.16.1.3/Makefile.am	2021-07-22 16:19:18.223907346 +0200
+@@ -14,6 +14,7 @@ DISTCHECK_CONFIGURE_FLAGS = \
+ 	--with-audit \
+ 	--with-selinux \
+ 	--with-imaevm \
++	--with-fapolicyd \
+ 	--disable-dependency-tracking
+ 
+ include $(top_srcdir)/rpm.am
+diff -up rpm-4.16.1.3/plugins/fapolicyd.c.orig rpm-4.16.1.3/plugins/fapolicyd.c
+--- rpm-4.16.1.3/plugins/fapolicyd.c.orig	2021-07-22 16:18:29.356006855 +0200
++++ rpm-4.16.1.3/plugins/fapolicyd.c	2021-07-22 16:18:35.380117862 +0200
+@@ -0,0 +1,191 @@
++#include "system.h"
++
++#include <rpm/rpmts.h>
++#include <rpm/rpmlog.h>
++#include "lib/rpmplugin.h"
++
++#include <fcntl.h>
++#include <errno.h>
++#include <unistd.h>
++#include <sys/stat.h>
++
++struct fapolicyd_data {
++    int fd;
++    long changed_files;
++    const char * fifo_path;
++};
++
++static struct fapolicyd_data fapolicyd_state = {
++    .fd = -1,
++    .changed_files = 0,
++    .fifo_path = "/run/fapolicyd/fapolicyd.fifo",
++};
++
++static rpmRC open_fifo(struct fapolicyd_data* state)
++{
++    int fd = -1;
++    struct stat s;
++
++    fd = open(state->fifo_path, O_RDWR);
++    if (fd == -1) {
++        rpmlog(RPMLOG_DEBUG, "Open: %s -> %s\n", state->fifo_path, strerror(errno));
++        goto bad;
++    }
++
++    if (stat(state->fifo_path, &s) == -1) {
++        rpmlog(RPMLOG_DEBUG, "Stat: %s -> %s\n", state->fifo_path, strerror(errno));
++        goto bad;
++    }
++
++    if (!S_ISFIFO(s.st_mode)) {
++        rpmlog(RPMLOG_DEBUG, "File: %s exists but it is not a pipe!\n", state->fifo_path);
++        goto bad;
++    }
++
++    /* keep only file's permition bits */
++    mode_t mode = s.st_mode & ~S_IFMT;
++
++    /* we require pipe to have 0660 permission */
++    if (mode != 0660) {
++        rpmlog(RPMLOG_ERR, "File: %s has %o instead of 0660 \n",
++               state->fifo_path,
++               mode );
++        goto bad;
++    }
++
++    state->fd = fd;
++    /* considering success */
++    return RPMRC_OK;
++
++ bad:
++    if (fd >= 0)
++        close(fd);
++    return RPMRC_FAIL;
++}
++
++static rpmRC write_fifo(struct fapolicyd_data* state, const char * str)
++{
++    ssize_t len = strlen(str);
++    ssize_t written = 0;
++    ssize_t n = 0;
++
++    while (written < len) {
++        if ((n = write(state->fd, str + written, len - written)) < 0) {
++            if (errno == EINTR || errno == EAGAIN)
++                continue;
++            rpmlog(RPMLOG_DEBUG, "Write: %s -> %s\n", state->fifo_path, strerror(errno));
++            goto bad;
++        }
++        written += n;
++    }
++
++    return RPMRC_OK;
++
++ bad:
++    return RPMRC_FAIL;
++}
++
++static rpmRC fapolicyd_init(rpmPlugin plugin, rpmts ts)
++{
++    if (rpmtsFlags(ts) & (RPMTRANS_FLAG_TEST|RPMTRANS_FLAG_BUILD_PROBS))
++        goto end;
++
++    if (!rstreq(rpmtsRootDir(ts), "/"))
++        goto end;
++
++    (void) open_fifo(&fapolicyd_state);
++
++ end:
++    return RPMRC_OK;
++}
++
++static void fapolicyd_cleanup(rpmPlugin plugin)
++{
++    if (fapolicyd_state.fd > 0)
++        (void) close(fapolicyd_state.fd);
++
++    fapolicyd_state.fd = -1;
++}
++
++static rpmRC fapolicyd_tsm_post(rpmPlugin plugin, rpmts ts, int res)
++{
++    if (rpmtsFlags(ts) & (RPMTRANS_FLAG_TEST|RPMTRANS_FLAG_BUILD_PROBS))
++        goto end;
++
++    /* we are ready */
++    if (fapolicyd_state.fd > 0) {
++        /* send a signal that transaction is over */
++        (void) write_fifo(&fapolicyd_state, "1\n");
++        /* flush cache */
++        (void) write_fifo(&fapolicyd_state, "2\n");
++    }
++
++ end:
++    return RPMRC_OK;
++}
++
++static rpmRC fapolicyd_scriptlet_pre(rpmPlugin plugin, const char *s_name,
++                                     int type)
++{
++    if (fapolicyd_state.fd == -1)
++        goto end;
++
++    if (fapolicyd_state.changed_files > 0) {
++        /* send signal to flush cache */
++        (void) write_fifo(&fapolicyd_state, "2\n");
++
++        /* optimize flushing */
++        /* flush only when there was an actual change */
++        fapolicyd_state.changed_files = 0;
++    }
++
++ end:
++    return RPMRC_OK;
++}
++
++static rpmRC fapolicyd_fsm_file_prepare(rpmPlugin plugin, rpmfi fi,
++                                        const char *path, const char *dest,
++                                        mode_t file_mode, rpmFsmOp op)
++{
++    /* not ready  */
++    if (fapolicyd_state.fd == -1)
++        goto end;
++
++    rpmFileAction action = XFO_ACTION(op);
++
++    /* Ignore skipped files and unowned directories */
++    if (XFA_SKIPPING(action) || (op & FAF_UNOWNED)) {
++        rpmlog(RPMLOG_DEBUG, "fapolicyd skipping early: path %s dest %s\n",
++               path, dest);
++        goto end;
++    }
++
++    if (!S_ISREG(rpmfiFMode(fi))) {
++        rpmlog(RPMLOG_DEBUG, "fapolicyd skipping non regular: path %s dest %s\n",
++               path, dest);
++        goto end;
++    }
++
++    fapolicyd_state.changed_files++;
++
++    char buffer[4096];
++
++    rpm_loff_t size = rpmfiFSize(fi);
++    char * sha = rpmfiFDigestHex(fi, NULL);
++
++    snprintf(buffer, 4096, "%s %lu %64s\n", dest, size, sha);
++    (void) write_fifo(&fapolicyd_state, buffer);
++
++    free(sha);
++
++ end:
++    return RPMRC_OK;
++}
++
++struct rpmPluginHooks_s fapolicyd_hooks = {
++    .init = fapolicyd_init,
++    .cleanup = fapolicyd_cleanup,
++    .scriptlet_pre = fapolicyd_scriptlet_pre,
++    .tsm_post = fapolicyd_tsm_post,
++    .fsm_file_prepare = fapolicyd_fsm_file_prepare,
++};
+diff -up rpm-4.16.1.3/plugins/Makefile.am.orig rpm-4.16.1.3/plugins/Makefile.am
+--- rpm-4.16.1.3/plugins/Makefile.am.orig	2021-07-22 16:18:23.022890155 +0200
++++ rpm-4.16.1.3/plugins/Makefile.am	2021-07-22 16:18:55.797494098 +0200
+@@ -43,6 +43,12 @@ ima_la_LIBADD = $(top_builddir)/lib/libr
+ plugins_LTLIBRARIES += ima.la
+ endif
+ 
++if FAPOLICYD
++fapolicyd_la_sources = fapolicyd.c
++fapolicyd_la_LIBADD = $(top_builddir)/lib/librpm.la $(top_builddir)/rpmio/librpmio.la
++plugins_LTLIBRARIES += fapolicyd.la
++endif
++
+ if AUDIT
+ audit_la_sources = audit.c
+ audit_la_LIBADD = $(top_builddir)/lib/librpm.la $(top_builddir)/rpmio/librpmio.la @WITH_AUDIT_LIB@

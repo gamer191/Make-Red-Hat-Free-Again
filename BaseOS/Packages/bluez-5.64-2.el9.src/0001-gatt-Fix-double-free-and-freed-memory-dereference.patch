@@ -1,0 +1,41 @@
+From f853012bc0142ab6056f3d9ef4abf621b1e8a756 Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 24 May 2022 16:45:56 +0530
+Subject: [PATCH BlueZ] gatt: Fix double free and freed memory dereference
+
+commit 3627eddea13042ffc0848ae37356f30335ce2e4b
+Author: Ildar Kamaletdinov <i.kamaletdinov@omp.ru>
+Date:   Fri Apr 1 15:16:47 2022 +0300
+
+    gatt: Fix double free and freed memory dereference
+
+    If device is no longer exists or not paired when notifications send it
+    is possible to get double free and dereference of already freed memory.
+
+    To avoid this we need to recheck the state of device after sending
+    notification.
+
+    Found by Linux Verification Center (linuxtesting.org) with the SVACE
+    static analysis tool.
+---
+ src/gatt-database.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/gatt-database.c b/src/gatt-database.c
+index d6c94058c..d32f616a9 100644
+--- a/src/gatt-database.c
++++ b/src/gatt-database.c
+@@ -3877,6 +3877,10 @@ void btd_gatt_database_server_connected(struct btd_gatt_database *database,
+ 
+ 	send_notification_to_device(state, state->pending);
+ 
++	state = find_device_state(database, &bdaddr, bdaddr_type);
++	if (!state || !state->pending)
++		return;
++
+ 	free(state->pending->value);
+ 	free(state->pending);
+ 	state->pending = NULL;
+-- 
+2.26.2
+

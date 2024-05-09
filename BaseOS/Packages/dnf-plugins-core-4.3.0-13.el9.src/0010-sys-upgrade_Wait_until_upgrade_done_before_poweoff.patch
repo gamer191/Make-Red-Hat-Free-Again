@@ -1,0 +1,32 @@
+From 7475f8df6d903764eaf8baaa87ec7a3a1a4d888c Mon Sep 17 00:00:00 2001
+From: Jan Kolarik <jkolarik@redhat.com>
+Date: Fri, 9 Jun 2023 11:57:33 +0000
+Subject: [PATCH] system-upgrade: Wait until the upgrade is done before
+ poweroff (RhBug:2211844)
+
+Add a systemd dependency to wait until upgrade service is finished before executing the poweroff when passing the `--poweroff` option in `system-upgrade` plugin.
+
+= changelog =
+msg: Fix systemd dependencies when using --poweroff option in system-upgrade plugin
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2211844
+---
+ etc/systemd/dnf-system-upgrade.service | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/etc/systemd/dnf-system-upgrade.service b/etc/systemd/dnf-system-upgrade.service
+index 2d23cfe..3e15920 100644
+--- a/etc/systemd/dnf-system-upgrade.service
++++ b/etc/systemd/dnf-system-upgrade.service
+@@ -6,7 +6,7 @@ Documentation=http://www.freedesktop.org/wiki/Software/systemd/SystemUpdates
+ DefaultDependencies=no
+ Requires=sysinit.target
+ After=sysinit.target systemd-journald.socket system-update-pre.target
+-Before=shutdown.target system-update.target
++Before=poweroff.target reboot.target shutdown.target system-update.target
+ OnFailure=dnf-system-upgrade-cleanup.service
+ 
+ [Service]
+-- 
+2.40.1
+

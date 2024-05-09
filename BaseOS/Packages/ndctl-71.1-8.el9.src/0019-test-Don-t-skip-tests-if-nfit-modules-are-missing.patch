@@ -1,0 +1,211 @@
+From 1649ad9c3e2c6e9c47870c8d3b54f10b24177bc7 Mon Sep 17 00:00:00 2001
+From: Santosh Sivaraj <santosh@fossix.org>
+Date: Thu, 13 May 2021 11:42:16 +0530
+Subject: [PATCH 019/217] test: Don't skip tests if nfit modules are missing
+
+For NFIT to be available ACPI is a must, so don't fail when nfit modules
+are missing on a platform that doesn't support ACPI.
+
+Link: https://lore.kernel.org/r/20210513061218.760322-2-santosh@fossix.org
+Signed-off-by: Santosh Sivaraj <santosh@fossix.org>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ test.h                        |  2 +-
+ test/ack-shutdown-count-set.c |  2 +-
+ test/blk_namespaces.c         |  2 +-
+ test/core.c                   | 28 ++++++++++++++++++++++++++--
+ test/dpa-alloc.c              |  2 +-
+ test/dsm-fail.c               |  2 +-
+ test/libndctl.c               |  2 +-
+ test/multi-pmem.c             |  2 +-
+ test/parent-uuid.c            |  2 +-
+ test/pmem_namespaces.c        |  2 +-
+ 10 files changed, 35 insertions(+), 11 deletions(-)
+
+diff --git a/test.h b/test.h
+index cba8d41..7de13fe 100644
+--- a/test.h
++++ b/test.h
+@@ -20,7 +20,7 @@ void builtin_xaction_namespace_reset(void);
+ 
+ struct kmod_ctx;
+ struct kmod_module;
+-int nfit_test_init(struct kmod_ctx **ctx, struct kmod_module **mod,
++int ndctl_test_init(struct kmod_ctx **ctx, struct kmod_module **mod,
+ 		struct ndctl_ctx *nd_ctx, int log_level,
+ 		struct ndctl_test *test);
+ 
+diff --git a/test/ack-shutdown-count-set.c b/test/ack-shutdown-count-set.c
+index fb1d82b..c561ff3 100644
+--- a/test/ack-shutdown-count-set.c
++++ b/test/ack-shutdown-count-set.c
+@@ -99,7 +99,7 @@ static int test_ack_shutdown_count_set(int loglevel, struct ndctl_test *test,
+ 	int result = EXIT_FAILURE, err;
+ 
+ 	ndctl_set_log_priority(ctx, loglevel);
+-	err = nfit_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
++	err = ndctl_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
+ 	if (err < 0) {
+ 		result = 77;
+ 		ndctl_test_skip(test);
+diff --git a/test/blk_namespaces.c b/test/blk_namespaces.c
+index d7f00cb..f076e85 100644
+--- a/test/blk_namespaces.c
++++ b/test/blk_namespaces.c
+@@ -228,7 +228,7 @@ int test_blk_namespaces(int log_level, struct ndctl_test *test,
+ 
+ 	if (!bus) {
+ 		fprintf(stderr, "ACPI.NFIT unavailable falling back to nfit_test\n");
+-		rc = nfit_test_init(&kmod_ctx, &mod, NULL, log_level, test);
++		rc = ndctl_test_init(&kmod_ctx, &mod, NULL, log_level, test);
+ 		ndctl_invalidate(ctx);
+ 		bus = ndctl_bus_get_by_provider(ctx, "nfit_test.0");
+ 		if (rc < 0 || !bus) {
+diff --git a/test/core.c b/test/core.c
+index cc7d8d9..2b03aa9 100644
+--- a/test/core.c
++++ b/test/core.c
+@@ -11,6 +11,7 @@
+ #include <util/log.h>
+ #include <util/sysfs.h>
+ #include <ndctl/libndctl.h>
++#include <ndctl/ndctl.h>
+ #include <ccan/array_size/array_size.h>
+ 
+ #define KVER_STRLEN 20
+@@ -106,11 +107,11 @@ int ndctl_test_get_skipped(struct ndctl_test *test)
+ 	return test->skip;
+ }
+ 
+-int nfit_test_init(struct kmod_ctx **ctx, struct kmod_module **mod,
++int ndctl_test_init(struct kmod_ctx **ctx, struct kmod_module **mod,
+ 		struct ndctl_ctx *nd_ctx, int log_level,
+ 		struct ndctl_test *test)
+ {
+-	int rc;
++	int rc, family = -1;
+ 	unsigned int i;
+ 	const char *name;
+ 	struct ndctl_bus *bus;
+@@ -127,10 +128,28 @@ int nfit_test_init(struct kmod_ctx **ctx, struct kmod_module **mod,
+ 		"nd_e820",
+ 		"nd_pmem",
+ 	};
++	char *test_env;
+ 
+ 	log_init(&log_ctx, "test/init", "NDCTL_TEST");
+ 	log_ctx.log_priority = log_level;
+ 
++	/*
++	 * The following two checks determine the platform family. For
++	 * Intel/platforms which support ACPI, check sysfs; for other platforms
++	 * determine from the environment variable NVDIMM_TEST_FAMILY
++	 */
++	if (access("/sys/bus/acpi", F_OK) == 0)
++		family = NVDIMM_FAMILY_INTEL;
++
++	test_env = getenv("NDCTL_TEST_FAMILY");
++	if (test_env && strcmp(test_env, "PAPR") == 0)
++		family = NVDIMM_FAMILY_PAPR;
++
++	if (family == -1) {
++		log_err(&log_ctx, "Cannot determine NVDIMM family\n");
++		return -ENOTSUP;
++	}
++
+ 	*ctx = kmod_new(NULL, NULL);
+ 	if (!*ctx)
+ 		return -ENXIO;
+@@ -185,6 +204,11 @@ retry:
+ 
+ 		path = kmod_module_get_path(*mod);
+ 		if (!path) {
++			if (family != NVDIMM_FAMILY_INTEL &&
++			    (strcmp(name, "nfit") == 0 ||
++			     strcmp(name, "nd_e820") == 0))
++				continue;
++
+ 			log_err(&log_ctx, "%s.ko: failed to get path\n", name);
+ 			break;
+ 		}
+diff --git a/test/dpa-alloc.c b/test/dpa-alloc.c
+index e922009..0b3bb7a 100644
+--- a/test/dpa-alloc.c
++++ b/test/dpa-alloc.c
+@@ -289,7 +289,7 @@ int test_dpa_alloc(int loglevel, struct ndctl_test *test, struct ndctl_ctx *ctx)
+ 		return 77;
+ 
+ 	ndctl_set_log_priority(ctx, loglevel);
+-	err = nfit_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
++	err = ndctl_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
+ 	if (err < 0) {
+ 		ndctl_test_skip(test);
+ 		fprintf(stderr, "nfit_test unavailable skipping tests\n");
+diff --git a/test/dsm-fail.c b/test/dsm-fail.c
+index 9dfd8b0..0a6383d 100644
+--- a/test/dsm-fail.c
++++ b/test/dsm-fail.c
+@@ -346,7 +346,7 @@ int test_dsm_fail(int loglevel, struct ndctl_test *test, struct ndctl_ctx *ctx)
+ 	int result = EXIT_FAILURE, err;
+ 
+ 	ndctl_set_log_priority(ctx, loglevel);
+-	err = nfit_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
++	err = ndctl_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
+ 	if (err < 0) {
+ 		result = 77;
+ 		ndctl_test_skip(test);
+diff --git a/test/libndctl.c b/test/libndctl.c
+index c42f785..d9b50f4 100644
+--- a/test/libndctl.c
++++ b/test/libndctl.c
+@@ -2708,7 +2708,7 @@ int test_libndctl(int loglevel, struct ndctl_test *test, struct ndctl_ctx *ctx)
+ 	daxctl_set_log_priority(daxctl_ctx, loglevel);
+ 	ndctl_set_private_data(ctx, test);
+ 
+-	err = nfit_test_init(&kmod_ctx, &mod, ctx, loglevel, test);
++	err = ndctl_test_init(&kmod_ctx, &mod, ctx, loglevel, test);
+ 	if (err < 0) {
+ 		ndctl_test_skip(test);
+ 		fprintf(stderr, "nfit_test unavailable skipping tests\n");
+diff --git a/test/multi-pmem.c b/test/multi-pmem.c
+index 3d10952..3ea08cc 100644
+--- a/test/multi-pmem.c
++++ b/test/multi-pmem.c
+@@ -249,7 +249,7 @@ int test_multi_pmem(int loglevel, struct ndctl_test *test, struct ndctl_ctx *ctx
+ 
+ 	ndctl_set_log_priority(ctx, loglevel);
+ 
+-	err = nfit_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
++	err = ndctl_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
+ 	if (err < 0) {
+ 		result = 77;
+ 		ndctl_test_skip(test);
+diff --git a/test/parent-uuid.c b/test/parent-uuid.c
+index 6424e9f..bded33a 100644
+--- a/test/parent-uuid.c
++++ b/test/parent-uuid.c
+@@ -218,7 +218,7 @@ int test_parent_uuid(int loglevel, struct ndctl_test *test, struct ndctl_ctx *ct
+ 		return 77;
+ 
+ 	ndctl_set_log_priority(ctx, loglevel);
+-	err = nfit_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
++	err = ndctl_test_init(&kmod_ctx, &mod, NULL, loglevel, test);
+ 	if (err < 0) {
+ 		ndctl_test_skip(test);
+ 		fprintf(stderr, "nfit_test unavailable skipping tests\n");
+diff --git a/test/pmem_namespaces.c b/test/pmem_namespaces.c
+index f0f2edd..a4db1ae 100644
+--- a/test/pmem_namespaces.c
++++ b/test/pmem_namespaces.c
+@@ -191,7 +191,7 @@ int test_pmem_namespaces(int log_level, struct ndctl_test *test,
+ 
+ 	if (!bus) {
+ 		fprintf(stderr, "ACPI.NFIT unavailable falling back to nfit_test\n");
+-		rc = nfit_test_init(&kmod_ctx, &mod, NULL, log_level, test);
++		rc = ndctl_test_init(&kmod_ctx, &mod, NULL, log_level, test);
+ 		ndctl_invalidate(ctx);
+ 		bus = ndctl_bus_get_by_provider(ctx, "nfit_test.0");
+ 		if (rc < 0 || !bus) {
+-- 
+2.27.0
+

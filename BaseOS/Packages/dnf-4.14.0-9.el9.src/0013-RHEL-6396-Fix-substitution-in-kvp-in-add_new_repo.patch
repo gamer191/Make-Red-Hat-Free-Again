@@ -1,0 +1,53 @@
+From 422794199b7b8a5f7426effc04979804cf31b6f7 Mon Sep 17 00:00:00 2001
+From: Anish Bhatt <anish.bhatt@salesforce.com>
+Date: Mon, 10 Jul 2023 10:09:17 -0700
+Subject: [PATCH] When parsing over a KVP list, do not return till the whole
+ list is parsed
+
+---
+ dnf/repodict.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/dnf/repodict.py b/dnf/repodict.py
+index ffa0f8ed..82c05ac0 100644
+--- a/dnf/repodict.py
++++ b/dnf/repodict.py
+@@ -79,8 +79,8 @@ class RepoDict(dict):
+                     if isinstance(value, str):
+                         substituted.append(
+                             libdnf.conf.ConfigParser.substitute(value, conf.substitutions))
+-                    if substituted:
+-                        return substituted
++                if substituted:
++                    return substituted
+             return values
+ 
+         repo = dnf.repo.Repo(repoid, conf)
+-- 
+2.41.0
+
+
+From d750fcb27686f73e352ae4575db150aa954aeb10 Mon Sep 17 00:00:00 2001
+From: Anish Bhatt <anish.bhatt@salesforce.com>
+Date: Mon, 10 Jul 2023 10:10:30 -0700
+Subject: [PATCH] Add to authors
+
+---
+ AUTHORS | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/AUTHORS b/AUTHORS
+index e802a51e..699a92c4 100644
+--- a/AUTHORS
++++ b/AUTHORS
+@@ -63,6 +63,7 @@ DNF CONTRIBUTORS
+     Adam Williamson <awilliam@redhat.com>
+     Albert Uchytil <auchytil@redhat.com>
+     Alberto Ruiz <aruiz@redhat.com>
++    Anish Bhatt <anish.bhatt@salesforce.com>
+     Baurzhan Muftakhidinov <baurthefirst@gmail.com>
+     Christopher Meng <cickumqt@gmail.com>
+     Daniel Mach <dmach@redhat.com>
+-- 
+2.41.0
+

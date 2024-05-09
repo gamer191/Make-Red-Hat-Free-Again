@@ -1,0 +1,78 @@
+From 307641a869134de4ebd496d1a78e5ff128a26293 Mon Sep 17 00:00:00 2001
+From: Jan Kolarik <jkolarik@redhat.com>
+Date: Fri, 30 Sep 2022 11:36:26 +0000
+Subject: [PATCH 2/4] Add a warning when using `system-upgrade` on RHEL
+
+---
+ dnf-plugins-core.spec     | 3 +--
+ doc/system-upgrade.rst    | 6 ++++--
+ plugins/system_upgrade.py | 4 ++++
+ 3 files changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/dnf-plugins-core.spec b/dnf-plugins-core.spec
+index 4df6e44..1ee87a1 100644
+--- a/dnf-plugins-core.spec
++++ b/dnf-plugins-core.spec
+@@ -148,14 +148,13 @@ Summary:    Core Plugins for DNF
+ %{?python_provide:%python_provide python3-%{name}}
+ BuildRequires:  python3-dbus
+ BuildRequires:  python3-devel
++BuildRequires:  python3-distro
+ BuildRequires:  python3-dnf >= %{dnf_lowest_compatible}
+ BuildRequires:  python3-systemd
+ BuildRequires:  pkgconfig(systemd)
+ BuildRequires:  systemd
+ %{?systemd_ordering}
+-%if 0%{?fedora}
+ Requires:       python3-distro
+-%endif
+ Requires:       python3-dbus
+ Requires:       python3-dnf >= %{dnf_lowest_compatible}
+ Requires:       python3-hawkey >= %{hawkey_version}
+diff --git a/doc/system-upgrade.rst b/doc/system-upgrade.rst
+index 3110460..87b7319 100644
+--- a/doc/system-upgrade.rst
++++ b/doc/system-upgrade.rst
+@@ -27,13 +27,15 @@ DNF system-upgrades plugin provides three commands: ``system-upgrade``, ``offlin
+ ``offline-distrosync``. Only ``system-upgrade`` command requires increase of distribution major
+ version (``--releasever``) compared to installed version.
+ 
+-``dnf system-upgrade`` can be used to upgrade a Fedora system to a new major
+-release. It replaces fedup (the old Fedora Upgrade tool). Before you proceed ensure that your system
++``dnf system-upgrade`` is a recommended way to upgrade a system to a new major release.
++It replaces fedup (the old Fedora Upgrade tool). Before you proceed ensure that your system
+ is fully upgraded (``dnf --refresh upgrade``).
+ 
+ The ``system-upgrade`` command also performes additional actions necessary for the upgrade of the
+ system, for example an upgrade of groups and environments.
+ 
++.. WARNING:: The ``system-upgrade`` command is not supported on the RHEL distribution.
++
+ --------
+ Synopsis
+ --------
+diff --git a/plugins/system_upgrade.py b/plugins/system_upgrade.py
+index fee6762..0baf978 100644
+--- a/plugins/system_upgrade.py
++++ b/plugins/system_upgrade.py
+@@ -20,6 +20,7 @@
+ """system_upgrade.py - DNF plugin to handle major-version system upgrades."""
+ 
+ from subprocess import call, Popen, check_output, CalledProcessError
++import distro
+ import json
+ import os
+ import os.path
+@@ -451,6 +452,9 @@ class SystemUpgradeCommand(dnf.cli.Command):
+ 
+     def configure_download(self):
+         if 'system-upgrade' == self.opts.command or 'fedup' == self.opts.command:
++            if distro.id() == 'rhel':
++                logger.warning(_('WARNING: this operation is not supported on the RHEL distribution. '
++                                 'Proceed at your own risk.'))
+             help_url = get_url_from_os_release()
+             if help_url:
+                 msg = _('Additional information for System Upgrade: {}')
+-- 
+2.38.1
+

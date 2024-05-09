@@ -1,0 +1,66 @@
+diff -up avahi-0.8/avahi-qt/Makefile.am.no_undefined avahi-0.8/avahi-qt/Makefile.am
+--- avahi-0.8/avahi-qt/Makefile.am.no_undefined	2018-09-14 00:31:28.490023071 -0500
++++ avahi-0.8/avahi-qt/Makefile.am	2020-11-17 16:35:04.646045499 -0600
+@@ -38,9 +38,9 @@ libavahi_qt3_la_SOURCES = \
+ qt-watch.moc3: qt-watch.cpp
+ 	$(AM_V_GEN)$(MOC_QT3) $^ > $@
+ 
+-libavahi_qt3_la_CPPFLAGS = $(AM_CFLAGS) $(QT3_CFLAGS) -DQT3 $(VISIBILITY_HIDDEN_CFLAGS)
++libavahi_qt3_la_CPPFLAGS = $(AM_CFLAGS) $(QT3_CFLAGS) -DQT3 $(VISIBILITY_HIDDEN_CFLAGS)
+ libavahi_qt3_la_LIBADD = $(AM_LDADD) ../avahi-common/libavahi-common.la $(QT3_LIBS)
+-libavahi_qt3_la_LDFLAGS = $(AM_LDFLAGS) -export-dynamic -version-info $(LIBAVAHI_QT3_VERSION_INFO)
++libavahi_qt3_la_LDFLAGS = $(AM_LDFLAGS) -Wl,--no-undefined -no-undefined -export-dynamic -version-info $(LIBAVAHI_QT3_VERSION_INFO)
+ endif
+ 
+ if HAVE_QT4
+@@ -62,7 +62,7 @@ qt-watch.moc4: qt-watch.cpp
+ 
+ libavahi_qt4_la_CPPFLAGS = $(AM_CFLAGS) $(QT4_CFLAGS) -DQT4 $(VISIBILITY_HIDDEN_CFLAGS)
+ libavahi_qt4_la_LIBADD = $(AM_LDADD) ../avahi-common/libavahi-common.la $(QT4_LIBS)
+-libavahi_qt4_la_LDFLAGS = $(AM_LDFLAGS) -version-info $(LIBAVAHI_QT4_VERSION_INFO)
++libavahi_qt4_la_LDFLAGS = $(AM_LDFLAGS) -Wl,--no-undefined -no-undefined -version-info $(LIBAVAHI_QT4_VERSION_INFO)
+ endif
+ 
+ if HAVE_QT5
+@@ -84,7 +84,7 @@ qt-watch.moc5: qt-watch.cpp
+ 
+ libavahi_qt5_la_CPPFLAGS = $(AM_CFLAGS) --std=gnu++11 $(QT5_CFLAGS) -DQT5 $(VISIBILITY_HIDDEN_CFLAGS)
+ libavahi_qt5_la_LIBADD = $(AM_LDADD) ../avahi-common/libavahi-common.la $(QT5_LIBS)
+-libavahi_qt5_la_LDFLAGS = $(AM_LDFLAGS) -version-info $(LIBAVAHI_QT5_VERSION_INFO)
++libavahi_qt5_la_LDFLAGS = $(AM_LDFLAGS) -Wl,--no-undefined -no-undefined  -version-info $(LIBAVAHI_QT5_VERSION_INFO)
+ endif
+ 
+ CLEANFILES = $(BUILT_SOURCES)
+diff -up avahi-0.8/avahi-qt/Makefile.in.no_undefined avahi-0.8/avahi-qt/Makefile.in
+--- avahi-0.8/avahi-qt/Makefile.in.no_undefined	2020-02-18 01:03:16.474614659 -0600
++++ avahi-0.8/avahi-qt/Makefile.in	2020-11-17 16:36:12.263297534 -0600
+@@ -551,9 +551,9 @@ BUILT_SOURCES = $(am__append_2) $(am__ap
+ @HAVE_QT3_TRUE@libavahi_qt3_la_SOURCES = \
+ @HAVE_QT3_TRUE@	qt-watch.cpp
+ 
+-@HAVE_QT3_TRUE@libavahi_qt3_la_CPPFLAGS = $(AM_CFLAGS) $(QT3_CFLAGS) $(VISIBILITY_HIDDEN_CFLAGS)
++@HAVE_QT3_TRUE@libavahi_qt3_la_CPPFLAGS = $(AM_CFLAGS) $(QT3_CFLAGS) -DQT3 $(VISIBILITY_HIDDEN_CFLAGS)
+ @HAVE_QT3_TRUE@libavahi_qt3_la_LIBADD = $(AM_LDADD) ../avahi-common/libavahi-common.la $(QT3_LIBS)
+-@HAVE_QT3_TRUE@libavahi_qt3_la_LDFLAGS = $(AM_LDFLAGS) -export-dynamic -version-info $(LIBAVAHI_QT3_VERSION_INFO)
++@HAVE_QT3_TRUE@libavahi_qt3_la_LDFLAGS = $(AM_LDFLAGS) -Wl,--no-undefined -no-undefined -export-dynamic -version-info $(LIBAVAHI_QT3_VERSION_INFO)
+ @HAVE_QT4_TRUE@avahiqt4includedir = $(includedir)/avahi-qt4
+ @HAVE_QT4_TRUE@avahiqt4include_HEADERS = \
+ @HAVE_QT4_TRUE@	qt-watch.h
+@@ -563,7 +563,7 @@ BUILT_SOURCES = $(am__append_2) $(am__ap
+ 
+ @HAVE_QT4_TRUE@libavahi_qt4_la_CPPFLAGS = $(AM_CFLAGS) $(QT4_CFLAGS) -DQT4 $(VISIBILITY_HIDDEN_CFLAGS)
+ @HAVE_QT4_TRUE@libavahi_qt4_la_LIBADD = $(AM_LDADD) ../avahi-common/libavahi-common.la $(QT4_LIBS)
+-@HAVE_QT4_TRUE@libavahi_qt4_la_LDFLAGS = $(AM_LDFLAGS) -version-info $(LIBAVAHI_QT4_VERSION_INFO)
++@HAVE_QT4_TRUE@libavahi_qt4_la_LDFLAGS = $(AM_LDFLAGS) -Wl,--no-undefined -no-undefined -version-info $(LIBAVAHI_QT4_VERSION_INFO)
+ @HAVE_QT5_TRUE@avahiqt5includedir = $(includedir)/avahi-qt5
+ @HAVE_QT5_TRUE@avahiqt5include_HEADERS = \
+ @HAVE_QT5_TRUE@	qt-watch.h
+@@ -573,7 +573,7 @@ BUILT_SOURCES = $(am__append_2) $(am__ap
+ 
+ @HAVE_QT5_TRUE@libavahi_qt5_la_CPPFLAGS = $(AM_CFLAGS) --std=gnu++11 $(QT5_CFLAGS) -DQT5 $(VISIBILITY_HIDDEN_CFLAGS)
+ @HAVE_QT5_TRUE@libavahi_qt5_la_LIBADD = $(AM_LDADD) ../avahi-common/libavahi-common.la $(QT5_LIBS)
+-@HAVE_QT5_TRUE@libavahi_qt5_la_LDFLAGS = $(AM_LDFLAGS) -version-info $(LIBAVAHI_QT5_VERSION_INFO)
++@HAVE_QT5_TRUE@libavahi_qt5_la_LDFLAGS = $(AM_LDFLAGS) -Wl,--no-undefined -no-undefined -version-info $(LIBAVAHI_QT5_VERSION_INFO)
+ CLEANFILES = $(BUILT_SOURCES)
+ all: $(BUILT_SOURCES)
+ 	$(MAKE) $(AM_MAKEFLAGS) all-am

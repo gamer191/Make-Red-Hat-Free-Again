@@ -1,0 +1,26 @@
+From b4987c9544224e7b3dae7b4411a2c8437ec573ab Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.de>
+Date: Sat, 17 Sep 2022 00:49:29 +0200
+Subject: [PATCH] fix(nvmf): don't use "finished" queue for autoconnect
+
+The "finished" initqueue is for testing if everything is alright,
+not for triggering any actions.
+
+Resolves: #1933787
+---
+ modules.d/95nvmf/parse-nvmf-boot-connections.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules.d/95nvmf/parse-nvmf-boot-connections.sh b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+index 1cdaba69..df104606 100755
+--- a/modules.d/95nvmf/parse-nvmf-boot-connections.sh
++++ b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+@@ -105,6 +105,6 @@ if [ -f "/etc/nvme/discovery.conf" ]; then
+ else
+     # No nvme command line arguments present, try autodiscovery
+     if [ "$trtype" = "fc" ]; then
+-        /sbin/initqueue --finished --onetime --unique --name nvme-fc-autoconnect /sbin/nvmf-autoconnect.sh
++        /sbin/initqueue --settled --onetime --unique --name nvme-fc-autoconnect /sbin/nvmf-autoconnect.sh
+     fi
+ fi
+

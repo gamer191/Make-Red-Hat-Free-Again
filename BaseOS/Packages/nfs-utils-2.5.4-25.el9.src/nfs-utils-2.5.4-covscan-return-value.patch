@@ -1,0 +1,25 @@
+diff -up nfs-utils-2.5.4/support/export/client.c.orig nfs-utils-2.5.4/support/export/client.c
+--- nfs-utils-2.5.4/support/export/client.c.orig	2021-06-10 14:07:47.000000000 -0400
++++ nfs-utils-2.5.4/support/export/client.c	2023-01-26 11:26:00.279342412 -0500
+@@ -699,6 +699,9 @@ check_netgroup(const nfs_client *clp, co
+ 
+ 	/* check whether the IP itself is in the netgroup */
+ 	ip = calloc(INET6_ADDRSTRLEN, 1);
++	if (ip == NULL)
++		goto out;
++
+ 	if (inet_ntop(ai->ai_family, &(((struct sockaddr_in *)ai->ai_addr)->sin_addr), ip, INET6_ADDRSTRLEN) == ip) {
+ 		if (innetgr(netgroup, ip, NULL, NULL)) {
+ 			free(hname);
+diff -up nfs-utils-2.5.4/tools/nfsrahead/main.c.orig nfs-utils-2.5.4/tools/nfsrahead/main.c
+--- nfs-utils-2.5.4/tools/nfsrahead/main.c.orig	2023-01-26 11:23:48.941618287 -0500
++++ nfs-utils-2.5.4/tools/nfsrahead/main.c	2023-01-26 11:26:00.279342412 -0500
+@@ -167,7 +167,7 @@ int main(int argc, char **argv)
+ 		if ((ret = get_device_info(argv[optind], &device)) == 0)
+ 			break;
+ 
+-	if (ret != 0) {
++	if (ret != 0 || device.fstype == NULL) {
+ 		xlog(D_GENERAL, "unable to find device %s\n", argv[optind]);
+ 		goto out;
+ 	}

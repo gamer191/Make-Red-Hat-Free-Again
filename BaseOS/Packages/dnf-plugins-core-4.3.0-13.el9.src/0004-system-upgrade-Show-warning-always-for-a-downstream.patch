@@ -1,0 +1,62 @@
+From e04aff1e65fb260912e7e0feeb201e17fa5abda4 Mon Sep 17 00:00:00 2001
+From: Jan Kolarik <jkolarik@redhat.com>
+Date: Fri, 16 Dec 2022 05:55:19 +0000
+Subject: [PATCH] system-upgrade: Show warning always for a downstream
+
+As the distro package is not available in the BaseOS, the warning implementation will be shown always, but only in related downstreams.
+
+= changelog =
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2152846
+---
+ dnf-plugins-core.spec     | 3 ++-
+ plugins/system_upgrade.py | 6 ++----
+ 2 files changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/dnf-plugins-core.spec b/dnf-plugins-core.spec
+index 1ee87a1..4df6e44 100644
+--- a/dnf-plugins-core.spec
++++ b/dnf-plugins-core.spec
+@@ -148,13 +148,14 @@ Summary:    Core Plugins for DNF
+ %{?python_provide:%python_provide python3-%{name}}
+ BuildRequires:  python3-dbus
+ BuildRequires:  python3-devel
+-BuildRequires:  python3-distro
+ BuildRequires:  python3-dnf >= %{dnf_lowest_compatible}
+ BuildRequires:  python3-systemd
+ BuildRequires:  pkgconfig(systemd)
+ BuildRequires:  systemd
+ %{?systemd_ordering}
++%if 0%{?fedora}
+ Requires:       python3-distro
++%endif
+ Requires:       python3-dbus
+ Requires:       python3-dnf >= %{dnf_lowest_compatible}
+ Requires:       python3-hawkey >= %{hawkey_version}
+diff --git a/plugins/system_upgrade.py b/plugins/system_upgrade.py
+index ef1de73..4f7620f 100644
+--- a/plugins/system_upgrade.py
++++ b/plugins/system_upgrade.py
+@@ -20,7 +20,6 @@
+ """system_upgrade.py - DNF plugin to handle major-version system upgrades."""
+ 
+ from subprocess import call, Popen, check_output, CalledProcessError
+-import distro
+ import json
+ import os
+ import os.path
+@@ -452,9 +451,8 @@ class SystemUpgradeCommand(dnf.cli.Command):
+ 
+     def configure_download(self):
+         if 'system-upgrade' == self.opts.command or 'fedup' == self.opts.command:
+-            if distro.id() == 'rhel':
+-                logger.warning(_('WARNING: this operation is not supported on the RHEL distribution. '
+-                                 'Proceed at your own risk.'))
++            logger.warning(_('WARNING: this operation is not supported on the RHEL distribution. '
++                             'Proceed at your own risk.'))
+             help_url = get_url_from_os_release()
+             if help_url:
+                 msg = _('Additional information for System Upgrade: {}')
+-- 
+2.39.0
+

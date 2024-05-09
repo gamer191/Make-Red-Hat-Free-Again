@@ -1,0 +1,106 @@
+diff -up shadow-4.9/man/usermod.8.xml.badname-special-characters shadow-4.9/man/usermod.8.xml
+--- shadow-4.9/man/usermod.8.xml.badname-special-characters	2021-07-22 23:55:35.000000000 +0200
++++ shadow-4.9/man/usermod.8.xml	2022-09-26 16:32:46.214519257 +0200
+@@ -110,7 +110,7 @@
+       </varlistentry>
+       <varlistentry>
+ 	<term>
+-	  <option>-b</option>, <option>--badnames</option>
++	  <option>-b</option>, <option>--badname</option>
+ 	</term>
+ 	<listitem>
+ 	  <para>
+diff -up shadow-4.9/src/newusers.c.badname-special-characters shadow-4.9/src/newusers.c
+--- shadow-4.9/src/newusers.c.badname-special-characters	2021-07-22 23:55:35.000000000 +0200
++++ shadow-4.9/src/newusers.c	2022-09-26 16:33:31.331869855 +0200
+@@ -139,7 +139,7 @@ static void usage (int status)
+ 	                  "\n"
+ 	                  "Options:\n"),
+ 	                Prog);
+-	(void) fputs (_("  -b, --badnames                allow bad names\n"), usageout);
++	(void) fputs (_("  -b, --badname                 allow bad names\n"), usageout);
+ #ifndef USE_PAM
+ 	(void) fprintf (usageout,
+ 	                _("  -c, --crypt-method METHOD     the crypt method (one of %s)\n"),
+@@ -406,7 +406,7 @@ static int add_user (const char *name, u
+ 	/* Check if this is a valid user name */
+ 	if (!is_valid_user_name (name)) {
+ 		fprintf (stderr,
+-		         _("%s: invalid user name '%s'\n"),
++		         _("%s: invalid user name '%s': use --badname to ignore\n"),
+ 		         Prog, name);
+ 		return -1;
+ 	}
+@@ -634,7 +634,7 @@ static void process_flags (int argc, cha
+         int bad_s;
+ #endif				/* USE_SHA_CRYPT || USE_BCRYPT || USE_YESCRYPT */
+ 	static struct option long_options[] = {
+-		{"badnames",     no_argument,       NULL, 'b'},
++		{"badname",      no_argument,       NULL, 'b'},
+ #ifndef USE_PAM
+ 		{"crypt-method", required_argument, NULL, 'c'},
+ #endif				/* !USE_PAM */
+diff -up shadow-4.9/src/pwck.c.badname-special-characters shadow-4.9/src/pwck.c
+--- shadow-4.9/src/pwck.c.badname-special-characters	2022-09-26 16:32:46.208519211 +0200
++++ shadow-4.9/src/pwck.c	2022-09-26 16:32:46.214519257 +0200
+@@ -151,7 +151,7 @@ static /*@noreturn@*/void usage (int sta
+ 		                  "Options:\n"),
+ 		                Prog);
+ 	}
+-	(void) fputs (_("  -b, --badnames                allow bad names\n"), usageout);
++	(void) fputs (_("  -b, --badname                 allow bad names\n"), usageout);
+ 	(void) fputs (_("  -h, --help                    display this help message and exit\n"), usageout);
+ 	(void) fputs (_("  -q, --quiet                   report errors only\n"), usageout);
+ 	(void) fputs (_("  -r, --read-only               display errors and warnings\n"
+@@ -176,7 +176,7 @@ static void process_flags (int argc, cha
+ {
+ 	int c;
+ 	static struct option long_options[] = {
+-		{"badnames",  no_argument,       NULL, 'b'},
++		{"badname",   no_argument,       NULL, 'b'},
+ 		{"help",      no_argument,       NULL, 'h'},
+ 		{"quiet",     no_argument,       NULL, 'q'},
+ 		{"read-only", no_argument,       NULL, 'r'},
+@@ -493,7 +493,8 @@ static void check_pw_file (int *errors,
+ 		 */
+ 
+ 		if (!is_valid_user_name (pwd->pw_name)) {
+-			printf (_("invalid user name '%s'\n"), pwd->pw_name);
++			printf (_("invalid user name '%s': use --badname to ignore\n"),
++					pwd->pw_name);
+ 			*errors += 1;
+ 		}
+ 
+diff -up shadow-4.9/src/useradd.c.badname-special-characters shadow-4.9/src/useradd.c
+--- shadow-4.9/src/useradd.c.badname-special-characters	2022-09-26 16:32:46.212519242 +0200
++++ shadow-4.9/src/useradd.c	2022-09-26 16:32:46.214519257 +0200
+@@ -852,7 +852,7 @@ static void usage (int status)
+ 	                  "\n"
+ 	                  "Options:\n"),
+ 	                Prog, Prog, Prog);
+-	(void) fputs (_("      --badnames                do not check for bad names\n"), usageout);
++	(void) fputs (_("      --badname                 do not check for bad names\n"), usageout);
+ 	(void) fputs (_("  -b, --base-dir BASE_DIR       base directory for the home directory of the\n"
+ 	                "                                new account\n"), usageout);
+ #ifdef WITH_BTRFS
+@@ -1119,7 +1119,7 @@ static void process_flags (int argc, cha
+ #ifdef WITH_BTRFS
+ 			{"btrfs-subvolume-home", no_argument, NULL, 200},
+ #endif
+-			{"badnames",       no_argument,       NULL, 201},
++			{"badname",        no_argument,       NULL, 201},
+ 			{"comment",        required_argument, NULL, 'c'},
+ 			{"home-dir",       required_argument, NULL, 'd'},
+ 			{"defaults",       no_argument,       NULL, 'D'},
+diff -up shadow-4.9/src/usermod.c.badname-special-characters shadow-4.9/src/usermod.c
+--- shadow-4.9/src/usermod.c.badname-special-characters	2022-09-26 16:32:46.215519265 +0200
++++ shadow-4.9/src/usermod.c	2022-09-26 16:33:52.274032599 +0200
+@@ -418,7 +418,7 @@ static /*@noreturn@*/void usage (int sta
+ 	                  "\n"
+ 	                  "Options:\n"),
+ 	                Prog);
+-	(void) fputs (_("  -b, --badnames                allow bad names\n"), usageout);
++	(void) fputs (_("  -b, --badname                 allow bad names\n"), usageout);
+ 	(void) fputs (_("  -c, --comment COMMENT         new value of the GECOS field\n"), usageout);
+ 	(void) fputs (_("  -d, --home HOME_DIR           new home directory for the user account\n"), usageout);
+ 	(void) fputs (_("  -e, --expiredate EXPIRE_DATE  set account expiration date to EXPIRE_DATE\n"), usageout);

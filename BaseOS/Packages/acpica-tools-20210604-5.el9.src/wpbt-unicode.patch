@@ -1,0 +1,196 @@
+Index: acpica-unix2-20210604/source/common/dmtable.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/common/dmtable.c
++++ acpica-unix2-20210604/source/common/dmtable.c
+@@ -979,6 +979,12 @@ AcpiDmDumpTable (
+             ByteLength = 128;
+             break;
+ 
++        case ACPI_DMT_WPBT_UNICODE:
++
++            ByteLength = SubtableLength;
++            CurrentOffset = sizeof (ACPI_TABLE_WPBT);
++            break;
++
+         case ACPI_DMT_UNICODE:
+         case ACPI_DMT_BUFFER:
+         case ACPI_DMT_RAW_BUFFER:
+@@ -1596,6 +1602,7 @@ AcpiDmDumpTable (
+             break;
+ 
+         case ACPI_DMT_UNICODE:
++        case ACPI_DMT_WPBT_UNICODE:
+ 
+             if (ByteLength == 0)
+             {
+Index: acpica-unix2-20210604/source/common/dmtbdump3.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/common/dmtbdump3.c
++++ acpica-unix2-20210604/source/common/dmtbdump3.c
+@@ -753,8 +753,11 @@ AcpiDmDumpWpbt (
+     Subtable = ACPI_CAST_PTR (ACPI_TABLE_WPBT, Table);
+     ArgumentsLength = AcpiUtReadUint16 (&Subtable->ArgumentsLength);
+ 
+-    /* Dump the arguments buffer */
++    /* Dump the arguments buffer if present */
+ 
+-    (void) AcpiDmDumpTable (TableLength, 0, Table, ArgumentsLength,
+-        AcpiDmTableInfoWpbt0);
++    if (ArgumentsLength)
++    {
++        (void) AcpiDmDumpTable (Table->Length, 0, Table, ArgumentsLength,
++            AcpiDmTableInfoWpbt0);
++    }
+ }
+Index: acpica-unix2-20210604/source/common/dmtbinfo3.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/common/dmtbinfo3.c
++++ acpica-unix2-20210604/source/common/dmtbinfo3.c
+@@ -651,7 +651,7 @@ ACPI_DMTABLE_INFO           AcpiDmTableI
+ 
+ ACPI_DMTABLE_INFO           AcpiDmTableInfoWpbt0[] =
+ {
+-    {ACPI_DMT_UNICODE,     sizeof (ACPI_TABLE_WPBT),                "Command-line Arguments", 0},
++    {ACPI_DMT_WPBT_UNICODE, ACPI_WPBT2_OFFSET (UnicodeString),      "Command-line Arguments", DT_DESCRIBES_OPTIONAL},
+     ACPI_DMT_TERMINATOR
+ };
+ 
+Index: acpica-unix2-20210604/source/compiler/dttable2.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/compiler/dttable2.c
++++ acpica-unix2-20210604/source/compiler/dttable2.c
+@@ -2615,13 +2615,11 @@ DtCompileWpbt (
+     DT_SUBTABLE             *ParentTable;
+     ACPI_TABLE_WPBT         *Table;
+     ACPI_STATUS             Status;
+-    UINT16                  Length;
+ 
+ 
+     /* Compile the main table */
+ 
+-    Status = DtCompileTable (PFieldList, AcpiDmTableInfoWpbt,
+-        &Subtable);
++    Status = DtCompileTable (PFieldList, AcpiDmTableInfoWpbt, &Subtable);
+     if (ACPI_FAILURE (Status))
+     {
+         return (Status);
+@@ -2629,11 +2627,23 @@ DtCompileWpbt (
+ 
+     ParentTable = DtPeekSubtable ();
+     DtInsertSubtable (ParentTable, Subtable);
++    Table = ACPI_CAST_PTR (ACPI_TABLE_WPBT, ParentTable->Buffer);
++
++    /*
++     * Exit now if there are no arguments specified. This is indicated by:
++     * The "Command-line Arguments" field has not been specified (if specified,
++     * it will be the last field in the field list -- after the main table).
++     * Set the Argument Length in the main table to zero.
++     */
++    if (!*PFieldList)
++    {
++        Table->ArgumentsLength = 0;
++        return (AE_OK);
++    }
+ 
+     /* Compile the argument list subtable */
+ 
+-    Status = DtCompileTable (PFieldList, AcpiDmTableInfoWpbt0,
+-        &Subtable);
++    Status = DtCompileTable (PFieldList, AcpiDmTableInfoWpbt0, &Subtable);
+     if (ACPI_FAILURE (Status))
+     {
+         return (Status);
+@@ -2641,12 +2651,8 @@ DtCompileWpbt (
+ 
+     /* Extract the length of the Arguments buffer, insert into main table */
+ 
+-    AcpiUtWriteUint (&Length, sizeof (UINT16),
++    AcpiUtWriteUint (&Table->ArgumentsLength, sizeof (UINT16),
+            &Subtable->TotalLength, sizeof (UINT32));
+-    Table = ACPI_CAST_PTR (ACPI_TABLE_WPBT, ParentTable->Buffer);
+-    Table->ArgumentsLength = AcpiUtReadUint16 (&Length);
+-
+-    ParentTable = DtPeekSubtable ();
+     DtInsertSubtable (ParentTable, Subtable);
+     return (AE_OK);
+ }
+Index: acpica-unix2-20210604/source/compiler/dtutils.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/compiler/dtutils.c
++++ acpica-unix2-20210604/source/compiler/dtutils.c
+@@ -344,6 +344,7 @@ DtGetFieldType (
+         break;
+ 
+     case ACPI_DMT_UNICODE:
++    case ACPI_DMT_WPBT_UNICODE:
+ 
+         Type = DT_FIELD_TYPE_UNICODE;
+         break;
+@@ -626,12 +627,13 @@ DtGetFieldLength (
+         break;
+ 
+     case ACPI_DMT_UNICODE:
++    case ACPI_DMT_WPBT_UNICODE:
+ 
+         Value = DtGetFieldValue (Field);
+ 
+         /* TBD: error if Value is NULL? (as below?) */
+ 
+-        ByteLength = (strlen (Value) + 1) * sizeof(UINT16);
++        ByteLength = (strlen (Value) + 1) * sizeof (UINT16);
+         break;
+ 
+     default:
+Index: acpica-unix2-20210604/source/include/acdisasm.h
+===================================================================
+--- acpica-unix2-20210604.orig/source/include/acdisasm.h
++++ acpica-unix2-20210604/source/include/acdisasm.h
+@@ -175,6 +175,7 @@ typedef enum
+     ACPI_DMT_SRAT,
+     ACPI_DMT_TPM2,
+     ACPI_DMT_VIOT,
++    ACPI_DMT_WPBT_UNICODE,
+ 
+     /* Special opcodes */
+ 
+Index: acpica-unix2-20210604/source/include/actbinfo.h
+===================================================================
+--- acpica-unix2-20210604.orig/source/include/actbinfo.h
++++ acpica-unix2-20210604/source/include/actbinfo.h
+@@ -97,6 +97,7 @@
+ #define ACPI_WDDT_OFFSET(f)             (UINT16) ACPI_OFFSET (ACPI_TABLE_WDDT,f)
+ #define ACPI_WDRT_OFFSET(f)             (UINT16) ACPI_OFFSET (ACPI_TABLE_WDRT,f)
+ #define ACPI_WPBT_OFFSET(f)             (UINT16) ACPI_OFFSET (ACPI_TABLE_WPBT,f)
++#define ACPI_WPBT2_OFFSET(f)            (UINT16) ACPI_OFFSET (ACPI_WPBT_UNICODE,f)
+ #define ACPI_WSMT_OFFSET(f)             (UINT16) ACPI_OFFSET (ACPI_TABLE_WSMT,f)
+ #define ACPI_XENV_OFFSET(f)             (UINT16) ACPI_OFFSET (ACPI_TABLE_XENV,f)
+ 
+Index: acpica-unix2-20210604/source/include/actbl3.h
+===================================================================
+--- acpica-unix2-20210604.orig/source/include/actbl3.h
++++ acpica-unix2-20210604/source/include/actbl3.h
+@@ -847,6 +847,12 @@ typedef struct acpi_table_wpbt
+ 
+ } ACPI_TABLE_WPBT;
+ 
++typedef struct acpi_wpbt_unicode
++{
++    UINT16                  *UnicodeString;
++
++} ACPI_WPBT_UNICODE;
++
+ 
+ /*******************************************************************************
+  *
+Index: acpica-unix2-20210604/source/tools/acpisrc/astable.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/tools/acpisrc/astable.c
++++ acpica-unix2-20210604/source/tools/acpisrc/astable.c
+@@ -772,6 +772,7 @@ ACPI_TYPED_IDENTIFIER_TABLE           Ac
+     {"ACPI_VIOT_VIRTIO_IOMMU_PCI",          SRC_TYPE_STRUCT},
+     {"ACPI_VIOT_VIRTIO_IOMMU_MMIO",         SRC_TYPE_STRUCT},
+     {"ACPI_WDAT_ENTRY",                     SRC_TYPE_STRUCT},
++    {"ACPI_WPBT_UNICODE",                   SRC_TYPE_STRUCT},
+ 
+     /* Data Table compiler */
+ 

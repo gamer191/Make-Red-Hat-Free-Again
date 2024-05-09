@@ -1,0 +1,91 @@
+From 17b691400e8ce0755bb1d7a33490fbc014067e5e Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Fri, 27 Jan 2023 06:30:20 +0100
+Subject: [PATCH] mkfs: tolerate tiny filesystems
+
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+---
+ man/man8/mkfs.xfs.8.in |  4 ++--
+ mkfs/xfs_mkfs.c        | 23 ++++++++++++++---------
+ 2 files changed, 16 insertions(+), 11 deletions(-)
+
+diff --git a/man/man8/mkfs.xfs.8.in b/man/man8/mkfs.xfs.8.in
+index 211e7b0c..03f0fda8 100644
+--- a/man/man8/mkfs.xfs.8.in
++++ b/man/man8/mkfs.xfs.8.in
+@@ -405,7 +405,7 @@ is required if
+ is given. Otherwise, it is only needed if the filesystem should occupy
+ less space than the size of the special file.
+ 
+-The data section must be at least 300MB in size.
++The data section should be at least 300MB in size.
+ .TP
+ .BI sunit= value
+ This is used to specify the stripe unit for a RAID device or a
+@@ -705,7 +705,7 @@ described above. The overriding minimum value for size is 512 blocks.
+ With some combinations of filesystem block size, inode size,
+ and directory block size, the minimum log size is larger than 512 blocks.
+ 
+-The log must be at least 64MB in size.
++The log should be at least 64MB in size.
+ The log cannot be more than 2GB in size.
+ .TP
+ .BI version= value
+diff --git a/mkfs/xfs_mkfs.c b/mkfs/xfs_mkfs.c
+index 9dd0e79c..72c906d6 100644
+--- a/mkfs/xfs_mkfs.c
++++ b/mkfs/xfs_mkfs.c
+@@ -2503,6 +2503,8 @@ validate_supported(
+ 	struct xfs_mount	*mp,
+ 	struct cli_params	*cli)
+ {
++	bool deprecated = false;
++
+ 	/* Undocumented option to enable unsupported tiny filesystems. */
+ 	if (!cli->is_supported) {
+ 		printf(
+@@ -2532,9 +2534,8 @@ validate_supported(
+ 	 * 64MB * (8 / 7) * 4 = 293MB
+ 	 */
+ 	if (mp->m_sb.sb_dblocks < MEGABYTES(300, mp->m_sb.sb_blocklog)) {
+-		fprintf(stderr,
+- _("Filesystem must be larger than 300MB.\n"));
+-		usage();
++		printf(_("Filesystem should be larger than 300MB.\n"));
++		deprecated = true;
+ 	}
+ 
+ 	/*
+@@ -2543,9 +2544,8 @@ validate_supported(
+ 	 */
+ 	if (mp->m_sb.sb_logblocks <
+ 			XFS_MIN_REALISTIC_LOG_BLOCKS(mp->m_sb.sb_blocklog)) {
+-		fprintf(stderr,
+- _("Log size must be at least 64MB.\n"));
+-		usage();
++		printf( _("Log size should be at least 64MB.\n"));
++		deprecated = true;
+ 	}
+ 
+ 	/*
+@@ -2553,9 +2553,14 @@ validate_supported(
+ 	 * have redundant superblocks.
+ 	 */
+ 	if (mp->m_sb.sb_agcount < 2) {
+-		fprintf(stderr,
+- _("Filesystem must have at least 2 superblocks for redundancy!\n"));
+-		usage();
++		printf(
++ _("Filesystem should have at least 2 superblocks for redundancy!\n"));
++		deprecated = true;
++	}
++
++	if (deprecated) {
++		printf(
++_("Support for filesystems like this one is deprecated and they will not be supported in future releases.\n"));
+ 	}
+ }
+ 
+-- 
+2.39.1
+

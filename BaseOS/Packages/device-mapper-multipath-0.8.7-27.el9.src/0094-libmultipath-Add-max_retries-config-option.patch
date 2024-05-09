@@ -1,0 +1,182 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Thu, 9 Nov 2023 18:46:11 -0500
+Subject: [PATCH] libmultipath: Add max_retries config option
+
+This option lets multipath set a scsi disk's max_retries sysfs value.
+Setting this can be helpful for cases where the path checker succeeds,
+but IO commands hang and timeout. By default, the SCSI layer will retry
+IOs 5 times. Reducing this value will allow multipath to retry the IO
+down another path sooner.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/config.h      |  1 +
+ libmultipath/dict.c        | 25 ++++++++++++++++++++++++
+ libmultipath/discovery.c   | 40 +++++++++++++++++++++++++++++++++++++-
+ libmultipath/structs.h     |  6 ++++++
+ multipath/multipath.conf.5 | 14 +++++++++++++
+ 5 files changed, 85 insertions(+), 1 deletion(-)
+
+diff --git a/libmultipath/config.h b/libmultipath/config.h
+index c1e18363..b0ee8241 100644
+--- a/libmultipath/config.h
++++ b/libmultipath/config.h
+@@ -162,6 +162,7 @@ struct config {
+ 	int fast_io_fail;
+ 	unsigned int dev_loss;
+ 	int eh_deadline;
++	int max_retries;
+ 	int log_checker_err;
+ 	int allow_queueing;
+ 	int allow_usb_devices;
+diff --git a/libmultipath/dict.c b/libmultipath/dict.c
+index eb2f33a2..0c66c1e1 100644
+--- a/libmultipath/dict.c
++++ b/libmultipath/dict.c
+@@ -1206,6 +1206,30 @@ declare_hw_snprint(eh_deadline, print_undef_off_zero)
+ declare_pc_handler(eh_deadline, set_undef_off_zero)
+ declare_pc_snprint(eh_deadline, print_undef_off_zero)
+ 
++static int
++def_max_retries_handler(struct config *conf, vector strvec, const char *file,
++			int line_nr)
++{
++	char * buff;
++
++	buff = set_value(strvec);
++	if (!buff)
++		return 1;
++
++	if (strcmp(buff, "off") == 0)
++		conf->max_retries = MAX_RETRIES_OFF;
++	else if (strcmp(buff, "0") == 0)
++		conf->max_retries = MAX_RETRIES_ZERO;
++	else
++		do_set_int(strvec, &conf->max_retries, 1, 5, file, line_nr,
++			   buff);
++
++	free(buff);
++	return 0;
++}
++
++declare_def_snprint(max_retries, print_undef_off_zero)
++
+ static int
+ set_pgpolicy(vector strvec, void *ptr, const char *file, int line_nr)
+ {
+@@ -2143,6 +2167,7 @@ init_keywords(vector keywords)
+ 	install_keyword("fast_io_fail_tmo", &def_fast_io_fail_handler, &snprint_def_fast_io_fail);
+ 	install_keyword("dev_loss_tmo", &def_dev_loss_handler, &snprint_def_dev_loss);
+ 	install_keyword("eh_deadline", &def_eh_deadline_handler, &snprint_def_eh_deadline);
++	install_keyword("max_retries", &def_max_retries_handler, &snprint_def_max_retries);
+ 	install_keyword("bindings_file", &def_bindings_file_handler, &snprint_def_bindings_file);
+ 	install_keyword("wwids_file", &def_wwids_file_handler, &snprint_def_wwids_file);
+ 	install_keyword("prkeys_file", &def_prkeys_file_handler, &snprint_def_prkeys_file);
+diff --git a/libmultipath/discovery.c b/libmultipath/discovery.c
+index a592a54e..adf8bbaa 100644
+--- a/libmultipath/discovery.c
++++ b/libmultipath/discovery.c
+@@ -632,6 +632,42 @@ sysfs_set_eh_deadline(struct path *pp)
+ 	return (ret <= 0);
+ }
+ 
++static int
++sysfs_set_max_retries(struct config *conf, struct path *pp)
++{
++	struct udev_device *parent;
++	char value[16];
++	STRBUF_ON_STACK(buf);
++	int ret, len;
++
++	if (conf->max_retries == MAX_RETRIES_UNSET)
++		return 0;
++
++	if (!pp->udev || pp->sg_id.host_no < 0)
++		return 1;
++
++	len = sprintf(value, "%d", (conf->max_retries == MAX_RETRIES_OFF)? -1 :
++				   (conf->max_retries == MAX_RETRIES_ZERO)? 0 :
++				   conf->max_retries);
++
++	parent = udev_device_get_parent_with_subsystem_devtype(pp->udev,
++			"scsi", "scsi_device");
++	if (!parent)
++		return 1;
++
++	if (print_strbuf(&buf, "scsi_disk/%i:%i:%i:%" PRIu64 "/max_retries",
++			 pp->sg_id.host_no, pp->sg_id.channel,
++			 pp->sg_id.scsi_id, pp->sg_id.lun) < 0)
++		return 1;
++
++	ret = sysfs_attr_set_value(parent, get_strbuf_str(&buf), value, len);
++	if (len != ret)
++		condlog(3, "%s/%s: failed to set value to %s: %s",
++			udev_device_get_sysname(parent), get_strbuf_str(&buf),
++			value, (ret < 0)? strerror(-ret) : "write underflow");
++	return (len != ret);
++}
++
+ static void
+ sysfs_set_rport_tmo(struct multipath *mpp, struct path *pp)
+ {
+@@ -862,13 +898,15 @@ sysfs_set_scsi_tmo (struct config *conf, struct multipath *mpp)
+ 
+ 		if (pp->dev_loss == DEV_LOSS_TMO_UNSET &&
+ 		    pp->fast_io_fail == MP_FAST_IO_FAIL_UNSET &&
+-		    pp->eh_deadline == EH_DEADLINE_UNSET)
++		    pp->eh_deadline == EH_DEADLINE_UNSET &&
++		    conf->max_retries == MAX_RETRIES_UNSET)
+ 			continue;
+ 
+ 		if (pp->bus != SYSFS_BUS_SCSI)
+ 			continue;
+ 
+ 		sysfs_set_eh_deadline(pp);
++		sysfs_set_max_retries(conf, pp);
+ 
+ 		if (pp->dev_loss == DEV_LOSS_TMO_UNSET &&
+ 		    pp->fast_io_fail == MP_FAST_IO_FAIL_UNSET)
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index c1e93e6e..b4252ab5 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -276,6 +276,12 @@ enum eh_deadline_states {
+ 	EH_DEADLINE_ZERO = UOZ_ZERO,
+ };
+ 
++enum max_retries_states {
++	MAX_RETRIES_UNSET = UOZ_UNDEF,
++	MAX_RETRIES_OFF = UOZ_OFF,
++	MAX_RETRIES_ZERO = UOZ_ZERO,
++};
++
+ enum recheck_wwid_states {
+ 	RECHECK_WWID_UNDEF = YNU_UNDEF,
+ 	RECHECK_WWID_OFF = YNU_NO,
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index 5e447e67..789f0bfc 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -743,6 +743,20 @@ The default is: \fB<unset>\fR
+ .
+ .
+ .TP
++.B max_retries
++Specify the maximum number of times the SCSI layer will retry IO commands for
++some types of SCSI errors before returning failure. Setting this can be helpful
++for cases where IO commands hang and timeout. By default, the SCSI layer will
++retry IOs 5 times. Reducing this value will allow multipath to retry the IO
++down another path sooner. Valid values are
++\fB0\fR through \fB5\fR.
++.RS
++.TP
++The default is: \fB<unset>\fR
++.RE
++.
++.
++.TP
+ .B bindings_file
+ This option is deprecated, and will be removed in a future release.
+ The full pathname of the binding file to be used when the user_friendly_names

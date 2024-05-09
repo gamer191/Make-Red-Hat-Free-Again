@@ -1,0 +1,143 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 7 Oct 2022 12:35:42 -0500
+Subject: [PATCH] libmultipath: prepare proto_id for use by non-scsi devivces
+
+Make sure that when we are checking for a scsi protocol, we are first
+checking that we are working with a scsi path.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/configure.c   |  9 +++++----
+ libmultipath/discovery.c   | 13 ++++++++-----
+ libmultipath/print.c       |  6 ++++--
+ libmultipath/structs.c     |  2 +-
+ libmultipath/structs.h     |  4 +++-
+ multipathd/fpin_handlers.c |  2 +-
+ 6 files changed, 22 insertions(+), 14 deletions(-)
+
+diff --git a/libmultipath/configure.c b/libmultipath/configure.c
+index cc778a22..c6803b40 100644
+--- a/libmultipath/configure.c
++++ b/libmultipath/configure.c
+@@ -223,10 +223,11 @@ int rr_optimize_path_order(struct pathgroup *pgp)
+ 
+ 	total_paths = VECTOR_SIZE(pgp->paths);
+ 	vector_foreach_slot(pgp->paths, pp, i) {
+-		if (pp->sg_id.proto_id != SCSI_PROTOCOL_FCP &&
+-			pp->sg_id.proto_id != SCSI_PROTOCOL_SAS &&
+-			pp->sg_id.proto_id != SCSI_PROTOCOL_ISCSI &&
+-			pp->sg_id.proto_id != SCSI_PROTOCOL_SRP) {
++		if (pp->bus != SYSFS_BUS_SCSI ||
++		    (pp->sg_id.proto_id != SCSI_PROTOCOL_FCP &&
++		     pp->sg_id.proto_id != SCSI_PROTOCOL_SAS &&
++		     pp->sg_id.proto_id != SCSI_PROTOCOL_ISCSI &&
++		     pp->sg_id.proto_id != SCSI_PROTOCOL_SRP)) {
+ 			/* return success as default path order
+ 			 * is maintained in path group
+ 			 */
+diff --git a/libmultipath/discovery.c b/libmultipath/discovery.c
+index bcda8b09..7f2eb409 100644
+--- a/libmultipath/discovery.c
++++ b/libmultipath/discovery.c
+@@ -481,10 +481,11 @@ int sysfs_get_host_adapter_name(const struct path *pp, char *adapter_name)
+ 
+ 	proto_id = pp->sg_id.proto_id;
+ 
+-	if (proto_id != SCSI_PROTOCOL_FCP &&
+-	    proto_id != SCSI_PROTOCOL_SAS &&
+-	    proto_id != SCSI_PROTOCOL_ISCSI &&
+-	    proto_id != SCSI_PROTOCOL_SRP) {
++	if (pp->bus != SYSFS_BUS_SCSI ||
++	    (proto_id != SCSI_PROTOCOL_FCP &&
++	     proto_id != SCSI_PROTOCOL_SAS &&
++	     proto_id != SCSI_PROTOCOL_ISCSI &&
++	     proto_id != SCSI_PROTOCOL_SRP)) {
+ 		return 1;
+ 	}
+ 	/* iscsi doesn't have adapter info in sysfs
+@@ -1754,8 +1755,10 @@ sysfs_pathinfo(struct path *pp, const struct _vector *hwtable)
+ 		pp->bus = SYSFS_BUS_CCISS;
+ 	if (!strncmp(pp->dev,"dasd", 4))
+ 		pp->bus = SYSFS_BUS_CCW;
+-	if (!strncmp(pp->dev,"sd", 2))
++	if (!strncmp(pp->dev,"sd", 2)) {
+ 		pp->bus = SYSFS_BUS_SCSI;
++		pp->sg_id.proto_id = SCSI_PROTOCOL_UNSPEC;
++	}
+ 	if (!strncmp(pp->dev,"nvme", 4))
+ 		pp->bus = SYSFS_BUS_NVME;
+ 
+diff --git a/libmultipath/print.c b/libmultipath/print.c
+index 46e3d32e..082e4e30 100644
+--- a/libmultipath/print.c
++++ b/libmultipath/print.c
+@@ -592,7 +592,8 @@ snprint_host_attr (struct strbuf *buff, const struct path * pp, char *attr)
+ 	const char *value = NULL;
+ 	int ret;
+ 
+-	if (pp->sg_id.proto_id != SCSI_PROTOCOL_FCP)
++	if (pp->bus != SYSFS_BUS_SCSI ||
++	    pp->sg_id.proto_id != SCSI_PROTOCOL_FCP)
+ 		return append_strbuf_str(buff, "[undef]");
+ 	sprintf(host_id, "host%d", pp->sg_id.host_no);
+ 	host_dev = udev_device_new_from_subsystem_sysname(udev, "fc_host",
+@@ -631,7 +632,8 @@ snprint_tgt_wwpn (struct strbuf *buff, const struct path * pp)
+ 	const char *value = NULL;
+ 	int ret;
+ 
+-	if (pp->sg_id.proto_id != SCSI_PROTOCOL_FCP)
++	if (pp->bus != SYSFS_BUS_SCSI ||
++	    pp->sg_id.proto_id != SCSI_PROTOCOL_FCP)
+ 		return append_strbuf_str(buff, "[undef]");
+ 	sprintf(rport_id, "rport-%d:%d-%d",
+ 		pp->sg_id.host_no, pp->sg_id.channel, pp->sg_id.transport_id);
+diff --git a/libmultipath/structs.c b/libmultipath/structs.c
+index 5dfa86a8..be81a83c 100644
+--- a/libmultipath/structs.c
++++ b/libmultipath/structs.c
+@@ -116,7 +116,7 @@ alloc_path (void)
+ 		pp->sg_id.channel = -1;
+ 		pp->sg_id.scsi_id = -1;
+ 		pp->sg_id.lun = SCSI_INVALID_LUN;
+-		pp->sg_id.proto_id = SCSI_PROTOCOL_UNSPEC;
++		pp->sg_id.proto_id = PROTOCOL_UNSET;
+ 		pp->fd = -1;
+ 		pp->tpgs = TPGS_UNDEF;
+ 		pp->priority = PRIO_UNDEF;
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index b4f75de0..2525af17 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -176,6 +176,8 @@ enum queue_mode_states {
+ 	QUEUE_MODE_RQ,
+ };
+ 
++#define PROTOCOL_UNSET -1
++
+ enum scsi_protocol {
+ 	SCSI_PROTOCOL_FCP = 0,	/* Fibre Channel */
+ 	SCSI_PROTOCOL_SPI = 1,	/* parallel SCSI */
+@@ -284,7 +286,7 @@ struct sg_id {
+ 	uint64_t lun;
+ 	short h_cmd_per_lun;
+ 	short d_queue_depth;
+-	enum scsi_protocol proto_id;
++	int proto_id;
+ 	int transport_id;
+ };
+ 
+diff --git a/multipathd/fpin_handlers.c b/multipathd/fpin_handlers.c
+index aaf5655d..571796e7 100644
+--- a/multipathd/fpin_handlers.c
++++ b/multipathd/fpin_handlers.c
+@@ -219,7 +219,7 @@ static int  fpin_chk_wwn_setpath_marginal(uint16_t host_num,  struct vectors *ve
+ 
+ 	vector_foreach_slot(vecs->pathvec, pp, k) {
+ 		/* Checks the host number and also for the SCSI FCP */
+-		if (pp->sg_id.proto_id != SCSI_PROTOCOL_FCP || host_num !=  pp->sg_id.host_no)
++		if (pp->bus != SYSFS_BUS_SCSI || pp->sg_id.proto_id != SCSI_PROTOCOL_FCP || host_num !=  pp->sg_id.host_no)
+ 			continue;
+ 		sprintf(rport_id, "rport-%d:%d-%d",
+ 				pp->sg_id.host_no, pp->sg_id.channel, pp->sg_id.transport_id);

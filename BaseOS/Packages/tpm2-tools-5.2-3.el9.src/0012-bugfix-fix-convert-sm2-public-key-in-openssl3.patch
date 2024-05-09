@@ -1,0 +1,30 @@
+From 3848000b934b9e2546a506ab0922c028491d2284 Mon Sep 17 00:00:00 2001
+From: mayuanchen <94815698+mayuanchenma@users.noreply.github.com>
+Date: Thu, 1 Dec 2022 21:44:22 +0800
+Subject: [PATCH 12/17] bugfix: fix convert sm2 public key in openssl3.
+
+Signed-off-by: mayuanchen <94815698+mayuanchenma@users.noreply.github.com>
+---
+ lib/tpm2_convert.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/lib/tpm2_convert.c b/lib/tpm2_convert.c
+index 1bba370f..edb9bed0 100644
+--- a/lib/tpm2_convert.c
++++ b/lib/tpm2_convert.c
+@@ -335,7 +335,11 @@ EVP_PKEY *convert_pubkey_ECC(TPMT_PUBLIC *public) {
+         goto out;
+     }
+ 
+-    ctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL);
++    if (nid == NID_sm2) {
++        ctx = EVP_PKEY_CTX_new_from_name(NULL, "SM2", NULL);
++    } else {
++        ctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL);
++    }
+     if (!ctx) {
+         print_ssl_error("Failed to allocate EC key context");
+         goto out;
+-- 
+2.40.1
+

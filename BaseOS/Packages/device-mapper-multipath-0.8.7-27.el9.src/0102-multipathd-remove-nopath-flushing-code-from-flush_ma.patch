@@ -1,0 +1,131 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 6 Dec 2023 17:22:02 -0500
+Subject: [PATCH] multipathd: remove nopath flushing code from flush_map()
+
+Instead of flush_map() handling both user requested flushes and
+automatic flushes when the last path has been deleted, make
+flush_map_nopaths() handle the automatic flushes itself, since a later
+patch will change the behavior of flush_map().
+
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipathd/cli_handlers.c |  2 +-
+ multipathd/main.c         | 45 +++++++++++++++++----------------------
+ multipathd/main.h         |  2 +-
+ 3 files changed, 21 insertions(+), 28 deletions(-)
+
+diff --git a/multipathd/cli_handlers.c b/multipathd/cli_handlers.c
+index 53bebc8d..f04fb558 100644
+--- a/multipathd/cli_handlers.c
++++ b/multipathd/cli_handlers.c
+@@ -796,7 +796,7 @@ cli_del_maps (void *v, char **reply, int *len, void *data)
+ 
+ 	condlog(2, "remove maps (operator)");
+ 	vector_foreach_slot(vecs->mpvec, mpp, i) {
+-		if (flush_map(mpp, vecs, 0))
++		if (flush_map(mpp, vecs))
+ 			ret++;
+ 		else
+ 			i--;
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 6d1a5e4e..1b5f82e7 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -490,12 +490,11 @@ int update_multipath (struct vectors *vecs, char *mapname, int reset)
+ 
+ static bool
+ flush_map_nopaths(struct multipath *mpp, struct vectors *vecs) {
+-	char alias[WWID_SIZE];
++	int r;
+ 
+ 	/*
+ 	 * flush_map will fail if the device is open
+ 	 */
+-	strlcpy(alias, mpp->alias, WWID_SIZE);
+ 	if (mpp->flush_on_last_del == FLUSH_ENABLED) {
+ 		condlog(2, "%s Last path deleted, disabling queueing",
+ 			mpp->alias);
+@@ -505,11 +504,20 @@ flush_map_nopaths(struct multipath *mpp, struct vectors *vecs) {
+ 		mpp->stat_map_failures++;
+ 		dm_queue_if_no_path(mpp->alias, 0);
+ 	}
+-	if (!flush_map(mpp, vecs, 1)) {
+-		condlog(2, "%s: removed map after removing all paths", alias);
+-		return true;
++	r = dm_flush_map_nopaths(mpp->alias, mpp->deferred_remove);
++	if (r) {
++		if (r == 1)
++			condlog(0, "%s: can't flush", mpp->alias);
++		else {
++			condlog(2, "%s: devmap deferred remove", mpp->alias);
++			mpp->deferred_remove = DEFERRED_REMOVE_IN_PROGRESS;
++		}
++		return false;
+ 	}
+-	return false;
++
++	condlog(2, "%s: map flushed after removing all paths", mpp->alias);
++	remove_map_and_stop_waiter(mpp, vecs);
++	return true;
+ }
+ 
+ static void
+@@ -685,30 +693,15 @@ sync_maps_state(vector mpvec)
+ }
+ 
+ int
+-flush_map(struct multipath * mpp, struct vectors * vecs, int nopaths)
++flush_map(struct multipath * mpp, struct vectors * vecs)
+ {
+-	int r;
+-
+-	if (nopaths)
+-		r = dm_flush_map_nopaths(mpp->alias, mpp->deferred_remove);
+-	else
+-		r = dm_flush_map(mpp->alias);
+-	/*
+-	 * clear references to this map before flushing so we can ignore
+-	 * the spurious uevent we may generate with the dm_flush_map call below
+-	 */
++	int r = dm_flush_map(mpp->alias);
+ 	if (r) {
+-		if (r == 1)
+-			condlog(0, "%s: can't flush", mpp->alias);
+-		else {
+-			condlog(2, "%s: devmap deferred remove", mpp->alias);
+-			mpp->deferred_remove = DEFERRED_REMOVE_IN_PROGRESS;
+-		}
++		condlog(0, "%s: can't flush", mpp->alias);
+ 		return r;
+ 	}
+-	else
+-		condlog(2, "%s: map flushed", mpp->alias);
+ 
++	condlog(2, "%s: map flushed", mpp->alias);
+ 	remove_map_and_stop_waiter(mpp, vecs);
+ 
+ 	return 0;
+@@ -866,7 +859,7 @@ ev_remove_map (char * devname, char * alias, int minor, struct vectors * vecs)
+ 			mpp->alias, mpp->dmi->minor, minor);
+ 		return 1;
+ 	}
+-	return flush_map(mpp, vecs, 0);
++	return flush_map(mpp, vecs);
+ }
+ 
+ static void
+diff --git a/multipathd/main.h b/multipathd/main.h
+index dbae4935..4138faa4 100644
+--- a/multipathd/main.h
++++ b/multipathd/main.h
+@@ -43,7 +43,7 @@ int ev_add_path (struct path *, struct vectors *, int);
+ int ev_remove_path (struct path *, struct vectors *, int);
+ int ev_add_map (char *, const char *, struct vectors *);
+ int ev_remove_map (char *, char *, int, struct vectors *);
+-int flush_map(struct multipath *, struct vectors *, int);
++int flush_map(struct multipath *, struct vectors *);
+ int set_config_state(enum daemon_status);
+ void * mpath_alloc_prin_response(int prin_sa);
+ int prin_do_scsi_ioctl(char *, int rq_servact, struct prin_resp * resp,

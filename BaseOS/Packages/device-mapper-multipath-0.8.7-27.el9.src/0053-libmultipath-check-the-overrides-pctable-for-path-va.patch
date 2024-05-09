@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 13 Apr 2022 23:27:39 -0500
+Subject: [PATCH] libmultipath: check the overrides pctable for path variables
+
+Paths will now also check the pctable when checking for attribtes that
+exists in both the overrides section and the protocol subsection. Values
+in a matching pcentry will be used in preference to values in the
+overrides hwentry.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/propsel.c | 29 ++++++++++++++++++++++++++---
+ 1 file changed, 26 insertions(+), 3 deletions(-)
+
+diff --git a/libmultipath/propsel.c b/libmultipath/propsel.c
+index f146fe64..2b47f5f8 100644
+--- a/libmultipath/propsel.c
++++ b/libmultipath/propsel.c
+@@ -80,6 +80,8 @@ static const char conf_origin[] =
+ 	"(setting: multipath.conf defaults/devices section)";
+ static const char overrides_origin[] =
+ 	"(setting: multipath.conf overrides section)";
++static const char overrides_pce_origin[] =
++	"(setting: multipath.conf overrides protocol section)";
+ static const char cmdline_origin[] =
+ 	"(setting: multipath command line [-p] flag)";
+ static const char autodetect_origin[] =
+@@ -147,6 +149,27 @@ do {									\
+ 	}								\
+ } while (0)
+ 
++#define pp_set_ovr_pce(var)						\
++do {									\
++	struct pcentry *_pce;						\
++	int _i;								\
++									\
++	if (conf->overrides) {						\
++		vector_foreach_slot(conf->overrides->pctable, _pce, _i) {	\
++			if (_pce->type == (int)bus_protocol_id(pp) && _pce->var) {	\
++				pp->var = _pce->var;			\
++				origin = overrides_pce_origin;		\
++				goto out;				\
++			}						\
++		}							\
++		if (conf->overrides->var) {				\
++			pp->var = conf->overrides->var;			\
++			origin = overrides_origin;			\
++			goto out;					\
++		}							\
++	}								\
++} while (0)
++
+ int select_mode(struct config *conf, struct multipath *mp)
+ {
+ 	const char *origin;
+@@ -775,7 +798,7 @@ int select_fast_io_fail(struct config *conf, struct path *pp)
+ 	const char *origin;
+ 	STRBUF_ON_STACK(buff);
+ 
+-	pp_set_ovr(fast_io_fail);
++	pp_set_ovr_pce(fast_io_fail);
+ 	pp_set_hwe(fast_io_fail);
+ 	pp_set_conf(fast_io_fail);
+ 	pp_set_default(fast_io_fail, DEFAULT_FAST_IO_FAIL);
+@@ -791,7 +814,7 @@ int select_dev_loss(struct config *conf, struct path *pp)
+ 	const char *origin;
+ 	STRBUF_ON_STACK(buff);
+ 
+-	pp_set_ovr(dev_loss);
++	pp_set_ovr_pce(dev_loss);
+ 	pp_set_hwe(dev_loss);
+ 	pp_set_conf(dev_loss);
+ 	pp->dev_loss = DEV_LOSS_TMO_UNSET;
+@@ -808,7 +831,7 @@ int select_eh_deadline(struct config *conf, struct path *pp)
+ 	const char *origin;
+ 	STRBUF_ON_STACK(buff);
+ 
+-	pp_set_ovr(eh_deadline);
++	pp_set_ovr_pce(eh_deadline);
+ 	pp_set_hwe(eh_deadline);
+ 	pp_set_conf(eh_deadline);
+ 	pp->eh_deadline = EH_DEADLINE_UNSET;

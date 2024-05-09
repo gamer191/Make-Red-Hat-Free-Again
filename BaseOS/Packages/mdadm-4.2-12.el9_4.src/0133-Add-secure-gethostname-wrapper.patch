@@ -1,0 +1,124 @@
+From 21e622f214a38c048c5689158bc6314a91a46e40 Mon Sep 17 00:00:00 2001
+From: Blazej Kucman <blazej.kucman@intel.com>
+Date: Fri, 16 Jun 2023 21:45:55 +0200
+Subject: [PATCH 133/165] Add secure gethostname() wrapper
+
+gethostname() func does not ensure null-terminated string
+if hostname is longer than buffer length.
+For security, a function s_gethostname() has been added
+to ensure that "\0" is added to the end of the buffer.
+Previously this had to be handled in each place
+of the gethostname() call.
+
+Signed-off-by: Blazej Kucman <blazej.kucman@intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ Monitor.c   |  3 +--
+ lib.c       | 19 +++++++++++++++++++
+ mapfile.c   |  3 +--
+ mdadm.c     |  3 +--
+ mdadm.h     |  1 +
+ super-ddf.c |  3 +--
+ 6 files changed, 24 insertions(+), 8 deletions(-)
+
+diff --git a/Monitor.c b/Monitor.c
+index 66175968..e74a0558 100644
+--- a/Monitor.c
++++ b/Monitor.c
+@@ -222,11 +222,10 @@ int Monitor(struct mddev_dev *devlist,
+ 	info.dosyslog = dosyslog;
+ 	info.test = c->test;
+ 
+-	if (gethostname(info.hostname, sizeof(info.hostname)) != 0) {
++	if (s_gethostname(info.hostname, sizeof(info.hostname)) != 0) {
+ 		pr_err("Cannot get hostname.\n");
+ 		return 1;
+ 	}
+-	info.hostname[sizeof(info.hostname) - 1] = '\0';
+ 
+ 	if (share){
+ 		if (check_one_sharer(c->scan) == 2)
+diff --git a/lib.c b/lib.c
+index fe5c8d2c..8a4b48e0 100644
+--- a/lib.c
++++ b/lib.c
+@@ -585,3 +585,22 @@ int parse_num(int *dest, const char *num)
+ 	*dest = temp;
+ 	return 0;
+ }
++
++/**
++ * s_gethostname() - secure get hostname. Assure null-terminated string.
++ *
++ * @buf: buffer for hostname.
++ * @buf_len: buffer length.
++ *
++ * Return: gethostname() result.
++ */
++int s_gethostname(char *buf, int buf_len)
++{
++	assert(buf);
++
++	int ret = gethostname(buf, buf_len);
++
++	buf[buf_len - 1] = 0;
++
++	return ret;
++}
+diff --git a/mapfile.c b/mapfile.c
+index 34fea179..f1f3ee2c 100644
+--- a/mapfile.c
++++ b/mapfile.c
+@@ -363,8 +363,7 @@ void RebuildMap(void)
+ 	char *homehost = conf_get_homehost(&require_homehost);
+ 
+ 	if (homehost == NULL || strcmp(homehost, "<system>")==0) {
+-		if (gethostname(sys_hostname, sizeof(sys_hostname)) == 0) {
+-			sys_hostname[sizeof(sys_hostname)-1] = 0;
++		if (s_gethostname(sys_hostname, sizeof(sys_hostname)) == 0) {
+ 			homehost = sys_hostname;
+ 		}
+ 	}
+diff --git a/mdadm.c b/mdadm.c
+index 076b45e0..e32598cb 100644
+--- a/mdadm.c
++++ b/mdadm.c
+@@ -1340,8 +1340,7 @@ int main(int argc, char *argv[])
+ 	if (c.homehost == NULL && c.require_homehost)
+ 		c.homehost = conf_get_homehost(&c.require_homehost);
+ 	if (c.homehost == NULL || strcasecmp(c.homehost, "<system>") == 0) {
+-		if (gethostname(sys_hostname, sizeof(sys_hostname)) == 0) {
+-			sys_hostname[sizeof(sys_hostname)-1] = 0;
++		if (s_gethostname(sys_hostname, sizeof(sys_hostname)) == 0) {
+ 			c.homehost = sys_hostname;
+ 		}
+ 	}
+diff --git a/mdadm.h b/mdadm.h
+index 83f2cf7f..f0ceeb78 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -1805,6 +1805,7 @@ extern void set_dlm_hooks(void);
+ extern void sleep_for(unsigned int sec, long nsec, bool wake_after_interrupt);
+ extern bool is_directory(const char *path);
+ extern bool is_file(const char *path);
++extern int s_gethostname(char *buf, int buf_len);
+ 
+ #define _ROUND_UP(val, base)	(((val) + (base) - 1) & ~(base - 1))
+ #define ROUND_UP(val, base)	_ROUND_UP(val, (typeof(val))(base))
+diff --git a/super-ddf.c b/super-ddf.c
+index 7213284e..c5242654 100644
+--- a/super-ddf.c
++++ b/super-ddf.c
+@@ -2364,8 +2364,7 @@ static int init_super_ddf(struct supertype *st,
+ 	 * Remaining 16 are serial number.... maybe a hostname would do?
+ 	 */
+ 	memcpy(ddf->controller.guid, T10, sizeof(T10));
+-	gethostname(hostname, sizeof(hostname));
+-	hostname[sizeof(hostname) - 1] = 0;
++	s_gethostname(hostname, sizeof(hostname));
+ 	hostlen = strlen(hostname);
+ 	memcpy(ddf->controller.guid + 24 - hostlen, hostname, hostlen);
+ 	for (i = strlen(T10) ; i+hostlen < 24; i++)
+-- 
+2.40.1
+

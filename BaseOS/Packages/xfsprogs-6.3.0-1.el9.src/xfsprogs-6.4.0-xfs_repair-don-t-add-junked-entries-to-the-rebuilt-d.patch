@@ -1,0 +1,41 @@
+From aca02624815ca47c6fd4cafdb0aeaad641ca1915 Mon Sep 17 00:00:00 2001
+From: "Darrick J. Wong" <djwong@kernel.org>
+Date: Mon, 5 Jun 2023 08:37:24 -0700
+Subject: [PATCH] xfs_repair: don't add junked entries to the rebuilt directory
+
+If a directory contains multiple entries with the same name, we create
+separate objects in the directory hashtab for each dirent.  The first
+one has p->junkit==0, but the subsequent ones have p->junkit==1.
+Because these are duplicate names that are not garbage, the first
+character of p->name.name is not set to a slash.
+
+Don't add these subsequent hashtab entries to the rebuilt directory.
+
+Found by running xfs/155 with the parent pointers patchset enabled.
+
+Fixes: 33165ec3b4b ("Fix dirv2 rebuild in phase6 Merge of master-melb:xfs-cmds:26664a by kenmcd.")
+Signed-off-by: Darrick J. Wong <djwong@kernel.org>
+Reviewed-by: Pavel Reichl <preichl@redhat.com>
+Signed-off-by: Carlos Maiolino <cem@kernel.org>
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+---
+ repair/phase6.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/repair/phase6.c b/repair/phase6.c
+index 25bbcd10..3870c5c9 100644
+--- a/repair/phase6.c
++++ b/repair/phase6.c
+@@ -1316,7 +1316,8 @@ longform_dir2_rebuild(
+ 	/* go through the hash list and re-add the inodes */
+ 
+ 	for (p = hashtab->first; p; p = p->nextbyorder) {
+-
++		if (p->junkit)
++			continue;
+ 		if (p->name.name[0] == '/' || (p->name.name[0] == '.' &&
+ 				(p->name.len == 1 || (p->name.len == 2 &&
+ 						p->name.name[1] == '.'))))
+-- 
+2.41.0
+

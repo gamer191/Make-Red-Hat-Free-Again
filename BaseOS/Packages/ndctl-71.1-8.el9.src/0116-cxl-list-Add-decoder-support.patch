@@ -1,0 +1,1108 @@
+From 46564977afb733a92526c688fe106e19b139ddfc Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:54:27 -0800
+Subject: [PATCH 116/217] cxl/list: Add decoder support
+
+Decoder objects exist at each level of a CXL port topology and map a
+physical address range a set of interleaved ports at each level of the
+hierarchy. Typically end users mostly care about the root-level decoders
+which enumerate the potential CXL address space in the system, and the
+endpoint decoders that indicate which address ranges a given device
+contributes resources. Intermediate switch-level decoders are typically
+only useful for debugging decode problems.
+
+$ cxl list -D -d 3.1 -u
+{
+  "decoder":"decoder3.1",
+  "resource":"0x8030000000",
+  "size":"512.00 MiB (536.87 MB)",
+  "volatile_capable":true
+}
+
+Link: https://lore.kernel.org/r/164298566760.3021641.3999006903066004615.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ .clang-format                    |   1 +
+ Documentation/cxl/cxl-list.txt   |  18 ++-
+ Documentation/cxl/lib/libcxl.txt |  70 ++++++++-
+ cxl/filter.c                     | 194 +++++++++++++++++++++++--
+ cxl/filter.h                     |   2 +
+ cxl/json.c                       |  62 ++++++++
+ cxl/json.h                       |   2 +
+ cxl/lib/libcxl.c                 | 239 ++++++++++++++++++++++++++++---
+ cxl/lib/libcxl.sym               |  14 ++
+ cxl/lib/private.h                |  31 +++-
+ cxl/libcxl.h                     |  28 ++++
+ cxl/list.c                       |   9 +-
+ util/json.h                      |   1 +
+ 13 files changed, 643 insertions(+), 28 deletions(-)
+
+diff --git a/.clang-format b/.clang-format
+index 106bc5e..16e28ac 100644
+--- a/.clang-format
++++ b/.clang-format
+@@ -80,6 +80,7 @@ ForEachMacros:
+   - 'cxl_memdev_foreach'
+   - 'cxl_bus_foreach'
+   - 'cxl_port_foreach'
++  - 'cxl_decoder_foreach'
+   - 'cxl_endpoint_foreach'
+   - 'daxctl_dev_foreach'
+   - 'daxctl_mapping_foreach'
+diff --git a/Documentation/cxl/cxl-list.txt b/Documentation/cxl/cxl-list.txt
+index bac27c7..84872b9 100644
+--- a/Documentation/cxl/cxl-list.txt
++++ b/Documentation/cxl/cxl-list.txt
+@@ -5,7 +5,7 @@ cxl-list(1)
+ 
+ NAME
+ ----
+-cxl-list - List CXL capable memory devices, and their attributes in json.
++cxl-list - List platform CXL objects, and their attributes, in json.
+ 
+ SYNOPSIS
+ --------
+@@ -29,6 +29,10 @@ The potential top-level array names and their nesting properties are:
+ "endpoints":: nest under ports or buses (if ports are not emitted)
+ "memdevs":: nest under endpoints or ports (if endpoints are not
+    emitted) or buses (if endpoints and ports are not emitted)
++"root decoders":: nest under buses
++"port decoders":: nest under ports, or buses (if ports are not emitted)
++"endpoint decoders":: nest under endpoints, or ports (if endpoints are
++   not emitted) or buses (if endpoints and ports are not emitted)
+ 
+ Filters can by specifed as either a single identidier, a space separated
+ quoted string, or a comma separated list. When multiple filter
+@@ -254,6 +258,18 @@ OPTIONS
+ 	Specify CXL endpoint device name(s), or device id(s) to filter
+ 	the emitted endpoint(s).
+ 
++-D::
++--decoders::
++	Include decoder objects (CXL Memory decode capability instances
++	in buses, ports, and endpoints) in the listing.
++
++-d::
++--decoder::
++	Specify CXL decoder device name(s), device id(s), or decoder type names
++	to filter the emitted decoder(s). The format for a decoder name is
++	"decoder<port_id>.<instance_id>". The possible decoder type names are
++	"root", "switch", or "endpoint", similar to the port filter syntax.
++
+ --debug::
+ 	If the cxl tool was built with debug enabled, turn on debug
+ 	messages.
+diff --git a/Documentation/cxl/lib/libcxl.txt b/Documentation/cxl/lib/libcxl.txt
+index 49edb71..73af3d0 100644
+--- a/Documentation/cxl/lib/libcxl.txt
++++ b/Documentation/cxl/lib/libcxl.txt
+@@ -179,6 +179,7 @@ struct cxl_bus *cxl_bus_get_first(struct cxl_ctx *ctx);
+ struct cxl_bus *cxl_bus_get_next(struct cxl_bus *bus);
+ struct cxl_ctx *cxl_bus_get_ctx(struct cxl_bus *bus);
+ struct cxl_bus *cxl_memdev_get_bus(struct cxl_memdev *memdev);
++struct cxl_bus *cxl_port_get_bus(struct cxl_port *port);
+ struct cxl_bus *cxl_endpoint_get_bus(struct cxl_endpoint *endpoint);
+ 
+ #define cxl_bus_foreach(ctx, bus)                                           \
+@@ -215,9 +216,9 @@ struct cxl_port *cxl_bus_get_port(struct cxl_bus *bus);
+ struct cxl_port *cxl_port_get_first(struct cxl_port *parent);
+ struct cxl_port *cxl_port_get_next(struct cxl_port *port);
+ struct cxl_port *cxl_port_get_parent(struct cxl_port *port);
+-struct cxl_bus *cxl_port_get_bus(struct cxl_port *port);
+ struct cxl_ctx *cxl_port_get_ctx(struct cxl_port *port);
+ const char *cxl_port_get_host(struct cxl_port *port);
++struct cxl_port *cxl_decoder_get_port(struct cxl_decoder *decoder);
+ 
+ #define cxl_port_foreach(parent, port)                                      \
+        for (port = cxl_port_get_first(parent); port != NULL;                \
+@@ -284,6 +285,73 @@ int cxl_endpoint_get_id(struct cxl_endpoint *endpoint);
+ int cxl_endpoint_is_enabled(struct cxl_endpoint *endpoint);
+ ----
+ 
++DECODERS
++--------
++Decoder objects are associated with the "HDM Decoder Capability"
++published in Port devices and CXL capable PCIe endpoints. The kernel
++additionally models platform firmware described CXL memory ranges (like
++the ACPI CEDT.CFMWS) as static decoder objects. They route System
++Physical Addresses through a port topology to an endpoint decoder that
++does the final translation from SPA to DPA (system-physical-address to
++device-local-physical-address).
++
++=== DECODER: Enumeration
++----
++struct cxl_decoder *cxl_decoder_get_first(struct cxl_port *port);
++struct cxl_decoder *cxl_decoder_get_next(struct cxl_decoder *decoder);
++struct cxl_ctx *cxl_decoder_get_ctx(struct cxl_decoder *decoder);
++
++#define cxl_decoder_foreach(port, decoder)                                  \
++       for (decoder = cxl_decoder_get_first(port); decoder != NULL;         \
++            decoder = cxl_decoder_get_next(decoder))
++----
++The definition of a CXL port in libcxl is an object that hosts one or
++more CXL decoder objects.
++
++=== DECODER: Attributes
++----
++unsigned long long cxl_decoder_get_resource(struct cxl_decoder *decoder);
++unsigned long long cxl_decoder_get_size(struct cxl_decoder *decoder);
++const char *cxl_decoder_get_devname(struct cxl_decoder *decoder);
++int cxl_decoder_get_id(struct cxl_decoder *decoder);
++
++enum cxl_decoder_target_type {
++       CXL_DECODER_TTYPE_UNKNOWN,
++       CXL_DECODER_TTYPE_EXPANDER,
++       CXL_DECODER_TTYPE_ACCELERATOR,
++};
++
++cxl_decoder_get_target_type(struct cxl_decoder *decoder);
++bool cxl_decoder_is_pmem_capable(struct cxl_decoder *decoder);
++bool cxl_decoder_is_volatile_capable(struct cxl_decoder *decoder);
++bool cxl_decoder_is_mem_capable(struct cxl_decoder *decoder);
++bool cxl_decoder_is_accelmem_capable(struct cxl_decoder *decoder);
++bool cxl_decoder_is_locked(struct cxl_decoder *decoder);
++----
++The kernel protects the enumeration of the physical address layout of
++the system. Without CAP_SYS_ADMIN cxl_decoder_get_resource() returns
++ULLONG_MAX to indicate that the address information was not retrievable.
++Otherwise, cxl_decoder_get_resource() returns the currently programmed
++value of the base of the decoder's decode range. A zero-sized decoder
++indicates a disabled decoder.
++
++Root level decoders only support limited set of memory types in their
++address range. The cxl_decoder_is_<memtype>_capable() helpers identify
++what is supported. Switch level decoders, in contrast are capable of
++routing any memory type, i.e. they just forward along the memory type
++support from their parent port. Endpoint decoders follow the
++capabilities of their host memory device.
++
++The capabilities of a decoder are not to be confused with their type /
++mode.  The type ultimately depends on the endpoint. For example an
++accelerator requires all decoders in its ancestry to be set to
++CXL_DECODER_TTYPE_ACCELERATOR, and conversely plain memory expander
++devices require CXL_DECODER_TTYPE_EXPANDER.
++
++Platform firmware may setup the CXL decode hierarchy before the OS
++boots, and may additionally require that the OS not change the decode
++settings. This property is indicated by the cxl_decoder_is_locked() API.
++
+ include::../../copyright.txt[]
+ 
+ SEE ALSO
+diff --git a/cxl/filter.c b/cxl/filter.c
+index 6dc61a1..dc052f6 100644
+--- a/cxl/filter.c
++++ b/cxl/filter.c
+@@ -171,6 +171,17 @@ util_cxl_endpoint_filter_by_port(struct cxl_endpoint *endpoint,
+ 	return NULL;
+ }
+ 
++static struct cxl_decoder *
++util_cxl_decoder_filter_by_port(struct cxl_decoder *decoder, const char *ident,
++				enum cxl_port_filter_mode mode)
++{
++	struct cxl_port *port = cxl_decoder_get_port(decoder);
++
++	if (util_cxl_port_filter(port, ident, mode))
++		return decoder;
++	return NULL;
++}
++
+ static struct cxl_bus *util_cxl_bus_filter(struct cxl_bus *bus,
+ 					   const char *__ident)
+ {
+@@ -233,6 +244,16 @@ static struct cxl_port *util_cxl_port_filter_by_bus(struct cxl_port *port,
+ 	return NULL;
+ }
+ 
++static struct cxl_decoder *
++util_cxl_decoder_filter_by_bus(struct cxl_decoder *decoder, const char *__ident)
++{
++	struct cxl_port *port = cxl_decoder_get_port(decoder);
++
++	if (!util_cxl_port_filter_by_bus(port, __ident))
++		return NULL;
++	return decoder;
++}
++
+ static struct cxl_memdev *
+ util_cxl_memdev_serial_filter(struct cxl_memdev *memdev, const char *__serials)
+ {
+@@ -357,6 +378,49 @@ static struct cxl_port *util_cxl_port_filter_by_memdev(struct cxl_port *port,
+ 	return NULL;
+ }
+ 
++static struct cxl_decoder *util_cxl_decoder_filter(struct cxl_decoder *decoder,
++						   const char *__ident)
++{
++	struct cxl_port *port = cxl_decoder_get_port(decoder);
++	int pid, did;
++	char *ident, *save;
++	const char *name;
++
++	if (!__ident)
++		return decoder;
++
++	ident = strdup(__ident);
++	if (!ident)
++		return NULL;
++
++	for (name = strtok_r(ident, which_sep(__ident), &save); name;
++	     name = strtok_r(NULL, which_sep(__ident), &save)) {
++		if (strcmp(name, "all") == 0)
++			break;
++
++		if (strcmp(name, "root") == 0 && cxl_port_is_root(port))
++			break;
++		if (strcmp(name, "switch") == 0 && cxl_port_is_switch(port))
++			break;
++		if (strcmp(name, "endpoint") == 0 && cxl_port_is_endpoint(port))
++			break;
++
++		if ((sscanf(name, "%d.%d", &pid, &did) == 2 ||
++		     sscanf(name, "decoder%d.%d", &pid, &did) == 2) &&
++		    cxl_port_get_id(port) == pid &&
++		    cxl_decoder_get_id(decoder) == did)
++			break;
++
++		if (strcmp(name, cxl_decoder_get_devname(decoder)) == 0)
++			break;
++	}
++
++	free(ident);
++	if (name)
++		return decoder;
++	return NULL;
++}
++
+ static unsigned long params_to_flags(struct cxl_filter_params *param)
+ {
+ 	unsigned long flags = 0;
+@@ -440,15 +504,44 @@ static struct json_object *pick_array(struct json_object *child,
+ 	return NULL;
+ }
+ 
++static void walk_decoders(struct cxl_port *port, struct cxl_filter_params *p,
++			  struct json_object *jdecoders, unsigned long flags)
++{
++	struct cxl_decoder *decoder;
++
++	cxl_decoder_foreach(port, decoder) {
++		struct json_object *jdecoder;
++
++		if (!p->decoders)
++			continue;
++		if (!util_cxl_decoder_filter(decoder, p->decoder_filter))
++			continue;
++		if (!util_cxl_decoder_filter_by_bus(decoder, p->bus_filter))
++			continue;
++		if (!util_cxl_decoder_filter_by_port(decoder, p->port_filter,
++						     pf_mode(p)))
++			continue;
++		if (!p->idle && cxl_decoder_get_size(decoder) == 0)
++			continue;
++		jdecoder = util_cxl_decoder_to_json(decoder, flags);
++		if (!decoder) {
++			dbg(p, "decoder object allocation failure\n");
++			continue;
++		}
++		json_object_array_add(jdecoders, jdecoder);
++	}
++}
++
+ static void walk_endpoints(struct cxl_port *port, struct cxl_filter_params *p,
+ 			   struct json_object *jeps, struct json_object *jdevs,
+-			   unsigned long flags)
++			   struct json_object *jdecoders, unsigned long flags)
+ {
+ 	struct cxl_endpoint *endpoint;
+ 
+ 	cxl_endpoint_foreach(port, endpoint) {
+ 		struct cxl_port *ep_port = cxl_endpoint_get_port(endpoint);
+ 		const char *devname = cxl_endpoint_get_devname(endpoint);
++		struct json_object *jchilddecoders = NULL;
+ 		struct json_object *jendpoint = NULL;
+ 		struct cxl_memdev *memdev;
+ 
+@@ -495,14 +588,31 @@ static void walk_endpoints(struct cxl_port *port, struct cxl_filter_params *p,
+ 			else
+ 				json_object_array_add(jdevs, jobj);
+ 		}
++
++		if (p->decoders && p->endpoints) {
++			jchilddecoders = json_object_new_array();
++			if (!jchilddecoders) {
++				err(p,
++				    "%s: failed to enumerate child decoders\n",
++				    devname);
++				continue;
++			}
++		}
++
++		if (!p->decoders)
++			continue;
++		walk_decoders(cxl_endpoint_get_port(endpoint), p,
++			      pick_array(jchilddecoders, jdecoders), flags);
++		cond_add_put_array_suffix(jendpoint, "decoders", devname,
++					  jchilddecoders);
+ 	}
+ }
+ 
+-static void walk_child_ports(struct cxl_port *parent_port,
+-			     struct cxl_filter_params *p,
+-			     struct json_object *jports,
+-			     struct json_object *jeps,
+-			     struct json_object *jdevs, unsigned long flags)
++static void
++walk_child_ports(struct cxl_port *parent_port, struct cxl_filter_params *p,
++		 struct json_object *jports, struct json_object *jportdecoders,
++		 struct json_object *jeps, struct json_object *jepdecoders,
++		 struct json_object *jdevs, unsigned long flags)
+ {
+ 	struct cxl_port *port;
+ 
+@@ -512,6 +622,7 @@ static void walk_child_ports(struct cxl_port *parent_port,
+ 		struct json_object *jchilddevs = NULL;
+ 		struct json_object *jchildports = NULL;
+ 		struct json_object *jchildeps = NULL;
++		struct json_object *jchilddecoders = NULL;
+ 
+ 		if (!util_cxl_port_filter_by_memdev(port, p->memdev_filter,
+ 						    p->serial_filter))
+@@ -555,19 +666,37 @@ static void walk_child_ports(struct cxl_port *parent_port,
+ 					continue;
+ 				}
+ 			}
++
++			if (p->decoders) {
++				jchilddecoders = json_object_new_array();
++				if (!jchilddecoders) {
++					err(p,
++					    "%s: failed to enumerate child decoders\n",
++					    devname);
++					continue;
++				}
++			}
+ 		}
+ 
+ walk_children:
+-		if (p->endpoints || p->memdevs)
++		if (p->endpoints || p->memdevs || p->decoders)
+ 			walk_endpoints(port, p, pick_array(jchildeps, jeps),
+-				       pick_array(jchilddevs, jdevs), flags);
++				       pick_array(jchilddevs, jdevs),
++				       pick_array(jchilddecoders, jepdecoders),
++				       flags);
+ 
++		walk_decoders(port, p,
++			      pick_array(jchilddecoders, jportdecoders), flags);
+ 		walk_child_ports(port, p, pick_array(jchildports, jports),
++				 pick_array(jchilddecoders, jportdecoders),
+ 				 pick_array(jchildeps, jeps),
++				 pick_array(jchilddecoders, jepdecoders),
+ 				 pick_array(jchilddevs, jdevs), flags);
+ 		cond_add_put_array_suffix(jport, "ports", devname, jchildports);
+ 		cond_add_put_array_suffix(jport, "endpoints", devname,
+ 					  jchildeps);
++		cond_add_put_array_suffix(jport, "decoders", devname,
++					  jchilddecoders);
+ 		cond_add_put_array_suffix(jport, "memdevs", devname,
+ 					  jchilddevs);
+ 	}
+@@ -578,6 +707,9 @@ int cxl_filter_walk(struct cxl_ctx *ctx, struct cxl_filter_params *p)
+ 	struct json_object *jdevs = NULL, *jbuses = NULL, *jports = NULL;
+ 	struct json_object *jplatform = json_object_new_array();
+ 	unsigned long flags = params_to_flags(p);
++	struct json_object *jportdecoders = NULL;
++	struct json_object *jbusdecoders = NULL;
++	struct json_object *jepdecoders = NULL;
+ 	struct json_object *janondevs = NULL;
+ 	struct json_object *jeps = NULL;
+ 	struct cxl_memdev *memdev;
+@@ -609,6 +741,18 @@ int cxl_filter_walk(struct cxl_ctx *ctx, struct cxl_filter_params *p)
+ 	if (!jdevs)
+ 		goto err;
+ 
++	jbusdecoders = json_object_new_array();
++	if (!jbusdecoders)
++		goto err;
++
++	jportdecoders = json_object_new_array();
++	if (!jportdecoders)
++		goto err;
++
++	jepdecoders = json_object_new_array();
++	if (!jepdecoders)
++		goto err;
++
+ 	dbg(p, "walk memdevs\n");
+ 	cxl_memdev_foreach(ctx, memdev) {
+ 		struct json_object *janondev;
+@@ -633,6 +777,7 @@ int cxl_filter_walk(struct cxl_ctx *ctx, struct cxl_filter_params *p)
+ 	dbg(p, "walk buses\n");
+ 	cxl_bus_foreach(ctx, bus) {
+ 		struct json_object *jbus = NULL;
++		struct json_object *jchilddecoders = NULL;
+ 		struct json_object *jchildports = NULL;
+ 		struct json_object *jchilddevs = NULL;
+ 		struct json_object *jchildeps = NULL;
+@@ -681,15 +826,33 @@ int cxl_filter_walk(struct cxl_ctx *ctx, struct cxl_filter_params *p)
+ 					continue;
+ 				}
+ 			}
++			if (p->decoders) {
++				jchilddecoders = json_object_new_array();
++				if (!jchilddecoders) {
++					err(p,
++					    "%s: failed to enumerate child decoders\n",
++					    devname);
++					continue;
++				}
++			}
++
+ 		}
+ walk_children:
++		dbg(p, "walk decoders\n");
++		walk_decoders(port, p, pick_array(jchilddecoders, jbusdecoders),
++			      flags);
++
+ 		dbg(p, "walk ports\n");
+ 		walk_child_ports(port, p, pick_array(jchildports, jports),
++				 pick_array(jchilddecoders, jportdecoders),
+ 				 pick_array(jchildeps, jeps),
++				 pick_array(jchilddecoders, jepdecoders),
+ 				 pick_array(jchilddevs, jdevs), flags);
+ 		cond_add_put_array_suffix(jbus, "ports", devname, jchildports);
+ 		cond_add_put_array_suffix(jbus, "endpoints", devname,
+ 					  jchildeps);
++		cond_add_put_array_suffix(jbus, "decoders", devname,
++					  jchilddecoders);
+ 		cond_add_put_array_suffix(jbus, "memdevs", devname, jchilddevs);
+ 	}
+ 
+@@ -703,12 +866,24 @@ walk_children:
+ 		top_level_objs++;
+ 	if (json_object_array_length(jdevs))
+ 		top_level_objs++;
++	if (json_object_array_length(jbusdecoders))
++		top_level_objs++;
++	if (json_object_array_length(jportdecoders))
++		top_level_objs++;
++	if (json_object_array_length(jepdecoders))
++		top_level_objs++;
+ 
+ 	splice_array(p, janondevs, jplatform, "anon memdevs", top_level_objs > 1);
+ 	splice_array(p, jbuses, jplatform, "buses", top_level_objs > 1);
+ 	splice_array(p, jports, jplatform, "ports", top_level_objs > 1);
+ 	splice_array(p, jeps, jplatform, "endpoints", top_level_objs > 1);
+ 	splice_array(p, jdevs, jplatform, "memdevs", top_level_objs > 1);
++	splice_array(p, jbusdecoders, jplatform, "root decoders",
++		     top_level_objs > 1);
++	splice_array(p, jportdecoders, jplatform, "port decoders",
++		     top_level_objs > 1);
++	splice_array(p, jepdecoders, jplatform, "endpoint decoders",
++		     top_level_objs > 1);
+ 
+ 	util_display_json_array(stdout, jplatform, flags);
+ 
+@@ -719,6 +894,9 @@ err:
+ 	json_object_put(jports);
+ 	json_object_put(jeps);
+ 	json_object_put(jdevs);
++	json_object_put(jbusdecoders);
++	json_object_put(jportdecoders);
++	json_object_put(jepdecoders);
+ 	json_object_put(jplatform);
+ 	return -ENOMEM;
+ }
+diff --git a/cxl/filter.h b/cxl/filter.h
+index bbd341c..5d7bf45 100644
+--- a/cxl/filter.h
++++ b/cxl/filter.h
+@@ -12,8 +12,10 @@ struct cxl_filter_params {
+ 	const char *bus_filter;
+ 	const char *port_filter;
+ 	const char *endpoint_filter;
++	const char *decoder_filter;
+ 	bool single;
+ 	bool endpoints;
++	bool decoders;
+ 	bool memdevs;
+ 	bool ports;
+ 	bool buses;
+diff --git a/cxl/json.c b/cxl/json.c
+index 51918d6..548bc52 100644
+--- a/cxl/json.c
++++ b/cxl/json.c
+@@ -262,6 +262,68 @@ struct json_object *util_cxl_bus_to_json(struct cxl_bus *bus,
+ 	return jbus;
+ }
+ 
++struct json_object *util_cxl_decoder_to_json(struct cxl_decoder *decoder,
++					     unsigned long flags)
++{
++	const char *devname = cxl_decoder_get_devname(decoder);
++	struct cxl_port *port = cxl_decoder_get_port(decoder);
++	struct json_object *jdecoder, *jobj;
++	u64 val;
++
++	jdecoder = json_object_new_object();
++	if (!jdecoder)
++		return NULL;
++
++	jobj = json_object_new_string(devname);
++	if (jobj)
++		json_object_object_add(jdecoder, "decoder", jobj);
++
++	val = cxl_decoder_get_resource(decoder);
++	if (val < ULLONG_MAX) {
++		jobj = util_json_object_hex(val, flags);
++		if (jobj)
++			json_object_object_add(jdecoder, "resource", jobj);
++	}
++
++	val = cxl_decoder_get_size(decoder);
++	if (val < ULLONG_MAX) {
++		jobj = util_json_object_size(val, flags);
++		if (jobj)
++			json_object_object_add(jdecoder, "size", jobj);
++	}
++
++	if (val == 0) {
++		jobj = json_object_new_string("disabled");
++		if (jobj)
++			json_object_object_add(jdecoder, "state", jobj);
++	}
++
++	if (cxl_port_is_root(port) && cxl_decoder_is_mem_capable(decoder)) {
++		if (cxl_decoder_is_pmem_capable(decoder)) {
++			jobj = json_object_new_boolean(true);
++			if (jobj)
++				json_object_object_add(jdecoder, "pmem_capable",
++						       jobj);
++		}
++		if (cxl_decoder_is_volatile_capable(decoder)) {
++			jobj = json_object_new_boolean(true);
++			if (jobj)
++				json_object_object_add(
++					jdecoder, "volatile_capable", jobj);
++		}
++	}
++
++	if (cxl_port_is_root(port) &&
++	    cxl_decoder_is_accelmem_capable(decoder)) {
++		jobj = json_object_new_boolean(true);
++		if (jobj)
++			json_object_object_add(jdecoder, "accelmem_capable",
++					       jobj);
++	}
++
++	return jdecoder;
++}
++
+ static struct json_object *__util_cxl_port_to_json(struct cxl_port *port,
+ 						   const char *name_key,
+ 						   unsigned long flags)
+diff --git a/cxl/json.h b/cxl/json.h
+index 8f45190..fcca2e6 100644
+--- a/cxl/json.h
++++ b/cxl/json.h
+@@ -13,4 +13,6 @@ struct json_object *util_cxl_port_to_json(struct cxl_port *port,
+ 					  unsigned long flags);
+ struct json_object *util_cxl_endpoint_to_json(struct cxl_endpoint *endpoint,
+ 					      unsigned long flags);
++struct json_object *util_cxl_decoder_to_json(struct cxl_decoder *decoder,
++					     unsigned long flags);
+ #endif /* __CXL_UTIL_JSON_H__ */
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 2fdaf71..5e30923 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -63,16 +63,26 @@ static void free_memdev(struct cxl_memdev *memdev, struct list_head *head)
+ 	free(memdev->firmware_version);
+ 	free(memdev->dev_buf);
+ 	free(memdev->dev_path);
+-	free(memdev->host);
++	free(memdev->host_path);
+ 	free(memdev);
+ }
+ 
++static void free_decoder(struct cxl_decoder *decoder, struct list_head *head)
++{
++	if (head)
++		list_del_from(head, &decoder->list);
++	free(decoder->dev_buf);
++	free(decoder->dev_path);
++	free(decoder);
++}
++
+ static void free_port(struct cxl_port *port, struct list_head *head);
+ static void free_endpoint(struct cxl_endpoint *endpoint, struct list_head *head);
+ static void __free_port(struct cxl_port *port, struct list_head *head)
+ {
+ 	struct cxl_port *child, *_c;
+ 	struct cxl_endpoint *endpoint, *_e;
++	struct cxl_decoder *decoder, *_d;
+ 
+ 	if (head)
+ 		list_del_from(head, &port->list);
+@@ -80,6 +90,8 @@ static void __free_port(struct cxl_port *port, struct list_head *head)
+ 		free_port(child, &port->child_ports);
+ 	list_for_each_safe(&port->endpoints, endpoint, _e, port.list)
+ 		free_endpoint(endpoint, &port->endpoints);
++	list_for_each_safe(&port->decoders, decoder, _d, list)
++		free_decoder(decoder, &port->decoders);
+ 	kmod_module_unref(port->module);
+ 	free(port->dev_buf);
+ 	free(port->dev_path);
+@@ -298,9 +310,9 @@ static void *add_cxl_memdev(void *parent, int id, const char *cxlmem_base)
+ 	char *path = calloc(1, strlen(cxlmem_base) + 100);
+ 	struct cxl_ctx *ctx = parent;
+ 	struct cxl_memdev *memdev, *memdev_dup;
+-	char *host, *rpath = NULL;
+ 	char buf[SYSFS_ATTR_SIZE];
+ 	struct stat st;
++	char *host;
+ 
+ 	if (!path)
+ 		return NULL;
+@@ -358,21 +370,13 @@ static void *add_cxl_memdev(void *parent, int id, const char *cxlmem_base)
+ 	if (!memdev->dev_path)
+ 		goto err_read;
+ 
+-	rpath = realpath(cxlmem_base, NULL);
+-	if (!rpath)
++	memdev->host_path = realpath(cxlmem_base, NULL);
++	if (!memdev->host_path)
+ 		goto err_read;
+-	host = strrchr(rpath, '/');
+-	if (host) {
+-		host[0] = '\0';
+-		host = strrchr(rpath, '/');
+-	}
++	host = strrchr(memdev->host_path, '/');
+ 	if (!host)
+ 		goto err_read;
+-	memdev->host = strdup(host + 1);
+-	if (!memdev->host)
+-		goto err_read;
+-	free(rpath);
+-	rpath = NULL;
++	host[0] = '\0';
+ 
+ 	sprintf(path, "%s/firmware_version", cxlmem_base);
+ 	if (sysfs_read_attr(ctx, path, buf) < 0)
+@@ -404,8 +408,8 @@ static void *add_cxl_memdev(void *parent, int id, const char *cxlmem_base)
+ 	free(memdev->firmware_version);
+ 	free(memdev->dev_buf);
+ 	free(memdev->dev_path);
++	free(memdev->host_path);
+ 	free(memdev);
+-	free(rpath);
+  err_dev:
+ 	free(path);
+ 	return NULL;
+@@ -463,7 +467,7 @@ CXL_EXPORT const char *cxl_memdev_get_devname(struct cxl_memdev *memdev)
+ 
+ CXL_EXPORT const char *cxl_memdev_get_host(struct cxl_memdev *memdev)
+ {
+-	return memdev->host;
++	return devpath_to_devname(memdev->host_path);
+ }
+ 
+ CXL_EXPORT struct cxl_bus *cxl_memdev_get_bus(struct cxl_memdev *memdev)
+@@ -679,9 +683,11 @@ static int cxl_port_init(struct cxl_port *port, struct cxl_port *parent_port,
+ 	port->ctx = ctx;
+ 	port->type = type;
+ 	port->parent = parent_port;
++	port->type = type;
+ 
+ 	list_head_init(&port->child_ports);
+ 	list_head_init(&port->endpoints);
++	list_head_init(&port->decoders);
+ 
+ 	port->dev_path = strdup(cxlport_base);
+ 	if (!port->dev_path)
+@@ -842,6 +848,207 @@ cxl_endpoint_get_memdev(struct cxl_endpoint *endpoint)
+ 	return NULL;
+ }
+ 
++static void *add_cxl_decoder(void *parent, int id, const char *cxldecoder_base)
++{
++	const char *devname = devpath_to_devname(cxldecoder_base);
++	char *path = calloc(1, strlen(cxldecoder_base) + 100);
++	struct cxl_decoder *decoder, *decoder_dup;
++	struct cxl_port *port = parent;
++	struct cxl_ctx *ctx = cxl_port_get_ctx(port);
++	char buf[SYSFS_ATTR_SIZE];
++	size_t i;
++
++	dbg(ctx, "%s: base: \'%s\'\n", devname, cxldecoder_base);
++
++	if (!path)
++		return NULL;
++
++	decoder = calloc(1, sizeof(*decoder));
++	if (!decoder)
++		goto err;
++
++	decoder->id = id;
++	decoder->ctx = ctx;
++	decoder->port = port;
++
++	decoder->dev_path = strdup(cxldecoder_base);
++	if (!decoder->dev_path)
++		goto err;
++
++	decoder->dev_buf = calloc(1, strlen(cxldecoder_base) + 50);
++	if (!decoder->dev_buf)
++		goto err;
++	decoder->buf_len = strlen(cxldecoder_base) + 50;
++
++	sprintf(path, "%s/start", cxldecoder_base);
++	if (sysfs_read_attr(ctx, path, buf) < 0)
++		decoder->start = ULLONG_MAX;
++	else
++		decoder->start = strtoull(buf, NULL, 0);
++
++	sprintf(path, "%s/size", cxldecoder_base);
++	if (sysfs_read_attr(ctx, path, buf) < 0)
++		decoder->size = ULLONG_MAX;
++	else
++		decoder->size = strtoull(buf, NULL, 0);
++
++	switch (port->type) {
++	case CXL_PORT_SWITCH:
++	case CXL_PORT_ENDPOINT:
++		decoder->pmem_capable = true;
++		decoder->volatile_capable = true;
++		decoder->mem_capable = true;
++		decoder->accelmem_capable = true;
++		sprintf(path, "%s/locked", cxldecoder_base);
++		if (sysfs_read_attr(ctx, path, buf) == 0)
++			decoder->locked = !!strtoul(buf, NULL, 0);
++		sprintf(path, "%s/target_type", cxldecoder_base);
++		if (sysfs_read_attr(ctx, path, buf) == 0) {
++			if (strcmp(buf, "accelerator") == 0)
++				decoder->target_type =
++					CXL_DECODER_TTYPE_ACCELERATOR;
++			if (strcmp(buf, "expander") == 0)
++				decoder->target_type =
++					CXL_DECODER_TTYPE_EXPANDER;
++		}
++		break;
++	case CXL_PORT_ROOT: {
++		struct cxl_decoder_flag {
++			char *name;
++			bool *flag;
++		} flags[] = {
++			{ "cap_type2", &decoder->accelmem_capable },
++			{ "cap_type3", &decoder->mem_capable },
++			{ "cap_ram", &decoder->volatile_capable },
++			{ "cap_pmem", &decoder->pmem_capable },
++			{ "locked", &decoder->locked },
++		};
++
++		for (i = 0; i < ARRAY_SIZE(flags); i++) {
++			struct cxl_decoder_flag *flag = &flags[i];
++
++			sprintf(path, "%s/%s", cxldecoder_base, flag->name);
++			if (sysfs_read_attr(ctx, path, buf) == 0)
++				*(flag->flag) = !!strtoul(buf, NULL, 0);
++		}
++		break;
++	}
++	}
++
++	cxl_decoder_foreach(port, decoder_dup)
++		if (decoder_dup->id == decoder->id) {
++			free_decoder(decoder, NULL);
++			return decoder_dup;
++		}
++
++	list_add(&port->decoders, &decoder->list);
++
++	return decoder;
++err:
++	free(decoder->dev_path);
++	free(decoder->dev_buf);
++	free(decoder);
++	free(path);
++	return NULL;
++}
++
++static void cxl_decoders_init(struct cxl_port *port)
++{
++	struct cxl_ctx *ctx = cxl_port_get_ctx(port);
++	char *decoder_fmt;
++
++	if (port->decoders_init)
++		return;
++
++	if (asprintf(&decoder_fmt, "decoder%d.", cxl_port_get_id(port)) < 0) {
++		err(ctx, "%s: failed to add decoder(s)\n",
++		    cxl_port_get_devname(port));
++		return;
++	}
++
++	port->decoders_init = 1;
++
++	sysfs_device_parse(ctx, port->dev_path, decoder_fmt, port,
++			   add_cxl_decoder);
++
++	free(decoder_fmt);
++}
++
++CXL_EXPORT struct cxl_decoder *cxl_decoder_get_first(struct cxl_port *port)
++{
++	cxl_decoders_init(port);
++
++	return list_top(&port->decoders, struct cxl_decoder, list);
++}
++
++CXL_EXPORT struct cxl_decoder *cxl_decoder_get_next(struct cxl_decoder *decoder)
++{
++	struct cxl_port *port = decoder->port;
++
++	return list_next(&port->decoders, decoder, list);
++}
++
++CXL_EXPORT struct cxl_ctx *cxl_decoder_get_ctx(struct cxl_decoder *decoder)
++{
++	return decoder->ctx;
++}
++
++CXL_EXPORT int cxl_decoder_get_id(struct cxl_decoder *decoder)
++{
++	return decoder->id;
++}
++
++CXL_EXPORT struct cxl_port *cxl_decoder_get_port(struct cxl_decoder *decoder)
++{
++	return decoder->port;
++}
++
++CXL_EXPORT unsigned long long cxl_decoder_get_resource(struct cxl_decoder *decoder)
++{
++	return decoder->start;
++}
++
++CXL_EXPORT unsigned long long cxl_decoder_get_size(struct cxl_decoder *decoder)
++{
++	return decoder->size;
++}
++
++CXL_EXPORT enum cxl_decoder_target_type
++cxl_decoder_get_target_type(struct cxl_decoder *decoder)
++{
++	return decoder->target_type;
++}
++
++CXL_EXPORT bool cxl_decoder_is_pmem_capable(struct cxl_decoder *decoder)
++{
++	return decoder->pmem_capable;
++}
++
++CXL_EXPORT bool cxl_decoder_is_volatile_capable(struct cxl_decoder *decoder)
++{
++	return decoder->volatile_capable;
++}
++
++CXL_EXPORT bool cxl_decoder_is_mem_capable(struct cxl_decoder *decoder)
++{
++	return decoder->mem_capable;
++}
++
++CXL_EXPORT bool cxl_decoder_is_accelmem_capable(struct cxl_decoder *decoder)
++{
++	return decoder->accelmem_capable;
++}
++
++CXL_EXPORT bool cxl_decoder_is_locked(struct cxl_decoder *decoder)
++{
++	return decoder->locked;
++}
++
++CXL_EXPORT const char *cxl_decoder_get_devname(struct cxl_decoder *decoder)
++{
++	return devpath_to_devname(decoder->dev_path);
++}
++
+ static void *add_cxl_port(void *parent, int id, const char *cxlport_base)
+ {
+ 	const char *devname = devpath_to_devname(cxlport_base);
+diff --git a/cxl/lib/libcxl.sym b/cxl/lib/libcxl.sym
+index f235e99..22babb7 100644
+--- a/cxl/lib/libcxl.sym
++++ b/cxl/lib/libcxl.sym
+@@ -117,4 +117,18 @@ global:
+ 	cxl_memdev_get_bus;
+ 	cxl_memdev_disable_invalidate;
+ 	cxl_memdev_enable;
++	cxl_decoder_get_first;
++	cxl_decoder_get_next;
++	cxl_decoder_get_ctx;
++	cxl_decoder_get_id;
++	cxl_decoder_get_port;
++	cxl_decoder_get_resource;
++	cxl_decoder_get_size;
++	cxl_decoder_get_devname;
++	cxl_decoder_get_target_type;
++	cxl_decoder_is_pmem_capable;
++	cxl_decoder_is_volatile_capable;
++	cxl_decoder_is_mem_capable;
++	cxl_decoder_is_accelmem_capable;
++	cxl_decoder_is_locked;
+ } LIBCXL_1;
+diff --git a/cxl/lib/private.h b/cxl/lib/private.h
+index c00bb36..1743a24 100644
+--- a/cxl/lib/private.h
++++ b/cxl/lib/private.h
+@@ -23,7 +23,7 @@ struct cxl_memdev {
+ 	int numa_node;
+ 	void *dev_buf;
+ 	size_t buf_len;
+-	char *host;
++	char *host_path;
+ 	char *dev_path;
+ 	char *firmware_version;
+ 	struct cxl_ctx *ctx;
+@@ -52,6 +52,7 @@ struct cxl_port {
+ 	char *uport;
+ 	int ports_init;
+ 	int endpoints_init;
++	int decoders_init;
+ 	struct cxl_ctx *ctx;
+ 	struct cxl_bus *bus;
+ 	enum cxl_port_type type;
+@@ -60,6 +61,7 @@ struct cxl_port {
+ 	struct list_node list;
+ 	struct list_head child_ports;
+ 	struct list_head endpoints;
++	struct list_head decoders;
+ };
+ 
+ struct cxl_bus {
+@@ -71,6 +73,33 @@ struct cxl_endpoint {
+ 	struct cxl_memdev *memdev;
+ };
+ 
++struct cxl_target {
++	struct list_node list;
++	struct cxl_decoder *decoder;
++	char *dev_path;
++	int id, position;
++};
++
++struct cxl_decoder {
++	struct cxl_port *port;
++	struct list_node list;
++	struct cxl_ctx *ctx;
++	u64 start;
++	u64 size;
++	void *dev_buf;
++	size_t buf_len;
++	char *dev_path;
++	int nr_targets;
++	int id;
++	bool pmem_capable;
++	bool volatile_capable;
++	bool mem_capable;
++	bool accelmem_capable;
++	bool locked;
++	enum cxl_decoder_target_type target_type;
++	struct list_head targets;
++};
++
+ enum cxl_cmd_query_status {
+ 	CXL_CMD_QUERY_NOT_RUN = 0,
+ 	CXL_CMD_QUERY_OK,
+diff --git a/cxl/libcxl.h b/cxl/libcxl.h
+index 53f68dd..439ed93 100644
+--- a/cxl/libcxl.h
++++ b/cxl/libcxl.h
+@@ -98,6 +98,34 @@ bool cxl_port_hosts_memdev(struct cxl_port *port, struct cxl_memdev *memdev);
+ 	for (port = cxl_port_get_first(parent); port != NULL;                  \
+ 	     port = cxl_port_get_next(port))
+ 
++struct cxl_decoder;
++struct cxl_decoder *cxl_decoder_get_first(struct cxl_port *port);
++struct cxl_decoder *cxl_decoder_get_next(struct cxl_decoder *decoder);
++unsigned long long cxl_decoder_get_resource(struct cxl_decoder *decoder);
++unsigned long long cxl_decoder_get_size(struct cxl_decoder *decoder);
++const char *cxl_decoder_get_devname(struct cxl_decoder *decoder);
++struct cxl_ctx *cxl_decoder_get_ctx(struct cxl_decoder *decoder);
++int cxl_decoder_get_id(struct cxl_decoder *decoder);
++struct cxl_port *cxl_decoder_get_port(struct cxl_decoder *decoder);
++
++enum cxl_decoder_target_type {
++	CXL_DECODER_TTYPE_UNKNOWN,
++	CXL_DECODER_TTYPE_EXPANDER,
++	CXL_DECODER_TTYPE_ACCELERATOR,
++};
++
++enum cxl_decoder_target_type
++cxl_decoder_get_target_type(struct cxl_decoder *decoder);
++bool cxl_decoder_is_pmem_capable(struct cxl_decoder *decoder);
++bool cxl_decoder_is_volatile_capable(struct cxl_decoder *decoder);
++bool cxl_decoder_is_mem_capable(struct cxl_decoder *decoder);
++bool cxl_decoder_is_accelmem_capable(struct cxl_decoder *decoder);
++bool cxl_decoder_is_locked(struct cxl_decoder *decoder);
++
++#define cxl_decoder_foreach(port, decoder)                                     \
++	for (decoder = cxl_decoder_get_first(port); decoder != NULL;           \
++	     decoder = cxl_decoder_get_next(decoder))
++
+ struct cxl_endpoint;
+ struct cxl_endpoint *cxl_endpoint_get_first(struct cxl_port *parent);
+ struct cxl_endpoint *cxl_endpoint_get_next(struct cxl_endpoint *endpoint);
+diff --git a/cxl/list.c b/cxl/list.c
+index b15e01c..d70192a 100644
+--- a/cxl/list.c
++++ b/cxl/list.c
+@@ -36,6 +36,11 @@ static const struct option options[] = {
+ 		   "filter by CXL endpoint device name(s)"),
+ 	OPT_BOOLEAN('E', "endpoints", &param.endpoints,
+ 		    "include CXL endpoint info"),
++	OPT_STRING('d', "decoder", &param.decoder_filter,
++		   "decoder device name",
++		   "filter by CXL decoder device name(s) / class"),
++	OPT_BOOLEAN('D', "decoders", &param.decoders,
++		    "include CXL decoder info"),
+ 	OPT_BOOLEAN('i', "idle", &param.idle, "include disabled devices"),
+ 	OPT_BOOLEAN('u', "human", &param.human,
+ 		    "use human friendly number formats "),
+@@ -50,7 +55,7 @@ static const struct option options[] = {
+ static int num_list_flags(void)
+ {
+ 	return !!param.memdevs + !!param.buses + !!param.ports +
+-	       !!param.endpoints;
++	       !!param.endpoints + !!param.decoders;
+ }
+ 
+ int cmd_list(int argc, const char **argv, struct cxl_ctx *ctx)
+@@ -82,6 +87,8 @@ int cmd_list(int argc, const char **argv, struct cxl_ctx *ctx)
+ 			param.ports = true;
+ 		if (param.endpoint_filter)
+ 			param.endpoints = true;
++		if (param.decoder_filter)
++			param.decoders = true;
+ 		if (num_list_flags() == 0) {
+ 			/*
+ 			 * TODO: We likely want to list regions by default if
+diff --git a/util/json.h b/util/json.h
+index 061f0d4..e026df1 100644
+--- a/util/json.h
++++ b/util/json.h
+@@ -18,6 +18,7 @@ enum util_json_flags {
+ 	UTIL_JSON_FIRMWARE	= (1 << 8),
+ 	UTIL_JSON_DAX_MAPPINGS	= (1 << 9),
+ 	UTIL_JSON_HEALTH	= (1 << 10),
++	UTIL_JSON_TARGETS	= (1 << 11),
+ };
+ 
+ void util_display_json_array(FILE *f_out, struct json_object *jarray,
+-- 
+2.27.0
+

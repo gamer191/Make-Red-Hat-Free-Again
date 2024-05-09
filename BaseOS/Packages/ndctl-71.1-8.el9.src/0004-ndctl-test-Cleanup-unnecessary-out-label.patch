@@ -1,0 +1,57 @@
+From ff4030e88da2cdcaf52c0d7457cd30264ea8915b Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Tue, 12 Jan 2021 23:15:03 -0800
+Subject: [PATCH 004/217] ndctl/test: Cleanup unnecessary out label
+
+There are no cleanup actions to take in test_dax_remap(), and it is already
+inconsistent for having a single return point, so remove the out label.
+
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+Link: https://lore.kernel.org/r/161052210395.1804207.7318263492906073721.stgit@dwillia2-desk3.amr.corp.intel.com
+---
+ test/dax-pmd.c | 12 ++++--------
+ 1 file changed, 4 insertions(+), 8 deletions(-)
+
+diff --git a/test/dax-pmd.c b/test/dax-pmd.c
+index 401826d..b1251db 100644
+--- a/test/dax-pmd.c
++++ b/test/dax-pmd.c
+@@ -83,20 +83,18 @@ int test_dax_remap(struct ndctl_test *test, int dax_fd, unsigned long align, voi
+ 	act.sa_flags = SA_SIGINFO;
+ 	if (sigaction(SIGBUS, &act, 0)) {
+ 		perror("sigaction");
+-		rc = EXIT_FAILURE;
+-		goto out;
++		return EXIT_FAILURE;
+ 	}
+ 
+ 	/* test fault after device-dax instance disabled */
+ 	if (sigsetjmp(sj_env, 1)) {
+ 		if (!fsdax && align > SZ_4K) {
+ 			fprintf(stderr, "got expected SIGBUS after mremap() of device-dax\n");
+-			rc = 0;
++			return 0;
+ 		} else {
+ 			fprintf(stderr, "unpexpected SIGBUS after mremap()\n");
+-			rc = -EIO;
++			return -EIO;
+ 		}
+-		goto out;
+ 	}
+ 
+ 	*(int *) anon = 0xAA;
+@@ -107,9 +105,7 @@ int test_dax_remap(struct ndctl_test *test, int dax_fd, unsigned long align, voi
+ 		return -ENXIO;
+ 	}
+ 
+-	rc = 0;
+-out:
+-	return rc;
++	return 0;
+ }
+ 
+ int test_dax_directio(int dax_fd, unsigned long align, void *dax_addr, off_t offset)
+-- 
+2.27.0
+

@@ -1,0 +1,61 @@
+From e8b5b191a55b7be671abf2c6d5d10db6edd8c1fb Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 28 Apr 2022 15:10:16 -0700
+Subject: [PATCH 157/217] util: Pretty print terabytes
+
+CXL capacities are such that gigabytes are too small of a unit for
+displaying capacities. Add terabyte support to the display_size()
+helper.
+
+Link: https://lore.kernel.org/r/165118381648.1676208.1686584406206186723.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ util/json.c | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/util/json.c b/util/json.c
+index ebdf8d9..1d5c6bc 100644
+--- a/util/json.c
++++ b/util/json.c
+@@ -37,11 +37,16 @@ static int display_size(struct json_object *jobj, struct printbuf *pbuf,
+ 
+ 			c = snprintf(buf, sizeof(buf), "\"%ld.%02ld MiB",
+ 					cMiB/100 , cMiB % 100);
+-		} else {
++		} else if (bytes < 2*SZ_1T) {
+ 			long cGiB = (bytes * 200LL / SZ_1G+1) /2;
+ 
+ 			c = snprintf(buf, sizeof(buf), "\"%ld.%02ld GiB",
+ 					cGiB/100 , cGiB % 100);
++		} else {
++			long cTiB = (bytes * 200LL / SZ_1T+1) /2;
++
++			c = snprintf(buf, sizeof(buf), "\"%ld.%02ld TiB",
++					cTiB/100 , cTiB % 100);
+ 		}
+ 
+ 		/* JEDEC */
+@@ -50,12 +55,18 @@ static int display_size(struct json_object *jobj, struct printbuf *pbuf,
+ 
+ 			snprintf(buf + c, sizeof(buf) - c, " (%ld.%02ld MB)\"",
+ 					cMB/100, cMB % 100);
+-		} else {
++		} else if (bytes < 2*SZ_1T) {
+ 			long cGB  = (bytes / (1000000000LL/200LL) + 1) / 2;
+ 
+ 			snprintf(buf + c, sizeof(buf) - c, " (%ld.%02ld GB)\"",
+ 					cGB/100 , cGB % 100);
++		} else {
++			long cTB  = (bytes / (1000000000000LL/200LL) + 1) / 2;
++
++			snprintf(buf + c, sizeof(buf) - c, " (%ld.%02ld TB)\"",
++					cTB/100 , cTB % 100);
+ 		}
++
+ 	}
+ 
+ 	return printbuf_memappend(pbuf, buf, strlen(buf));
+-- 
+2.27.0
+

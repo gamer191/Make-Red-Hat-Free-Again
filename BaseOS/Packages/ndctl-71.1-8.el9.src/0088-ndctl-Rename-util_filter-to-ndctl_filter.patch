@@ -1,0 +1,287 @@
+From d7c5fa695a91d66485ca1febd6f29c3a483e20f6 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:52:00 -0800
+Subject: [PATCH 088/217] ndctl: Rename util_filter to ndctl_filter
+
+In preparation for introducing a cxl_filter_walk() implementation rename
+the current filter_walk infrastructure with an ndctl_ prefix.
+
+Link: https://lore.kernel.org/r/164298552014.3021641.16369576632179722489.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ ndctl/filter.c         |  4 ++--
+ ndctl/filter.h         | 21 +++++++++++----------
+ ndctl/list.c           | 14 +++++++-------
+ ndctl/monitor.c        | 12 ++++++------
+ test/list-smart-dimm.c | 12 ++++++------
+ 5 files changed, 32 insertions(+), 31 deletions(-)
+
+diff -up ndctl-71.1/ndctl/filter.c.orig ndctl-71.1/ndctl/filter.c
+--- ndctl-71.1/ndctl/filter.c.orig	2022-10-07 17:54:40.799788014 -0400
++++ ndctl-71.1/ndctl/filter.c	2022-10-07 17:54:52.592828166 -0400
+@@ -338,8 +338,8 @@ const char *util_nsmode_name(enum ndctl_
+ 	return modes[mode];
+ }
+ 
+-int util_filter_walk(struct ndctl_ctx *ctx, struct util_filter_ctx *fctx,
+-		struct util_filter_params *param)
++int ndctl_filter_walk(struct ndctl_ctx *ctx, struct ndctl_filter_ctx *fctx,
++		      struct ndctl_filter_params *param)
+ {
+ 	struct ndctl_bus *bus;
+ 	unsigned int type = 0;
+diff -up ndctl-71.1/ndctl/filter.h.orig ndctl-71.1/ndctl/filter.h
+--- ndctl-71.1/ndctl/filter.h.orig	2022-10-07 17:54:40.799788014 -0400
++++ ndctl-71.1/ndctl/filter.h	2022-10-07 17:54:52.593828169 -0400
+@@ -31,7 +31,7 @@ const char *util_nsmode_name(enum ndctl_
+ 
+ struct json_object;
+ 
+-/* json object hierarchy for the util_filter_walk() performed by cmd_list() */
++/* json object hierarchy for the ndctl_filter_walk() performed by cmd_list() */
+ struct list_filter_arg {
+ 	struct json_object *jnamespaces;
+ 	struct json_object *jregions;
+@@ -50,19 +50,20 @@ struct monitor_filter_arg {
+ };
+ 
+ /*
+- * struct util_filter_ctx - control and callbacks for util_filter_walk()
++ * struct ndctl_filter_ctx - control and callbacks for ndctl_filter_walk()
+  * ->filter_bus() and ->filter_region() return bool because the
+  * child-object filter routines can not be called if the parent context
+  * is not established. ->filter_dimm() and ->filter_namespace() are leaf
+  * objects, so no child dependencies to check.
+  */
+-struct util_filter_ctx {
+-	bool (*filter_bus)(struct ndctl_bus *bus, struct util_filter_ctx *ctx);
+-	void (*filter_dimm)(struct ndctl_dimm *dimm, struct util_filter_ctx *ctx);
++struct ndctl_filter_ctx {
++	bool (*filter_bus)(struct ndctl_bus *bus, struct ndctl_filter_ctx *ctx);
++	void (*filter_dimm)(struct ndctl_dimm *dimm,
++			    struct ndctl_filter_ctx *ctx);
+ 	bool (*filter_region)(struct ndctl_region *region,
+-			struct util_filter_ctx *ctx);
++			      struct ndctl_filter_ctx *ctx);
+ 	void (*filter_namespace)(struct ndctl_namespace *ndns,
+-			struct util_filter_ctx *ctx);
++				 struct ndctl_filter_ctx *ctx);
+ 	union {
+ 		void *arg;
+ 		struct list_filter_arg *list;
+@@ -70,7 +71,7 @@ struct util_filter_ctx {
+ 	};
+ };
+ 
+-struct util_filter_params {
++struct ndctl_filter_params {
+ 	const char *bus;
+ 	const char *region;
+ 	const char *type;
+@@ -81,6 +82,6 @@ struct util_filter_params {
+ };
+ 
+ struct ndctl_ctx;
+-int util_filter_walk(struct ndctl_ctx *ctx, struct util_filter_ctx *fctx,
+-		struct util_filter_params *param);
++int ndctl_filter_walk(struct ndctl_ctx *ctx, struct ndctl_filter_ctx *fctx,
++		      struct ndctl_filter_params *param);
+ #endif /* _NDCTL_UTIL_FILTER_H_ */
+diff -up ndctl-71.1/ndctl/list.c.orig ndctl-71.1/ndctl/list.c
+--- ndctl-71.1/ndctl/list.c.orig	2022-10-07 17:54:40.806788038 -0400
++++ ndctl-71.1/ndctl/list.c	2022-10-07 17:54:52.593828169 -0400
+@@ -55,7 +55,7 @@ static unsigned long listopts_to_flags(v
+ 	return flags;
+ }
+ 
+-static struct util_filter_params param;
++static struct ndctl_filter_params param;
+ 
+ static int did_fail;
+ 
+@@ -234,7 +234,7 @@ static struct json_object *region_to_jso
+ }
+ 
+ static void filter_namespace(struct ndctl_namespace *ndns,
+-		struct util_filter_ctx *ctx)
++			     struct ndctl_filter_ctx *ctx)
+ {
+ 	struct json_object *jndns;
+ 	struct list_filter_arg *lfa = ctx->list;
+@@ -272,7 +272,7 @@ static void filter_namespace(struct ndct
+ }
+ 
+ static bool filter_region(struct ndctl_region *region,
+-		struct util_filter_ctx *ctx)
++			  struct ndctl_filter_ctx *ctx)
+ {
+ 	struct list_filter_arg *lfa = ctx->list;
+ 	struct json_object *jbus = lfa->jbus;
+@@ -318,7 +318,7 @@ static bool filter_region(struct ndctl_r
+ 	return true;
+ }
+ 
+-static void filter_dimm(struct ndctl_dimm *dimm, struct util_filter_ctx *ctx)
++static void filter_dimm(struct ndctl_dimm *dimm, struct ndctl_filter_ctx *ctx)
+ {
+ 	struct list_filter_arg *lfa = ctx->list;
+ 	struct json_object *jdimm;
+@@ -367,7 +367,7 @@ static void filter_dimm(struct ndctl_dim
+ 	json_object_array_add(lfa->jdimms, jdimm);
+ }
+ 
+-static bool filter_bus(struct ndctl_bus *bus, struct util_filter_ctx *ctx)
++static bool filter_bus(struct ndctl_bus *bus, struct ndctl_filter_ctx *ctx)
+ {
+ 	struct list_filter_arg *lfa = ctx->list;
+ 
+@@ -489,7 +489,7 @@ int cmd_list(int argc, const char **argv
+ 		NULL
+ 	};
+ 	bool lint = !!secure_getenv("NDCTL_LIST_LINT");
+-	struct util_filter_ctx fctx = { 0 };
++	struct ndctl_filter_ctx fctx = { 0 };
+ 	struct list_filter_arg lfa = { 0 };
+ 	int i, rc;
+ 
+@@ -544,7 +544,7 @@ int cmd_list(int argc, const char **argv
+ 	fctx.list = &lfa;
+ 	lfa.flags = listopts_to_flags();
+ 
+-	rc = util_filter_walk(ctx, &fctx, &param);
++	rc = ndctl_filter_walk(ctx, &fctx, &param);
+ 	if (rc)
+ 		return rc;
+ 
+diff -up ndctl-71.1/ndctl/monitor.c.orig ndctl-71.1/ndctl/monitor.c
+--- ndctl-71.1/ndctl/monitor.c.orig	2022-10-07 17:54:40.824788100 -0400
++++ ndctl-71.1/ndctl/monitor.c	2022-10-07 17:55:08.025880711 -0400
+@@ -48,7 +48,7 @@ struct monitor_dimm {
+ 	struct list_node list;
+ };
+ 
+-static struct util_filter_params param;
++static struct ndctl_filter_params param;
+ 
+ static int did_fail;
+ 
+@@ -263,12 +263,12 @@ out:
+ }
+ 
+ static bool filter_region(struct ndctl_region *region,
+-		struct util_filter_ctx *fctx)
++			  struct ndctl_filter_ctx *fctx)
+ {
+ 	return true;
+ }
+ 
+-static void filter_dimm(struct ndctl_dimm *dimm, struct util_filter_ctx *fctx)
++static void filter_dimm(struct ndctl_dimm *dimm, struct ndctl_filter_ctx *fctx)
+ {
+ 	struct monitor_dimm *mdimm;
+ 	struct monitor_filter_arg *mfa = fctx->monitor;
+@@ -316,7 +316,7 @@ static void filter_dimm(struct ndctl_dim
+ 	return;
+ }
+ 
+-static bool filter_bus(struct ndctl_bus *bus, struct util_filter_ctx *fctx)
++static bool filter_bus(struct ndctl_bus *bus, struct ndctl_filter_ctx *fctx)
+ {
+ 	return true;
+ }
+@@ -481,7 +481,7 @@ static void parse_config(const char **ar
+ }
+ 
+ static int read_config_file(struct ndctl_ctx *ctx, struct monitor *_monitor,
+-		struct util_filter_params *_param)
++		struct ndctl_filter_params *_param)
+ {
+ 	FILE *f;
+ 	size_t len = 0;
+@@ -603,7 +603,7 @@ int cmd_monitor(int argc, const char **a
+ 		NULL
+ 	};
+ 	const char *prefix = "./";
+-	struct util_filter_ctx fctx = { 0 };
++	struct ndctl_filter_ctx fctx = { 0 };
+ 	struct monitor_filter_arg mfa = { 0 };
+ 	int i, rc;
+ 
+@@ -667,7 +667,7 @@ int cmd_monitor(int argc, const char **a
+ 	mfa.maxfd_dimm = -1;
+ 	mfa.flags = 0;
+ 
+-	rc = util_filter_walk(ctx, &fctx, &param);
++	rc = ndctl_filter_walk(ctx, &fctx, &param);
+ 	if (rc)
+ 		goto out;
+ 
+diff -up ndctl-71.1/test/list-smart-dimm.c.orig ndctl-71.1/test/list-smart-dimm.c
+--- ndctl-71.1/test/list-smart-dimm.c.orig	2022-10-07 17:54:40.813788062 -0400
++++ ndctl-71.1/test/list-smart-dimm.c	2022-10-07 17:54:52.595828176 -0400
+@@ -11,7 +11,7 @@
+ #include <ndctl/ndctl.h>
+ #include <ndctl/json.h>
+ 
+-struct util_filter_params param;
++struct ndctl_filter_params param;
+ static int did_fail;
+ static int jflag = JSON_C_TO_STRING_PRETTY;
+ 
+@@ -23,12 +23,12 @@ do { \
+ } while (0)
+ 
+ static bool filter_region(struct ndctl_region *region,
+-		struct util_filter_ctx *ctx)
++		struct ndctl_filter_ctx *ctx)
+ {
+ 	return true;
+ }
+ 
+-static void filter_dimm(struct ndctl_dimm *dimm, struct util_filter_ctx *ctx)
++static void filter_dimm(struct ndctl_dimm *dimm, struct ndctl_filter_ctx *ctx)
+ {
+ 	struct list_filter_arg *lfa = ctx->list;
+ 	struct json_object *jdimm;
+@@ -57,7 +57,7 @@ static void filter_dimm(struct ndctl_dim
+ 	json_object_array_add(lfa->jdimms, jdimm);
+ }
+ 
+-static bool filter_bus(struct ndctl_bus *bus, struct util_filter_ctx *ctx)
++static bool filter_bus(struct ndctl_bus *bus, struct ndctl_filter_ctx *ctx)
+ {
+ 	return true;
+ }
+@@ -89,7 +89,7 @@ int main(int argc, const char *argv[])
+ 		"list-smart-dimm [<options>]",
+ 		NULL
+ 	};
+-	struct util_filter_ctx fctx = { 0 };
++	struct ndctl_filter_ctx fctx = { 0 };
+ 	struct list_filter_arg lfa = { 0 };
+ 
+ 	rc = ndctl_new(&ctx);
+@@ -108,7 +108,7 @@ int main(int argc, const char *argv[])
+ 	fctx.list = &lfa;
+ 	lfa.flags = 0;
+ 
+-	rc = util_filter_walk(ctx, &fctx, &param);
++	rc = ndctl_filter_walk(ctx, &fctx, &param);
+ 	if (rc)
+ 		return rc;
+ 
+diff -up ndctl-71.1/util/filter.c.orig ndctl-71.1/util/filter.c
+--- ndctl-71.1/util/filter.c.orig	2022-10-07 17:55:48.192017464 -0400
++++ ndctl-71.1/util/filter.c	2022-10-07 17:55:54.474038852 -0400
+@@ -394,8 +394,8 @@ const char *util_nsmode_name(enum ndctl_
+ 	return modes[mode];
+ }
+ 
+-int util_filter_walk(struct ndctl_ctx *ctx, struct util_filter_ctx *fctx,
+-		struct util_filter_params *param)
++int ndctl_filter_walk(struct ndctl_ctx *ctx, struct util_filter_ctx *fctx,
++		      struct util_filter_params *param)
+ {
+ 	struct ndctl_bus *bus;
+ 	unsigned int type = 0;

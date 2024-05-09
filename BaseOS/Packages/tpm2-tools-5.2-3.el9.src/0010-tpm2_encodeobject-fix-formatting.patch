@@ -1,0 +1,26 @@
+From 0582b619c3a2c407bf5eace8d83d832688781789 Mon Sep 17 00:00:00 2001
+From: William Roberts <william.c.roberts@intel.com>
+Date: Mon, 24 Oct 2022 10:31:05 -0500
+Subject: [PATCH 10/17] tpm2_encodeobject: fix formatting
+
+Signed-off-by: William Roberts <william.c.roberts@intel.com>
+---
+ tools/misc/tpm2_encodeobject.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/misc/tpm2_encodeobject.c b/tools/misc/tpm2_encodeobject.c
+index 2341c3a1..ccbd0e01 100644
+--- a/tools/misc/tpm2_encodeobject.c
++++ b/tools/misc/tpm2_encodeobject.c
+@@ -87,7 +87,7 @@ static bool on_option(char key, char *value) {
+         ctx.parent.ctx_path = value;
+         break;
+     case 'o':
+-	ctx.output_path = value;
++        ctx.output_path = value;
+ 	break;
+     }
+ 
+-- 
+2.40.1
+

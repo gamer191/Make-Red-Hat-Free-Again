@@ -1,0 +1,315 @@
+diff -up diffutils-3.7/lib/careadlinkat.c.me diffutils-3.7/lib/careadlinkat.c
+--- diffutils-3.7/lib/careadlinkat.c.me	2021-03-23 23:19:06.957542021 +0100
++++ diffutils-3.7/lib/careadlinkat.c	2021-03-23 23:22:29.309145314 +0100
+@@ -1,6 +1,6 @@
+ /* Read symbolic links into a buffer without size limitation, relative to fd.
+ 
+-   Copyright (C) 2001, 2003-2004, 2007, 2009-2018 Free Software Foundation,
++   Copyright (C) 2001, 2003-2004, 2007, 2009-2021 Free Software Foundation,
+    Inc.
+ 
+    This program is free software: you can redistribute it and/or modify
+@@ -38,75 +38,64 @@
+ 
+ #include "allocator.h"
+ 
+-/* Assuming the current directory is FD, get the symbolic link value
+-   of FILENAME as a null-terminated string and put it into a buffer.
+-   If FD is AT_FDCWD, FILENAME is interpreted relative to the current
+-   working directory, as in openat.
+-
+-   If the link is small enough to fit into BUFFER put it there.
+-   BUFFER's size is BUFFER_SIZE, and BUFFER can be null
+-   if BUFFER_SIZE is zero.
+-
+-   If the link is not small, put it into a dynamically allocated
+-   buffer managed by ALLOC.  It is the caller's responsibility to free
+-   the returned value if it is nonnull and is not BUFFER.  A null
+-   ALLOC stands for the standard allocator.
+-
+-   The PREADLINKAT function specifies how to read links.  It operates
+-   like POSIX readlinkat()
+-   <http://pubs.opengroup.org/onlinepubs/9699919799/functions/readlink.html>
+-   but can assume that its first argument is the same as FD.
++enum { STACK_BUF_SIZE = 1024 };
+ 
+-   If successful, return the buffer address; otherwise return NULL and
+-   set errno.  */
++/* Act like careadlinkat (see below), with an additional argument
++   STACK_BUF that can be used as temporary storage.
+ 
+-char *
+-careadlinkat (int fd, char const *filename,
++   If GCC_LINT is defined, do not inline this function with GCC 10.1
++   and later, to avoid creating a pointer to the stack that GCC
++   -Wreturn-local-addr incorrectly complains about.  See:
++   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=93644
++   Although the noinline attribute can hurt performance a bit, no better way
++   to pacify GCC is known; even an explicit #pragma does not pacify GCC.
++   When the GCC bug is fixed this workaround should be limited to the
++   broken GCC versions.  */
++#if __GNUC_PREREQ (10, 1)
++# if defined GCC_LINT || defined lint
++__attribute__ ((__noinline__))
++# elif __OPTIMIZE__ && !__NO_INLINE__
++#  define GCC_BOGUS_WRETURN_LOCAL_ADDR
++# endif
++#endif
++static char *
++readlink_stk (int fd, char const *filename,
+               char *buffer, size_t buffer_size,
+               struct allocator const *alloc,
+-              ssize_t (*preadlinkat) (int, char const *, char *, size_t))
++              ssize_t (*preadlinkat) (int, char const *, char *, size_t),
++              char stack_buf[STACK_BUF_SIZE])
+ {
+   char *buf;
+   size_t buf_size;
+   size_t buf_size_max =
+     SSIZE_MAX < SIZE_MAX ? (size_t) SSIZE_MAX + 1 : SIZE_MAX;
+-  char stack_buf[1024];
+ 
+   if (! alloc)
+     alloc = &stdlib_allocator;
+ 
+-  if (! buffer_size)
++  if (!buffer)
+     {
+-      /* Allocate the initial buffer on the stack.  This way, in the
+-         common case of a symlink of small size, we get away with a
+-         single small malloc() instead of a big malloc() followed by a
+-         shrinking realloc().  */
+       buffer = stack_buf;
+-      buffer_size = sizeof stack_buf;
++      buffer_size = STACK_BUF_SIZE;
+     }
+ 
+   buf = buffer;
+   buf_size = buffer_size;
+ 
+-  do
++  while (buf)
+     {
+       /* Attempt to read the link into the current buffer.  */
+       ssize_t link_length = preadlinkat (fd, filename, buf, buf_size);
+       size_t link_size;
+       if (link_length < 0)
+         {
+-          /* On AIX 5L v5.3 and HP-UX 11i v2 04/09, readlink returns -1
+-             with errno == ERANGE if the buffer is too small.  */
+-          int readlinkat_errno = errno;
+-          if (readlinkat_errno != ERANGE)
++          if (buf != buffer)
+             {
+-              if (buf != buffer)
+-                {
+-                  alloc->free (buf);
+-                  errno = readlinkat_errno;
+-                }
+-              return NULL;
++              int readlinkat_errno = errno;
++              alloc->free (buf);
++              errno = readlinkat_errno;
+             }
++          return NULL;
+         }
+ 
+       link_size = link_length;
+@@ -117,19 +106,19 @@ careadlinkat (int fd, char const *filena
+ 
+           if (buf == stack_buf)
+             {
+-              char *b = (char *) alloc->allocate (link_size);
++              char *b = alloc->allocate (link_size);
+               buf_size = link_size;
+               if (! b)
+                 break;
+-              memcpy (b, buf, link_size);
+-              buf = b;
++              return memcpy (b, buf, link_size);
+             }
+-          else if (link_size < buf_size && buf != buffer && alloc->reallocate)
++
++          if (link_size < buf_size && buf != buffer && alloc->reallocate)
+             {
+               /* Shrink BUF before returning it.  */
+-              char *b = (char *) alloc->reallocate (buf, link_size);
++              char *b = alloc->reallocate (buf, link_size);
+               if (b)
+-                buf = b;
++                return b;
+             }
+ 
+           return buf;
+@@ -138,8 +127,8 @@ careadlinkat (int fd, char const *filena
+       if (buf != buffer)
+         alloc->free (buf);
+ 
+-      if (buf_size <= buf_size_max / 2)
+-        buf_size *= 2;
++      if (buf_size < buf_size_max / 2)
++        buf_size = 2 * buf_size + 1;
+       else if (buf_size < buf_size_max)
+         buf_size = buf_size_max;
+       else if (buf_size_max < SIZE_MAX)
+@@ -149,12 +138,53 @@ careadlinkat (int fd, char const *filena
+         }
+       else
+         break;
+-      buf = (char *) alloc->allocate (buf_size);
++      buf = alloc->allocate (buf_size);
+     }
+-  while (buf);
+ 
+   if (alloc->die)
+     alloc->die (buf_size);
+   errno = ENOMEM;
+   return NULL;
+ }
++
++
++/* Assuming the current directory is FD, get the symbolic link value
++   of FILENAME as a null-terminated string and put it into a buffer.
++   If FD is AT_FDCWD, FILENAME is interpreted relative to the current
++   working directory, as in openat.
++
++   If the link is small enough to fit into BUFFER put it there.
++   BUFFER's size is BUFFER_SIZE, and BUFFER can be null
++   if BUFFER_SIZE is zero.
++
++   If the link is not small, put it into a dynamically allocated
++   buffer managed by ALLOC.  It is the caller's responsibility to free
++   the returned value if it is nonnull and is not BUFFER.  A null
++   ALLOC stands for the standard allocator.
++
++   The PREADLINKAT function specifies how to read links.  It operates
++   like POSIX readlinkat()
++   <https://pubs.opengroup.org/onlinepubs/9699919799/functions/readlink.html>
++   but can assume that its first argument is the same as FD.
++
++   If successful, return the buffer address; otherwise return NULL and
++   set errno.  */
++
++char *
++careadlinkat (int fd, char const *filename,
++              char *buffer, size_t buffer_size,
++              struct allocator const *alloc,
++              ssize_t (*preadlinkat) (int, char const *, char *, size_t))
++{
++  /* Allocate the initial buffer on the stack.  This way, in the
++     common case of a symlink of small size, we get away with a
++     single small malloc instead of a big malloc followed by a
++     shrinking realloc.  */
++  #ifdef GCC_BOGUS_WRETURN_LOCAL_ADDR
++   #warning "GCC might issue a bogus -Wreturn-local-addr warning here."
++   #warning "See <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=93644>."
++  #endif
++  char stack_buf[STACK_BUF_SIZE];
++  return readlink_stk (fd, filename, buffer, buffer_size, alloc,
++                       preadlinkat, stack_buf);
++}
+diff -up diffutils-3.7/src/diff.c.me diffutils-3.7/src/diff.c
+diff -up diffutils-3.7/src/diff.h.me diffutils-3.7/src/diff.h
+--- diffutils-3.7/src/diff.h.me	2021-03-23 22:47:04.509390138 +0100
++++ diffutils-3.7/src/diff.h	2021-03-23 22:58:35.022552755 +0100
+@@ -392,7 +392,7 @@ extern void print_sdiff_script (struct c
+ extern char const change_letter[4];
+ extern char const pr_program[];
+ extern char *concat (char const *, char const *, char const *);
+-extern bool (*lines_differ) (char const *, size_t, char const *, size_t) _GL_ATTRIBUTE_PURE;
++extern bool (*lines_differ) (char const *, size_t, char const *, size_t);
+ extern bool lines_differ_singlebyte (char const *, size_t, char const *, size_t) _GL_ATTRIBUTE_PURE;
+ #ifdef HANDLE_MULTIBYTE
+ extern bool lines_differ_multibyte (char const *, size_t, char const *, size_t) _GL_ATTRIBUTE_PURE;
+diff -up diffutils-3.7/src/util.c.me diffutils-3.7/src/util.c
+--- diffutils-3.7/src/util.c.me	2021-03-23 23:01:58.105168496 +0100
++++ diffutils-3.7/src/util.c	2021-03-23 23:18:18.833918967 +0100
+@@ -1144,6 +1144,7 @@ lines_differ_singlebyte (char const *s1,
+ }
+ 
+ #ifdef HANDLE_MULTIBYTE
++#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+ # define MBC2WC(T, END, MBLENGTH, WC, STATE, CONVFAIL)	\
+ do							\
+   {							\
+diff -up diffutils-3.7/lib/regcomp.c.me diffutils-3.7/lib/regcomp.c
+--- diffutils-3.7/lib/regcomp.c.me	2021-03-24 09:01:20.582271604 +0100
++++ diffutils-3.7/lib/regcomp.c	2021-03-24 09:03:54.125287605 +0100
+@@ -3674,7 +3674,6 @@ build_charclass_op (re_dfa_t *dfa, RE_TR
+   Idx alloc = 0;
+ #endif /* not RE_ENABLE_I18N */
+   reg_errcode_t ret;
+-  re_token_t br_token;
+   bin_tree_t *tree;
+ 
+   sbcset = (re_bitset_ptr_t) calloc (sizeof (bitset_t), 1);
+@@ -3725,11 +3724,7 @@ build_charclass_op (re_dfa_t *dfa, RE_TR
+ #endif
+ 
+   /* Build a tree for simple bracket.  */
+-#if defined GCC_LINT || defined lint
+-  memset (&br_token, 0, sizeof br_token);
+-#endif
+-  br_token.type = SIMPLE_BRACKET;
+-  br_token.opr.sbcset = sbcset;
++  re_token_t br_token = { .type = SIMPLE_BRACKET, .opr.sbcset = sbcset };
+   tree = create_token_tree (dfa, NULL, NULL, &br_token);
+   if (__glibc_unlikely (tree == NULL))
+     goto build_word_op_espace;
+@@ -3820,11 +3815,7 @@ static bin_tree_t *
+ create_tree (re_dfa_t *dfa, bin_tree_t *left, bin_tree_t *right,
+ 	     re_token_type_t type)
+ {
+-  re_token_t t;
+-#if defined GCC_LINT || defined lint
+-  memset (&t, 0, sizeof t);
+-#endif
+-  t.type = type;
++  re_token_t t = { .type = type };
+   return create_token_tree (dfa, left, right, &t);
+ }
+ 
+diff -up diffutils-3.7/lib/regexec.c.me diffutils-3.7/lib/regexec.c
+--- diffutils-3.7/lib/regexec.c.me	2021-03-24 08:50:16.101143023 +0100
++++ diffutils-3.7/lib/regexec.c	2021-03-24 08:55:03.347246385 +0100
+@@ -828,7 +828,9 @@ re_search_internal (const regex_t *preg,
+ 		    break;
+ 		  if (__glibc_unlikely (err != REG_NOMATCH))
+ 		    goto free_return;
++#ifdef DEBUG
+ 		  match_last = -1;
++#endif
+ 		}
+ 	      else
+ 		break; /* We found a match.  */
+@@ -3693,6 +3695,7 @@ group_nodes_into_DFAstates (const re_dfa
+ 	  bitset_empty (accepts);
+ 	}
+     }
++  assume (ndests <= SBC_MAX);
+   return ndests;
+  error_return:
+   for (j = 0; j < ndests; ++j)
+diff -up diffutils-3.7/lib/regex_internal.h.me diffutils-3.7/lib/regex_internal.h
+--- diffutils-3.7/lib/regex_internal.h.me	2021-03-24 08:54:03.464477733 +0100
++++ diffutils-3.7/lib/regex_internal.h	2021-03-24 08:54:22.824728618 +0100
+@@ -34,6 +34,7 @@
+ #include <stdint.h>
+ 
+ #include <intprops.h>
++#include <verify.h>
+ 
+ #ifdef _LIBC
+ # include <libc-lock.h>
+diff -up diffutils-3.7/src/ifdef.c.me diffutils-3.7/src/ifdef.c
+--- diffutils-3.7/src/ifdef.c.me	2021-03-24 18:10:43.265671781 +0100
++++ diffutils-3.7/src/ifdef.c	2021-03-24 18:08:39.843320920 +0100
+@@ -362,7 +362,7 @@ do_printf_spec (FILE *out, char const *s
+ 	    printint print_value = value;
+ 	    size_t spec_prefix_len = f - spec - 2;
+ 	    size_t pI_len = sizeof pI - 1;
+-#if 0
++#if HAVE_C_VARARRAYS
+ 	    char format[spec_prefix_len + pI_len + 2];
+ #else
+ 	    char *format = xmalloc (spec_prefix_len + pI_len + 2);

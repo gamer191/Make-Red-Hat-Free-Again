@@ -1,0 +1,29 @@
+From c7ce4cca01425123ef93cb6b89b0a0fe76b2ec7a Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Thu, 2 Jun 2022 16:02:54 +0200
+Subject: libblkid: (bsd) fix buffer pointer use [fuzzing]
+
+Addresses: https://issues.redhat.com/browse/RHEL-16071
+Upstream: http://github.com/util-linux/util-linux/commit/0a0630133055c3b3daa3072a3fd9944a1a149401
+Reported-by: Thibault Guittet <tguittet@redhat.com>
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libblkid/src/partitions/bsd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libblkid/src/partitions/bsd.c b/libblkid/src/partitions/bsd.c
+index c74517334..7a0b23195 100644
+--- a/libblkid/src/partitions/bsd.c
++++ b/libblkid/src/partitions/bsd.c
+@@ -50,7 +50,7 @@ static int probe_bsd_pt(blkid_probe pr, const struct blkid_idmag *mag)
+ 		goto nothing;
+ 	}
+ 
+-	l = (struct bsd_disklabel *) data + BLKID_MAG_LASTOFFSET(mag);
++	l = (struct bsd_disklabel *) (data + BLKID_MAG_LASTOFFSET(mag));
+ 
+ 	ls = blkid_probe_get_partlist(pr);
+ 	if (!ls)
+-- 
+2.43.0
+

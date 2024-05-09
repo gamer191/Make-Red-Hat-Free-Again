@@ -1,0 +1,54 @@
+From 8fd0c565b09ba449418d7d604ceba66313246152 Mon Sep 17 00:00:00 2001
+From: Guanqin Miao <miaoguanqin@huawei.com>
+Date: Mon, 24 Apr 2023 16:06:35 +0800
+Subject: [PATCH 136/165] Fix memory leak in file Kill
+
+When we test mdadm with asan, we found some memory leaks in Kill.c
+We fix these memory leaks based on code logic.
+
+Signed-off-by: Guanqin Miao <miaoguanqin@huawei.com>
+Signed-off-by: Li Xiao Keng <lixiaokeng@huawei.com>
+Acked-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ Kill.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/Kill.c b/Kill.c
+index bfd0efdc..43c9abed 100644
+--- a/Kill.c
++++ b/Kill.c
+@@ -41,6 +41,7 @@ int Kill(char *dev, struct supertype *st, int force, int verbose, int noexcl)
+ 	 *  4 - failed to find a superblock.
+ 	 */
+ 
++	bool free_super = false;
+ 	int fd, rv = 0;
+ 
+ 	if (force)
+@@ -52,8 +53,10 @@ int Kill(char *dev, struct supertype *st, int force, int verbose, int noexcl)
+ 				dev);
+ 		return 2;
+ 	}
+-	if (st == NULL)
++	if (st == NULL) {
+ 		st = guess_super(fd);
++		free_super = true;
++	}
+ 	if (st == NULL || st->ss->init_super == NULL) {
+ 		if (verbose >= 0)
+ 			pr_err("Unrecognised md component device - %s\n", dev);
+@@ -77,6 +80,10 @@ int Kill(char *dev, struct supertype *st, int force, int verbose, int noexcl)
+ 			rv = 0;
+ 		}
+ 	}
++	if (free_super && st) {
++		st->ss->free_super(st);
++		free(st);
++	}
+ 	close(fd);
+ 	return rv;
+ }
+-- 
+2.40.1
+

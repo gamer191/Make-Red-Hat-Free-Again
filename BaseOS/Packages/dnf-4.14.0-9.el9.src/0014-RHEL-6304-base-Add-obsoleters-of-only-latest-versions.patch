@@ -1,0 +1,55 @@
+From cbc552f3f2ef72c8cb46e068aef841eee9206e30 Mon Sep 17 00:00:00 2001
+From: Marek Blaha <mblaha@redhat.com>
+Date: Wed, 20 Sep 2023 09:15:03 +0200
+Subject: [PATCH] base: Add obsoleters of only latest versions
+
+Resolves situations where a package is in older version obsoleted, but
+there is newer (not obsoleted) version available.
+This patch covers installation of group packages and arch specific
+packages. The rest is in hawkey library.
+
+Relevant bugs:
+https://bugzilla.redhat.com/show_bug.cgi?id=2183279
+https://bugzilla.redhat.com/show_bug.cgi?id=2176263
+---
+ dnf/base.py | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/dnf/base.py b/dnf/base.py
+index 7e97e21..50869ec 100644
+--- a/dnf/base.py
++++ b/dnf/base.py
+@@ -1684,7 +1684,16 @@ class Base(object):
+                     sltr.set(provides="({} if {})".format(comps_pkg.name, comps_pkg.requires))
+                 else:
+                     if self.conf.obsoletes:
+-                        query = query.union(self.sack.query().filterm(obsoletes=query))
++                        # If there is no installed package in the pkgs_list, add only
++                        # obsoleters of the latest versions. Otherwise behave
++                        # consistently with upgrade and add all obsoleters.
++                        # See https://bugzilla.redhat.com/show_bug.cgi?id=2176263
++                        # for details of the problem.
++                        if query.installed():
++                            query = query.union(self.sack.query().filterm(obsoletes=query))
++                        else:
++                            query = query.union(self.sack.query().filterm(
++                                obsoletes=query.filter(latest_per_arch_by_priority=True)))
+                     sltr.set(pkg=query)
+                 self._goal.install(select=sltr, optional=not strict)
+             return remove_query
+@@ -1921,7 +1930,11 @@ class Base(object):
+             sltr = dnf.selector.Selector(self.sack)
+             q = self.sack.query().filterm(pkg=packages)
+             if self.conf.obsoletes:
+-                q = q.union(self.sack.query().filterm(obsoletes=q))
++                # use only obsoletes of the latest versions
++                # See https://bugzilla.redhat.com/show_bug.cgi?id=2176263
++                # for details of the problem.
++                q = q.union(self.sack.query().filterm(
++                    obsoletes=q.filter(latest_per_arch_by_priority=True)))
+             sltr = sltr.set(pkg=q)
+             if reponame is not None:
+                 sltr = sltr.set(reponame=reponame)
+--
+libgit2 1.6.4
+

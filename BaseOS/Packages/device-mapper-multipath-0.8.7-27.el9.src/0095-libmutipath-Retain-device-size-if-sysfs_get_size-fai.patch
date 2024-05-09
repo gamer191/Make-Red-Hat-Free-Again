@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Thu, 9 Nov 2023 18:46:12 -0500
+Subject: [PATCH] libmutipath: Retain device size if sysfs_get_size fails.
+
+When paths are allocated their size is initialized to 0. If they've
+already set a size, and a future call to sysfs_get_size() fails during
+the parsing, assume that the size hasn't changed, instead of setting it
+to 0. All other failures in sysfs_get_size() already retain the existing
+size.
+
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/sysfs.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/libmultipath/sysfs.c b/libmultipath/sysfs.c
+index 24c12b6a..41354f91 100644
+--- a/libmultipath/sysfs.c
++++ b/libmultipath/sysfs.c
+@@ -229,7 +229,6 @@ sysfs_get_size (struct path *pp, unsigned long long * size)
+ 
+ 	if (r != 1) {
+ 		condlog(3, "%s: Cannot parse size attribute", pp->dev);
+-		*size = 0;
+ 		return 1;
+ 	}
+ 

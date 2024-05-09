@@ -1,0 +1,215 @@
+From 2e22136c0ef7fd5744460d783ef570525df42337 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Mon, 22 Jan 2024 12:56:24 +0100
+Subject: libmount: add utab.act file
+
+The file exists when libmount works with utab, and more steps are
+expected during a single mount operation (more kernel events, more
+updates to utab, etc.).
+
+It is possible to monitor the file through the mnt_monitor_...() API
+by a simple access() after any event. No locks are expected in
+monitor, making it usable for non-root users without any security
+impact. The monitor can ignore events if the file exist.
+
+Addresses: https://issues.redhat.com/browse/RHEL-14612
+Upstream: http://github.com/util-linux/util-linux/commit/9218c9678a6aa9b163705364246ed128e94fabb7
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libmount/src/context.c    |   7 +++
+ libmount/src/mountP.h     |   2 +
+ libmount/src/tab_update.c | 109 ++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 118 insertions(+)
+
+diff --git a/libmount/src/context.c b/libmount/src/context.c
+index 06ac50dc2..27e06a19c 100644
+--- a/libmount/src/context.c
++++ b/libmount/src/context.c
+@@ -2261,6 +2261,10 @@ int mnt_context_prepare_update(struct libmnt_context *cxt)
+ 		rc = mnt_update_set_fs(cxt->update, cxt->mountflags,
+ 					NULL, cxt->fs);
+ 
++	if (mnt_update_is_ready(cxt->update)) {
++		DBG(CXT, ul_debugobj(cxt, "update is ready"));
++		mnt_update_start(cxt->update);
++	}
+ 	return rc < 0 ? rc : 0;
+ }
+ 
+@@ -2319,7 +2323,10 @@ int mnt_context_update_tabs(struct libmnt_context *cxt)
+ emit:
+ 	if (rc == 0 && !mnt_context_within_helper(cxt))
+ 		mnt_update_emit_event(cxt->update);
++
+ end:
++	mnt_update_end(cxt->update);
++
+ 	if (!mnt_context_switch_ns(cxt, ns_old))
+ 		return -MNT_ERR_NAMESPACE;
+ 	return rc;
+diff --git a/libmount/src/mountP.h b/libmount/src/mountP.h
+index eddc82bde..505d70808 100644
+--- a/libmount/src/mountP.h
++++ b/libmount/src/mountP.h
+@@ -478,6 +478,8 @@ extern int mnt_update_set_filename(struct libmnt_update *upd,
+ 				   const char *filename, int userspace_only);
+ extern int mnt_update_emit_event(struct libmnt_update *upd);
+ extern int mnt_update_already_done(struct libmnt_update *upd);
++extern int mnt_update_start(struct libmnt_update *upd);
++extern int mnt_update_end(struct libmnt_update *upd);
+ 
+ #if __linux__
+ /* btrfs.c */
+diff --git a/libmount/src/tab_update.c b/libmount/src/tab_update.c
+index 25a734e9d..7b088c025 100644
+--- a/libmount/src/tab_update.c
++++ b/libmount/src/tab_update.c
+@@ -38,6 +38,9 @@ struct libmnt_update {
+ 	unsigned long	mountflags;
+ 	int		userspace_only;
+ 
++	int		act_fd;
++	char		*act_filename;
++
+ 	unsigned int	ready : 1,
+ 			missing_options : 1;
+ 
+@@ -61,6 +64,7 @@ struct libmnt_update *mnt_new_update(void)
+ 	if (!upd)
+ 		return NULL;
+ 
++	upd->act_fd = -1;
+ 	DBG(UPDATE, ul_debugobj(upd, "allocate"));
+ 	return upd;
+ }
+@@ -81,8 +85,11 @@ void mnt_free_update(struct libmnt_update *upd)
+ 	mnt_unref_lock(upd->lock);
+ 	mnt_unref_fs(upd->fs);
+ 	mnt_unref_table(upd->mountinfo);
++	if (upd->act_fd >= 0)
++		close(upd->act_fd);
+ 	free(upd->target);
+ 	free(upd->filename);
++	free(upd->act_filename);
+ 	free(upd);
+ }
+ 
+@@ -1004,6 +1011,8 @@ int mnt_update_emit_event(struct libmnt_update *upd)
+ 	if (asprintf(&filename, "%s.event", upd->filename) <= 0)
+ 		return -ENOMEM;
+ 
++	DBG(UPDATE, ul_debugobj(upd, "emitting utab event"));
++
+ 	fd = open(filename, O_WRONLY|O_CREAT|O_CLOEXEC,
+ 			    S_IWUSR|S_IRUSR|S_IRGRP|S_IROTH);
+ 	free(filename);
+@@ -1013,6 +1022,106 @@ int mnt_update_emit_event(struct libmnt_update *upd)
+ 	return 0;
+ }
+ 
++/*
++ * Let's use /run/mount/utab.act file to report to libmount monitor that
++ * libmount is working with utab. In this case, the monitor can ignore all
++ * events from kernel until entire mount (with all steps) is done.
++ *
++ * For example mount NFS with x-* options, means
++ * - create utab.act and mark it as used (by LOCK_SH)
++ * - exec /sbin/mount.nfs
++ *   - call mount(2) (kernel event on /proc/self/mounts)
++ *   - utab update (NFS stuff)
++ * - utab update (add x-* userspace options)
++ * - unlink utab.act (if not use anyone else)
++ * - release event by /run/mount/utab.event
++ *
++ * Note, this is used only when utab is in the game (x-* options).
++ */
++int mnt_update_start(struct libmnt_update *upd)
++{
++	int rc = 0;
++	mode_t oldmask;
++
++	if (!upd || !upd->filename)
++		return -EINVAL;
++
++	if (!upd->act_filename &&
++	    asprintf(&upd->act_filename, "%s.act", upd->filename) <= 0)
++		return -ENOMEM;
++
++	/* Use exclusive lock to avoid some other proces will remove the the
++	 * file before it's marked as used by LOCK_SH (below) */
++	rc = update_init_lock(upd, NULL);
++	if (rc)
++		return rc;
++
++	rc = mnt_lock_file(upd->lock);
++	if (rc)
++		return -MNT_ERR_LOCK;
++
++	DBG(UPDATE, ul_debugobj(upd, "creating act file"));
++
++	oldmask = umask(S_IRGRP|S_IWGRP|S_IXGRP|S_IROTH|S_IWOTH|S_IXOTH);
++	upd->act_fd = open(upd->act_filename, O_WRONLY|O_CREAT|O_CLOEXEC, S_IRUSR|S_IWUSR);
++	umask(oldmask);
++
++	if (upd->act_fd < 0) {
++		rc = -errno;
++		goto fail;
++	}
++
++	/* mark the file as used */
++	rc = flock(upd->act_fd, LOCK_SH);
++	if (rc) {
++		rc = -errno;
++		goto fail;
++	}
++
++	mnt_unlock_file(upd->lock);
++	return 0;
++fail:
++	DBG(UPDATE, ul_debugobj(upd, "act file failed [rc=%d]", rc));
++	mnt_unlock_file(upd->lock);
++	unlink(upd->act_filename);
++	close(upd->act_fd);
++	upd->act_fd = -1;
++	return rc;
++}
++
++int mnt_update_end(struct libmnt_update *upd)
++{
++	int rc;
++
++	if (!upd || upd->act_fd < 0)
++		return -EINVAL;
++
++	DBG(UPDATE, ul_debugobj(upd, "removing act file"));
++
++	/* make sure nobody else will use the file */
++	rc = mnt_lock_file(upd->lock);
++	if (rc)
++		return -MNT_ERR_LOCK;
++
++	/* mark the file as unused */
++	flock(upd->act_fd, LOCK_UN);
++	errno = 0;
++
++	/* check if nobody else need the file (if yes, then the file is under LOCK_SH) )*/
++	if (flock(upd->act_fd, LOCK_EX | LOCK_NB) != 0) {
++		if (errno == EWOULDBLOCK)
++			DBG(UPDATE, ul_debugobj(upd, "act file used, no unlink"));
++	} else {
++		DBG(UPDATE, ul_debugobj(upd, "unlinking act file"));
++		unlink(upd->act_filename);
++	}
++
++	mnt_unlock_file(upd->lock);
++	close(upd->act_fd);
++	upd->act_fd = -1;
++	return 0;
++}
++
+ #ifdef TEST_PROGRAM
+ 
+ static int update(const char *target, struct libmnt_fs *fs, unsigned long mountflags)
+-- 
+2.43.0
+

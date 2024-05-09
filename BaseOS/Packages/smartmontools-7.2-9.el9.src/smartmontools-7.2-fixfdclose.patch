@@ -1,0 +1,42 @@
+diff -up smartmontools-7.2/configure.ac.fixfdclose smartmontools-7.2/configure.ac
+--- smartmontools-7.2/configure.ac.fixfdclose	2024-01-10 16:45:10.994784319 +0100
++++ smartmontools-7.2/configure.ac	2024-01-10 16:47:27.985999103 +0100
+@@ -121,6 +121,16 @@ AM_CONDITIONAL(NEED_GETOPT_LONG, [test "
+ 
+ AC_CHECK_FUNCS([clock_gettime ftime gettimeofday])
+ 
++case "$host_os" in
++  mingw*)
++    # Older MinGW-w64 (5.0.3) require -lwinpthread
++    AC_SEARCH_LIBS([clock_gettime], [winpthread])
++    ;;
++  *)
++    AC_CHECK_FUNCS([close_range])
++    ;;
++esac
++
+ # Check byte ordering (defines WORDS_BIGENDIAN)
+ AC_C_BIGENDIAN
+ 
+diff -up smartmontools-7.2/smartd.cpp.fixfdclose smartmontools-7.2/smartd.cpp
+--- smartmontools-7.2/smartd.cpp.fixfdclose	2024-01-10 16:45:10.996784336 +0100
++++ smartmontools-7.2/smartd.cpp	2024-01-10 16:46:33.786518090 +0100
+@@ -1475,8 +1475,16 @@ static int daemon_init()
+   }
+ 
+   // close any open file descriptors
+-  for (int i = getdtablesize(); --i >= 0; )
+-    close(i);
++  int open_max = sysconf(_SC_OPEN_MAX);
++#ifdef HAVE_CLOSE_RANGE
++  if (close_range(0, open_max - 1, 0))
++#endif
++  {
++    // Limit number of close() calls under the assumption that there
++    // are no large gaps between open FDs
++    for (int i = 0, failed = 0; i < open_max && failed < 1024; i++)
++      failed = (!close(i) ? 0 : failed + 1);
++  }
+   
+   // redirect any IO attempts to /dev/null and change to root directory
+   int fd = open("/dev/null", O_RDWR);

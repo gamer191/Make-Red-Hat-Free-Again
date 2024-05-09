@@ -1,0 +1,48 @@
+From 968789d5426442ac43b96eabd65f3e5c0c141e62 Mon Sep 17 00:00:00 2001
+From: Eugene Syromyatnikov <evgsyr@gmail.com>
+Date: Tue, 28 Jun 2022 16:47:56 +0200
+Subject: [PATCH] strauss: fix off-by-one error in strauss array access
+
+It has to be limited with strauss_lines - 1, not strauss_lines.
+Reported by covscan:
+
+    Error: OVERRUN (CWE-119):
+    strace-5.18/src/strauss.c:380: cond_at_least: Checking "4UL + i < 37UL"
+    implies that "i" is at least 33 on the false branch.
+    strace-5.18/src/strauss.c:380: overrun-local: Overrunning array "strauss"
+    of 37 8-byte elements at element index 37 (byte offset 303) using index
+    "(4UL + i < 37UL) ? 4UL + i : 37UL" (which evaluates to 37).
+
+* src/strauss.c (print_totd): Limit strauss array accesses to
+strauss_lines - 1 instead of strauss_lines.
+---
+ src/strauss.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/strauss.c b/src/strauss.c
+index 98af183..b22ab6a 100644
+--- a/src/strauss.c
++++ b/src/strauss.c
+@@ -373,16 +373,16 @@ print_totd(void)
+ 			tip_left[MIN(i + 1, ARRAY_SIZE(tip_left) - 1)],
+ 			w, w, tips_tricks_tweaks[id][i] ?: "",
+ 			tip_right[MIN(i + 1, ARRAY_SIZE(tip_right) - 1)],
+-			strauss[MIN(3 + i, strauss_lines)]);
++			strauss[MIN(3 + i, strauss_lines - 1)]);
+ 	}
+ 	fprintf(stderr, "%s%s\n",
+-		tip_bottom, strauss[MIN(3 + i, strauss_lines)]);
++		tip_bottom, strauss[MIN(3 + i, strauss_lines - 1)]);
+ 	do {
+ 		fprintf(stderr, "%*s%*s%*s%s\n",
+ 			(int) strlen(tip_left[0]), "",
+ 			w, "",
+ 			(int) strlen(tip_right[0]), "",
+-			strauss[MIN(4 + i, strauss_lines)]);
++			strauss[MIN(4 + i, strauss_lines - 1)]);
+ 	} while ((show_tips == TIPS_FULL) && (4 + ++i < strauss_lines));
+ 
+ 	printed = true;
+-- 
+2.1.4
+

@@ -1,0 +1,45 @@
+From b0caa16589763699174f47a3e36a703e1af32ed4 Mon Sep 17 00:00:00 2001
+From: Kyle Walker <kwalker@redhat.com>
+Date: Tue, 20 Dec 2022 08:42:03 -0500
+Subject: [PATCH] Omit src RPMs from check-update (RhBug: 2151910)
+
+The current check-update operation relies on src RPMs not being included
+in the available repos. When those repos are enabled, *.src RPMs can be
+emitted as updates that are available. Those RPMs are not updated in the
+traditional fashion and can cause confusion to end users.
+
+This change unconditionally filters out src packages in the
+_list_patterns() callpath.
+
+= changelog =
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2151910
+---
+ dnf/base.py | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/dnf/base.py b/dnf/base.py
+index 24c5a44..7e97e21 100644
+--- a/dnf/base.py
++++ b/dnf/base.py
+@@ -1543,6 +1543,8 @@ class Base(object):
+             updates = query_for_repo(q).filterm(upgrades_by_priority=True)
+             # reduce a query to security upgrades if they are specified
+             updates = self._merge_update_filters(updates, upgrade=True)
++            # reduce a query to remove src RPMs
++            updates.filterm(arch__neq=['src', 'nosrc'])
+             # reduce a query to latest packages
+             updates = updates.latest().run()
+ 
+@@ -1595,6 +1597,8 @@ class Base(object):
+                 self.sack.query()).filter(obsoletes_by_priority=inst)
+             # reduce a query to security upgrades if they are specified
+             obsoletes = self._merge_update_filters(obsoletes, warning=False, upgrade=True)
++            # reduce a query to remove src RPMs
++            obsoletes.filterm(arch__neq=['src', 'nosrc'])
+             obsoletesTuples = []
+             for new in obsoletes:
+                 obsoleted_reldeps = new.obsoletes
+--
+libgit2 1.3.2
+

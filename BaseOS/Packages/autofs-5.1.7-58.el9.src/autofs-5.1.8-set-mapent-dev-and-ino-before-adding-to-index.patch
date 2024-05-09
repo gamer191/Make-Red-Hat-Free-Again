@@ -1,0 +1,140 @@
+autofs-5.1.8 - set mapent dev and ino before adding to index
+
+From: Ian Kent <raven@themaw.net>
+
+Set the struct fields dev and ino straight after getting them with
+stat() or fstat() so they can be used in cache_set_ino_index() without
+being passed in.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG           |    1 +
+ daemon/direct.c     |    8 ++++++--
+ daemon/state.c      |    2 +-
+ include/automount.h |    3 +--
+ lib/cache.c         |   11 ++---------
+ lib/mounts.c        |   16 +++++++++++++---
+ 6 files changed, 24 insertions(+), 17 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -144,6 +144,7 @@
+ - remove redundant fstat from do_mount_direct().
+ - get rid of strlen call in handle_packet_missing_direct().
+ - remove redundant stat call in lookup_ghost().
++- set mapent dev and ino before adding to index.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/direct.c
++++ autofs-5.1.7/daemon/direct.c
+@@ -410,6 +410,8 @@ int do_mount_autofs_direct(struct autofs
+ 		      "failed to stat direct mount trigger %s", me->key);
+ 		goto out_umount;
+ 	}
++	me->dev = st.st_dev;
++	me->ino = st.st_ino;
+ 
+ 	if (ap->mode && (err = chmod(me->key, ap->mode)))
+ 		warn(ap->logopt, "failed to change mode of %s", me->key);
+@@ -422,7 +424,7 @@ int do_mount_autofs_direct(struct autofs
+ 
+ 	ops->timeout(ap->logopt, ioctlfd, timeout);
+ 	notify_mount_result(ap, me->key, timeout, str_direct);
+-	cache_set_ino_index(me->mc, me->key, st.st_dev, st.st_ino);
++	cache_set_ino_index(me->mc, me);
+ 	ops->close(ap->logopt, ioctlfd);
+ 
+ 	debug(ap->logopt, "mounted trigger %s", me->key);
+@@ -765,6 +767,8 @@ int mount_autofs_offset(struct autofs_po
+ 			goto out_umount;
+ 		goto out_err;
+ 	}
++	me->dev = st.st_dev;
++	me->ino = st.st_ino;
+ 
+ 	ops->open(ap->logopt, &ioctlfd, st.st_dev, me->key);
+ 	if (ioctlfd < 0) {
+@@ -773,7 +777,7 @@ int mount_autofs_offset(struct autofs_po
+ 	}
+ 
+ 	ops->timeout(ap->logopt, ioctlfd, timeout);
+-	cache_set_ino_index(me->mc, me->key, st.st_dev, st.st_ino);
++	cache_set_ino_index(me->mc, me);
+ 	notify_mount_result(ap, me->key, timeout, str_offset);
+ 	ops->close(ap->logopt, ioctlfd);
+ 
+--- autofs-5.1.7.orig/daemon/state.c
++++ autofs-5.1.7/daemon/state.c
+@@ -362,7 +362,7 @@ static int do_readmap_mount(struct autof
+ 			valid->ioctlfd = me->ioctlfd;
+ 			me->ioctlfd = -1;
+ 			/* Set device and inode number of the new mapent */
+-			cache_set_ino_index(vmc, me->key, me->dev, me->ino);
++			cache_set_ino_index(vmc, me);
+ 			cache_unlock(vmc);
+ 			/* Set timeout and calculate the expire run frequency */
+ 			timeout = get_exp_timeout(ap, map);
+--- autofs-5.1.7.orig/include/automount.h
++++ autofs-5.1.7/include/automount.h
+@@ -199,8 +199,7 @@ int cache_push_mapent(struct mapent *me,
+ int cache_pop_mapent(struct mapent *me);
+ struct mapent_cache *cache_init(struct autofs_point *ap, struct map_source *map);
+ struct mapent_cache *cache_init_null_cache(struct master *master);
+-int cache_set_ino_index(struct mapent_cache *mc, const char *key, dev_t dev, ino_t ino);
+-/* void cache_set_ino(struct mapent *me, dev_t dev, ino_t ino); */
++int cache_set_ino_index(struct mapent_cache *mc, struct mapent *me);
+ struct mapent *cache_lookup_ino(struct mapent_cache *mc, dev_t dev, ino_t ino);
+ struct mapent *cache_lookup_first(struct mapent_cache *mc);
+ struct mapent *cache_lookup_next(struct mapent_cache *mc, struct mapent *me);
+--- autofs-5.1.7.orig/lib/cache.c
++++ autofs-5.1.7/lib/cache.c
+@@ -290,20 +290,13 @@ static u_int32_t ino_hash(dev_t dev, ino
+ 	return hashval % size;
+ }
+ 
+-int cache_set_ino_index(struct mapent_cache *mc, const char *key, dev_t dev, ino_t ino)
++int cache_set_ino_index(struct mapent_cache *mc, struct mapent *me)
+ {
+-	u_int32_t ino_index = ino_hash(dev, ino, mc->size);
+-	struct mapent *me;
+-
+-	me = cache_lookup_distinct(mc, key);
+-	if (!me)
+-		return 0;
++	u_int32_t ino_index = ino_hash(me->dev, me->ino, mc->size);
+ 
+ 	ino_index_lock(mc);
+ 	list_del_init(&me->ino_index);
+ 	list_add(&me->ino_index, &mc->ino_index[ino_index]);
+-	me->dev = dev;
+-	me->ino = ino;
+ 	ino_index_unlock(mc);
+ 
+ 	return 1;
+--- autofs-5.1.7.orig/lib/mounts.c
++++ autofs-5.1.7/lib/mounts.c
+@@ -2761,10 +2761,20 @@ static int remount_active_mount(struct a
+ 		ops->close(ap->logopt, fd);
+ 		return REMOUNT_STAT_FAIL;
+ 	}
+-	if (type != t_indirect)
+-		cache_set_ino_index(me->mc, path, st.st_dev, st.st_ino);
+-	else
++	if (type == t_indirect)
+ 		ap->dev = st.st_dev;
++	else {
++		if (strcmp(path, me->key)) {
++			error(ap->logopt,
++			      "mount point path mismatch, path %s mapent %s", path, me->key);
++			debug(ap->logopt, "couldn't re-connect to mount %s", path);
++			ops->close(ap->logopt, fd);
++			return REMOUNT_STAT_FAIL;
++		}
++		me->dev = st.st_dev;
++		me->ino = st.st_ino;
++		cache_set_ino_index(me->mc, me);
++	}
+ 	notify_mount_result(ap, path, timeout, str_type);
+ 
+ 	*ioctlfd = fd;

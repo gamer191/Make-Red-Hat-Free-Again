@@ -1,0 +1,15 @@
+--- a/man/man8/mkfs.xfs.8.in	2021-12-01 20:48:09.241170607 +0100
++++ b/man/man8/mkfs.xfs.8.in	2021-12-03 15:34:32.382616819 +0100
+@@ -1091,6 +1091,12 @@
+ .HP
+ .PD
+ .PP
++.SH Example Of Backward Compatible Configuration Files
++An example of a configuration file that facilitates creation of Red Hat
++Enterprise Linux 8 compatible XFS filesystems while running on Red Hat
++Enterprise Linux 9 can be found at:
++/usr/share/xfsprogs/mkfs/rhel8.0.conf
++.PP
+ .SH SEE ALSO
+ .BR xfs (5),
+ .BR mkfs (8),

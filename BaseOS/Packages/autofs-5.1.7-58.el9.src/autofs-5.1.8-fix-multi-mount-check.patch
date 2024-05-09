@@ -1,0 +1,44 @@
+autofs-5.1.8 - fix multi-mount check
+
+From: Ian Kent <raven@themaw.net>
+
+When checking if a mount location is a multi-mount after the first location
+the next '-' or '/' indicates it's a multi-mount.
+
+But the '-' can be part of a mount location and can follow a space leading
+to incorrectly deciding the location is a multi-mount.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG           |    1 +
+ modules/parse_sun.c |    9 ++++++++-
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -158,6 +158,7 @@
+ - fix incorrect matching of cached wildcard key.
+ - fix expire retry looping.
+ - allow -null map in indirect maps.
++- fix multi-mount check.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/modules/parse_sun.c
++++ autofs-5.1.7/modules/parse_sun.c
+@@ -787,7 +787,14 @@ static int check_is_multi(const char *ma
+ 		if (not_first_chunk) {
+ 			if (*p == '"')
+ 				p++;
+-			if (*p == '/' || *p == '-') {
++			/*
++			 * Although an options string here would mean
++			 * we have a multi-mount we can't rely on it
++			 * since it's also valid in a mount location.
++			 */
++			if (*p == '-')
++				p++;
++			if (*p == '/') {
+ 				multi = 1;
+ 				break;
+ 			}

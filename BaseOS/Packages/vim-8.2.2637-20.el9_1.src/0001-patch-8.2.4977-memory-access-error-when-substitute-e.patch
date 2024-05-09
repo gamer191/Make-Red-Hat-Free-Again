@@ -1,0 +1,59 @@
+diff -up vim82/src/ex_cmds.c.cve1785 vim82/src/ex_cmds.c
+--- vim82/src/ex_cmds.c.cve1785	2022-06-10 10:26:16.883312704 +0200
++++ vim82/src/ex_cmds.c	2022-06-10 10:26:16.910312568 +0200
+@@ -4356,12 +4356,17 @@ ex_substitute(exarg_T *eap)
+ 		// Save flags for recursion.  They can change for e.g.
+ 		// :s/^/\=execute("s#^##gn")
+ 		subflags_save = subflags;
++
++		// Disallow changing text or switching window in an expression.
++		++textwinlock;
+ #endif
+ 		// get length of substitution part
+ 		sublen = vim_regsub_multi(&regmatch,
+ 				    sub_firstlnum - regmatch.startpos[0].lnum,
+ 			       sub, sub_firstline, FALSE, magic_isset(), TRUE);
+ #ifdef FEAT_EVAL
++		--textwinlock;
++
+ 		// If getting the substitute string caused an error, don't do
+ 		// the replacement.
+ 		// Don't keep flags set by a recursive call.
+@@ -4462,9 +4467,15 @@ ex_substitute(exarg_T *eap)
+ 		mch_memmove(new_end, sub_firstline + copycol, (size_t)copy_len);
+ 		new_end += copy_len;
+ 
++#ifdef FEAT_EVAL
++		++textwinlock;
++#endif
+ 		(void)vim_regsub_multi(&regmatch,
+ 				    sub_firstlnum - regmatch.startpos[0].lnum,
+ 				      sub, new_end, TRUE, magic_isset(), TRUE);
++#ifdef FEAT_EVAL
++		--textwinlock;
++#endif
+ 		sub_nsubs++;
+ 		did_sub = TRUE;
+ 
+diff -up vim82/src/testdir/test_substitute.vim.cve1785 vim82/src/testdir/test_substitute.vim
+--- vim82/src/testdir/test_substitute.vim.cve1785	2022-06-10 10:26:16.910312568 +0200
++++ vim82/src/testdir/test_substitute.vim	2022-06-10 10:27:02.166084629 +0200
+@@ -942,5 +942,18 @@ func Test_using_old_sub()
+   set nocompatible
+ endfunc
+ 
++" This was switching windows in between computing the length and using it.
++func Test_sub_change_window()
++  silent! lfile
++  sil! norm o0000000000000000000000000000000000000000000000000000
++  func Repl()
++    lopen
++  endfunc
++  silent!  s/\%')/\=Repl()
++  bwipe!
++  bwipe!
++  delfunc Repl
++endfunc
++
+ 
+ " vim: shiftwidth=2 sts=2 expandtab

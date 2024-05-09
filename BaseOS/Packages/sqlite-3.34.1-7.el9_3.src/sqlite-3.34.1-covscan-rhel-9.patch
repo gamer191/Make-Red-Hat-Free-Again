@@ -1,0 +1,76 @@
+Subject: [PATCH] * Fix a potential memory leak following OOM in the decimal
+ extension. * Fix minor coverity warnings in the CLI.
+
+---
+ ext/misc/decimal.c |  9 +++++----
+ src/shell.c.in     | 10 +++++-----
+ 2 files changed, 10 insertions(+), 9 deletions(-)
+
+diff --git a/ext/misc/decimal.c b/ext/misc/decimal.c
+index a8d68ac..79fc91f 100644
+--- a/ext/misc/decimal.c
++++ b/ext/misc/decimal.c
+@@ -459,10 +459,11 @@ static void decimalSubFunc(
+   Decimal *pA = decimal_new(context, argv[0], 0, 0);
+   Decimal *pB = decimal_new(context, argv[1], 0, 0);
+   UNUSED_PARAMETER(argc);
+-  if( pB==0 ) return;
+-  pB->sign = !pB->sign;
+-  decimal_add(pA, pB);
+-  decimal_result(context, pA);
++  if( pB ) {
++    pB->sign = !pB->sign;
++    decimal_add(pA, pB);
++    decimal_result(context, pA);
++  }
+   decimal_free(pA);
+   decimal_free(pB);
+ }
+diff --git a/src/shell.c.in b/src/shell.c.in
+index 2d98d23..8258687 100644
+--- a/src/shell.c.in
++++ b/src/shell.c.in
+@@ -6715,6 +6715,7 @@ static void shellExec(sqlite3 *db, int *pRc, const char *zSql){
+     if( rc!=SQLITE_OK ){
+       raw_printf(stderr, "SQL error: %s\n", zErr);
+     }
++    sqlite3_free(zErr);
+     *pRc = rc;
+   }
+ }
+@@ -8017,7 +8018,6 @@ static int do_meta_command(char *zLine, ShellState *p){
+ 
+   if( c=='f' && strncmp(azArg[0], "fullschema", n)==0 ){
+     ShellState data;
+-    char *zErrMsg = 0;
+     int doStats = 0;
+     memcpy(&data, p, sizeof(data));
+     data.showHeader = 0;
+@@ -8039,7 +8039,7 @@ static int do_meta_command(char *zLine, ShellState *p){
+        "   SELECT sql, type, tbl_name, name, rowid FROM sqlite_temp_schema) "
+        "WHERE type!='meta' AND sql NOTNULL AND name NOT LIKE 'sqlite_%' "
+        "ORDER BY rowid",
+-       callback, &data, &zErrMsg
++       callback, &data, 0
+     );
+     if( rc==SQLITE_OK ){
+       sqlite3_stmt *pStmt;
+@@ -8055,12 +8055,12 @@ static int do_meta_command(char *zLine, ShellState *p){
+     }else{
+       raw_printf(p->out, "ANALYZE sqlite_schema;\n");
+       sqlite3_exec(p->db, "SELECT 'ANALYZE sqlite_schema'",
+-                   callback, &data, &zErrMsg);
++                   callback, &data, 0);
+       data.cMode = data.mode = MODE_Insert;
+       data.zDestTable = "sqlite_stat1";
+-      shell_exec(&data, "SELECT * FROM sqlite_stat1", &zErrMsg);
++      shell_exec(&data, "SELECT * FROM sqlite_stat1", 0);
+       data.zDestTable = "sqlite_stat4";
+-      shell_exec(&data, "SELECT * FROM sqlite_stat4", &zErrMsg);
++      shell_exec(&data, "SELECT * FROM sqlite_stat4", 0);
+       raw_printf(p->out, "ANALYZE sqlite_schema;\n");
+     }
+   }else
+-- 
+2.31.1
+

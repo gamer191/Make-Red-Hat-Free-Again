@@ -1,0 +1,127 @@
+From 7ce2fddfa3f108036a2d81de4d2e66ac29e4631e Mon Sep 17 00:00:00 2001
+From: QI Fuli <qi.fuli@fujitsu.com>
+Date: Wed, 3 Feb 2021 22:21:08 +0900
+Subject: [PATCH 011/217] ndctl/test: add checking the presence of jq command
+ ahead
+
+Due to the lack of jq command, the result of the test will be 'fail'.
+This patch adds checking the presence of jq commmand ahead.
+If there is no jq command in the system, the test will be marked as 'skip'.
+
+Signed-off-by: QI Fuli <qi.fuli@fujitsu.com>
+Link: https://github.com/pmem/ndctl/issues/141
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+Link: https://lore.kernel.org/r/20210203132108.6246-1-qi.fuli@fujitsu.com
+---
+ test/daxdev-errors.sh           | 1 +
+ test/inject-error.sh            | 2 ++
+ test/inject-smart.sh            | 1 +
+ test/label-compat.sh            | 1 +
+ test/max_available_extent_ns.sh | 1 +
+ test/monitor.sh                 | 2 ++
+ test/multi-dax.sh               | 1 +
+ test/sector-mode.sh             | 2 ++
+ 8 files changed, 11 insertions(+)
+
+diff --git a/test/daxdev-errors.sh b/test/daxdev-errors.sh
+index 6281f32..9547d78 100755
+--- a/test/daxdev-errors.sh
++++ b/test/daxdev-errors.sh
+@@ -9,6 +9,7 @@ rc=77
+ . $(dirname $0)/common
+ 
+ check_min_kver "4.12" || do_skip "lacks dax dev error handling"
++check_prereq "jq"
+ 
+ trap 'err $LINENO' ERR
+ 
+diff --git a/test/inject-error.sh b/test/inject-error.sh
+index c636033..7d0b826 100755
+--- a/test/inject-error.sh
++++ b/test/inject-error.sh
+@@ -11,6 +11,8 @@ err_count=8
+ 
+ . $(dirname $0)/common
+ 
++check_prereq "jq"
++
+ trap 'err $LINENO' ERR
+ 
+ # sample json:
+diff --git a/test/inject-smart.sh b/test/inject-smart.sh
+index 94705df..4ca83b8 100755
+--- a/test/inject-smart.sh
++++ b/test/inject-smart.sh
+@@ -166,6 +166,7 @@ do_tests()
+ }
+ 
+ check_min_kver "4.19" || do_skip "kernel $KVER may not support smart (un)injection"
++check_prereq "jq"
+ modprobe nfit_test
+ rc=1
+ 
+diff --git a/test/label-compat.sh b/test/label-compat.sh
+index 340b93d..8ab2858 100755
+--- a/test/label-compat.sh
++++ b/test/label-compat.sh
+@@ -10,6 +10,7 @@ BASE=$(dirname $0)
+ . $BASE/common
+ 
+ check_min_kver "4.11" || do_skip "may not provide reliable isetcookie values"
++check_prereq "jq"
+ 
+ trap 'err $LINENO' ERR
+ 
+diff --git a/test/max_available_extent_ns.sh b/test/max_available_extent_ns.sh
+index 14d741d..343f3c9 100755
+--- a/test/max_available_extent_ns.sh
++++ b/test/max_available_extent_ns.sh
+@@ -9,6 +9,7 @@ rc=77
+ trap 'err $LINENO' ERR
+ 
+ check_min_kver "4.19" || do_skip "kernel $KVER may not support max_available_size"
++check_prereq "jq"
+ 
+ init()
+ {
+diff --git a/test/monitor.sh b/test/monitor.sh
+index cdab5e1..28c5541 100755
+--- a/test/monitor.sh
++++ b/test/monitor.sh
+@@ -13,6 +13,8 @@ smart_supported_bus=""
+ 
+ . $(dirname $0)/common
+ 
++check_prereq "jq"
++
+ trap 'err $LINENO' ERR
+ 
+ check_min_kver "4.15" || do_skip "kernel $KVER may not support monitor service"
+diff --git a/test/multi-dax.sh b/test/multi-dax.sh
+index e932569..8496619 100755
+--- a/test/multi-dax.sh
++++ b/test/multi-dax.sh
+@@ -9,6 +9,7 @@ rc=77
+ . $(dirname $0)/common
+ 
+ check_min_kver "4.13" || do_skip "may lack multi-dax support"
++check_prereq "jq"
+ 
+ trap 'err $LINENO' ERR
+ 
+diff --git a/test/sector-mode.sh b/test/sector-mode.sh
+index dd7013e..54fa806 100755
+--- a/test/sector-mode.sh
++++ b/test/sector-mode.sh
+@@ -6,6 +6,8 @@ rc=77
+ 
+ . $(dirname $0)/common
+ 
++check_prereq "jq"
++
+ set -e
+ trap 'err $LINENO' ERR
+ 
+-- 
+2.27.0
+

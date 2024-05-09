@@ -1,0 +1,78 @@
+From 9bfb567715d1b45e6598e6b38bef531312c72db3 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Wed, 5 Jan 2022 13:32:21 -0800
+Subject: [PATCH 076/217] ndctl/test: Fix support for missing dax_pmem_compat
+ module
+
+The kernel is moving to drop CONFIG_DEV_DAX_PMEM_COMPAT. Update
+ndctl_test_init() to not error out if dax_pmem_compat is missing. It seems
+that the original implementation of support for missing dax_pmem_compat was
+broken, or since that time newer versions of kmod_module_new_from_name() no
+longer fail when the module is missing.
+
+Link: https://lore.kernel.org/r/164141834155.3990253.5388773351209410262.stgit@dwillia2-desk3.amr.corp.intel.com
+Fixes: b7991dbc22f3 ("ndctl/test: Relax dax_pmem_compat requirement")
+Tested-by: Alison Schofield <alison.schofield@intel.com>
+Tested-by: Vaibhav Jain <vaibhav@linux.ibm.com>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ test/core.c | 25 +++++++++++--------------
+ 1 file changed, 11 insertions(+), 14 deletions(-)
+
+diff --git a/test/core.c b/test/core.c
+index dc1405d..5d1aa23 100644
+--- a/test/core.c
++++ b/test/core.c
+@@ -120,7 +120,6 @@ int ndctl_test_init(struct kmod_ctx **ctx, struct kmod_module **mod,
+ 		"nfit",
+ 		"device_dax",
+ 		"dax_pmem",
+-		"dax_pmem_core",
+ 		"dax_pmem_compat",
+ 		"libnvdimm",
+ 		"nd_btt",
+@@ -180,29 +179,27 @@ int ndctl_test_init(struct kmod_ctx **ctx, struct kmod_module **mod,
+ 		/*
+ 		 * Skip device-dax bus-model modules on pre-v5.1
+ 		 */
+-		if ((strcmp(name, "dax_pmem_core") == 0
+-				|| strcmp(name, "dax_pmem_compat") == 0)
+-				&& !ndctl_test_attempt(test,
+-					KERNEL_VERSION(5, 1, 0)))
++		if ((strcmp(name, "dax_pmem_compat") == 0) &&
++		    !ndctl_test_attempt(test, KERNEL_VERSION(5, 1, 0)))
+ 			continue;
+ 
+ retry:
+ 		rc = kmod_module_new_from_name(*ctx, name, mod);
+-
+-		/*
+-		 * dax_pmem_compat is not required, missing is ok,
+-		 * present-but-production is not ok.
+-		 */
+-		if (rc && strcmp(name, "dax_pmem_compat") == 0)
+-			continue;
+-
+ 		if (rc) {
+-			log_err(&log_ctx, "%s.ko: missing\n", name);
++			log_err(&log_ctx, "failed to interrogate %s.ko\n",
++				name);
+ 			break;
+ 		}
+ 
+ 		path = kmod_module_get_path(*mod);
+ 		if (!path) {
++			/*
++			 * dax_pmem_compat is not required, missing is
++			 * ok, present-but-production is not ok.
++			 */
++			if (strcmp(name, "dax_pmem_compat") == 0)
++				continue;
++
+ 			if (family != NVDIMM_FAMILY_INTEL &&
+ 			    (strcmp(name, "nfit") == 0 ||
+ 			     strcmp(name, "nd_e820") == 0))
+-- 
+2.27.0
+

@@ -1,0 +1,36 @@
+autofs-5.1.8 - fix loop under run in cache_get_offset_parent()
+
+From: Frank Sorenson <sorenson@redhat.com>
+
+To avoid reading memory outside of the the string
+allocated for parent, tail needs to stop when it
+reaches or passes parent, even if it doesn't
+actually equal parent.
+
+Signed-off-by: Frank Sorenson <sorenson@redhat.com>
+---
+ CHANGELOG   |    1 +
+ lib/cache.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -88,6 +88,7 @@
+ - fix fix root offset error handling.
+ - fix nonstrict fail handling of last offset mount.
+ - dont fail on duplicate offset entry tree add.
++- fix loop under run in cache_get_offset_parent().
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/lib/cache.c
++++ autofs-5.1.7/lib/cache.c
+@@ -710,7 +710,7 @@ struct mapent *cache_get_offset_parent(s
+ 		*tail = 0;
+ 
+ 		tail--;
+-		if (tail == parent)
++		if (tail <= parent)
+ 			break;
+ 
+ 		me = cache_lookup_distinct(mc, parent);

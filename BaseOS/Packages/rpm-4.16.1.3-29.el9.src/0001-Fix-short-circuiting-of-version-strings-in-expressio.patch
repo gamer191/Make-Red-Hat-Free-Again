@@ -1,0 +1,50 @@
+From 321933f060896f721e361a1c8a8d3731bdcee827 Mon Sep 17 00:00:00 2001
+From: Michael Schroeder <mls@suse.de>
+Date: Wed, 22 Jun 2022 14:07:01 +0200
+Subject: [PATCH] Fix short circuiting of version strings in expressions
+
+We use an empty string when discarding a value due to short circuiting, but
+an empty string is not allowed for versions. So use "0" in that case.
+
+Fixes: #1883
+---
+ rpmio/expression.c | 2 +-
+ tests/rpmmacro.at  | 2 ++
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/rpmio/expression.c b/rpmio/expression.c
+index a389a04d5..98a44bbdb 100644
+--- a/rpmio/expression.c
++++ b/rpmio/expression.c
+@@ -477,7 +477,7 @@ static int rdToken(ParseState state)
+       if (qtok == TOK_STRING) {
+ 	v = valueMakeString(temp);
+       } else {
+-	v = valueMakeVersion(temp);
++	v = valueMakeVersion(state->flags & RPMEXPR_DISCARD ? "0" : temp);
+         free(temp); /* version doesn't take ownership of the string */
+         if (v == 0) {
+ 	  exprErr(state, _("invalid version"), p+1);
+diff --git a/tests/rpmmacro.at b/tests/rpmmacro.at
+index d1490b4d9..c4376d49e 100644
+--- a/tests/rpmmacro.at
++++ b/tests/rpmmacro.at
+@@ -533,6 +533,7 @@ runroot rpm \
+     --eval '%["%{aaa}"]' \
+     --eval '%[%{?ccc}]' \
+     --eval '%[v"1:2.3-4"]' \
++    --eval '%[v"0" && v"0"]' \
+ ]],
+ [0],
+ [4096
+@@ -542,6 +543,7 @@ runroot rpm \
+ 5
+ 0
+ 1:2.3-4
++0
+ ],
+ [])
+ AT_CLEANUP
+-- 
+2.41.0
+

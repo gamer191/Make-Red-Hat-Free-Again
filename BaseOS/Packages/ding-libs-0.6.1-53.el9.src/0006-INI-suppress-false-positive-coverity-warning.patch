@@ -1,0 +1,28 @@
+From 584dc25f2c31f4d8e5cf7154e0362e4d2504779c Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Thu, 5 Aug 2021 18:48:23 +0200
+Subject: [PATCH 6/6] INI: suppress false positive coverity warning
+
+`get_str_cfg_array()` returns `char **array` that is composed of pointers
+to slices of `copy` so `copy` can't be freed here.
+
+Reviewed-by: Pawel Polawski <ppolawsk@redhat.com>
+---
+ ini/ini_get_array.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/ini/ini_get_array.c b/ini/ini_get_array.c
+index 30ed423..95d0b05 100644
+--- a/ini/ini_get_array.c
++++ b/ini/ini_get_array.c
+@@ -164,6 +164,7 @@ static char **get_str_cfg_array(struct collection_item *item,
+     /* If count is 0 the copy needs to be freed */
+     if (count == 0) free(copy);
+     TRACE_FLOW_STRING("get_str_cfg_array", "Exit");
++    /* coverity[leaked_storage : SUPPRESS] */ /* false positive warning */
+     return array;
+ }
+ 
+-- 
+2.26.3
+

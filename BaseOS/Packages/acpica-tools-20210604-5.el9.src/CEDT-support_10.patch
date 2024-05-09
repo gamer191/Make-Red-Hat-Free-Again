@@ -1,0 +1,127 @@
+commit 0914618b553d6f3366e568409cebf2656891ca69
+Author: Robert Moore <Robert.Moore@intel.com>
+Date:   Thu Feb 17 14:24:24 2022 -0800
+
+    Automated cleanup; No functional changes
+    Removed some tabs and // comments.
+
+diff --git a/source/common/dmtbdump1.c b/source/common/dmtbdump1.c
+index 6abe8bc..88b7c1b 100644
+--- a/source/common/dmtbdump1.c
++++ b/source/common/dmtbdump1.c
+@@ -275,14 +275,16 @@ AcpiDmDumpCedt (
+             ACPI_CEDT_CFMWS *ptr = (ACPI_CEDT_CFMWS *) Subtable;
+             unsigned int i, max = 0x01 << (ptr->InterleaveWays);
+ 
+-            // print out table with first "Interleave target"
++            /* print out table with first "Interleave target" */
++
+             Status = AcpiDmDumpTable (Length, Offset, Subtable,
+                 Subtable->Length, AcpiDmTableInfoCedt1);
+             if (ACPI_FAILURE (Status)) {
+                 return;
+             }
+ 
+-            // Now, print out any interleave targets beyond the first.
++            /* Now, print out any interleave targets beyond the first. */
++
+             for (i = 1; i < max; i++) {
+                 unsigned int loc_offset = Offset + (i * 4) + ACPI_OFFSET(ACPI_CEDT_CFMWS, InterleaveTargets);
+                 unsigned int *trg = &(ptr->InterleaveTargets[i]);
+diff --git a/source/compiler/dttable1.c b/source/compiler/dttable1.c
+index 09aca3a..c1e6b98 100644
+--- a/source/compiler/dttable1.c
++++ b/source/compiler/dttable1.c
+@@ -262,7 +262,9 @@ DtCompileCedt (
+ 
+     while (*PFieldList)
+     {
+-        int InsertFlag = 1;             // if CFMWS and has more than one target, then set to zero later
++        /* if CFMWS and has more than one target, then set to zero later */
++
++        int InsertFlag = 1;
+         SubtableStart = *PFieldList;
+ 
+         /* CEDT Header */
+@@ -293,27 +295,30 @@ DtCompileCedt (
+             unsigned char *dump;
+             unsigned int idx, offset, max = 0;
+ 
+-            // Compile table with first "Interleave target"
++            /* Compile table with first "Interleave target" */
++
+             Status = DtCompileTable (PFieldList, AcpiDmTableInfoCedt1, &Subtable);
+             if (ACPI_FAILURE (Status))
+             {
+                 return (Status);
+             }
+ 
+-            // Look in buffer for the number of targets
++            /* Look in buffer for the number of targets */
+             offset = (unsigned int) ACPI_OFFSET (ACPI_CEDT_CFMWS, InterleaveWays);
+-            dump = (unsigned char *) Subtable->Buffer - 4;     // place at beginning of cedt1
+-            max = 0x01 << dump[offset]; // 2^max, so 0=1, 1=2, 2=4, 3=8.  8 is MAX
+-            if (max > 8)    max=1;      // Error in encoding Interleaving Ways.
+-            if (max == 1)               // if only one target, then break here.
+-                break;                  // break if only one target.
++            dump = (unsigned char *) Subtable->Buffer - 4;     /* place at beginning of cedt1 */
++            max = 0x01 << dump[offset];     /* 2^max, so 0=1, 1=2, 2=4, 3=8.  8 is MAX */
++            if (max > 8)    max=1;          /* Error in encoding Interleaving Ways. */
++            if (max == 1)                   /* if only one target, then break here. */
++                break;                      /* break if only one target. */
++
++            /* We need to add more interleave targets, so write the current Subtable. */
+ 
+-            // We need to add more interleave targets, so write the current Subtable.
+             ParentTable = DtPeekSubtable ();
+-            DtInsertSubtable (ParentTable, Subtable);   // Insert AcpiDmTableInfoCedt1 table so we can put in
+-            DtPushSubtable (Subtable);                  // the targets > the first.
++            DtInsertSubtable (ParentTable, Subtable);   /* Insert AcpiDmTableInfoCedt1 table so we can put in */
++            DtPushSubtable (Subtable);                  /* the targets > the first. */
++
++            /* Now, find out all interleave targets beyond the first. */
+ 
+-            // Now, find out all interleave targets beyond the first.
+             for (idx = 1; idx < max; idx++) {
+                 ParentTable = DtPeekSubtable ();
+ 
+@@ -326,7 +331,7 @@ DtCompileCedt (
+                     }
+                     if (Subtable)
+                     {
+-                        DtInsertSubtable (ParentTable, Subtable);       // got a target, so insert table.
++                        DtInsertSubtable (ParentTable, Subtable);       /* got a target, so insert table. */
+                         InsertFlag = 0;
+                     }
+                 }
+diff --git a/source/include/actbl1.h b/source/include/actbl1.h
+index 359861f..ccf7c95 100644
+--- a/source/include/actbl1.h
++++ b/source/include/actbl1.h
+@@ -468,19 +468,20 @@ typedef struct acpi_cedt_cfmws
+ typedef struct acpi_cedt_cfmws_target_element
+ {
+     UINT32                  InterleaveTarget;
++
+ } ACPI_CEDT_CFMWS_TARGET_ELEMENT;
+ 
+ /* Values for Interleave Arithmetic field above */
+ 
+-#define ACPI_CEDT_CFMWS_ARITHMETIC_MODULO	(0)
++#define ACPI_CEDT_CFMWS_ARITHMETIC_MODULO   (0)
+ 
+ /* Values for Restrictions field above */
+ 
+-#define ACPI_CEDT_CFMWS_RESTRICT_TYPE2		(1)
+-#define ACPI_CEDT_CFMWS_RESTRICT_TYPE3		(1<<1)
+-#define ACPI_CEDT_CFMWS_RESTRICT_VOLATILE	(1<<2)
+-#define ACPI_CEDT_CFMWS_RESTRICT_PMEM		(1<<3)
+-#define ACPI_CEDT_CFMWS_RESTRICT_FIXED		(1<<4)
++#define ACPI_CEDT_CFMWS_RESTRICT_TYPE2      (1)
++#define ACPI_CEDT_CFMWS_RESTRICT_TYPE3      (1<<1)
++#define ACPI_CEDT_CFMWS_RESTRICT_VOLATILE   (1<<2)
++#define ACPI_CEDT_CFMWS_RESTRICT_PMEM       (1<<3)
++#define ACPI_CEDT_CFMWS_RESTRICT_FIXED      (1<<4)
+ 
+ 
+ /*******************************************************************************

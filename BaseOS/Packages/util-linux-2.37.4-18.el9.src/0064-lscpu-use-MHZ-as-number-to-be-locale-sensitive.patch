@@ -1,0 +1,31 @@
+From 7049ee572ded1f139c83250c7c57c7fbfa89b658 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Mon, 24 May 2021 13:19:47 +0200
+Subject: lscpu: use MHZ as number to be locale sensitive
+
+Addresses: https://issues.redhat.com/browse/RHEL-12783
+Upstream: http://github.com/util-linux/util-linux/commit/ff6513c74e7fc97e2297b12dddb58d9b6513fcaf
+Fixes: https://github.com/karelzak/util-linux/issues/1316
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ sys-utils/lscpu.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/sys-utils/lscpu.c b/sys-utils/lscpu.c
+index 47dd9d72f..c1ac4cc7c 100644
+--- a/sys-utils/lscpu.c
++++ b/sys-utils/lscpu.c
+@@ -424,8 +424,8 @@ static char *get_cell_data(
+ 				 is_cpu_online(cxt, cpu) ? _("yes") : _("no"));
+ 		break;
+ 	case COL_CPU_MHZ:
+-		if (cpu->mhz)
+-			xstrncpy(buf, cpu->mhz, bufsz);
++		if (cpu->mhz_cur_freq)
++			snprintf(buf, bufsz, "%.4f", cpu->mhz_cur_freq);
+ 		break;
+ 	case COL_CPU_SCALMHZ:
+ 		if (cpu->mhz_cur_freq && cpu->mhz_max_freq)
+-- 
+2.43.0
+

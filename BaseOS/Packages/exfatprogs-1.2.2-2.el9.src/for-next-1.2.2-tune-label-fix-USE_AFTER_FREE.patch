@@ -1,0 +1,43 @@
+From 8e4f2e671a154549d07ec45cb3c9cfe31b27b27f Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Mon, 13 Nov 2023 08:37:06 +0100
+Subject: [PATCH] tune: label: fix USE_AFTER_FREE
+
+double_free: Calling free frees pointer bs which has already been freed.
+
+if exfat_alloc_exfat fails it already frees exfat->bs via exfat_free_exfat
+
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+Signed-off-by: Namjae Jeon <linkinjeon@kernel.org>
+---
+ label/label.c | 1 -
+ tune/tune.c   | 1 -
+ 2 files changed, 2 deletions(-)
+
+diff --git a/label/label.c b/label/label.c
+index 8cd5748..b110670 100644
+--- a/label/label.c
++++ b/label/label.c
+@@ -105,7 +105,6 @@ int main(int argc, char *argv[])
+ 
+ 		exfat = exfat_alloc_exfat(&bd, bs);
+ 		if (!exfat) {
+-			free(bs);
+ 			ret = -ENOMEM;
+ 			goto close_fd_out;
+ 		}
+diff --git a/tune/tune.c b/tune/tune.c
+index f883556..fdb8c94 100644
+--- a/tune/tune.c
++++ b/tune/tune.c
+@@ -129,7 +129,6 @@ int main(int argc, char *argv[])
+ 
+ 	exfat = exfat_alloc_exfat(&bd, bs);
+ 	if (!exfat) {
+-		free(bs);
+ 		ret = -ENOMEM;
+ 		goto close_fd_out;
+ 	}
+-- 
+2.43.0
+

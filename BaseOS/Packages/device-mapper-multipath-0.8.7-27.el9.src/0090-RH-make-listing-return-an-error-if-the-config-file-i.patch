@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 12 Jul 2023 12:56:48 -0500
+Subject: [PATCH] RH: make listing return an error if the config file is
+ missing
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/main.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/multipath/main.c b/multipath/main.c
+index e056c51c..f1077421 100644
+--- a/multipath/main.c
++++ b/multipath/main.c
+@@ -874,11 +874,14 @@ main (int argc, char *argv[])
+ 	struct config *conf;
+ 	int retries = -1;
+ 	bool enable_foreign = false;
++	bool have_config;
++	struct stat buf;
+ 
+ 	libmultipath_init();
+ 	if (atexit(dm_lib_exit) || atexit(libmultipath_exit))
+ 		condlog(1, "failed to register cleanup handler for libmultipath: %m");
+ 	logsink = LOGSINK_STDERR_WITH_TIME;
++	have_config = (stat(DEFAULT_CONFIGFILE, &buf) == 0);
+ 	if (init_config(DEFAULT_CONFIGFILE))
+ 		exit(RTVL_FAIL);
+ 	if (atexit(uninit_config))
+@@ -1129,6 +1132,9 @@ main (int argc, char *argv[])
+ 	while ((r = configure(conf, cmd, dev_type, dev)) == RTVL_RETRY)
+ 		condlog(3, "restart multipath configuration process");
+ 
++	if (!have_config && r == RTVL_OK &&
++            (cmd == CMD_LIST_SHORT || cmd == CMD_LIST_LONG))
++		r = RTVL_FAIL;
+ out:
+ 	put_multipath_config(conf);
+ 	if (dev)

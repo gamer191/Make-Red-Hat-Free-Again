@@ -1,0 +1,62 @@
+From 6d3e97e83a7d61cbb2f5109efb4b519383a55712 Mon Sep 17 00:00:00 2001
+From: Eugene Syromyatnikov <evgsyr@gmail.com>
+Date: Tue, 28 Jun 2022 16:55:49 +0200
+Subject: [PATCH] util: add offs sanity check to print_clock_t
+
+While it is not strictly needed right now, the code that uses
+the calculated offs value lacks any checks for possible buf overruns,
+which is not defensive enough, so let's add them.  Reported by covscan:
+
+    Error: OVERRUN (CWE-119):
+    strace-5.18/src/util.c:248: assignment: Assigning:
+    "offs" = "ilog10(val / clk_tck)". The value of "offs" is now between
+    16 and 31 (inclusive).
+    strace-5.18/src/util.c:249: overrun-local: Overrunning array of 30 bytes
+    at byte offset 31 by dereferencing pointer "buf + offs". [Note: The source
+    code implementation of the function has been overridden by a builtin model.]
+
+    Error: OVERRUN (CWE-119):
+    strace-5.18/src/util.c:248: assignment: Assigning:
+    "offs" = "ilog10(val / clk_tck)". The value of "offs" is now between
+    16 and 31 (inclusive).
+    strace-5.18/src/util.c:253: overrun-buffer-arg: Overrunning array "buf"
+    of 30 bytes by passing it to a function which accesses it at byte offset
+    32 using argument "offs + 2UL" (which evaluates to 33). [Note: The source
+    code implementation of the function has been overridden by a builtin model.]
+
+    Error: OVERRUN (CWE-119):
+    strace-5.18/src/util.c:248: assignment: Assigning:
+    "offs" = "ilog10(val / clk_tck)". The value of "offs" is now between
+    16 and 31 (inclusive).
+    strace-5.18/src/util.c:254: overrun-local: Overrunning array "buf"
+    of 30 bytes at byte offset 32 using index "offs + 1UL" (which evaluates
+    to 32).
+
+* src/util.c (print_clock_t): Add check that offs is small enough
+for it and "offs + 2" not to overrun buf.
+---
+ src/util.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/util.c b/src/util.c
+index 5f87acb..93aa7b3 100644
+--- a/src/util.c
++++ b/src/util.c
+@@ -246,6 +246,14 @@ print_clock_t(uint64_t val)
+ 		 */
+ 		char buf[sizeof(uint64_t) * 3 + sizeof("0.0 s")];
+ 		size_t offs = ilog10(val / clk_tck);
++		/*
++		 * This check is mostly to appease covscan, which thinks
++		 * that offs can go as high as 31 (it cannot), but since
++		 * there is no proper sanity checks against offs overrunning
++		 * buf down the code, it may as well be here.
++		 */
++		if (offs > (sizeof(buf) - sizeof("0.0 s")))
++			return;
+ 		int ret = snprintf(buf + offs, sizeof(buf) - offs, "%.*f s",
+ 				   frac_width,
+ 				   (double) (val % clk_tck) / clk_tck);
+-- 
+2.1.4
+

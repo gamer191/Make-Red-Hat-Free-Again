@@ -1,0 +1,60 @@
+From 7ce89c695e76ec41fcebd83f8b728f63b0361a2d Mon Sep 17 00:00:00 2001
+From: Renaud Metrich <rmetrich@redhat.com>
+Date: Thu, 5 Oct 2023 11:17:51 +0200
+Subject: [PATCH] setfacl: preserve the failed status when processing multiple
+ files
+
+Resolves the following bug:
+```
+$ mkdir FOO
+$ setfacl -m d:g:user:rwX -m g:user:rwX ./FOO/bar ./FOO
+setfacl: ./FOO/bar: No such file or directory
+$ echo $?
+0
+```
+
+(Cleanup added while applying.)
+
+Upstream-commit: 7ce89c695e76ec41fcebd83f8b728f63b0361a2d
+---
+ tools/setfacl.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/tools/setfacl.c b/tools/setfacl.c
+index fd0bf2e..4140276 100644
+--- a/tools/setfacl.c
++++ b/tools/setfacl.c
+@@ -332,7 +332,7 @@ int main(int argc, char *argv[])
+ {
+ 	int opt;
+ 	int saw_files = 0;
+-	int status = 0;
++	int status = 0, status2;
+ 	FILE *file;
+ 	int which;
+ 	int lineno;
+@@ -555,7 +555,9 @@ int main(int argc, char *argv[])
+ 					goto synopsis;
+ 				saw_files = 1;
+ 
+-				status = next_file(optarg, seq);
++				status2 = next_file(optarg, seq);
++				if (status == 0)
++					status = status2;
+ 				break;
+ 
+ 			case 'B':  /* restore ACL backup */
+@@ -642,7 +644,9 @@ int main(int argc, char *argv[])
+ 			goto synopsis;
+ 		saw_files = 1;
+ 
+-		status = next_file(argv[optind++], seq);
++		status2 = next_file(argv[optind++], seq);
++		if (status == 0)
++			status = status2;
+ 	}
+ 	if (!saw_files)
+ 		goto synopsis;
+-- 
+2.41.0
+

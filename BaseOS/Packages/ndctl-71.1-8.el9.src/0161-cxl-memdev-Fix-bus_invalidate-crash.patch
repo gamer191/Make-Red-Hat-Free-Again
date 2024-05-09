@@ -1,0 +1,50 @@
+From 2dbe3b45879ad614968a75392cb1ef9907d8648d Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 28 Apr 2022 15:10:37 -0700
+Subject: [PATCH 161/217] cxl/memdev: Fix bus_invalidate() crash
+
+bus_invalidate() attempts to limit the invalidation of memdevs to a single
+bus scope. However, the ordering of bus_invalidate() leads to a use after
+free. Unconditionally invalidate memdevs (disconnect memdevs from their
+endpoints) and resotre on next lookup. Otherwise the following command
+results in the following backtrace with cxl_test:
+
+    cxl disable-memdev 5,1 --force
+
+#2  0x00007ffff7fb97d4 in snprintf (__fmt=0x7ffff7fbc3ed "%s/driver", __n=98,
+    __s=0x574d545619f7bae2 <error: Cannot access memory at address 0x574d545619f7bae2>)
+    at /usr/include/bits/stdio2.h:71
+#3  cxl_port_is_enabled (port=port@entry=0x422eb0) at ../cxl/lib/libcxl.c:1379
+#4  0x00007ffff7fb99a9 in cxl_port_get_bus (port=0x422eb0) at ../cxl/lib/libcxl.c:1339
+#5  0x00007ffff7fba3d0 in bus_invalidate (bus=bus@entry=0x421740) at ../cxl/lib/libcxl.c:549
+#6  0x00007ffff7fba4e7 in cxl_memdev_disable_invalidate (memdev=0x416fd0) at ../cxl/lib/libcxl.c:596
+#7  0x000000000040624e in memdev_action (argc=<optimized out>, argv=<optimized out>, ctx=0x4152a0,
+    action=action@entry=0x406b70 <action_disable>, options=options@entry=0x40fca0 <disable_options>,
+    usage=usage@entry=0x40f4b0 "cxl disable-memdev <mem0> [<mem1>..<memN>] [<options>]")
+    at ../cxl/memdev.c:506
+#8  0x0000000000406d57 in cmd_disable_memdev (argc=<optimized out>, argv=<optimized out>,
+
+Link: https://lore.kernel.org/r/165118383756.1676208.5717187278816036969.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 0e8dd20..374b0f1 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -546,8 +546,7 @@ static void bus_invalidate(struct cxl_bus *bus)
+ 	 * indeterminate, delete them all and start over.
+ 	 */
+ 	cxl_memdev_foreach(ctx, memdev)
+-		if (cxl_memdev_get_bus(memdev) == bus)
+-			memdev->endpoint = NULL;
++		memdev->endpoint = NULL;
+ 
+ 	bus_port = cxl_bus_get_port(bus);
+ 	list_for_each_safe(&bus_port->child_ports, port, _p, list)
+-- 
+2.27.0
+

@@ -1,0 +1,32 @@
+From 20a714fe89a7941ef99898821719a46f04f7488b Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Tue, 4 Jan 2022 17:18:23 -0700
+Subject: [PATCH 067/217] ndctl: add repology graphic to README.md
+
+Add a graphic/badge from repology showing the packaging status of ndctl
+with various distros.
+
+Link: https://lore.kernel.org/r/20220105001823.299797-1-vishal.l.verma@intel.com
+Reviewed-by: Ira Weiny <ira.weiny@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ README.md | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/README.md b/README.md
+index 89dfc87..4ab4523 100644
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,9 @@
+ Utility library for managing the libnvdimm (non-volatile memory device)
+ sub-system in the Linux kernel
+   
++<a href="https://repology.org/project/ndctl/versions">
++    <img src="https://repology.org/badge/vertical-allrepos/ndctl.svg" alt="Packaging status" align="right">
++</a>
+ 
+ Build
+ =====
+-- 
+2.27.0
+

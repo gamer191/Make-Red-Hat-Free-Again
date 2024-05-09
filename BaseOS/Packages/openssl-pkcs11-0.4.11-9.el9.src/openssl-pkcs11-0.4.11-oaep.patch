@@ -1,0 +1,25 @@
+From 668b2bd03942f3d371f0553fc252ea6c64253a19 Mon Sep 17 00:00:00 2001
+From: S-P Chan <shihping.chan@gmail.com>
+Date: Fri, 11 Mar 2022 23:42:22 +0800
+Subject: [PATCH] Fix OAEP source param
+
+The only supported value is 1UL CKZ_DATA_SPECIFIED
+---
+ src/p11_pkey.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/p11_pkey.c b/src/p11_pkey.c
+index f1a98b18..63e0e197 100644
+--- a/src/p11_pkey.c
++++ b/src/p11_pkey.c
+@@ -301,8 +301,8 @@ static int pkcs11_params_oaep(CK_RSA_PKCS_OAEP_PARAMS *oaep,
+ 	if (!oaep->hashAlg || !oaep->mgf)
+ 		return -1;
+ 	/* we do not support the OAEP "label" parameter yet... */
+-	oaep->source = 0UL; /* empty parameter (label) */
+-	oaep->pSourceData = NULL;
++	oaep->source = CKZ_DATA_SPECIFIED;
++	oaep->pSourceData = NULL; /* empty parameter (label) */
+ 	oaep->ulSourceDataLen = 0;
+ 	return 0;
+ }

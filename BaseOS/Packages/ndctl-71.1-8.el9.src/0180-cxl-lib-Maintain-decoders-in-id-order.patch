@@ -1,0 +1,103 @@
+From 06ae7118aaa74aa2139004fa12b4910bc15236de Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 14 Jul 2022 10:02:21 -0700
+Subject: [PATCH 180/217] cxl/lib: Maintain decoders in id order
+
+Given that decoder instance order is fundamental to the DPA translation
+sequence for endpoint decoders, enforce that cxl_decoder_for_each() returns
+decoders in instance order. Otherwise, they show up in readddir() order
+which is not predictable.
+
+Add a list_add_sorted() to generically handle inserting into a sorted list.
+
+Link: https://lore.kernel.org/r/165781814167.1555691.14895625637451030942.stgit@dwillia2-xfh.jf.intel.com
+Reviewed-by: Davidlohr Bueso <dave@stgolabs.net>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c |  8 +++++++-
+ util/list.h      | 39 +++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 46 insertions(+), 1 deletion(-)
+ create mode 100644 util/list.h
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 6f4d64d..ea597f6 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -19,6 +19,7 @@
+ #include <ccan/short_types/short_types.h>
+ 
+ #include <util/log.h>
++#include <util/list.h>
+ #include <util/size.h>
+ #include <util/sysfs.h>
+ #include <util/bitmap.h>
+@@ -909,6 +910,11 @@ cxl_endpoint_get_memdev(struct cxl_endpoint *endpoint)
+ 	return NULL;
+ }
+ 
++static int decoder_id_cmp(struct cxl_decoder *d1, struct cxl_decoder *d2)
++{
++	return d1->id - d2->id;
++}
++
+ static void *add_cxl_decoder(void *parent, int id, const char *cxldecoder_base)
+ {
+ 	const char *devname = devpath_to_devname(cxldecoder_base);
+@@ -1050,7 +1056,7 @@ static void *add_cxl_decoder(void *parent, int id, const char *cxldecoder_base)
+ 			return decoder_dup;
+ 		}
+ 
+-	list_add(&port->decoders, &decoder->list);
++	list_add_sorted(&port->decoders, decoder, list, decoder_id_cmp);
+ 
+ 	free(path);
+ 	return decoder;
+diff --git a/util/list.h b/util/list.h
+new file mode 100644
+index 0000000..cb77271
+--- /dev/null
++++ b/util/list.h
+@@ -0,0 +1,39 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/* Copyright (C) 2022 Intel Corporation. All rights reserved. */
++#ifndef _NDCTL_LIST_H_
++#define _NDCTL_LIST_H_
++
++#include <ccan/list/list.h>
++
++#define list_add_sorted(head, n, node, cmp)                                    \
++	do {                                                                   \
++		struct list_head *__head = (head);                             \
++		typeof(n) __iter, __next;                                      \
++		typeof(n) __new = (n);                                         \
++                                                                               \
++		if (list_empty(__head)) {                                      \
++			list_add(__head, &__new->node);                        \
++			break;                                                 \
++		}                                                              \
++                                                                               \
++		list_for_each (__head, __iter, node) {                         \
++			if (cmp(__new, __iter) < 0) {                          \
++				list_add_before(__head, &__iter->node,         \
++						&__new->node);                 \
++				break;                                         \
++			}                                                      \
++			__next = list_next(__head, __iter, node);              \
++			if (!__next) {                                         \
++				list_add_after(__head, &__iter->node,          \
++					       &__new->node);                  \
++				break;                                         \
++			}                                                      \
++			if (cmp(__new, __next) < 0) {                          \
++				list_add_before(__head, &__next->node,         \
++						&__new->node);                 \
++				break;                                         \
++			}                                                      \
++		}                                                              \
++	} while (0)
++
++#endif /* _NDCTL_LIST_H_ */
+-- 
+2.27.0
+

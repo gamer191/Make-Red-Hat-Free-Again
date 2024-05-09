@@ -1,0 +1,69 @@
+From faa1764ca23f587fb7fc995a4b2bdf48c5c80147 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Wed, 3 Jan 2024 12:38:21 +0100
+Subject: libmount: add mnt_context_within_helper() wrapper
+
+Addresses: https://issues.redhat.com/browse/RHEL-14612
+Upstream: http://github.com/util-linux/util-linux/commit/0f9b2438c927d2787bf43b693809af3719e15646
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libmount/src/context.c        | 9 ++++++++-
+ libmount/src/context_umount.c | 2 +-
+ libmount/src/mountP.h         | 1 +
+ 3 files changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/libmount/src/context.c b/libmount/src/context.c
+index 3b32224e3..71b8d730a 100644
+--- a/libmount/src/context.c
++++ b/libmount/src/context.c
+@@ -2799,7 +2799,6 @@ int mnt_context_get_excode(
+ 	return rc;
+ }
+ 
+-
+ /**
+  * mnt_context_init_helper
+  * @cxt: mount context
+@@ -2835,6 +2834,14 @@ int mnt_context_init_helper(struct libmnt_context *cxt, int action,
+ 	return rc;
+ }
+ 
++/*
++ * libmount used in /sbin/[u]mount.<type> helper
++ */
++int mnt_context_within_helper(struct libmnt_context *cxt)
++{
++	return cxt && (cxt->flags & MNT_FL_HELPER);
++}
++
+ /**
+  * mnt_context_helper_setopt:
+  * @cxt: context
+diff --git a/libmount/src/context_umount.c b/libmount/src/context_umount.c
+index 8773c65ff..ba1e35456 100644
+--- a/libmount/src/context_umount.c
++++ b/libmount/src/context_umount.c
+@@ -272,7 +272,7 @@ static int lookup_umount_fs_by_statfs(struct libmnt_context *cxt, const char *tg
+ 	 */
+ 	if (mnt_context_is_restricted(cxt)
+ 	    || *tgt != '/'
+-	    || (cxt->flags & MNT_FL_HELPER)
++	    || mnt_context_within_helper(cxt)
+ 	    || mnt_context_mtab_writable(cxt)
+ 	    || mnt_context_is_force(cxt)
+ 	    || mnt_context_is_lazy(cxt)
+diff --git a/libmount/src/mountP.h b/libmount/src/mountP.h
+index 30fac593a..4b4c5de1e 100644
+--- a/libmount/src/mountP.h
++++ b/libmount/src/mountP.h
+@@ -423,6 +423,7 @@ extern const char *mnt_context_get_writable_tabpath(struct libmnt_context *cxt);
+ 
+ extern int mnt_context_get_mtab_for_target(struct libmnt_context *cxt,
+ 				    struct libmnt_table **mtab, const char *tgt);
++extern int mnt_context_within_helper(struct libmnt_context *cxt);
+ 
+ extern int mnt_context_prepare_srcpath(struct libmnt_context *cxt);
+ extern int mnt_context_prepare_target(struct libmnt_context *cxt);
+-- 
+2.43.0
+

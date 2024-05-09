@@ -1,0 +1,30 @@
+From c91bdf66e1156db0e8171a72a15b6d63148357e4 Mon Sep 17 00:00:00 2001
+From: Srinivas Pandruvada <srinivas.pandruvada@linux.intel.com>
+Date: Tue, 24 Jan 2023 11:47:44 -0800
+Subject: [PATCH 07/13] thermal: Fix log message for perf and efficiency
+
+In the log message perf and efficiency fields are swapped. So, showing
+perf field as efficiency and vice versa. Fix this to show correct
+log message.
+
+Signed-off-by: Srinivas Pandruvada <srinivas.pandruvada@linux.intel.com>
+---
+ thermal.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/thermal.c b/thermal.c
+index 7cd0807..a45568a 100644
+--- a/thermal.c
++++ b/thermal.c
+@@ -407,7 +407,7 @@ static int handle_thermal_event(struct nl_msg *msg, void *arg __attribute__((unu
+ 		need_to_ban = !!(!event_data[INDEX_PERF] && !event_data[INDEX_EFFI]);
+ 		update_banned_cpus(cur_cpuidx, need_to_ban);
+ 
+-		log(TO_ALL, LOG_DEBUG, "thermal: event - CPU %d, efficiency %d, perf %d.\n",
++		log(TO_ALL, LOG_DEBUG, "thermal: event - CPU %d, perf %d, efficiency %d.\n",
+ 		    cur_cpuidx, event_data[INDEX_PERF], event_data[INDEX_EFFI]);
+ 	}
+ 
+-- 
+2.33.1
+

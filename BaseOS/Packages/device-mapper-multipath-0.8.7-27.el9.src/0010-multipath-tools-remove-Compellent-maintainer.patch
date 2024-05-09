@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Date: Tue, 28 Sep 2021 22:39:17 +0200
+Subject: [PATCH] multipath-tools: remove Compellent maintainer
+
+e-mail was bounced: 550 5.1.1 User Unknown
+
+Cc: Martin Wilck <mwilck@suse.com>
+Cc: Benjamin Marzinski <bmarzins@redhat.com>
+Cc: Christophe Varoqui <christophe.varoqui@opensvc.com>
+Cc: DM-DEVEL ML <dm-devel@redhat.com>
+Signed-off-by: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index 7fc5bc04..763982cd 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -361,11 +361,7 @@ static struct hwentry default_hw[] = {
+ 		.pgpolicy      = MULTIBUS,
+ 	},
+ 	{
+-		/*
+-		 * SC Series, formerly Compellent
+-		 *
+-		 * Maintainer: Sean McGinnis <sean_mcginnis@dell.com>
+-		 */
++		/* SC Series, formerly Compellent */
+ 		.vendor        = "COMPELNT",
+ 		.product       = "Compellent Vol",
+ 		.pgpolicy      = GROUP_BY_PRIO,

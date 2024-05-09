@@ -1,0 +1,33 @@
+From 934d2b34b616566163d80f5844b371ecf88d646a Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Tue, 23 Aug 2022 01:45:27 -0600
+Subject: [PATCH 216/217] cxl/filter: Fix an uninitialized pointer dereference
+
+Static analysis points out that there was a chance that 'jdecoder' could
+be used while uninitialized in walk_decoders(). Initialize it to NULL to
+avoid this.
+
+Link: https://lore.kernel.org/r/20220823074527.404435-4-vishal.l.verma@intel.com
+Cc: Dan Williams <dan.j.williams@intel.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/filter.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cxl/filter.c b/cxl/filter.c
+index 9a3de8c..56c6599 100644
+--- a/cxl/filter.c
++++ b/cxl/filter.c
+@@ -796,7 +796,7 @@ static void walk_decoders(struct cxl_port *port, struct cxl_filter_params *p,
+ 	cxl_decoder_foreach(port, decoder) {
+ 		const char *devname = cxl_decoder_get_devname(decoder);
+ 		struct json_object *jchildregions = NULL;
+-		struct json_object *jdecoder;
++		struct json_object *jdecoder = NULL;
+ 
+ 		if (!p->decoders)
+ 			goto walk_children;
+-- 
+2.27.0
+

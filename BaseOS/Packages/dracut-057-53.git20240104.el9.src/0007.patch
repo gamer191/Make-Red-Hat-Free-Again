@@ -1,0 +1,42 @@
+From d754571fea528af061db46a0284e996d012f14c9 Mon Sep 17 00:00:00 2001
+From: Pavel Valena <pvalena@redhat.com>
+Date: Tue, 19 Jul 2022 17:06:25 +0200
+Subject: [PATCH] ci: run integration tests only on C9s
+
+---
+ .github/workflows/container.yml   | 4 ----
+ .github/workflows/integration.yml | 3 ---
+ 2 files changed, 7 deletions(-)
+
+diff --git a/.github/workflows/container.yml b/.github/workflows/container.yml
+index 82d7a097..34038f57 100644
+--- a/.github/workflows/container.yml
++++ b/.github/workflows/container.yml
+@@ -28,11 +28,7 @@ jobs:
+             fail-fast: false
+             matrix:
+                 config:
+-                    - { dockerfile: 'Dockerfile-Fedora-latest',     tag: 'fedora:latest' }
+-                    - { dockerfile: 'Dockerfile-OpenSuse-latest',   tag: 'opensuse:latest' }
+-                    - { dockerfile: 'Dockerfile-Arch',              tag: 'arch:latest' }
+                     - { dockerfile: 'Dockerfile-CentOS-9-Stream',   tag: 'centos:stream9' }
+-                    - { dockerfile: 'Dockerfile-Debian',            tag: 'debian:latest' }
+         steps:
+             -   name: Check out the repo
+                 uses: actions/checkout@v2
+diff --git a/.github/workflows/integration.yml b/.github/workflows/integration.yml
+index 82d01457..40da300c 100644
+--- a/.github/workflows/integration.yml
++++ b/.github/workflows/integration.yml
+@@ -14,10 +14,7 @@ jobs:
+         strategy:
+             matrix:
+                 container: [
+-                        "arch:latest",
+-                        "debian:latest",
+                         "fedora:latest",
+-                        "opensuse:latest",
+                 ]
+                 test: [
+                         "04",
+

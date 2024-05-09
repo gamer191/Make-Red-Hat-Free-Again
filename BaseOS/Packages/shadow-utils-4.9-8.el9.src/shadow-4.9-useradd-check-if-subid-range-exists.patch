@@ -1,0 +1,38 @@
+From e0524e813a3bae2891b33a66f35876841c11cee7 Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Mon, 24 Oct 2022 10:46:36 +0200
+Subject: [PATCH] useradd: check if subid range exists for user
+
+Check if a user already has a subid range before assigning one.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2012929
+
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ src/useradd.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/useradd.c b/src/useradd.c
+index 7ea0a9c4..e784d602 100644
+--- a/src/useradd.c
++++ b/src/useradd.c
+@@ -2188,14 +2188,14 @@ static void usr_update (unsigned long subuid_count, unsigned long subgid_count)
+ 		fail_exit (E_PW_UPDATE);
+ 	}
+ #ifdef ENABLE_SUBIDS
+-	if (is_sub_uid &&
++	if (is_sub_uid && !local_sub_uid_assigned(user_name) &&
+ 	    (sub_uid_add(user_name, sub_uid_start, subuid_count) == 0)) {
+ 		fprintf (stderr,
+ 		         _("%s: failed to prepare the new %s entry\n"),
+ 		         Prog, sub_uid_dbname ());
+ 		fail_exit (E_SUB_UID_UPDATE);
+ 	}
+-	if (is_sub_gid &&
++	if (is_sub_gid && !local_sub_gid_assigned(user_name) &&
+ 	    (sub_gid_add(user_name, sub_gid_start, subgid_count) == 0)) {
+ 		fprintf (stderr,
+ 		         _("%s: failed to prepare the new %s entry\n"),
+-- 
+2.40.1
+

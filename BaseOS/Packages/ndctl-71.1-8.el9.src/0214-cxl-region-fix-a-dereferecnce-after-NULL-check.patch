@@ -1,0 +1,39 @@
+From cc2766399882001880a899e723c7bd968e60f100 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Tue, 23 Aug 2022 01:45:25 -0600
+Subject: [PATCH 214/217] cxl/region: fix a dereferecnce after NULL check
+
+A NULL check in region_action() implies that 'decoder' might be NULL, but
+later we dereference it during cxl_decoder_foreach(). The NULL check is
+valid because it was the filter result being checked, however, while
+doing this, the original 'decoder' variable was being clobbered.
+
+Check the filter results independently of the original decoder variable.
+
+Link: https://lore.kernel.org/r/20220823074527.404435-2-vishal.l.verma@intel.com
+Cc: Dan Williams <dan.j.williams@intel.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/region.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/cxl/region.c b/cxl/region.c
+index a30313c..334fcc2 100644
+--- a/cxl/region.c
++++ b/cxl/region.c
+@@ -686,9 +686,8 @@ static int region_action(int argc, const char **argv, struct cxl_ctx *ctx,
+ 			continue;
+ 
+ 		cxl_decoder_foreach (port, decoder) {
+-			decoder = util_cxl_decoder_filter(decoder,
+-							  param.root_decoder);
+-			if (!decoder)
++			if (!util_cxl_decoder_filter(decoder,
++						     param.root_decoder))
+ 				continue;
+ 			rc = decoder_region_action(p, decoder, action, count);
+ 			if (rc)
+-- 
+2.27.0
+

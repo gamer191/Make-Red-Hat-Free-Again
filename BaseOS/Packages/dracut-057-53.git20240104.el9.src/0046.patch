@@ -1,0 +1,55 @@
+From edd1efe46a6c211034f06ad1e20c027a5e1102db Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Thu, 21 Sep 2023 14:31:07 +0200
+Subject: [PATCH] fix(nvmf): move /etc/nvme/host{nqn,id} requirement to
+ hostonly
+
+When creating initramfs for universal boot image such as an installer,
+we can't include any machine-specific IDs. Let's move the check
+for /etc/nvme/hostnqn and /etc/nvme/hostid files presence to
+the hostonly section to avoid unsatisfied requirements.
+
+Signed-off-by: Tomas Bzatek <tbzatek@redhat.com>
+
+(Cherry-picked commit: 1cf10397b5f002790a096e5bdce733436fffbd2d
+  PR: https://github.com/dracutdevs/dracut/pull/2523)
+
+Resolves: RHEL-3630
+---
+ modules.d/95nvmf/module-setup.sh | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/modules.d/95nvmf/module-setup.sh b/modules.d/95nvmf/module-setup.sh
+index 1dd2ca53..0b90d8be 100755
+--- a/modules.d/95nvmf/module-setup.sh
++++ b/modules.d/95nvmf/module-setup.sh
+@@ -3,8 +3,6 @@
+ # called by dracut
+ check() {
+     require_binaries nvme jq || return 1
+-    [ -f /etc/nvme/hostnqn ] || return 255
+-    [ -f /etc/nvme/hostid ] || return 255
+ 
+     is_nvmf() {
+         local _dev=$1
+@@ -36,6 +34,8 @@ check() {
+     }
+ 
+     [[ $hostonly ]] || [[ $mount_needs ]] && {
++        [ -f /etc/nvme/hostnqn ] || return 255
++        [ -f /etc/nvme/hostid ] || return 255
+         pushd . > /dev/null
+         for_each_host_dev_and_slaves is_nvmf
+         local _is_nvmf=$?
+@@ -130,8 +130,8 @@ install() {
+         _nvmf_args=$(cmdline)
+         [[ "$_nvmf_args" ]] && printf "%s" "$_nvmf_args" >> "${initdir}/etc/cmdline.d/95nvmf-args.conf"
+     fi
+-    inst_simple "/etc/nvme/hostnqn"
+-    inst_simple "/etc/nvme/hostid"
++    inst_simple -H "/etc/nvme/hostnqn"
++    inst_simple -H "/etc/nvme/hostid"
+ 
+     inst_multiple ip sed
+ 
+

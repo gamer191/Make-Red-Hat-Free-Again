@@ -1,0 +1,62 @@
+From 5e082d74b73bf1b3565cfd72a3e1ba7a45a00a8b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Luk=C3=A1=C5=A1=20Hr=C3=A1zk=C3=BD?= <lhrazky@redhat.com>
+Date: Wed, 7 Sep 2022 14:40:32 +0200
+Subject: [PATCH 1/2] Pass whole URL in relativeUrl to PackageTarget for RPM
+ URL download
+
+The PackageTarget supports baseUrl and relativeUrl on the API, but then
+the relativeUrl is just a path fragment with no definition on whether it
+should be encoded. It's being passed unencoded paths from other places,
+and so there's a conditional encode (only if not full URL) in libdnf.
+
+But full URLs are actually supported in relativeUrl (in that case
+baseUrl should be empty) and in that case the URL is expected to be
+encoded and is not encoded for the second time.
+
+Hence, pass the full URL to relativeUrl instead of splitting it. We also
+need to decode the file name we store, as on the filesystem the RPM file
+name is also decoded.
+
+= changelog =
+msg: Don't double-encode RPM URLs passed on CLI
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2103015
+---
+ dnf/repo.py | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/dnf/repo.py b/dnf/repo.py
+index ec1a2537..86fb2bf4 100644
+--- a/dnf/repo.py
++++ b/dnf/repo.py
+@@ -47,6 +47,7 @@ import string
+ import sys
+ import time
+ import traceback
++import urllib
+ 
+ _PACKAGES_RELATIVE_DIR = "packages"
+ _MIRRORLIST_FILENAME = "mirrorlist"
+@@ -295,7 +296,7 @@ class RemoteRPMPayload(PackagePayload):
+         self.local_path = os.path.join(self.pkgdir, self.__str__().lstrip("/"))
+ 
+     def __str__(self):
+-        return os.path.basename(self.remote_location)
++        return os.path.basename(urllib.parse.unquote(self.remote_location))
+ 
+     def _progress_cb(self, cbdata, total, done):
+         self.remote_size = total
+@@ -308,8 +309,8 @@ class RemoteRPMPayload(PackagePayload):
+ 
+     def _librepo_target(self):
+         return libdnf.repo.PackageTarget(
+-            self.conf._config, os.path.basename(self.remote_location),
+-            self.pkgdir, 0, None, 0, os.path.dirname(self.remote_location),
++            self.conf._config, self.remote_location,
++            self.pkgdir, 0, None, 0, None,
+             True, 0, 0, self.callbacks)
+ 
+     @property
+-- 
+2.37.3
+

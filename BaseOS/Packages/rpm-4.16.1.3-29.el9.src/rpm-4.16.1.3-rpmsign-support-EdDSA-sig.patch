@@ -1,0 +1,20 @@
+commit 23770e1a4f28c56a31fe600cae332c77333b60b6
+Author: Demi Marie Obenour <athena@invisiblethingslab.com>
+Date:   Sat Mar 6 03:23:41 2021 -0500
+
+    rpmsign: support EdDSA signatures
+    
+    They were previously rejected
+
+diff --git a/sign/rpmgensig.c b/sign/rpmgensig.c
+index 28cd91576..d8c84e937 100644
+--- a/sign/rpmgensig.c
++++ b/sign/rpmgensig.c
+@@ -155,6 +155,7 @@ static rpmtd makeSigTag(Header sigh, int ishdr, uint8_t *pkt, size_t pktlen)
+     pubkey_algo = pgpDigParamsAlgo(sigp, PGPVAL_PUBKEYALGO);
+     switch (pubkey_algo) {
+     case PGPPUBKEYALGO_DSA:
++    case PGPPUBKEYALGO_EDDSA:
+ 	sigtag = ishdr ? RPMSIGTAG_DSA : RPMSIGTAG_GPG;
+ 	break;
+     case PGPPUBKEYALGO_RSA:

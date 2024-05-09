@@ -1,0 +1,92 @@
+From 7fe21767d3ab65a686518d2e36d18a07f535972e Mon Sep 17 00:00:00 2001
+From: Yu Kuai <yukuai3@huawei.com>
+Date: Mon, 29 May 2023 21:28:19 +0800
+Subject: [PATCH 144/165] tests: add a new test for rdev lifetime
+
+This test add and remove a underlying disk to raid concurretly, verify
+that the following problem is fixed:
+
+run mdadm test 23rdev-lifetime at Fri Apr 28 03:25:30 UTC 2023
+md: could not open device unknown-block(1,0).
+sysfs: cannot create duplicate filename '/devices/virtual/block/md0/md/dev-ram0'
+CPU: 26 PID: 10521 Comm: test Not tainted 6.3.0-rc2-00134-g7b3a8828043c #115
+Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS 1.16.1-2.fc37 04/014
+Call Trace:
+ <TASK>
+ dump_stack_lvl+0xe7/0x180
+ dump_stack+0x18/0x30
+ sysfs_warn_dup+0xa2/0xd0
+ sysfs_create_dir_ns+0x119/0x140
+ kobject_add_internal+0x143/0x4d0
+ kobject_add_varg+0x35/0x70
+ kobject_add+0x64/0xd0
+ bind_rdev_to_array+0x254/0x840 [md_mod]
+ new_dev_store+0x14d/0x350 [md_mod]
+ md_attr_store+0xc1/0x1a0 [md_mod]
+ sysfs_kf_write+0x51/0x70
+ kernfs_fop_write_iter+0x188/0x270
+ vfs_write+0x27e/0x460
+ ksys_write+0x85/0x180
+ __x64_sys_write+0x21/0x30
+ do_syscall_64+0x6c/0xe0
+ entry_SYSCALL_64_after_hwframe+0x63/0xcd
+RIP: 0033:0x7f26bacf5387
+Code: 0d 00 f7 d8 64 89 02 48 c7 c0 ff ff ff ff eb b7 0f 1f 00 f3 0f 1e fa 64 84
+RSP: 002b:00007ffe98d79e68 EFLAGS: 00000246 ORIG_RAX: 0000000000000001
+RAX: ffffffffffffffda RBX: 0000000000000004 RCX: 00007f26bacf5387
+RDX: 0000000000000004 RSI: 000055bd10282bf0 RDI: 0000000000000001
+RBP: 000055bd10282bf0 R08: 000000000000000a R09: 00007f26bad8b4e0
+R10: 00007f26bad8b3e0 R11: 0000000000000246 R12: 0000000000000004
+R13: 00007f26badc8520 R14: 0000000000000004 R15: 00007f26badc8700
+ </TASK>
+
+Signed-off-by: Yu Kuai <yukuai3@huawei.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ tests/23rdev-lifetime | 34 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 34 insertions(+)
+ create mode 100644 tests/23rdev-lifetime
+
+diff --git a/tests/23rdev-lifetime b/tests/23rdev-lifetime
+new file mode 100644
+index 00000000..1750b0db
+--- /dev/null
++++ b/tests/23rdev-lifetime
+@@ -0,0 +1,34 @@
++devname=${dev0##*/}
++devt=`cat /sys/block/$devname/dev`
++pid=""
++runtime=2
++
++clean_up_test() {
++	pill -9 $pid
++	echo clear > /sys/block/md0/md/array_state
++}
++
++trap 'clean_up_test' EXIT
++
++add_by_sysfs() {
++        while true; do
++                echo $devt > /sys/block/md0/md/new_dev
++        done
++}
++
++remove_by_sysfs(){
++        while true; do
++                echo remove > /sys/block/md0/md/dev-${devname}/state
++        done
++}
++
++echo md0 > /sys/module/md_mod/parameters/new_array || die "create md0 failed"
++
++add_by_sysfs &
++pid="$pid $!"
++
++remove_by_sysfs &
++pid="$pid $!"
++
++sleep $runtime
++exit 0
+-- 
+2.40.1
+

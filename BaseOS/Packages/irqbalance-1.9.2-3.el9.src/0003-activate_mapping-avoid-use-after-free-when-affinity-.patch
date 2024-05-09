@@ -1,0 +1,144 @@
+From f589bdced6e1fe885969f2833fc3cacdfb60ea79 Mon Sep 17 00:00:00 2001
+From: Robin Jarry <rjarry@redhat.com>
+Date: Tue, 11 Jul 2023 15:17:55 +0200
+Subject: [PATCH 3/7] activate_mapping: avoid use-after-free when affinity
+ cannot be set
+
+add_banned_irq appends the irq_info to the banned_irqs list.
+remove_one_irq_from_db removes it from the interrupts_db and free()s it.
+
+This leaves an invalid pointer dangling in banned_irqs *and* potentially
+in rebalance_irq_list which can cause use-after-free errors.
+
+Do not move the irq_info around. Only add a flag to indicate that this
+irq's affinity cannot be managed and ignore the irq when this flag is
+set.
+
+Link: https://github.com/Irqbalance/irqbalance/issues/267
+Fixes: 55c5c321c73e ("arm64: Add irq aff change check For aarch64...")
+Signed-off-by: Robin Jarry <rjarry@redhat.com>
+---
+ activate.c   |  8 +++++---
+ classify.c   | 28 +++-------------------------
+ irqbalance.h |  2 --
+ types.h      |  3 ++-
+ 4 files changed, 10 insertions(+), 31 deletions(-)
+
+diff --git a/activate.c b/activate.c
+index 62cfd08..6f8af27 100644
+--- a/activate.c
++++ b/activate.c
+@@ -60,6 +60,9 @@ static void activate_mapping(struct irq_info *info, void *data __attribute__((un
+ 	if (!info->assigned_obj)
+ 		return;
+ 
++	if (info->flags & IRQ_FLAG_AFFINITY_UNMANAGED)
++		return;
++
+ 	/* activate only online cpus, otherwise writing to procfs returns EOVERFLOW */
+ 	cpus_and(applied_mask, cpu_online_map, info->assigned_obj->mask);
+ 
+@@ -77,9 +80,8 @@ static void activate_mapping(struct irq_info *info, void *data __attribute__((un
+ 	cpumask_scnprintf(buf, PATH_MAX, applied_mask);
+ 	ret = fprintf(file, "%s", buf);
+ 	if (ret < 0) {
+-		log(TO_ALL, LOG_WARNING, "cannot change irq %i's affinity, add it to banned list", info->irq);
+-		add_banned_irq(info->irq);
+-		remove_one_irq_from_db(info->irq);
++		log(TO_ALL, LOG_WARNING, "cannot change IRQ %i affinity, will never try again\n", info->irq);
++		info->flags |= IRQ_FLAG_AFFINITY_UNMANAGED;
+ 	}
+ 	fclose(file);
+ 	info->moved = 0; /*migration is done*/
+diff --git a/classify.c b/classify.c
+index dac813c..1601a1e 100644
+--- a/classify.c
++++ b/classify.c
+@@ -257,7 +257,7 @@ static gint compare_ints(gconstpointer a, gconstpointer b)
+ 	return ai->irq - bi->irq;
+ }
+ 
+-static void __add_banned_irq(int irq, GList **list)
++static void add_banned_irq(int irq, GList **list)
+ {
+ 	struct irq_info find, *new;
+ 	GList *entry;
+@@ -281,14 +281,9 @@ static void __add_banned_irq(int irq, GList **list)
+ 	return;
+ }
+ 
+-void add_banned_irq(int irq)
+-{
+-	__add_banned_irq(irq, &banned_irqs);
+-}
+-
+ void add_cl_banned_irq(int irq)
+ {
+-	__add_banned_irq(irq, &cl_banned_irqs);
++	add_banned_irq(irq, &cl_banned_irqs);
+ }
+ 
+ gint substr_find(gconstpointer a, gconstpointer b)
+@@ -392,23 +387,6 @@ get_numa_node:
+ 	return new;
+ }
+ 
+-void remove_one_irq_from_db(int irq)
+-{
+-	struct irq_info find, *tmp;
+-	GList *entry = NULL;
+-
+-	find.irq = irq;
+-	entry = g_list_find_custom(interrupts_db, &find, compare_ints);
+-	if (!entry)
+-		return;
+-
+-	tmp = entry->data;
+-	interrupts_db = g_list_remove(interrupts_db, tmp);
+-	free(tmp);
+-	log(TO_CONSOLE, LOG_INFO, "IRQ %d was removed from db.\n", irq);
+-	return;
+-}
+-
+ static void parse_user_policy_key(char *buf, int irq, struct user_irq_policy *pol)
+ {
+ 	char *key, *value, *end;
+@@ -629,7 +607,7 @@ static void add_new_irq(char *path, struct irq_info *hint)
+ 	/* Set NULL devpath for the irq has no sysfs entries */
+ 	get_irq_user_policy(path, irq, &pol);
+ 	if ((pol.ban == 1) || check_for_irq_ban(hint, mod)) { /*FIXME*/
+-		__add_banned_irq(irq, &banned_irqs);
++		add_banned_irq(irq, &banned_irqs);
+ 		new = get_irq_info(irq);
+ 	} else
+ 		new = add_one_irq_to_db(path, hint, &pol);
+diff --git a/irqbalance.h b/irqbalance.h
+index e7f6b94..46e05ca 100644
+--- a/irqbalance.h
++++ b/irqbalance.h
+@@ -109,8 +109,6 @@ extern struct irq_info *get_irq_info(int irq);
+ extern void migrate_irq(GList **from, GList **to, struct irq_info *info);
+ extern void free_cl_opts(void);
+ extern void add_cl_banned_module(char *modname);
+-extern void add_banned_irq(int irq);
+-extern void remove_one_irq_from_db(int irq);
+ #define irq_numa_node(irq) ((irq)->numa_node)
+ 
+ 
+diff --git a/types.h b/types.h
+index 9693cf4..c63cfea 100644
+--- a/types.h
++++ b/types.h
+@@ -34,7 +34,8 @@
+ /*
+  * IRQ Internal tracking flags
+  */
+-#define IRQ_FLAG_BANNED	1
++#define IRQ_FLAG_BANNED                 (1ULL << 0)
++#define IRQ_FLAG_AFFINITY_UNMANAGED     (1ULL << 1)
+ 
+ enum obj_type_e {
+ 	OBJ_TYPE_CPU,
+-- 
+2.40.1
+

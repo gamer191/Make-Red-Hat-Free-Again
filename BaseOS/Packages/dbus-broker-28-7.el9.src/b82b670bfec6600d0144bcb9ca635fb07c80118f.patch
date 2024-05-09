@@ -1,0 +1,30 @@
+From b82b670bfec6600d0144bcb9ca635fb07c80118f Mon Sep 17 00:00:00 2001
+From: David Rheinsberg <david.rheinsberg@gmail.com>
+Date: Thu, 18 Mar 2021 12:13:16 +0100
+Subject: [PATCH] launch/policy: fix at_console range assertion again
+
+The previous fix did not actually consider that a full range can span up
+until (uint32_t)-1. Fix this properly now, and just check manually for
+an empty range before checking that the highest entry in the range can
+be represented.
+
+Signed-off-by: David Rheinsberg <david.rheinsberg@gmail.com>
+---
+ src/launch/policy.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/launch/policy.c b/src/launch/policy.c
+index 75eb0d3..6999ceb 100644
+--- a/src/launch/policy.c
++++ b/src/launch/policy.c
+@@ -935,9 +935,7 @@ static int policy_export_console(Policy *policy, sd_bus_message *m, PolicyEntrie
+         int r;
+ 
+         /* check for overflow */
+-        c_assert(uid_start + n_uid >= uid_start);
+-        /* check for encoding into dbus `u` type */
+-        c_assert(uid_start + n_uid <= (uint32_t)-1);
++        c_assert(n_uid == 0 || uid_start + n_uid - 1 >= uid_start);
+ 
+         if (n_uid == 0)
+                 return 0;

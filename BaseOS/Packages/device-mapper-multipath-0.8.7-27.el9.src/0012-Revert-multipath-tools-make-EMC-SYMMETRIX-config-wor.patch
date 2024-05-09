@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Wed, 20 Oct 2021 20:46:09 +0200
+Subject: [PATCH] Revert "multipath-tools: make EMC/SYMMETRIX config work with
+ alua and multibus"
+
+This reverts commit 831af0dbfa171cd39d968ba6174669f11a278be9.
+
+Mail from "berthiaume, wayne" <Wayne.Berthiaume@dell.com>, 210930:
+
+"As a representative of Dell I request this patch be withdrawn. If we had
+wanted the default stanza changed we would have already implemented it.
+Also for your information we only advertise the entire enterprise storage
+product line (DMX, VMAX, VMAX AFA, PowerMax) as SYMMETRIX in the VPD page.
+The ALUA capability is only used for mobility devices in an SRDF/Metro
+configuration and the current device stanza still works well in all of our
+testing."
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index 211087ad..a8ba28e3 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -329,9 +329,8 @@ static struct hwentry default_hw[] = {
+ 		/* Symmetrix / DMX / VMAX / PowerMax */
+ 		.vendor        = "EMC",
+ 		.product       = "SYMMETRIX",
+-		.pgpolicy      = GROUP_BY_PRIO,
++		.pgpolicy      = MULTIBUS,
+ 		.no_path_retry = 6,
+-		.pgfailback    = -FAILBACK_IMMEDIATE,
+ 	},
+ 	{
+ 		/* DGC CLARiiON CX/AX / VNX and Unity */

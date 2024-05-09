@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 29 Nov 2022 19:56:37 -0600
+Subject: [PATCH] multipath.conf(5): remove io-affinity information
+
+The multpath-tools do not support the io-affinity path selector.  We
+always add a repeat count as the path argument. The io-affinity selector
+doesn't take one. Instead it takes a bit map of CPUs that a path can
+run on. This isn't something that lends itself to the kind of
+auto-assembling that multipathd does. But even if we did want to
+try to support this path-selector, until we do, we shouldn't be listing
+it in the multipath.conf documentation.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/multipath.conf.5 | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index 01904feb..5e447e67 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -211,10 +211,6 @@ of outstanding I/O to the path and its relative throughput.
+ estimation of future service time based on the history of previous I/O submitted
+ to each path.
+ .TP
+-.I "io-affinity 0"
+-(Since 5.11 kernel) Choose the path for the next bunch of I/O based on a CPU to
+-path mapping the user passes in and what CPU we are executing on.
+-.TP
+ The default is: \fBservice-time 0\fR
+ .RE
+ .

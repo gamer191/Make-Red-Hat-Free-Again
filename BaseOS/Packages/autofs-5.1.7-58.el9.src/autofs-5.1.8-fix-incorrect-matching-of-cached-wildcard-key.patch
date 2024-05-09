@@ -1,0 +1,62 @@
+autofs-5.1.8 - fix incorrect matching of cached wildcard key
+
+From: Ian Kent <raven@themaw.net>
+
+During the implementation of amd format map entry support the code
+to match a cached key was modified.
+
+Unfortunately there's a case were the key lookup behaves incorrectly.
+
+That case is when there are included maps in the map itself and one
+of the maps (usually the last) has a wildcard key entry. In this case
+the wildcard key may be found during lookup but the map it blongs to
+isn't checked so it can be incorrectly returned instead of a matching
+entry in a subsequent included map.
+
+Another problem case is when there's a wildcard match and a cache prune
+occurs while the mount is being done. In this case the matched cache
+entry that has been added is seen as stale and removed along with the
+mount point directory during the prune leading to a mount fail.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG        |    1 +
+ lib/parse_subs.c |    9 +++++++--
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -155,6 +155,7 @@
+ - add ioctlfd open helper.
+ - make open files limit configurable.
+ - fix some sss error return cases.
++- fix incorrect matching of cached wildcard key.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/lib/parse_subs.c
++++ autofs-5.1.7/lib/parse_subs.c
+@@ -532,8 +532,11 @@ struct mapent *match_cached_key(struct a
+ 			while ((me = cache_lookup_key_next(me)))
+ 				if (me->source == source)
+ 					break;
+-			if (!me)
++			if (!me) {
+ 				me = cache_lookup_distinct(mc, "*");
++				if (me && (me->source != source))
++					me = NULL;
++			}
+ 		}
+ 
+ 		if (!me)
+@@ -545,7 +548,9 @@ struct mapent *match_cached_key(struct a
+ 		 */
+ 		if (!(ap->flags & MOUNT_FLAG_REMOUNT) &&
+ 		    ap->type == LKP_INDIRECT && *me->key == '*') {
+-			ret = cache_update(mc, source, key, me->mapent, me->age);
++			time_t now = monotonic_time(NULL);
++
++			ret = cache_update(mc, source, key, me->mapent, now);
+ 			if (!(ret & (CHE_OK | CHE_UPDATED)))
+ 				me = NULL;
+ 		}

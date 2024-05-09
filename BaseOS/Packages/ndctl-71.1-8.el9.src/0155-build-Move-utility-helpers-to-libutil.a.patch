@@ -1,0 +1,68 @@
+From 6d0e543f8bf01219b793cf4d7a603d3dfd7844ed Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 28 Apr 2022 15:10:05 -0700
+Subject: [PATCH 155/217] build: Move utility helpers to libutil.a
+
+Stop listing util/json.c and util/log.c per command, just add them to
+the common libutil.a object.
+
+Link: https://lore.kernel.org/r/165118380572.1676208.16232543117821121022.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/meson.build    | 2 --
+ daxctl/meson.build | 1 -
+ ndctl/meson.build  | 2 --
+ util/meson.build   | 2 ++
+ 4 files changed, 2 insertions(+), 5 deletions(-)
+
+diff -up ndctl-71.1/cxl/meson.build.orig ndctl-71.1/cxl/meson.build
+--- ndctl-71.1/cxl/meson.build.orig	2022-10-07 16:54:43.451540066 -0400
++++ ndctl-71.1/cxl/meson.build	2022-10-07 16:55:35.330716698 -0400
+@@ -3,8 +3,6 @@ cxl_src = [
+   'list.c',
+   'port.c',
+   'memdev.c',
+-  '../util/json.c',
+-  '../util/log.c',
+   'json.c',
+   'filter.c',
+ ]
+diff -up ndctl-71.1/daxctl/meson.build.orig ndctl-71.1/daxctl/meson.build
+--- ndctl-71.1/daxctl/meson.build.orig	2022-10-07 16:54:43.333539664 -0400
++++ ndctl-71.1/daxctl/meson.build	2022-10-07 16:55:35.330716698 -0400
+@@ -4,7 +4,6 @@ daxctl_src = [
+   'list.c',
+   'migrate.c',
+   'device.c',
+-  '../util/json.c',
+   'json.c',
+   'filter.c',
+ ]
+diff -up ndctl-71.1/ndctl/meson.build.orig ndctl-71.1/ndctl/meson.build
+--- ndctl-71.1/ndctl/meson.build.orig	2022-10-07 16:54:43.333539664 -0400
++++ ndctl-71.1/ndctl/meson.build	2022-10-07 16:55:35.330716698 -0400
+@@ -6,11 +6,9 @@ ndctl_src = [
+   'check.c',
+   'region.c',
+   'dimm.c',
+-  '../util/log.c',
+   '../daxctl/filter.c',
+   'filter.c',
+   'list.c',
+-  '../util/json.c',
+   '../daxctl/json.c',
+   'json.c',
+   'json-smart.c',
+diff -up ndctl-71.1/util/meson.build.orig ndctl-71.1/util/meson.build
+--- ndctl-71.1/util/meson.build.orig	2022-10-07 16:54:43.334539667 -0400
++++ ndctl-71.1/util/meson.build	2022-10-07 16:55:35.330716698 -0400
+@@ -2,6 +2,8 @@ util = static_library('util', [
+   'parse-options.c',
+   'usage.c',
+   'size.c',
++  'json.c',
++  'log.c',
+   'main.c',
+   'help.c',
+   'strbuf.c',

@@ -1,0 +1,43 @@
+From 756a6598a0fa6cebdd0e98564af089ca6b463fb1 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Wed, 5 Jan 2022 13:32:05 -0800
+Subject: [PATCH 073/217] ndctl/test: Skip BLK flags checks
+
+With the removal of BLK-mode support, test/libndctl will fail to detect the
+JEDEC format on the nfit_test bus. Report + skip that check rather than
+fail the test when that happens.
+
+Link: https://lore.kernel.org/r/164141832529.3990253.16538298357542644310.stgit@dwillia2-desk3.amr.corp.intel.com
+Tested-by: Alison Schofield <alison.schofield@intel.com>
+Tested-by: Vaibhav Jain <vaibhav@linux.ibm.com>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ test/libndctl.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/test/libndctl.c b/test/libndctl.c
+index c0e4b4c..1e97926 100644
+--- a/test/libndctl.c
++++ b/test/libndctl.c
+@@ -2535,7 +2535,7 @@ static int check_dimms(struct ndctl_bus *bus, struct dimm *dimms, int n,
+ 				fprintf(stderr, "dimm%d expected formats: %d got: %d\n",
+ 						i, dimms[i].formats,
+ 						ndctl_dimm_get_formats(dimm));
+-				return -ENXIO;
++				fprintf(stderr, "continuing...\n");
+ 			}
+ 			for (j = 0; j < dimms[i].formats; j++) {
+ 				if (ndctl_dimm_get_formatN(dimm, j) != dimms[i].format[j]) {
+@@ -2543,7 +2543,7 @@ static int check_dimms(struct ndctl_bus *bus, struct dimm *dimms, int n,
+ 						"dimm%d expected format[%d]: %d got: %d\n",
+ 							i, j, dimms[i].format[j],
+ 							ndctl_dimm_get_formatN(dimm, j));
+-					return -ENXIO;
++					fprintf(stderr, "continuing...\n");
+ 				}
+ 			}
+ 		}
+-- 
+2.27.0
+

@@ -1,0 +1,25 @@
+From 0589b06aa369efd3cd5dfc0bba9a868f48a14506 Mon Sep 17 00:00:00 2001
+From: Tomas Mraz <tmraz@fedoraproject.org>
+Date: Wed, 5 Jan 2022 19:17:18 +0100
+Subject: [PATCH 3/5] get_number: Add missing NUL termination for the scanned
+ string
+
+---
+ src/entry.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/entry.c b/src/entry.c
+index f2bb717..15ce9b5 100644
+--- a/src/entry.c
++++ b/src/entry.c
+@@ -666,6 +666,7 @@ get_number(int *numptr, int low, const char *names[], FILE * file) {
+ 			goto bad;
+ 		*pc++ = (char)ch;
+ 	}
++	*pc = '\0';
+ 	if (len == 0)
+ 		goto bad;
+ 
+-- 
+2.36.1
+

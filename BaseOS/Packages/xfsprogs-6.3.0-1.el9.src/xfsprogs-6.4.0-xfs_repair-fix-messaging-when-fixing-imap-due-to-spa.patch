@@ -1,0 +1,39 @@
+From 1e12a0751b99efd48cda501258e16f00bef9d13d Mon Sep 17 00:00:00 2001
+From: "Darrick J. Wong" <djwong@kernel.org>
+Date: Mon, 5 Jun 2023 08:38:01 -0700
+Subject: [PATCH] xfs_repair: fix messaging when fixing imap due to sparse
+ cluster
+
+This logic is wrong -- if we're in verbose dry-run mode, we do NOT want
+to say that we're correcting the imap.  Otherwise, we print things like:
+
+imap claims inode XXX is present, but inode cluster is sparse,
+
+But then we can erroneously tell the user that we would correct the
+imap when in fact we /are/ correcting it.
+
+Fixes: f4ff8086586 ("xfs_repair: don't crash on partially sparse inode clusters")
+Signed-off-by: Darrick J. Wong <djwong@kernel.org>
+Reviewed-by: Carlos Maiolino <cmaiolino@redhat.com>
+Signed-off-by: Carlos Maiolino <cem@kernel.org>
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+---
+ repair/dino_chunks.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/repair/dino_chunks.c b/repair/dino_chunks.c
+index 0841e65b1844..64ce2a323c8d 100644
+--- a/repair/dino_chunks.c
++++ b/repair/dino_chunks.c
+@@ -834,7 +834,7 @@ next_readbuf:
+ 			do_warn(
+ 	_("imap claims inode %" PRIu64 " is present, but inode cluster is sparse, "),
+ 						ino);
+-			if (verbose || !no_modify)
++			if (!no_modify)
+ 				do_warn(_("correcting imap\n"));
+ 			else
+ 				do_warn(_("would correct imap\n"));
+-- 
+2.41.0
+

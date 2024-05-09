@@ -1,0 +1,374 @@
+From 676979fa9cc7920e5e4d547814f9c0edb597fa0d Mon Sep 17 00:00:00 2001
+From: Eugene Syromyatnikov <evgsyr@gmail.com>
+Date: Thu, 30 Jun 2022 16:01:05 +0200
+Subject: [PATCH] pathtrace, util: do not print " (deleted)" as part of the
+ path
+
+In order to allow to discern the unlinked paths from the paths that
+do indeed end with " (deleted)".
+
+* src/defs.h (getfdpath_pid): Add deleted parameter.
+(getfdpath): Pass NULL as deleted parameter to getfdpath_pid.
+* src/largefile_wrappers.h (lstat_file): New macro.
+* src/pathtrace.c: Include <sys/stat.h>, <sys/types.h>, <unistd.h>,
+and "largefile_wrappers.h".
+(getfdpath_pid): Add deleted parameter, check if path ends with
+" (deleted)", and if it is, try to figure out if it is a part
+of the path by comparing device/inode numbers of the file procfs
+link resolves into and the file pointed by the path read;  strip
+" (deleted)";  set deleted (if it is non-NULL) to true if the fd
+is turned out to be deleted and to false otherwise.
+* src/util.c (print_quoted_string_in_angle_brackets): Add deleted
+parameter, print "(deleted)" after the closing angle bracket if it is
+non-NULL.
+(printfd_pid): Add deleted local variable, pass it to getfdpath_pid
+and print_quoted_string_in_angle_brackets calls.
+* tests/fchmod.c: Add checks for a file with " (deleted)" in the path,
+update expected output.
+* NEWS: Mention the change.
+---
+ NEWS                     |  5 +++++
+ src/defs.h               |  5 +++--
+ src/largefile_wrappers.h |  2 ++
+ src/pathtrace.c          | 48 +++++++++++++++++++++++++++++++++++++++++++++---
+ src/util.c               | 10 +++++++---
+ tests/fchmod.c           | 47 +++++++++++++++++++++++++++++++++++++++++++----
+ 6 files changed, 105 insertions(+), 12 deletions(-)
+
+Index: strace-5.18/NEWS
+===================================================================
+--- strace-5.18.orig/NEWS	2022-07-13 12:52:48.219784860 +0200
++++ strace-5.18/NEWS	2022-07-13 12:52:48.451782122 +0200
+@@ -1,6 +1,11 @@
+ Noteworthy changes in release 5.18 (2022-06-18)
+ ===============================================
+ 
++* Changes in behaviour
++  * The "(deleted)" marker for unlinked paths of file descriptors is now printed
++    outside angle brackets;  the matching of unlinked paths of file descriptors
++    no longer includes the " (deleted)" part into consideration.
++
+ * Improvements
+   * Added an interface of raising des Strausses awareness.
+   * Added --tips option to print strace tips, tricks, and tweaks
+Index: strace-5.18/src/defs.h
+===================================================================
+--- strace-5.18.orig/src/defs.h	2022-07-13 12:52:29.405006910 +0200
++++ strace-5.18/src/defs.h	2022-07-13 12:52:54.532710356 +0200
+@@ -785,12 +785,13 @@
+ 	return pathtrace_match_set(tcp, &global_path_set);
+ }
+ 
+-extern int getfdpath_pid(pid_t pid, int fd, char *buf, unsigned bufsize);
++extern int getfdpath_pid(pid_t pid, int fd, char *buf, unsigned bufsize,
++			 bool *deleted);
+ 
+ static inline int
+ getfdpath(struct tcb *tcp, int fd, char *buf, unsigned bufsize)
+ {
+-	return getfdpath_pid(tcp->pid, fd, buf, bufsize);
++	return getfdpath_pid(tcp->pid, fd, buf, bufsize, NULL);
+ }
+ 
+ extern unsigned long getfdinode(struct tcb *, int);
+Index: strace-5.18/src/largefile_wrappers.h
+===================================================================
+--- strace-5.18.orig/src/largefile_wrappers.h	2022-07-13 12:52:29.405006910 +0200
++++ strace-5.18/src/largefile_wrappers.h	2022-07-13 12:52:48.451782122 +0200
+@@ -31,6 +31,7 @@
+ #  endif
+ #  define fstat_fd fstat64
+ #  define strace_stat_t struct stat64
++#  define lstat_file lstat64
+ #  define stat_file stat64
+ #  define struct_dirent struct dirent64
+ #  define read_dir readdir64
+@@ -42,6 +43,7 @@
+ #  define fcntl_fd fcntl
+ #  define fstat_fd fstat
+ #  define strace_stat_t struct stat
++#  define lstat_file lstat
+ #  define stat_file stat
+ #  define struct_dirent struct dirent
+ #  define read_dir readdir
+Index: strace-5.18/src/pathtrace.c
+===================================================================
+--- strace-5.18.orig/src/pathtrace.c	2022-07-13 12:52:29.405006910 +0200
++++ strace-5.18/src/pathtrace.c	2022-07-13 12:52:54.532710356 +0200
+@@ -10,7 +10,11 @@
+ #include "defs.h"
+ #include <limits.h>
+ #include <poll.h>
++#include <sys/stat.h>
++#include <sys/types.h>
++#include <unistd.h>
+ 
++#include "largefile_wrappers.h"
+ #include "number_set.h"
+ #include "sen.h"
+ #include "xstring.h"
+@@ -77,7 +81,7 @@
+  * Get path associated with fd of a process with pid.
+  */
+ int
+-getfdpath_pid(pid_t pid, int fd, char *buf, unsigned bufsize)
++getfdpath_pid(pid_t pid, int fd, char *buf, unsigned bufsize, bool *deleted)
+ {
+ 	char linkpath[sizeof("/proc/%u/fd/%u") + 2 * sizeof(int)*3];
+ 	ssize_t n;
+@@ -91,12 +95,50 @@
+ 
+ 	xsprintf(linkpath, "/proc/%u/fd/%u", proc_pid, fd);
+ 	n = readlink(linkpath, buf, bufsize - 1);
++	if (n < 0)
++		goto end;
++
+ 	/*
+ 	 * NB: if buf is too small, readlink doesn't fail,
+ 	 * it returns truncated result (IOW: n == bufsize - 1).
+ 	 */
+-	if (n >= 0)
+-		buf[n] = '\0';
++	buf[n] = '\0';
++	if (deleted)
++		*deleted = false;
++
++	/*
++	 * Try to figure out if the kernel has appended " (deleted)"
++	 * to the end of a potentially unlinked path and set deleted
++	 * if it is the case.
++	 */
++	static const char del_sfx[] = " (deleted)";
++	if ((size_t) n <= sizeof(del_sfx))
++		goto end;
++
++	char *del = buf + n + 1 - sizeof(del_sfx);
++
++	if (memcmp(del, del_sfx, sizeof(del_sfx)))
++		goto end;
++
++	strace_stat_t st_link;
++	strace_stat_t st_path;
++	int rc = stat_file(linkpath, &st_link);
++
++	if (rc)
++		goto end;
++
++	rc = lstat_file(buf, &st_path);
++
++	if (rc ||
++	    (st_link.st_ino != st_path.st_ino) ||
++	    (st_link.st_dev != st_path.st_dev)) {
++		*del = '\0';
++		n = del - buf + 1;
++		if (deleted)
++			*deleted = true;
++	}
++
++end:
+ 	return n;
+ }
+ 
+Index: strace-5.18/src/util.c
+===================================================================
+--- strace-5.18.orig/src/util.c	2022-07-13 12:52:47.989787575 +0200
++++ strace-5.18/src/util.c	2022-07-13 12:52:48.452782111 +0200
+@@ -735,12 +735,15 @@
+ }
+ 
+ static void
+-print_quoted_string_in_angle_brackets(const char *str)
++print_quoted_string_in_angle_brackets(const char *str, const bool deleted)
+ {
+ 	tprints("<");
+ 	print_quoted_string_ex(str, strlen(str),
+ 			       QUOTE_OMIT_LEADING_TRAILING_QUOTES, "<>");
+ 	tprints(">");
++
++	if (deleted)
++		tprints("(deleted)");
+ }
+ 
+ void
+@@ -749,8 +752,9 @@
+ 	PRINT_VAL_D(fd);
+ 
+ 	char path[PATH_MAX + 1];
++	bool deleted;
+ 	if (pid > 0 && !number_set_array_is_empty(decode_fd_set, 0)
+-	    && getfdpath_pid(pid, fd, path, sizeof(path)) >= 0) {
++	    && getfdpath_pid(pid, fd, path, sizeof(path), &deleted) >= 0) {
+ 		if (is_number_in_set(DECODE_FD_SOCKET, decode_fd_set) &&
+ 		    printsocket(tcp, fd, path))
+ 			goto printed;
+@@ -761,7 +765,7 @@
+ 		    printpidfd(pid, fd, path))
+ 			goto printed;
+ 		if (is_number_in_set(DECODE_FD_PATH, decode_fd_set))
+-			print_quoted_string_in_angle_brackets(path);
++			print_quoted_string_in_angle_brackets(path, deleted);
+ printed:	;
+ 	}
+ 
+Index: strace-5.18/tests/fchmod.c
+===================================================================
+--- strace-5.18.orig/tests/fchmod.c	2022-07-13 12:52:29.405006910 +0200
++++ strace-5.18/tests/fchmod.c	2022-07-13 12:52:48.452782111 +0200
+@@ -35,10 +35,17 @@
+ 	(void) unlink(sample);
+ 	int fd = open(sample, O_CREAT|O_RDONLY, 0400);
+ 	if (fd == -1)
+-		perror_msg_and_fail("open");
++		perror_msg_and_fail("open(\"%s\")", sample);
++
++	static const char sample_del[] = "fchmod_sample_file (deleted)";
++	(void) unlink(sample_del);
++	int fd_del = open(sample_del, O_CREAT|O_RDONLY, 0400);
++	if (fd_del == -1)
++		perror_msg_and_fail("open(\"%s\")", sample);
+ 
+ # ifdef YFLAG
+ 	char *sample_realpath = get_fd_path(fd);
++	char *sample_del_realpath = get_fd_path(fd_del);
+ # endif
+ 
+ 	const char *sample_secontext = SECONTEXT_FILE(sample);
+@@ -56,12 +63,27 @@
+ 	       sample_secontext,
+ 	       sprintrc(rc));
+ 
++	const char *sample_del_secontext = SECONTEXT_FILE(sample_del);
++	rc = syscall(__NR_fchmod, fd_del, 0600);
++# ifdef YFLAG
++	printf("%s%s(%d<%s>%s, 0600) = %s\n",
++# else
++	printf("%s%s(%d%s, 0600) = %s\n",
++# endif
++	       my_secontext, "fchmod",
++	       fd_del,
++# ifdef YFLAG
++	       sample_del_realpath,
++# endif
++	       sample_del_secontext,
++	       sprintrc(rc));
++
+ 	if (unlink(sample))
+-		perror_msg_and_fail("unlink");
++		perror_msg_and_fail("unlink(\"%s\")", sample);
+ 
+ 	rc = syscall(__NR_fchmod, fd, 051);
+ # ifdef YFLAG
+-	printf("%s%s(%d<%s (deleted)>%s, 051) = %s\n",
++	printf("%s%s(%d<%s>(deleted)%s, 051) = %s\n",
+ # else
+ 	printf("%s%s(%d%s, 051) = %s\n",
+ # endif
+@@ -73,9 +95,26 @@
+ 	       sample_secontext,
+ 	       sprintrc(rc));
+ 
++	if (unlink(sample_del))
++		perror_msg_and_fail("unlink(\"%s\")", sample_del);
++
++	rc = syscall(__NR_fchmod, fd_del, 051);
++# ifdef YFLAG
++	printf("%s%s(%d<%s>(deleted)%s, 051) = %s\n",
++# else
++	printf("%s%s(%d%s, 051) = %s\n",
++# endif
++	       my_secontext, "fchmod",
++	       fd_del,
++# ifdef YFLAG
++	       sample_del_realpath,
++# endif
++	       sample_del_secontext,
++	       sprintrc(rc));
++
+ 	rc = syscall(__NR_fchmod, fd, 004);
+ # ifdef YFLAG
+-	printf("%s%s(%d<%s (deleted)>%s, 004) = %s\n",
++	printf("%s%s(%d<%s>(deleted)%s, 004) = %s\n",
+ # else
+ 	printf("%s%s(%d%s, 004) = %s\n",
+ # endif
+Index: strace-5.18/tests-m32/fchmod.c
+===================================================================
+--- strace-5.18.orig/tests-m32/fchmod.c	2022-07-13 12:52:29.405006910 +0200
++++ strace-5.18/tests-m32/fchmod.c	2022-07-13 12:52:48.452782111 +0200
+@@ -35,10 +35,17 @@
+ 	(void) unlink(sample);
+ 	int fd = open(sample, O_CREAT|O_RDONLY, 0400);
+ 	if (fd == -1)
+-		perror_msg_and_fail("open");
++		perror_msg_and_fail("open(\"%s\")", sample);
++
++	static const char sample_del[] = "fchmod_sample_file (deleted)";
++	(void) unlink(sample_del);
++	int fd_del = open(sample_del, O_CREAT|O_RDONLY, 0400);
++	if (fd_del == -1)
++		perror_msg_and_fail("open(\"%s\")", sample);
+ 
+ # ifdef YFLAG
+ 	char *sample_realpath = get_fd_path(fd);
++	char *sample_del_realpath = get_fd_path(fd_del);
+ # endif
+ 
+ 	const char *sample_secontext = SECONTEXT_FILE(sample);
+@@ -56,12 +63,27 @@
+ 	       sample_secontext,
+ 	       sprintrc(rc));
+ 
++	const char *sample_del_secontext = SECONTEXT_FILE(sample_del);
++	rc = syscall(__NR_fchmod, fd_del, 0600);
++# ifdef YFLAG
++	printf("%s%s(%d<%s>%s, 0600) = %s\n",
++# else
++	printf("%s%s(%d%s, 0600) = %s\n",
++# endif
++	       my_secontext, "fchmod",
++	       fd_del,
++# ifdef YFLAG
++	       sample_del_realpath,
++# endif
++	       sample_del_secontext,
++	       sprintrc(rc));
++
+ 	if (unlink(sample))
+-		perror_msg_and_fail("unlink");
++		perror_msg_and_fail("unlink(\"%s\")", sample);
+ 
+ 	rc = syscall(__NR_fchmod, fd, 051);
+ # ifdef YFLAG
+-	printf("%s%s(%d<%s (deleted)>%s, 051) = %s\n",
++	printf("%s%s(%d<%s>(deleted)%s, 051) = %s\n",
+ # else
+ 	printf("%s%s(%d%s, 051) = %s\n",
+ # endif
+@@ -73,9 +95,26 @@
+ 	       sample_secontext,
+ 	       sprintrc(rc));
+ 
++	if (unlink(sample_del))
++		perror_msg_and_fail("unlink(\"%s\")", sample_del);
++
++	rc = syscall(__NR_fchmod, fd_del, 051);
++# ifdef YFLAG
++	printf("%s%s(%d<%s>(deleted)%s, 051) = %s\n",
++# else
++	printf("%s%s(%d%s, 051) = %s\n",
++# endif
++	       my_secontext, "fchmod",
++	       fd_del,
++# ifdef YFLAG
++	       sample_del_realpath,
++# endif
++	       sample_del_secontext,
++	       sprintrc(rc));
++
+ 	rc = syscall(__NR_fchmod, fd, 004);
+ # ifdef YFLAG
+-	printf("%s%s(%d<%s (deleted)>%s, 004) = %s\n",
++	printf("%s%s(%d<%s>(deleted)%s, 004) = %s\n",
+ # else
+ 	printf("%s%s(%d%s, 004) = %s\n",
+ # endif

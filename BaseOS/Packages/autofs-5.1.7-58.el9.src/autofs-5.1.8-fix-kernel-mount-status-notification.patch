@@ -1,0 +1,135 @@
+autofs-5.1.8 - fix kernel mount status notification
+
+From: Ian Kent <raven@themaw.net>
+
+The status return for attempted mount notification is not done
+correctly in some cases leading to a status being sent to the
+kernel multiple times or the send causing an error.
+
+We must send a status to the kernel but it needs to be the correct
+one. It definitely shouldn't be sent twice for the same mount attempt
+and shouldn't be failing.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG         |    1 +
+ daemon/direct.c   |   19 +++++++++++--------
+ daemon/indirect.c |   19 +++++++++++--------
+ 3 files changed, 23 insertions(+), 16 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -80,6 +80,7 @@
+ - fix concat_options() error handling.
+ - eliminate some more alloca usage.
+ - use default stack size for threads.
++- fix kernel mount status notification.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/direct.c
++++ autofs-5.1.7/daemon/direct.c
+@@ -1143,12 +1143,18 @@ int handle_packet_expire_direct(struct a
+ 	return 0;
+ }
+ 
+-static void mount_send_fail(void *arg)
++static void mount_send_status(void *arg)
+ {
+ 	struct ioctl_ops *ops = get_ioctl_ops();
+ 	struct pending_args *mt = arg;
+ 	struct autofs_point *ap = mt->ap;
+-	ops->send_fail(ap->logopt, mt->ioctlfd, mt->wait_queue_token, -ENOENT);
++
++	if (mt->status)
++		ops->send_fail(ap->logopt, mt->ioctlfd,
++			       mt->wait_queue_token, mt->status);
++	else
++		ops->send_ready(ap->logopt,
++				mt->ioctlfd, mt->wait_queue_token);
+ 	ops->close(ap->logopt, mt->ioctlfd);
+ }
+ 
+@@ -1177,7 +1183,8 @@ static void *do_mount_direct(void *arg)
+ 
+ 	pending_mutex_unlock(args);
+ 
+-	pthread_cleanup_push(mount_send_fail, &mt);
++	mt.status = 0;
++	pthread_cleanup_push(mount_send_status, &mt);
+ 
+ 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &state);
+ 
+@@ -1191,9 +1198,7 @@ static void *do_mount_direct(void *arg)
+ 	if (status == -1) {
+ 		error(ap->logopt,
+ 		      "can't stat direct mount trigger %s", mt.name);
+-		ops->send_fail(ap->logopt,
+-			       mt.ioctlfd, mt.wait_queue_token, -ENOENT);
+-		ops->close(ap->logopt, mt.ioctlfd);
++		mt.status = -ENOENT;
+ 		pthread_setcancelstate(state, NULL);
+ 		pthread_exit(NULL);
+ 	}
+@@ -1203,8 +1208,6 @@ static void *do_mount_direct(void *arg)
+ 		error(ap->logopt,
+ 		     "direct trigger not valid or already mounted %s",
+ 		     mt.name);
+-		ops->send_ready(ap->logopt, mt.ioctlfd, mt.wait_queue_token);
+-		ops->close(ap->logopt, mt.ioctlfd);
+ 		pthread_setcancelstate(state, NULL);
+ 		pthread_exit(NULL);
+ 	}
+--- autofs-5.1.7.orig/daemon/indirect.c
++++ autofs-5.1.7/daemon/indirect.c
+@@ -674,13 +674,18 @@ int handle_packet_expire_indirect(struct
+ 	return 0;
+ }
+ 
+-static void mount_send_fail(void *arg)
++static void mount_send_status(void *arg)
+ {
+ 	struct ioctl_ops *ops = get_ioctl_ops();
+ 	struct pending_args *mt = arg;
+ 	struct autofs_point *ap = mt->ap;
+-	ops->send_fail(ap->logopt,
+-		       ap->ioctlfd, mt->wait_queue_token, -ENOENT);
++
++	if (mt->status)
++		ops->send_fail(ap->logopt, ap->ioctlfd,
++			       mt->wait_queue_token, mt->status);
++	else
++		ops->send_ready(ap->logopt,
++				ap->ioctlfd, mt->wait_queue_token);
+ }
+ 
+ static void *do_mount_indirect(void *arg)
+@@ -709,7 +714,8 @@ static void *do_mount_indirect(void *arg
+ 
+ 	pending_mutex_unlock(args);
+ 
+-	pthread_cleanup_push(mount_send_fail, &mt);
++	mt.status = 0;
++	pthread_cleanup_push(mount_send_status, &mt);
+ 
+ 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &state);
+ 
+@@ -722,9 +728,7 @@ static void *do_mount_indirect(void *arg
+ 	len = ncat_path(buf, sizeof(buf), ap->path, mt.name, mt.len);
+ 	if (!len) {
+ 		crit(ap->logopt, "path to be mounted is to long");
+-		ops->send_fail(ap->logopt,
+-			       ap->ioctlfd, mt.wait_queue_token,
+-			      -ENAMETOOLONG);
++		mt.status = -ENAMETOOLONG;
+ 		pthread_setcancelstate(state, NULL);
+ 		pthread_exit(NULL);
+ 	}
+@@ -733,7 +737,6 @@ static void *do_mount_indirect(void *arg
+ 	if (status != -1 && !(S_ISDIR(st.st_mode) && st.st_dev == mt.dev)) {
+ 		error(ap->logopt,
+ 		      "indirect trigger not valid or already mounted %s", buf);
+-		ops->send_ready(ap->logopt, ap->ioctlfd, mt.wait_queue_token);
+ 		pthread_setcancelstate(state, NULL);
+ 		pthread_exit(NULL);
+ 	}

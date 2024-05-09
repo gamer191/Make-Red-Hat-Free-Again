@@ -1,0 +1,45 @@
+From f5ef6694eae2696b10b4f6e5a0d72a29223651ce Mon Sep 17 00:00:00 2001
+From: Kairui Song <kasong@tencent.com>
+Date: Tue, 20 Sep 2022 02:13:01 +0800
+Subject: [PATCH] fix(dracut-initramfs-restore.sh): initramfs detection not
+ working
+
+The path detection is not working on latest Fedora and some other
+distros, and it fails to extract the initramfs. It seems the if
+statement is broken by a previous commit, so let's fix it.
+
+Fixes: 3d8e1ad ('fix(dracut-initramfs-restore.sh): add missing default paths')
+Signed-off-by: Kairui Song <kasong@tencent.com>
+(cherry picked from commit 481b87fa7a82be54663071ad9ad76c34e378ddc7)
+
+Resolves: #2149232
+---
+ dracut-initramfs-restore.sh | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/dracut-initramfs-restore.sh b/dracut-initramfs-restore.sh
+index 68ea3873..df6cb9a8 100644
+--- a/dracut-initramfs-restore.sh
++++ b/dracut-initramfs-restore.sh
+@@ -27,14 +27,14 @@ fi
+ 
+ mount -o ro /boot &> /dev/null || true
+ 
+-if [[ -d /efi/loader/entries ]] || [[ -L /efi/loader/entries ]] \
+-    || [[ -d /efi/$MACHINE_ID ]] || [[ -L /efi/$MACHINE_ID ]]; then
++if [[ -d /efi/loader/entries || -L /efi/loader/entries ]] \
++    && [[ -d /efi/$MACHINE_ID || -L /efi/$MACHINE_ID ]]; then
+     IMG="/efi/${MACHINE_ID}/${KERNEL_VERSION}/initrd"
+-elif [[ -d /boot/loader/entries ]] || [[ -L /boot/loader/entries ]] \
+-    || [[ -d /boot/$MACHINE_ID ]] || [[ -L /boot/$MACHINE_ID ]]; then
++elif [[ -d /boot/loader/entries || -L /boot/loader/entries ]] \
++    && [[ -d /boot/$MACHINE_ID || -L /boot/$MACHINE_ID ]]; then
+     IMG="/boot/${MACHINE_ID}/${KERNEL_VERSION}/initrd"
+-elif [[ -d /boot/efi/loader/entries ]] || [[ -L /boot/efi/loader/entries ]] \
+-    || [[ -d /boot/efi/$MACHINE_ID ]] || [[ -L /boot/efi/$MACHINE_ID ]]; then
++elif [[ -d /boot/efi/loader/entries || -L /boot/efi/loader/entries ]] \
++    && [[ -d /boot/efi/$MACHINE_ID || -L /boot/efi/$MACHINE_ID ]]; then
+     IMG="/boot/efi/$MACHINE_ID/$KERNEL_VERSION/initrd"
+ elif [[ -f /lib/modules/${KERNEL_VERSION}/initrd ]]; then
+     IMG="/lib/modules/${KERNEL_VERSION}/initrd"
+

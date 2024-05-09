@@ -1,0 +1,209 @@
+From 3f0e5340b651da98251a58cc7923525d69f96032 Mon Sep 17 00:00:00 2001
+From: Eugene Syromyatnikov <evgsyr@gmail.com>
+Date: Fri, 1 Jul 2022 10:45:48 +0200
+Subject: [PATCH] secontext: fix expected SELinux context check for unlinked
+ FDs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+selinux_getfdcon open-coded a part of getfdpath_pid since it tries
+to do the same job, figure out a path associated with an FD, for slightly
+different purpose: to get the expected SELinux context for it.  As the previous
+commit shows, it's a bit more complicated in cases when the path ends
+with the " (deleted)" string, which is also used for designated unlinked paths
+in procfs.  Otherwise, it may manifest in test failures such as this:
+
+     [unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023] fchmod(4</root/rpmbuild/BUILD/strace-5.13/tests/fchmod-y--secontext_full_mismatch.dir/fchmod_subdir/fchmod_sample_file> [unconfined_u:object_r:admin_home_t:s0!!system_u:object_r:admin_home_t:s0], 0600) = 0
+    -[unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023] fchmod(4</root/rpmbuild/BUILD/strace-5.13/tests/fchmod-y--secontext_full_mismatch.dir/fchmod_subdir/fchmod_sample_file (deleted)> [unconfined_u:object_r:admin_home_t:s0!!system_u:object_r:admin_home_t:s0], 051) = 0
+    -[unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023] fchmod(4</root/rpmbuild/BUILD/strace-5.13/tests/fchmod-y--secontext_full_mismatch.dir/fchmod_subdir/fchmod_sample_file (deleted)> [unconfined_u:object_r:admin_home_t:s0!!system_u:object_r:admin_home_t:s0], 004) = 0
+    +[unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023] fchmod(4</root/rpmbuild/BUILD/strace-5.13/tests/fchmod-y--secontext_full_mismatch.dir/fchmod_subdir/fchmod_sample_file (deleted)> [unconfined_u:object_r:admin_home_t:s0], 051) = 0
+    +[unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023] fchmod(4</root/rpmbuild/BUILD/strace-5.13/tests/fchmod-y--secontext_full_mismatch.dir/fchmod_subdir/fchmod_sample_file (deleted)> [unconfined_u:object_r:admin_home_t:s0], 004) = 0
+     +++ exited with 0 +++
+    + fail_ '../../src/strace -a15 -y --secontext=full,mismatch -e trace=fchmod ../fchmod-y--secontext_full_mismatch output mismatch'
+    + warn_ 'fchmod-y--secontext_full_mismatch.gen.test: failed test: ../../src/strace -a15 -y --secontext=full,mismatch -e trace=fchmod ../fchmod-y--secontext_full_mismatch output mismatch'
+    + printf '%s\n' 'fchmod-y--secontext_full_mismatch.gen.test: failed test: ../../src/strace -a15 -y --secontext=full,mismatch -e trace=fchmod ../fchmod-y--secontext_full_mismatch output mismatch'
+    fchmod-y--secontext_full_mismatch.gen.test: failed test: ../../src/strace -a15 -y --secontext=full,mismatch -e trace=fchmod ../fchmod-y--secontext_full_mismatch output mismatch
+    + exit 1
+    FAIL fchmod-y--secontext_full_mismatch.gen.test (exit status: 1)
+
+that happens due to the fact that the get_expected_filecontext() call
+is made against the path with the " (deleted)" part, which is wrong (it
+is more wrong than shown above when a file with the path that ends with
+" (deleted)" exists).  Moreover, it would be incorrect to call stat()
+on that path.
+
+Let's factor out the common part of the code and simply call it
+from selinux_getfdcon, then use the st_mode from the procfs link.
+
+* src/defs.h (get_proc_pid_fd_path): New declaration.
+* src/pathtrace.c (get)proc_pid_fd_path): New function, part
+of getfdpath_pid that performs link resolution and processing
+of the result.
+(getfdpath_pid): Call get_proc_pid_fd_path after PID resolution.
+* src/secontext.c (get_expected_filecontext): Add mode parameter, use
+it in selabel_lookup call instead of retrieveing file mode using stat()
+if it is not -1.
+(selinux_getfdcon): Call get_proc_pid_fd_path instead
+of open-coding path resolution code, call stat() on the procfs link
+and pass the retrieved st_mode to the get_expected_filecontext call.
+(selinux_getfilecon): Pass -1 as mode in the get_expected_filecontext
+call.
+
+Reported-by: Václav Kadlčík <vkadlcik@redhat.com>
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2087693
+---
+ src/defs.h      | 15 +++++++++++++++
+ src/pathtrace.c | 26 ++++++++++++++++++--------
+ src/secontext.c | 35 +++++++++++++++++++++--------------
+ 3 files changed, 54 insertions(+), 22 deletions(-)
+
+Index: strace-5.18/src/defs.h
+===================================================================
+--- strace-5.18.orig/src/defs.h	2022-07-12 18:22:01.563254140 +0200
++++ strace-5.18/src/defs.h	2022-07-12 18:22:06.202199392 +0200
+@@ -785,6 +785,21 @@
+ 	return pathtrace_match_set(tcp, &global_path_set);
+ }
+ 
++/**
++ * Resolves a path for a fd procfs PID proc_pid (the one got from
++ * get_proc_pid()).
++ *
++ * @param proc_pid PID number in /proc, obtained with get_proc_pid().
++ * @param fd       FD to resolve path for.
++ * @param buf      Buffer to store the resolved path in.
++ * @param bufsize  The size of buf.
++ * @param deleted  If non-NULL, set to true if the path associated with the FD
++ *                 seems to have been unlinked and to false otherwise.
++ * @return         Number of bytes written including terminating '\0'.
++ */
++extern int get_proc_pid_fd_path(int proc_pid, int fd, char *buf,
++				unsigned bufsize, bool *deleted);
++
+ extern int getfdpath_pid(pid_t pid, int fd, char *buf, unsigned bufsize,
+ 			 bool *deleted);
+ 
+Index: strace-5.18/src/pathtrace.c
+===================================================================
+--- strace-5.18.orig/src/pathtrace.c	2022-07-12 18:22:01.532254506 +0200
++++ strace-5.18/src/pathtrace.c	2022-07-12 18:22:06.202199392 +0200
+@@ -77,11 +77,9 @@
+ 	set->paths_selected[set->num_selected++] = path;
+ }
+ 
+-/*
+- * Get path associated with fd of a process with pid.
+- */
+ int
+-getfdpath_pid(pid_t pid, int fd, char *buf, unsigned bufsize, bool *deleted)
++get_proc_pid_fd_path(int proc_pid, int fd, char *buf, unsigned bufsize,
++		     bool *deleted)
+ {
+ 	char linkpath[sizeof("/proc/%u/fd/%u") + 2 * sizeof(int)*3];
+ 	ssize_t n;
+@@ -89,10 +87,6 @@
+ 	if (fd < 0)
+ 		return -1;
+ 
+-	int proc_pid = get_proc_pid(pid);
+-	if (!proc_pid)
+-		return -1;
+-
+ 	xsprintf(linkpath, "/proc/%u/fd/%u", proc_pid, fd);
+ 	n = readlink(linkpath, buf, bufsize - 1);
+ 	if (n < 0)
+@@ -143,6 +137,22 @@
+ }
+ 
+ /*
++ * Get path associated with fd of a process with pid.
++ */
++int
++getfdpath_pid(pid_t pid, int fd, char *buf, unsigned bufsize, bool *deleted)
++{
++	if (fd < 0)
++		return -1;
++
++	int proc_pid = get_proc_pid(pid);
++	if (!proc_pid)
++		return -1;
++
++	return get_proc_pid_fd_path(proc_pid, fd, buf, bufsize, deleted);
++}
++
++/*
+  * Add a path to the set we're tracing.  Also add the canonicalized
+  * version of the path.  Specifying NULL will delete all paths.
+  */
+Index: strace-5.18/src/secontext.c
+===================================================================
+--- strace-5.18.orig/src/secontext.c	2022-07-12 18:22:01.564254128 +0200
++++ strace-5.18/src/secontext.c	2022-07-12 18:22:06.203199380 +0200
+@@ -62,7 +62,7 @@
+ }
+ 
+ static int
+-get_expected_filecontext(const char *path, char **secontext)
++get_expected_filecontext(const char *path, char **secontext, int mode)
+ {
+ 	static struct selabel_handle *hdl;
+ 
+@@ -80,12 +80,7 @@
+ 		}
+ 	}
+ 
+-	strace_stat_t stb;
+-	if (stat_file(path, &stb) < 0) {
+-		return -1;
+-	}
+-
+-	return selabel_lookup(hdl, secontext, path, stb.st_mode);
++	return selabel_lookup(hdl, secontext, path, mode);
+ }
+ 
+ /*
+@@ -130,16 +125,22 @@
+ 
+ 	/*
+ 	 * We need to resolve the path, because selabel_lookup() doesn't
+-	 * resolve anything.  Using readlink() is sufficient here.
++	 * resolve anything.
+ 	 */
++	char buf[PATH_MAX + 1];
++	ssize_t n = get_proc_pid_fd_path(proc_pid, fd, buf, sizeof(buf), NULL);
++	if ((size_t) n >= (sizeof(buf) - 1))
++		return 0;
+ 
+-	char buf[PATH_MAX];
+-	ssize_t n = readlink(linkpath, buf, sizeof(buf));
+-	if ((size_t) n >= sizeof(buf))
++	/*
++	 * We retrieve stat() here since the path the procfs link resolves into
++	 * may be reused by a different file with different context.
++	 */
++	strace_stat_t st;
++	if (stat_file(linkpath, &st))
+ 		return 0;
+-	buf[n] = '\0';
+ 
+-	get_expected_filecontext(buf, expected);
++	get_expected_filecontext(buf, expected, st.st_mode);
+ 
+ 	return 0;
+ }
+@@ -190,7 +191,13 @@
+ 	if (!resolved)
+ 		return 0;
+ 
+-	get_expected_filecontext(resolved, expected);
++	strace_stat_t st;
++	if (stat_file(resolved, &st) < 0)
++		goto out;
++
++	get_expected_filecontext(resolved, expected, st.st_mode);
++
++out:
+ 	free(resolved);
+ 
+ 	return 0;

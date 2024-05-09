@@ -1,0 +1,16 @@
+Index: acpica-unix2-20210604/source/common/dmtbdump.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/common/dmtbdump.c
++++ acpica-unix2-20210604/source/common/dmtbdump.c
+@@ -338,7 +338,11 @@ AcpiDmDumpXsdt (
+     for (i = 0; i < Entries; i++)
+     {
+         AcpiDmLineHeader2 (Offset, sizeof (UINT64), "ACPI Table Address", i);
++#if ACPI_MACHINE_WIDTH == 32
++        AcpiOsPrintf ("%16.16llX\n", AcpiUtReadUint64 (&Array[i]));
++#else
+         AcpiOsPrintf ("%16.16lX\n", AcpiUtReadUint64 (&Array[i]));
++#endif
+         Offset += sizeof (UINT64);
+     }
+ }

@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Fri, 12 Aug 2022 18:58:15 +0200
+Subject: [PATCH] multipathd: replace libreadline with libedit
+
+Linking multipathd with libreadline may cause a license conflict,
+because libreadline is licensed under GPL-3.0-or-later, and
+libmultipath contains several files under GPL-2.0.
+
+See:
+   https://github.com/opensvc/multipath-tools/issues/36
+   https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=979095
+   https://www.gnu.org/licenses/gpl-faq.html#AllCompatibility
+
+Replace the readline functionality with libedit, which comes under
+a BSD license. The readline library can still be enabled (e.g. for
+binaries not intended to be distributed) by running
+"make READLINE=libreadline".
+
+Signed-off-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ Makefile.inc        |  5 +++++
+ multipathd/Makefile | 12 +++++++++++-
+ multipathd/cli.c    |  5 +++++
+ multipathd/uxclnt.c |  6 ++++++
+ 4 files changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile.inc b/Makefile.inc
+index 688c4599..05027703 100644
+--- a/Makefile.inc
++++ b/Makefile.inc
+@@ -14,6 +14,11 @@
+ #
+ # Uncomment to disable dmevents polling support
+ # ENABLE_DMEVENTS_POLL = 0
++#
++# Readline library to use, libedit or libreadline
++# Caution: Using libreadline may make the multipathd binary undistributable,
++# see https://github.com/opensvc/multipath-tools/issues/36
++READLINE = libedit
+ 
+ PKGCONFIG	?= pkg-config
+ 
+diff --git a/multipathd/Makefile b/multipathd/Makefile
+index cd6f7e6d..00342464 100644
+--- a/multipathd/Makefile
++++ b/multipathd/Makefile
+@@ -19,7 +19,17 @@ CFLAGS += $(BIN_CFLAGS) -I$(multipathdir) -I$(mpathpersistdir) \
+ LDFLAGS += $(BIN_LDFLAGS)
+ LIBDEPS += -L$(multipathdir) -lmultipath -L$(mpathpersistdir) -lmpathpersist \
+ 	   -L$(mpathcmddir) -lmpathcmd -ludev -ldl -lurcu -lpthread \
+-	   -ldevmapper -lreadline
++	   -ldevmapper
++
++ifeq ($(READLINE),libedit)
++CFLAGS += -DUSE_LIBEDIT
++LIBDEPS += -ledit
++endif
++ifeq ($(READLINE),libreadline)
++CFLAGS += -DUSE_LIBREADLINE
++LIBDEPS += -lreadline
++endif
++
+ CFLAGS += $(shell $(PKGCONFIG) --modversion liburcu 2>/dev/null | \
+ 	awk -F. '{ printf("-DURCU_VERSION=0x%06x", 256 * ( 256 * $$1 + $$2) + $$3); }')
+ 
+diff --git a/multipathd/cli.c b/multipathd/cli.c
+index 4d6c37c9..cc547e67 100644
+--- a/multipathd/cli.c
++++ b/multipathd/cli.c
+@@ -11,7 +11,12 @@
+ #include "parser.h"
+ #include "util.h"
+ #include "version.h"
++#ifdef USE_LIBEDIT
++#include <editline/readline.h>
++#endif
++#ifdef USE_LIBREADLINE
+ #include <readline/readline.h>
++#endif
+ 
+ #include "mpath_cmd.h"
+ #include "cli.h"
+diff --git a/multipathd/uxclnt.c b/multipathd/uxclnt.c
+index f16a7309..2c17d8fc 100644
+--- a/multipathd/uxclnt.c
++++ b/multipathd/uxclnt.c
+@@ -16,8 +16,14 @@
+ #include <sys/socket.h>
+ #include <sys/un.h>
+ #include <poll.h>
++
++#ifdef USE_LIBEDIT
++#include <editline/readline.h>
++#endif
++#ifdef USE_LIBREADLINE
+ #include <readline/readline.h>
+ #include <readline/history.h>
++#endif
+ 
+ #include "mpath_cmd.h"
+ #include "uxsock.h"

@@ -1,0 +1,3084 @@
+diff -urN cracklib-2.9.6.old/po/as.po cracklib-2.9.6.new/po/as.po
+--- cracklib-2.9.6.old/po/as.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/as.po	2018-10-09 11:57:33.759928725 +0200
+@@ -1,82 +1,83 @@
+ # Copyright (C) 2009 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+-#
++# 
+ # Amitakhya Phukan <aphukan@fedoraproject.org>, 2009.
++# ngoswami <ngoswami@redhat.com>, 2013. #zanata
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: \n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-11-12 11:39+0530\n"
+-"Last-Translator: Amitakhya Phukan <aphukan@fedoraproject.org>\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2012-12-14 16:11-0600\n"
++"PO-Revision-Date: 2013-09-23 10:11-0400\n"
++"Last-Translator: ngoswami <ngoswami@redhat.com>\n"
+ "Language-Team: Assamese <>\n"
+-"Language: as\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: Lokalize 1.0\n"
++"Language: as\n"
+ "Plural-Forms: nplurals=2; plural=n != 1;\n"
++"X-Generator: Zanata 3.1.2\n"
++
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "আপুনি গুপ্তশব্দৰ নথিপত্ৰ পঞ্জিকৃত নহয়"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "এইটো আপোনাৰ ব্যৱহাৰকৰ্তাৰ নামৰ আধাৰত"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "এইটো আপোনাৰ গুপ্তশব্দৰ নিবেশৰ আধাৰত"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "ইয়াক আপোনাৰ গুপ্তশব্দৰ নিবেশৰ পৰা পোৱা হৈছে"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "ইয়াক আপোনাৰ গুপ্তশব্দৰ নিবেশৰ পৰা পোৱা হৈছে"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "ইয়াক আপোনাৰ গুপ্তশব্দৰ নিবেশৰ পৰা পাব পাৰি"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "ইয়াক আপোনাৰ গুপ্তশব্দৰ নিবেশৰ পৰা পাব পাৰি"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "আপুনি গুপ্তশব্দৰ নথিপত্ৰ পঞ্জিকৃত নহয়"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "ই বৰ সৰু"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "ই বৰ সৰু"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "ইয়াত যথেষ্ট ভিন্ন আকৰ নাই"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "ই সম্পূৰ্ণৰূপে ৰিক্ত স্থানেৰে ভৰা"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "ই বৰ সৰল/শৃংখলাবদ্ধ"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "ই দেখাত এটা National Insurance ৰ নম্বৰৰ দৰে ।"
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "ই এটা অভিধানৰ শব্দৰ আধাৰত"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "ই এটা অভিধানৰ শব্দৰ আধাৰত (ওলোটা ক্ৰমত)"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "শব্দকোষ ল'ড কৰোতে ত্ৰুটি"
+diff -urN cracklib-2.9.6.old/po/be.po cracklib-2.9.6.new/po/be.po
+--- cracklib-2.9.6.old/po/be.po	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/po/be.po	2018-10-09 11:38:57.597040577 +0200
+@@ -0,0 +1,79 @@
++# Viktar Siarheichyk <veq@fedoraproject.org>, 2018. #zanata
++msgid ""
++msgstr ""
++"Project-Id-Version: cracklib 2.9.6\n"
++"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
++"POT-Creation-Date: 2015-08-18 13:45-0500\n"
++"PO-Revision-Date: 2018-06-04 07:22+0000\n"
++"Last-Translator: Viktar Siarheichyk <veq@fedoraproject.org>\n"
++"Language-Team: Belarusian\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Language: be\n"
++"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2)\n"
++"X-Generator: Zanata 4.6.2\n"
++
++#: lib/fascist.c:516
++msgid "it is based on your username"
++msgstr "заснавана на імені карыстальніка"
++
++#: lib/fascist.c:576
++msgid "it is based upon your password entry"
++msgstr "заснавана на ўпісаным пароле"
++
++#: lib/fascist.c:591
++msgid "it is derived from your password entry"
++msgstr "паходзіць з вашага запісу пароля"
++
++#: lib/fascist.c:599
++msgid "it's derived from your password entry"
++msgstr "паходзіць з вашага запісу пароля"
++
++#: lib/fascist.c:608
++msgid "it is derivable from your password entry"
++msgstr "можа паходзіць з вашага запісу пароля"
++
++#: lib/fascist.c:617
++msgid "it's derivable from your password entry"
++msgstr "можа паходзіць з вашага запісу пароля"
++
++#: lib/fascist.c:674
++msgid "you are not registered in the password file"
++msgstr "няма вашага запісу ў файле пароляў"
++
++#: lib/fascist.c:709
++msgid "it is WAY too short"
++msgstr "ён ЗАНАДТА кароткі"
++
++#: lib/fascist.c:714
++msgid "it is too short"
++msgstr "ён надта кароткі"
++
++#: lib/fascist.c:731
++msgid "it does not contain enough DIFFERENT characters"
++msgstr "у ім недастаткова РОЗНАСТАЙНЫХ знакаў"
++
++#: lib/fascist.c:745
++msgid "it is all whitespace"
++msgstr "адны прабелы"
++
++#: lib/fascist.c:764
++msgid "it is too simplistic/systematic"
++msgstr "надта просты ці распаўсюджаны"
++
++#: lib/fascist.c:769
++msgid "it looks like a National Insurance number."
++msgstr " надобны на нумар сацыяльнага страхавання."
++
++#: lib/fascist.c:801
++msgid "it is based on a dictionary word"
++msgstr "базуецца на слоўнікавым слове"
++
++#: lib/fascist.c:820
++msgid "it is based on a (reversed) dictionary word"
++msgstr "бвзуецца на (адваротным) слоўнікавым слове"
++
++#: lib/fascist.c:865
++msgid "error loading dictionary"
++msgstr "памылка падчас загрузкі слоўніка"
+diff -urN cracklib-2.9.6.old/po/bn_IN.po cracklib-2.9.6.new/po/bn_IN.po
+--- cracklib-2.9.6.old/po/bn_IN.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/bn_IN.po	2018-10-09 11:57:33.759928725 +0200
+@@ -1,83 +1,84 @@
+ # translation of cracklib.po to Bengali INDIA
+ # Copyright (C) 2009 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the cracklib package.
+-#
++# 
+ # Runa Bhattacharjee <runab@redhat.com>, 2009.
++# sray <sray@redhat.com>, 2013. #zanata
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: cracklib.default.cracklib\n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-11-11 12:34+0530\n"
+-"Last-Translator: Runa Bhattacharjee <runab@redhat.com>\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2012-12-14 16:11-0600\n"
++"PO-Revision-Date: 2013-10-03 05:14-0400\n"
++"Last-Translator: sray <sray@redhat.com>\n"
+ "Language-Team: Bengali INDIA <anubad@lists.ankur.org.in>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
++"Language: bn-IN\n"
+ "Plural-Forms: nplurals=2; plural=(n != 1);\n"
++"X-Generator: Zanata 3.1.2\n"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "পাসওয়ার্ড ফাইলের মধ্যে আপনার পরিচয় নিবন্ধিত নয়"
++
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "আপনার ব্যবহারকারীর নামের উপর এটি নির্ভরশীল"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "আপনার পাসওয়ার্ড এনট্রির উপর এটি নির্ভরশীল"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "আপনার পাসওয়ার্ড এনট্রি থেকে এটি আহরণ করা হয়েছে"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "আপনার পাসওয়ার্ড এনট্রি থেকে এটি আহরণ করা হয়েছে"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "আপনার পাসওয়ার্ড এনট্রি থেকে এটি আহরণ করা সম্ভব"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "আপনার পাসওয়ার্ড এনট্রি থেকে এটি আহরণ করা সম্ভব"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "পাসওয়ার্ড ফাইলের মধ্যে আপনার পরিচয় নিবন্ধিত নয়"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "এটি অত্যাধিক ছোট"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "এটি অতিমাত্রায় ছোট"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "এর মধ্যে উপস্থিত অক্ষরগুলির মধ্যে পর্যাপ্ত বৈচিত্র উপস্থিত নেই"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "এটি শুধুমাত্র শূণ্যস্থান দ্বারা গঠিত হয়েছে"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "এটি অত্যাধিক সরল/গতানুগতিক"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "এটি একটি বীমার অ্যাকাউন্টের সংখ্যার অনুরূপ।"
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "এটি অভিধানের একটি শব্দের ভিত্তিতে নির্ধারিত হয়েছে"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "এটি অভিধানের একটি শব্দের (বিপরীত) ভিত্তিতে নির্ধারিত হয়েছে"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "অভিধান লোড হতে সমস্যা"
+diff -urN cracklib-2.9.6.old/po/ca.po cracklib-2.9.6.new/po/ca.po
+--- cracklib-2.9.6.old/po/ca.po	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/po/ca.po	2018-10-09 11:37:49.699355368 +0200
+@@ -0,0 +1,79 @@
++# Robert Antoni Buj Gelonch <rbuj@fedoraproject.org>, 2016. #zanata
++msgid ""
++msgstr ""
++"Project-Id-Version: cracklib 2.9.6\n"
++"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
++"POT-Creation-Date: 2015-08-18 13:45-0500\n"
++"PO-Revision-Date: 2016-10-08 03:48+0000\n"
++"Last-Translator: Robert Antoni Buj Gelonch <rbuj@fedoraproject.org>\n"
++"Language-Team: Catalan\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Language: ca\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
++
++#: lib/fascist.c:516
++msgid "it is based on your username"
++msgstr "es basa en el vostre nom d'usuari"
++
++#: lib/fascist.c:576
++msgid "it is based upon your password entry"
++msgstr "es basa en la introducció de la vostra contrasenya"
++
++#: lib/fascist.c:591
++msgid "it is derived from your password entry"
++msgstr "es deriva a partir de la introducció de la vostra contrasenya"
++
++#: lib/fascist.c:599
++msgid "it's derived from your password entry"
++msgstr "es deriva a partir de la introducció de la vostra contrasenya"
++
++#: lib/fascist.c:608
++msgid "it is derivable from your password entry"
++msgstr "es pot derivar a partir de la introducció de la vostra contrasenya"
++
++#: lib/fascist.c:617
++msgid "it's derivable from your password entry"
++msgstr "es pot derivar a partir de la introducció de la vostra contrasenya"
++
++#: lib/fascist.c:674
++msgid "you are not registered in the password file"
++msgstr "no esteu registrat al fitxer de contrasenyes"
++
++#: lib/fascist.c:709
++msgid "it is WAY too short"
++msgstr "és massa curt"
++
++#: lib/fascist.c:714
++msgid "it is too short"
++msgstr "és massa curt"
++
++#: lib/fascist.c:731
++msgid "it does not contain enough DIFFERENT characters"
++msgstr "no conté prou caràcters DIFERENTS"
++
++#: lib/fascist.c:745
++msgid "it is all whitespace"
++msgstr "és tot l'espai en blanc"
++
++#: lib/fascist.c:764
++msgid "it is too simplistic/systematic"
++msgstr "és massa simplista/sistemàtica"
++
++#: lib/fascist.c:769
++msgid "it looks like a National Insurance number."
++msgstr "sembla un número de la seguretat social."
++
++#: lib/fascist.c:801
++msgid "it is based on a dictionary word"
++msgstr "es basa en una paraula del diccionari"
++
++#: lib/fascist.c:820
++msgid "it is based on a (reversed) dictionary word"
++msgstr "es basa en una paraula del diccionari (revers)"
++
++#: lib/fascist.c:865
++msgid "error loading dictionary"
++msgstr "error en carregar el diccionari"
+diff -urN cracklib-2.9.6.old/po/cs.po cracklib-2.9.6.new/po/cs.po
+--- cracklib-2.9.6.old/po/cs.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/cs.po	2018-10-09 11:37:54.554475070 +0200
+@@ -1,19 +1,21 @@
+ # translation of cracklib.po to czech
+ # Klara Cihlarova <koty@seznam.cz>, 2003.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Marek Suchánek <m.suchanek.2@gmail.com>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-06-23 13:18+02:00\n"
+-"Last-Translator: Klara Cihlarova <koty@seznam.cz>\n"
++"PO-Revision-Date: 2016-08-31 01:14+0000\n"
++"Last-Translator: Marek Suchánek <m.suchanek.2@gmail.com>\n"
+ "Language-Team: czech <suse@suse.cz>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.2\n"
++"Language: cs\n"
++"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -77,4 +79,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "chyba při načítání slovníku"
+diff -urN cracklib-2.9.6.old/po/da.po cracklib-2.9.6.new/po/da.po
+--- cracklib-2.9.6.old/po/da.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/da.po	2018-10-09 11:39:10.434360676 +0200
+@@ -2,20 +2,22 @@
+ # Copyright (C) 2005 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+ # Martin Møller <martin@martinm-76.dk>, 2005.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# scootergrisen <scootergrisen@gmail.com>, 2017. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-16 20:11+0200\n"
+-"Last-Translator: Martin Møller <martin@martinm-76.dk>\n"
++"PO-Revision-Date: 2017-10-06 02:39+0000\n"
++"Last-Translator: scootergrisen <scootergrisen@gmail.com>\n"
+ "Language-Team: Dansk <da@li.org>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.10.1\n"
++"Language: da\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -43,7 +45,7 @@
+ 
+ #: lib/fascist.c:674
+ msgid "you are not registered in the password file"
+-msgstr "Du er ikke optegnet i adgangskodefilen"
++msgstr "du er ikke optegnet i adgangskodefilen"
+ 
+ #: lib/fascist.c:709
+ msgid "it is WAY too short"
+@@ -59,7 +61,7 @@
+ 
+ #: lib/fascist.c:745
+ msgid "it is all whitespace"
+-msgstr "det er kun mellemrum/blanke tegn"
++msgstr "alt er blanktegn"
+ 
+ #: lib/fascist.c:764
+ msgid "it is too simplistic/systematic"
+@@ -67,7 +69,7 @@
+ 
+ #: lib/fascist.c:769
+ msgid "it looks like a National Insurance number."
+-msgstr "det ligner et CPR nummer."
++msgstr "det ligner et \"National Insurance\"-nummer."
+ 
+ #: lib/fascist.c:801
+ msgid "it is based on a dictionary word"
+@@ -79,4 +81,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "fejl ved indlæsning af ordbog"
+diff -urN cracklib-2.9.6.old/po/de.po cracklib-2.9.6.new/po/de.po
+--- cracklib-2.9.6.old/po/de.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/de.po	2018-10-09 11:38:15.372988343 +0200
+@@ -4,21 +4,21 @@
+ # Antje Faber <afaber@suse.de>, 2000-2003.
+ # Karl Eichwalder <ke@suse.de>, 1999-2003.
+ # Martin Lohner <ml@suse.de>, 2000.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: new\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2003-11-27 18:31GMT\n"
+-"Last-Translator: Novell Language <language@novell.com>\n"
++"PO-Revision-Date: 2018-08-16 12:44+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: Novell Language <language@novell.com>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=utf-8\n"
++"Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
++"Language: de\n"
+ "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+-"X-Generator: KBabel 1.0.2\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -82,4 +82,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "Fehler beim Laden des Wörterbuchs"
+diff -urN cracklib-2.9.6.old/po/el.po cracklib-2.9.6.new/po/el.po
+--- cracklib-2.9.6.old/po/el.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/el.po	2018-10-09 11:38:32.974426610 +0200
+@@ -4,20 +4,21 @@
+ # This file is distributed under the same license as the PACKAGE package.
+ # Kostas Boukouvalas <quantis@hellug.gr>, 2005.
+ # Hellenic SuSE Translation Group <hstg@billg.gr>, 2005.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: el\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-26 19:19+0300\n"
+-"Last-Translator: Hellenic SuSE Translation Group <hstg@billg.gr>\n"
++"PO-Revision-Date: 2016-06-18 01:02+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: Hellenic-Ελληνικά-Greek <hstg@billg.gr>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.10\n"
++"Language: el\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+diff -urN cracklib-2.9.6.old/po/es.po cracklib-2.9.6.new/po/es.po
+--- cracklib-2.9.6.old/po/es.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/es.po	2018-10-09 11:38:49.684843285 +0200
+@@ -1,81 +1,83 @@
+ # translation of cracklib.po to
+ # This file is put in the public domain.
+-# , 2003
+-#
++#, 2003
++# Waldo Ribeiro <waldoribeiro@sapo.pt>, 2016. #zanata
++# Máximo Castañeda Riloba <mcrcctm@gmail.com>, 2017. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-06-23 13:17+02:00\n"
+-"Last-Translator: Novell Language <language@novell.com>\n"
+-"Language-Team:  Novell Language <language@novell.com>\n"
+-"Language: \n"
++"PO-Revision-Date: 2018-08-16 12:44+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
++"Language-Team: Novell Language <language@novell.com>\n"
+ "MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=utf-8\n"
++"Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.0.1\n"
++"Language: es\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+-msgstr "Está basada en su nombre de usuario."
++msgstr "está basada en su nombre de usuario"
+ 
+ #: lib/fascist.c:576
+ msgid "it is based upon your password entry"
+-msgstr "Está basada en su contraseña."
++msgstr "está basada en su contraseña"
+ 
+ #: lib/fascist.c:591
+ msgid "it is derived from your password entry"
+-msgstr "Se deriva de su contraseña."
++msgstr "se deriva de su contraseña"
+ 
+ #: lib/fascist.c:599
+ msgid "it's derived from your password entry"
+-msgstr "Se deriva de su contraseña."
++msgstr "se deriva de su contraseña"
+ 
+ #: lib/fascist.c:608
+ msgid "it is derivable from your password entry"
+-msgstr "Puede derivarse de su contraseña."
++msgstr "puede derivarse de su contraseña"
+ 
+ #: lib/fascist.c:617
+ msgid "it's derivable from your password entry"
+-msgstr "Puede derivarse de su contraseña."
++msgstr "puede derivarse de su contraseña"
+ 
+ #: lib/fascist.c:674
+ msgid "you are not registered in the password file"
+-msgstr "No está registrado en el archivo de contraseñas."
++msgstr "no está registrado en el archivo de contraseñas"
+ 
+ #: lib/fascist.c:709
+ msgid "it is WAY too short"
+-msgstr "Es DEMASIADO corta."
++msgstr "es DEMASIADO corta"
+ 
+ #: lib/fascist.c:714
+ msgid "it is too short"
+-msgstr "Es demasiado corta."
++msgstr "es demasiado corta"
+ 
+ #: lib/fascist.c:731
+ msgid "it does not contain enough DIFFERENT characters"
+-msgstr "No contiene suficientes caracteres DIFERENTES."
++msgstr "no contiene suficientes caracteres DIFERENTES"
+ 
+ #: lib/fascist.c:745
+ msgid "it is all whitespace"
+-msgstr "Está formada sólo por espacios."
++msgstr "está formada sólo por espacios"
+ 
+ #: lib/fascist.c:764
+ msgid "it is too simplistic/systematic"
+-msgstr "Es demasiado simple/sistemática."
++msgstr "es demasiado simple/sistemática"
+ 
+ #: lib/fascist.c:769
+ msgid "it looks like a National Insurance number."
+-msgstr "Parece un número de la Seguridad Social."
++msgstr "parece un número de la Seguridad Social"
+ 
+ #: lib/fascist.c:801
+ msgid "it is based on a dictionary word"
+-msgstr "Está basada en una palabra del diccionario."
++msgstr "está basada en una palabra del diccionario"
+ 
+ #: lib/fascist.c:820
+ msgid "it is based on a (reversed) dictionary word"
+-msgstr "Está basada en una palabra del diccionario escrita al revés."
++msgstr "está basada en una palabra del diccionario escrita al revés"
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "error al cargar el diccionario"
+diff -urN cracklib-2.9.6.old/po/eu.po cracklib-2.9.6.new/po/eu.po
+--- cracklib-2.9.6.old/po/eu.po	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/po/eu.po	2018-10-09 11:38:46.701768899 +0200
+@@ -0,0 +1,79 @@
++# Mikel Olasagasti Uranga <mikel@olasagasti.info>, 2017. #zanata
++msgid ""
++msgstr ""
++"Project-Id-Version: cracklib 2.9.6\n"
++"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
++"POT-Creation-Date: 2015-08-18 13:45-0500\n"
++"PO-Revision-Date: 2017-04-11 05:46+0000\n"
++"Last-Translator: Mikel Olasagasti Uranga <mikel@olasagasti.info>\n"
++"Language-Team: Basque\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Language: eu\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
++
++#: lib/fascist.c:516
++msgid "it is based on your username"
++msgstr "zure erabiltzaile-izenean oinarrituta dago"
++
++#: lib/fascist.c:576
++msgid "it is based upon your password entry"
++msgstr ""
++
++#: lib/fascist.c:591
++msgid "it is derived from your password entry"
++msgstr ""
++
++#: lib/fascist.c:599
++msgid "it's derived from your password entry"
++msgstr ""
++
++#: lib/fascist.c:608
++msgid "it is derivable from your password entry"
++msgstr ""
++
++#: lib/fascist.c:617
++msgid "it's derivable from your password entry"
++msgstr ""
++
++#: lib/fascist.c:674
++msgid "you are not registered in the password file"
++msgstr ""
++
++#: lib/fascist.c:709
++msgid "it is WAY too short"
++msgstr "OSO laburra da"
++
++#: lib/fascist.c:714
++msgid "it is too short"
++msgstr "laburregia da"
++
++#: lib/fascist.c:731
++msgid "it does not contain enough DIFFERENT characters"
++msgstr "ez ditu nahikoa karaktere EZBERDIN"
++
++#: lib/fascist.c:745
++msgid "it is all whitespace"
++msgstr "karaktere guztiak zuriuneak dira"
++
++#: lib/fascist.c:764
++msgid "it is too simplistic/systematic"
++msgstr "oso sinple edo sistematikoa"
++
++#: lib/fascist.c:769
++msgid "it looks like a National Insurance number."
++msgstr "Gizarte Segurantza zenbakia dirudi (National Insurance)"
++
++#: lib/fascist.c:801
++msgid "it is based on a dictionary word"
++msgstr "hiztegiko hitz batean oinarritua da"
++
++#: lib/fascist.c:820
++msgid "it is based on a (reversed) dictionary word"
++msgstr "hiztegiko hitz batean oinarritua da (alderantziz)"
++
++#: lib/fascist.c:865
++msgid "error loading dictionary"
++msgstr "errorea hiztegia kargatzean"
+diff -urN cracklib-2.9.6.old/po/fi.po cracklib-2.9.6.new/po/fi.po
+--- cracklib-2.9.6.old/po/fi.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/fi.po	2018-10-09 11:39:09.467336563 +0200
+@@ -2,20 +2,22 @@
+ # Copyright (C) 2005 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+ # Jyri Palokangas <jmp@netti.fi>, 2005.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Jiri Grönroos <jiri.gronroos@iki.fi>, 2017. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-25 15:20+0300\n"
+-"Last-Translator: Jyri Palokangas <jmp@netti.fi>\n"
+-"Language-Team:  <fi@li.org>\n"
+-"Language: \n"
++"PO-Revision-Date: 2017-03-26 09:02+0000\n"
++"Last-Translator: Jiri Grönroos <jiri.gronroos@iki.fi>\n"
++"Language-Team: <fi@li.org>\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.10.2\n"
++"Language: fi\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -79,4 +81,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "virhe sanakirjaa ladatessa"
+diff -urN cracklib-2.9.6.old/po/fr.po cracklib-2.9.6.new/po/fr.po
+--- cracklib-2.9.6.old/po/fr.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/fr.po	2018-10-09 11:38:58.577065014 +0200
+@@ -1,20 +1,22 @@
+ # translation of cracklib.po to Français
+ # This file is put in the public domain.
+ # Patricia Vaz <Patricia.Vaz@suse.de>, 2003
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Jean-Baptiste Holcroft <jean-baptiste@holcroft.fr>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-06-23 13:17+02:00\n"
+-"Last-Translator: Novell Language <language@novell.com>\n"
++"PO-Revision-Date: 2018-08-16 12:44+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: Novell Language <language@novell.com>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=utf-8\n"
++"Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.0.1\n"
++"Language: fr\n"
++"Plural-Forms: nplurals=2; plural=(n > 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -78,4 +80,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "erreur lors du chargement du dictionnaire"
+diff -urN cracklib-2.9.6.old/po/gu.po cracklib-2.9.6.new/po/gu.po
+--- cracklib-2.9.6.old/po/gu.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/gu.po	2018-10-09 11:57:33.760928751 +0200
+@@ -1,84 +1,85 @@
+ # translation of cracklib.default.cracklib.gu.po to Gujarati
+ # Copyright (C) 2009 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+-#
++# 
+ # Ankit Patel <ankit@redhat.com>, 2009.
++# swkothar <swkothar@redhat.com>, 2013. #zanata
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: cracklib.default.cracklib.gu\n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-10-22 18:13+0530\n"
+-"Last-Translator: Ankit Patel <ankit@redhat.com>\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2012-12-14 16:11-0600\n"
++"PO-Revision-Date: 2013-09-24 05:01-0400\n"
++"Last-Translator: swkothar <swkothar@redhat.com>\n"
+ "Language-Team: Gujarati <fedora-trans-gu@redhat.com>\n"
+-"Language: gu\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
+-"Plural-Forms:  nplurals=2; plural=(n!=1);\n"
++"Language: gu\n"
++"Plural-Forms: nplurals=2; plural=(n!=1);\n"
+ "\n"
++"X-Generator: Zanata 3.1.2\n"
++
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "પાસવર્ડ ફાઈલમાં તમારી નોંધ થયેલ નથી"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "તમારા વપરાશકર્તા નામ પર આધારિત છે"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "તમારા પાસવર્ડ પ્રવેશ પર આધારિત છે"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "તમારા પાસવર્ડ પ્રવેશમાંથી તારવવામાં આવેલ છે"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "તમારા પાસવર્ડ પ્રવેશમાંથી તારવવામાં આવેલ છે"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "તમારા પાસવર્ડ પ્રવેશમાંથી તારવી શકાય તેવું છે"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "તમારા પાસવર્ડ પ્રવેશમાંથી તારવી શકાય તેવું છે"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "પાસવર્ડ ફાઈલમાં તમારી નોંધ થયેલ નથી"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "ખૂબ ટૂંકો છે"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "ખૂબ ટૂંકો છે"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "ભિન્ન અક્ષરો સમાવતો નથી"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "આ બધી ખાલી જગ્યા છે"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "ખૂબ સરળ છે/પદ્ધતિસરનું છે"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "રાષ્ટ્રિય વીમા નંબર જેવું દેખાય છે."
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "શબ્દકોષના શબ્દ પર આધારિત છે"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "(આરક્ષિત) શબ્દકોષના શબ્દ પર આધારિત છે"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "શબ્દકોષને લાવી રહ્યા હોય ત્યારે ભૂલ"
+diff -urN cracklib-2.9.6.old/po/he.po cracklib-2.9.6.new/po/he.po
+--- cracklib-2.9.6.old/po/he.po	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/po/he.po	2018-10-09 11:38:19.242084195 +0200
+@@ -0,0 +1,79 @@
++# Yaron Shahrabani <sh.yaron@gmail.com>, 2018. #zanata
++msgid ""
++msgstr ""
++"Project-Id-Version: cracklib 2.9.6\n"
++"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
++"POT-Creation-Date: 2015-08-18 13:45-0500\n"
++"PO-Revision-Date: 2018-03-20 10:17+0000\n"
++"Last-Translator: Yaron Shahrabani <sh.yaron@gmail.com>\n"
++"Language-Team: Hebrew\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Language: he\n"
++"Plural-Forms: nplurals=3; plural=n==1 ? 0 : n==2 ? 2 : 1;\n"
++"X-Generator: Zanata 4.6.2\n"
++
++#: lib/fascist.c:516
++msgid "it is based on your username"
++msgstr "מבוססת על שם המשתמש שלך"
++
++#: lib/fascist.c:576
++msgid "it is based upon your password entry"
++msgstr ""
++
++#: lib/fascist.c:591
++msgid "it is derived from your password entry"
++msgstr ""
++
++#: lib/fascist.c:599
++msgid "it's derived from your password entry"
++msgstr ""
++
++#: lib/fascist.c:608
++msgid "it is derivable from your password entry"
++msgstr ""
++
++#: lib/fascist.c:617
++msgid "it's derivable from your password entry"
++msgstr ""
++
++#: lib/fascist.c:674
++msgid "you are not registered in the password file"
++msgstr "לא נרשמת בקובץ הססמאות"
++
++#: lib/fascist.c:709
++msgid "it is WAY too short"
++msgstr "קצרה ביותר"
++
++#: lib/fascist.c:714
++msgid "it is too short"
++msgstr "קצרה מדי"
++
++#: lib/fascist.c:731
++msgid "it does not contain enough DIFFERENT characters"
++msgstr "אינה מכילה מספיק תווים שונים"
++
++#: lib/fascist.c:745
++msgid "it is all whitespace"
++msgstr "כולה רווחים"
++
++#: lib/fascist.c:764
++msgid "it is too simplistic/systematic"
++msgstr "מערכתית/פשוטה מדי"
++
++#: lib/fascist.c:769
++msgid "it looks like a National Insurance number."
++msgstr "נראית כמו מספר תעודת זהות/ביטוח לאומי"
++
++#: lib/fascist.c:801
++msgid "it is based on a dictionary word"
++msgstr "מבוססת על מילה במילון"
++
++#: lib/fascist.c:820
++msgid "it is based on a (reversed) dictionary word"
++msgstr "מבוססת על (היפוך של) מילה במילון"
++
++#: lib/fascist.c:865
++msgid "error loading dictionary"
++msgstr "שגיאה בטעינת המילון"
+diff -urN cracklib-2.9.6.old/po/hi.po cracklib-2.9.6.new/po/hi.po
+--- cracklib-2.9.6.old/po/hi.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/hi.po	2018-10-09 11:57:33.760928751 +0200
+@@ -2,84 +2,85 @@
+ # Hindi translations for cracklib package.
+ # Copyright (C) 2009, 2010 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the cracklib package.
+-#
++# 
+ # Rajesh Ranjan <rranjan@redhat.com>, 2010.
++# rranjan <rranjan@redhat.com>, 2013. #zanata
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: cracklib.default.cracklib\n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2010-04-06 12:21+0530\n"
+-"Last-Translator: Rajesh Ranjan <rranjan@redhat.com>\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2012-12-14 16:11-0600\n"
++"PO-Revision-Date: 2013-10-23 04:21-0400\n"
++"Last-Translator: rranjan <rranjan@redhat.com>\n"
+ "Language-Team: Hindi <Red Hat>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
++"Language: hi\n"
+ "Plural-Forms: nplurals=2; plural=(n!=1);\n"
+ "\n"
++"X-Generator: Zanata 3.1.2\n"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "आप कूटशब्द फ़ाइल में पंजीकृत नहीं हैं"
++
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "यह आपके उपयोक्ता नाम पर आधारित है"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "यह आपकी कूटशब्द प्रविष्टि पर आधारित है"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "यह आपकी कूटशब्द प्रविष्टि से निकला हुआ है"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "यह आपकी कूटशब्द प्रविष्टि से निकला हुआ है"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "यह आपकी कूटशब्द प्रविष्टि से निकलने योग्य है"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "यह आपकी कूटशब्द प्रविष्टि से निकलने योग्य है"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "आप कूटशब्द फ़ाइल में पंजीकृत नहीं हैं"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "यह बहुत ही छोटा है"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "यह बहुत छोटा है"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "इसमें पर्याप्त मात्रा में भिन्न वर्ण समाहित नहीं हैं"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "यह पूरी तरह से खाली स्थान है"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "यह काफी सरल/क्रमबद्ध है"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "यह राष्ट्रीय बीमा संख्या की तरह दिखता है."
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "यह शब्दकोश के शब्द पर आधारित है"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "यह शब्दकोश के शब्द (विलोम) पर आधारित है"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "शब्दकोश लोड करने में त्रुटि"
+diff -urN cracklib-2.9.6.old/po/hu.po cracklib-2.9.6.new/po/hu.po
+--- cracklib-2.9.6.old/po/hu.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/hu.po	2018-10-09 11:38:16.351012456 +0200
+@@ -2,48 +2,49 @@
+ # This file is put in the public domain.
+ # Marcel Hilzinger <hili@suselinux.hu>, 2003.
+ # Gábor Szentiványi <szenti@suselinux.hu>, 2003
+-#
++# Meskó Balázs <meskobalazs@gmail.com>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib.hu\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-06 20:20+0100\n"
+-"Last-Translator: Szabolcs Varga <shirokuma@shirokuma.hu>\n"
++"PO-Revision-Date: 2016-09-10 06:40+0000\n"
++"Last-Translator: Meskó Balázs <meskobalazs@gmail.com>\n"
+ "Language-Team: hungarian\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.0.1\n"
++"Language: hu\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+-msgstr "az Ön felhasználónevén alapszik"
++msgstr "a felhasználónevén alapszik"
+ 
+ #: lib/fascist.c:576
+ msgid "it is based upon your password entry"
+-msgstr "az Ön jelszóbejegyzésén alapszik"
++msgstr "a jelszóbejegyzésén alapszik"
+ 
+ #: lib/fascist.c:591
+ msgid "it is derived from your password entry"
+-msgstr "az Ön jelszóbejegyzéséból lett származtatva"
++msgstr "a jelszóbejegyzéséből lett származtatva"
+ 
+ #: lib/fascist.c:599
+ msgid "it's derived from your password entry"
+-msgstr "az Ön jelszóbejegyzéséból lett származtatva"
++msgstr "a jelszóbejegyzéséből lett származtatva"
+ 
+ #: lib/fascist.c:608
+ msgid "it is derivable from your password entry"
+-msgstr "kitalálható az Ön jelszóbejegyzéséből"
++msgstr "kitalálható a jelszóbejegyzéséből"
+ 
+ #: lib/fascist.c:617
+ msgid "it's derivable from your password entry"
+-msgstr "kitalálható az Ön jelszóbejegyzéséből"
++msgstr "kitalálható a jelszóbejegyzéséből"
+ 
+ #: lib/fascist.c:674
+ msgid "you are not registered in the password file"
+-msgstr "Ön nem szerepel a password fájlban"
++msgstr "nincs regisztrálva a jelszófájlban"
+ 
+ #: lib/fascist.c:709
+ msgid "it is WAY too short"
+@@ -59,7 +60,7 @@
+ 
+ #: lib/fascist.c:745
+ msgid "it is all whitespace"
+-msgstr "csak szóközszerű karakterekből áll"
++msgstr "csak üres karakterekből áll"
+ 
+ #: lib/fascist.c:764
+ msgid "it is too simplistic/systematic"
+@@ -71,12 +72,12 @@
+ 
+ #: lib/fascist.c:801
+ msgid "it is based on a dictionary word"
+-msgstr "a szótárban megtalálható"
++msgstr "szótári szón alapszik"
+ 
+ #: lib/fascist.c:820
+ msgid "it is based on a (reversed) dictionary word"
+-msgstr "visszafelé olvasva egy ismert szót ad"
++msgstr "(megfordított) szótári szón alapszik"
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "hiba a szótár betöltésekor"
+diff -urN cracklib-2.9.6.old/po/id.po cracklib-2.9.6.new/po/id.po
+--- cracklib-2.9.6.old/po/id.po	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/po/id.po	2018-10-09 11:38:48.634817101 +0200
+@@ -0,0 +1,79 @@
++# Andika Triwidada <andika@gmail.com>, 2017. #zanata
++msgid ""
++msgstr ""
++"Project-Id-Version: cracklib 2.9.6\n"
++"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
++"POT-Creation-Date: 2015-08-18 13:45-0500\n"
++"PO-Revision-Date: 2017-07-24 12:45+0000\n"
++"Last-Translator: Andika Triwidada <andika@gmail.com>\n"
++"Language-Team: Indonesian\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Language: id\n"
++"Plural-Forms: nplurals=1; plural=0\n"
++"X-Generator: Zanata 4.6.2\n"
++
++#: lib/fascist.c:516
++msgid "it is based on your username"
++msgstr "ini berbasis pada nama Anda"
++
++#: lib/fascist.c:576
++msgid "it is based upon your password entry"
++msgstr "ini berbasis pada entri kata sandi Anda"
++
++#: lib/fascist.c:591
++msgid "it is derived from your password entry"
++msgstr "ini diturunkan dari entri kata sandi Anda"
++
++#: lib/fascist.c:599
++msgid "it's derived from your password entry"
++msgstr "ini diturunkan dari entri kata sandi Anda"
++
++#: lib/fascist.c:608
++msgid "it is derivable from your password entry"
++msgstr "ini dapat diturunkan dari entri kata sandi Anda"
++
++#: lib/fascist.c:617
++msgid "it's derivable from your password entry"
++msgstr "ini dapat diturunkan dari entri kata sandi Anda"
++
++#: lib/fascist.c:674
++msgid "you are not registered in the password file"
++msgstr "Anda tidak terdaftar dalam berkas kata sandi"
++
++#: lib/fascist.c:709
++msgid "it is WAY too short"
++msgstr "ini KETERLALUAN pendeknya"
++
++#: lib/fascist.c:714
++msgid "it is too short"
++msgstr "ini terlalu pendek"
++
++#: lib/fascist.c:731
++msgid "it does not contain enough DIFFERENT characters"
++msgstr "ini tidak memuat cukup karakter yang BERBEDA"
++
++#: lib/fascist.c:745
++msgid "it is all whitespace"
++msgstr "ini semua keluarga spasi"
++
++#: lib/fascist.c:764
++msgid "it is too simplistic/systematic"
++msgstr "ini terlalu sederhana/sistematis"
++
++#: lib/fascist.c:769
++msgid "it looks like a National Insurance number."
++msgstr "ini tampak seperti nomor Asuransi Nasional."
++
++#: lib/fascist.c:801
++msgid "it is based on a dictionary word"
++msgstr "ini berbasis pada kata kamus"
++
++#: lib/fascist.c:820
++msgid "it is based on a (reversed) dictionary word"
++msgstr "ini berbasis pada kata kamus (terbalik)"
++
++#: lib/fascist.c:865
++msgid "error loading dictionary"
++msgstr "galat saat memuat kamus"
+diff -urN cracklib-2.9.6.old/po/it.po cracklib-2.9.6.new/po/it.po
+--- cracklib-2.9.6.old/po/it.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/it.po	2018-10-09 11:38:39.759595795 +0200
+@@ -1,20 +1,22 @@
+ # SOME DESCRIPTIVE TITLE.
+ # This file is put in the public domain.
+ # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Luca Ciavatta <luca.ciavatta@gmail.com>, 2017. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-06-23 13:15+02:00\n"
+-"Last-Translator: Novell Language <language@novell.com>\n"
++"PO-Revision-Date: 2018-08-16 12:44+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: Novell Language <language@novell.com>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=utf-8\n"
++"Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 0.9.6\n"
++"Language: it\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -78,4 +80,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "Errore di caricamento del dizionario"
+diff -urN cracklib-2.9.6.old/po/ja.po cracklib-2.9.6.new/po/ja.po
+--- cracklib-2.9.6.old/po/ja.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/ja.po	2018-10-09 11:38:02.366667678 +0200
+@@ -2,19 +2,22 @@
+ # Copyright (C) YEAR Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+ # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Ludek Janda <ljanda@redhat.com>, 2018. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-18 11:52-0000\n"
+-"Last-Translator: Novell Language <language@novell.com>\n"
++"PO-Revision-Date: 2018-08-16 12:48+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: Novell Language <language@novell.com>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
++"Language: ja\n"
++"Plural-Forms: nplurals=1; plural=0\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -78,4 +81,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "辞書の読み込み中二エラーが発生しました"
+diff -urN cracklib-2.9.6.old/po/kk.po cracklib-2.9.6.new/po/kk.po
+--- cracklib-2.9.6.old/po/kk.po	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/po/kk.po	2018-10-09 11:39:13.394434486 +0200
+@@ -0,0 +1,79 @@
++# Baurzhan Muftakhidinov <baurthefirst@gmail.com>, 2017. #zanata
++msgid ""
++msgstr ""
++"Project-Id-Version: cracklib 2.9.6\n"
++"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
++"POT-Creation-Date: 2015-08-18 13:45-0500\n"
++"PO-Revision-Date: 2017-04-11 12:05+0000\n"
++"Last-Translator: Baurzhan Muftakhidinov <baurthefirst@gmail.com>\n"
++"Language-Team: Kazakh\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Language: kk\n"
++"Plural-Forms: nplurals=1; plural=0\n"
++"X-Generator: Zanata 4.6.2\n"
++
++#: lib/fascist.c:516
++msgid "it is based on your username"
++msgstr "ол сіздің пайдаланушы атыңызға негізделген"
++
++#: lib/fascist.c:576
++msgid "it is based upon your password entry"
++msgstr ""
++
++#: lib/fascist.c:591
++msgid "it is derived from your password entry"
++msgstr ""
++
++#: lib/fascist.c:599
++msgid "it's derived from your password entry"
++msgstr ""
++
++#: lib/fascist.c:608
++msgid "it is derivable from your password entry"
++msgstr ""
++
++#: lib/fascist.c:617
++msgid "it's derivable from your password entry"
++msgstr ""
++
++#: lib/fascist.c:674
++msgid "you are not registered in the password file"
++msgstr ""
++
++#: lib/fascist.c:709
++msgid "it is WAY too short"
++msgstr "ол ТЫМ қысқа"
++
++#: lib/fascist.c:714
++msgid "it is too short"
++msgstr "ол тым қысқа"
++
++#: lib/fascist.c:731
++msgid "it does not contain enough DIFFERENT characters"
++msgstr ""
++
++#: lib/fascist.c:745
++msgid "it is all whitespace"
++msgstr ""
++
++#: lib/fascist.c:764
++msgid "it is too simplistic/systematic"
++msgstr ""
++
++#: lib/fascist.c:769
++msgid "it looks like a National Insurance number."
++msgstr ""
++
++#: lib/fascist.c:801
++msgid "it is based on a dictionary word"
++msgstr ""
++
++#: lib/fascist.c:820
++msgid "it is based on a (reversed) dictionary word"
++msgstr ""
++
++#: lib/fascist.c:865
++msgid "error loading dictionary"
++msgstr ""
+diff -urN cracklib-2.9.6.old/po/kn.po cracklib-2.9.6.new/po/kn.po
+--- cracklib-2.9.6.old/po/kn.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/kn.po	2018-10-09 11:57:33.760928751 +0200
+@@ -1,83 +1,84 @@
+ # translation of cracklib.po to Kannada
+ # Copyright (C) 2008 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+-#
++# 
+ # Shankar Prasad <svenkate@redhat.com>, 2008.
++# Shankar Prasad <svenkate@redhat.com>, 2008, 2013.
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2008-12-11 11:49+0530\n"
++"Project-Id-Version: PACKAGE VERSION\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2013-08-06 14:45+0530\n"
++"PO-Revision-Date: 2013-10-28 02:15-0400\n"
+ "Last-Translator: Shankar Prasad <svenkate@redhat.com>\n"
+-"Language-Team: Kannada <en@li.org>\n"
+-"Language: kn\n"
++"Language-Team: Kannada <kde-i18n-doc@kde.org>\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
+-"Plural-Forms:  nplurals=2; plural=(n != 1);\n"
++"Language: kn\n"
++"Plural-Forms: nplurals=2; plural=(n != 1);\n"
++"X-Generator: Zanata 3.1.2\n"
++
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "ಗುಪ್ತಪದದ ಕಡತದಲ್ಲಿ ನಿಮ್ಮ ಹೆಸರು ನೋಂದಾಯಿಸಲ್ಪಟ್ಟಿಲ್ಲ"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "ಇದು ನಿಮ್ಮ ಬಳಕೆದಾರಹೆಸರಿನ ಮೇಲೆ ಆಧರಿತವಾಗಿದೆ"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "ಇದು ನಿಮ್ಮ ಗುಪ್ತಪದ ನಮೂದಿನ ಮೇಲೆ ಆಧರಿತವಾಗಿದೆ"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "ಇದನ್ನು ನಿಮ್ಮ ಗುಪ್ತಪದ ನಮೂದಿನಿಂದ ತೆಗೆದುಕೊಳ್ಳಲಾಗಿದೆ"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "ಇದು ನಿಮ್ಮ ಗುಪ್ತಪದ ನಮೂದಿನಿಂದ ತೆಗೆದುಕೊಳ್ಳಲ್ಪಟ್ಟಿದೆ"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "ಇದನ್ನು ನಿಮ್ಮ ಗುಪ್ತಪದ ನಮೂದಿನಿಂದ ತೆಗೆದುಕೊಳ್ಳಬಹುದಾಗಿದೆ"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "ಇದನ್ನು ನಿಮ್ಮ ಗುಪ್ತಪದ ನಮೂದಿನಿಂದ ತೆಗೆದುಕೊಳ್ಳಬಹುದಾಗಿದೆ"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "ಗುಪ್ತಪದದ ಕಡತದಲ್ಲಿ ನಿಮ್ಮ ಹೆಸರು ನೋಂದಾಯಿಸಲ್ಪಟ್ಟಿಲ್ಲ"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "ಇದು ಅತ್ಯಂತ ಚಿಕ್ಕದಾಗಿದೆ"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "ಇದು ಬಹಳ ಚಿಕ್ಕದಾಗಿದೆ"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "ಇದು ವಿಭಿನ್ನವಾದ ಸಾಕಷ್ಟು ಅಕ್ಷರಗಳನ್ನು ಹೊಂದಿಲ್ಲ"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "ಇದು ಕೇವಲ ಖಾಲಿ ಜಾಗಗಳನ್ನು ಹೊಂದಿದೆ"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "ಇದು ಬಹಳ ಸರಳ/ಊಹಿಸಬಹುದಾಗಿದೆ"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "ಇದು ರಾಷ್ಟ್ರೀಯ ವಿಮೆ ಸಂಖ್ಯೆಯಂತೆ ಕಾಣಿಸುತ್ತಿದೆ"
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "ಇದು ಶಬ್ಧಕೋಶದಲ್ಲಿನ ಒಂದು ಪದದಂತಿದೆ"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "ಇದು ಶಬ್ಧಕೋಶದಲ್ಲಿನ ಒಂದು ಪದದಂತಿದೆ(ತಿರುಮುರುವು)"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "ಕೋಶವನ್ನು ಲೋಡ್ ಮಾಡುವಲ್ಲಿ ದೋಷ"
+diff -urN cracklib-2.9.6.old/po/ko.po cracklib-2.9.6.new/po/ko.po
+--- cracklib-2.9.6.old/po/ko.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/ko.po	2018-10-09 11:39:16.328507645 +0200
+@@ -3,20 +3,22 @@
+ # This file is distributed under the same license as the PACKAGE package.
+ #
+ # Eunju Kim <eukim@redhat.com>, 2009.
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Ludek Janda <ljanda@redhat.com>, 2018. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib.default\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-11-18 11:19+1000\n"
+-"Last-Translator: Eunju Kim <eukim@redhat.com>\n"
++"PO-Revision-Date: 2018-08-21 09:51+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: Korean <ko@li.org>\n"
+-"Language: ko\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
+-"Plural-Forms:  nplurals=1; plural=0;\n"
++"Language: ko\n"
++"Plural-Forms: nplurals=1; plural=0;\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -80,4 +82,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "사전을 로드하는 도중 오류가 발생했습니다 "
+diff -urN cracklib-2.9.6.old/po/LINGUAS cracklib-2.9.6.new/po/LINGUAS
+--- cracklib-2.9.6.old/po/LINGUAS	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/po/LINGUAS	2018-10-09 12:14:53.147237727 +0200
+@@ -0,0 +1 @@
++as be bn_IN ca cs da de el es eu fi fr gu he hi hu id it ja kk kn ko lt ml mr nb nl or pa pl pt_BR pt ru sk sl_SI sq sv ta te tr uk zh_CN zh_TW
+diff -urN cracklib-2.9.6.old/po/lt.po cracklib-2.9.6.new/po/lt.po
+--- cracklib-2.9.6.old/po/lt.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/lt.po	2018-10-09 11:38:04.314715706 +0200
+@@ -2,19 +2,21 @@
+ # Copyright (C) YEAR Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+ # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-04 12:05+0200\n"
+-"Last-Translator: Linas Spraunius <linas@operis.org>\n"
++"PO-Revision-Date: 2016-06-18 01:02+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: lt\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
++"Language: lt\n"
++"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && (n%100<10 || n%100>=20) ? 1 : 2)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+diff -urN cracklib-2.9.6.old/po/ml.po cracklib-2.9.6.new/po/ml.po
+--- cracklib-2.9.6.old/po/ml.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/ml.po	2018-10-09 11:57:33.760928751 +0200
+@@ -2,81 +2,82 @@
+ # Copyright (C) 2009 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the cracklib package.
+ # Ani Peter <apeter@redhat.com>, 2009.
+-#
++# apeter <apeter@redhat.com>, 2013. #zanata
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: cracklib\n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-11-11 14:46+0530\n"
+-"Last-Translator: Ani Peter <apeter@redhat.com>\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2012-12-14 16:11-0600\n"
++"PO-Revision-Date: 2013-10-28 08:56-0400\n"
++"Last-Translator: apeter <apeter@redhat.com>\n"
+ "Language-Team: Malayalam\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
++"Language: ml\n"
++"X-Generator: Zanata 3.1.2\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "നിങ്ങള്‍ രഹസ്യവാക്കിനുള്ള ഫയലില്‍ രജിസ്ടര്‍ ചെയ്തിട്ടില്ല"
++
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "നിങ്ങളുടെ ഉപയോക്തൃനാമം അനുസരിച്ചാണു്"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "നിങ്ങളുടെ രഹസ്യവാക്കനുസരിച്ചാണു്"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "നിങ്ങളുടെ രഹസ്യവാക്കില്‍ നിന്നും ലഭ്യമാക്കുന്നു"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "നിങ്ങളുടെ രഹസ്യവാക്കില്‍ നിന്നും ലഭ്യമാക്കുന്നു"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "നിങ്ങളുടെ രഹസ്യവാക്കില്‍ നിന്നും ലഭ്യമാക്കുവാന്‍ സാധിക്കുന്നു"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "നിങ്ങളുടെ രഹസ്യവാക്കില്‍ നിന്നും ലഭ്യമാക്കുന്നു"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "നിങ്ങള്‍ രഹസ്യവാക്കിനുള്ള ഫയലില്‍ രജിസ്ടര്‍ ചെയ്തിട്ടില്ല"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "വളരെ ചെറുതാണു്"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "വളരെ ചെറുതാണു്"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "അനവധി തരത്തിലുള്ള അക്ഷരങ്ങള്‍ നല്‍കുക"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "എല്ലാം വൈറ്റ്സ്പെയിസാണു്"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "വളരെ ലളിതമാണു്"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "ഒരു നാഷണല്‍ ഇന്‍ഷുറന്‍സ് നംബര്‍ പോലുണ്ടു്."
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "നിഘണ്ടുവിലുള്ള ഒരു വാക്കിനെ അടിസ്ഥാനമാക്കിയുള്ളതാണു്"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "നിഘണ്ടുവിലുള്ള ഒരു വാക്കിനെ അടിസ്ഥാനമാക്കിയുള്ളതാണു്"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "നിഘണ്ടു ലഭ്യമാക്കുന്നതില്‍ പിശക്"
+diff -urN cracklib-2.9.6.old/po/mr.po cracklib-2.9.6.new/po/mr.po
+--- cracklib-2.9.6.old/po/mr.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/mr.po	2018-10-09 11:57:33.761928776 +0200
+@@ -1,83 +1,84 @@
+ # translation of cracklib.default.cracklib.po to Marathi
+ # Copyright (C) 2009 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+-#
++# 
+ # Sandeep Shedmake <sshedmak@redhat.com>, 2009.
++# Sandeep Shedmake <sshedmak@redhat.com>, 2009, 2013.
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib.default.cracklib\n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-11-11 12:24+0530\n"
++"Project-Id-Version: PACKAGE VERSION\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2013-08-06 14:45+0530\n"
++"PO-Revision-Date: 2013-10-13 01:28-0400\n"
+ "Last-Translator: Sandeep Shedmake <sshedmak@redhat.com>\n"
+ "Language-Team: Marathi <fedora-trans-mr@redhat.com>\n"
+-"Language: mr\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
++"Language: mr\n"
+ "Plural-Forms: nplurals=2; plural=(n!=1);\n"
++"X-Generator: Zanata 3.1.2\n"
++
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "तुम्ही पासवर्ड फाइलमध्ये नोंदणीकृत नाही"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "तुमच्या वापरकर्तानावावर आधारीत आहे"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "तुमच्या पासवर्ड नोंदवर आधारीत आहे"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "तुमच्या पासवर्ड नोंद पासून प्राप्त आहे"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "तुमच्या पासवर्ड नोंद पासून प्राप्त"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "तुमच्या पासवर्ड नोंद पासून प्राप्यजोगी आहे"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "तुमच्या पासवर्ड नोंद पासून प्राप्यजोगी"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "तुम्ही पासवर्ड फाइलमध्ये नोंदणीकृत नाही"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "खूपच लहान"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "खूप लहान आहे"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "अतिरीक्त वेगळे अक्षर समाविष्टीत नाही"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "सर्वत्र वाईटस्पेस् आहे"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "खूपच सोपे/पद्धतशीर आहे"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "राष्ट्रीय इन्शॉरन्स् क्रमांक प्रमाणे आढळते."
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "शब्दकोषमधील शब्दावर आधारीत आहे"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "(उलटे) शब्दकोषमधील शब्दावर आधारीत आहे"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "शब्दकोष लोड करतेवेळी त्रुटी"
+diff -urN cracklib-2.9.6.old/po/nb.po cracklib-2.9.6.new/po/nb.po
+--- cracklib-2.9.6.old/po/nb.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/nb.po	2018-10-09 11:38:53.611941207 +0200
+@@ -2,20 +2,21 @@
+ # Copyright (C) 2005 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+ # Olav Pettershagen <olav.pet@online.no>, 2005.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: nb\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-11 20:48+0200\n"
+-"Last-Translator: Olav Pettershagen <olav.pet@online.no>\n"
+-"Language-Team:  <nb@li.org>\n"
+-"Language: \n"
++"PO-Revision-Date: 2016-06-18 01:02+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
++"Language-Team: <nb@li.org>\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.10.2\n"
++"Language: nb\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+diff -urN cracklib-2.9.6.old/po/nl.po cracklib-2.9.6.new/po/nl.po
+--- cracklib-2.9.6.old/po/nl.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/nl.po	2018-10-09 11:38:51.650892308 +0200
+@@ -4,21 +4,22 @@
+ # This file is put in the public domain.
+ # Arthur & Ettie Kerkmeester <a.s.kerkmeester@hccnet.nl>, 2003.
+ # Rinse de Vries <rinsedevries@kde.nl>, 2005.
+-#
++# Geert Warrink <geert.warrink@onsnet.nu>, 2016. #zanata
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: nl\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-14 05:41+0200\n"
+-"Last-Translator: Rinse de Vries <rinsedevries@kde.nl>\n"
++"PO-Revision-Date: 2016-09-01 06:35+0000\n"
++"Last-Translator: Geert Warrink <geert.warrink@onsnet.nu>\n"
+ "Language-Team: Dutch <kde-i18n-nl@kde.org>\n"
+-"Language: nl\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.10.2\n"
+-"Plural-Forms:  nplurals=2; plural=(n != 1);\n"
++"Language: nl\n"
++"Plural-Forms: nplurals=2; plural=(n != 1);\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -82,4 +83,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "fout bij laden woordenboek"
+diff -urN cracklib-2.9.6.old/po/or.po cracklib-2.9.6.new/po/or.po
+--- cracklib-2.9.6.old/po/or.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/or.po	2018-10-09 11:57:33.761928776 +0200
+@@ -1,84 +1,85 @@
+ # translation of cracklib.default.cracklib.or.po to Oriya
+ # Copyright (C) 2009 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+-#
++# 
+ # Manoj Kumar Giri <mgiri@redhat.com>, 2009.
++# mgiri <mgiri@redhat.com>, 2013. #zanata
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: cracklib.default.cracklib.or\n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-11-12 13:02+0530\n"
+-"Last-Translator: Manoj Kumar Giri <mgiri@redhat.com>\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2012-12-14 16:11-0600\n"
++"PO-Revision-Date: 2013-10-22 06:40-0400\n"
++"Last-Translator: mgiri <mgiri@redhat.com>\n"
+ "Language-Team: Oriya <oriya-it@googlegroups.com>\n"
+-"Language: or\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
+-"Plural-Forms:  nplurals=2; plural=(n!=1);\n"
++"Language: or\n"
++"Plural-Forms: nplurals=2; plural=(n!=1);\n"
+ "\n"
++"X-Generator: Zanata 3.1.2\n"
++
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "ପ୍ରବେଶ ସଂକେତ ଫାଇଲରେ ଆପଣ ପଞ୍ଜିକୃତ ହୋଇନାହାନ୍ତି"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "ଏହା ଆପଣଙ୍କର ଚାଳକନାମ ଉପରେ ଆଧାରିତ"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "ଏହା ଆପଣଙ୍କର ପ୍ରବେଶ ସଂକେତ ଭରଣ ଉପରେ ଆଧାରିତ"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "ଏହା ଆପଣଙ୍କର ପ୍ରବେଶ ସଂକେତ ଭରଣରୁ ଉତ୍ପନ୍ନ କରାହୋଇଥାଏ"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "ଏହା ଆପଣଙ୍କର ପ୍ରବେଶ ସଂକେତ ଭରଣରୁ ଉତ୍ପନ୍ନ କରାହୋଇଥାଏ"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "ଏହା ଆପଣଙ୍କର ପ୍ରବେଶ ସଂକେତ ଭରଣରୁ ଉତ୍ପନ୍ନ କରିବା ଯୋଗ୍ୟ"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "ଏହା ଆପଣଙ୍କର ପ୍ରବେଶ ସଂକେତ ଭରଣରୁ ଉତ୍ପନ୍ନ କରିବା ଯୋଗ୍ୟ"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "ପ୍ରବେଶ ସଂକେତ ଫାଇଲରେ ଆପଣ ପଞ୍ଜିକୃତ ହୋଇନାହାନ୍ତି"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "ଏହା ଅତ୍ୟଧିକ ଛୋଟ ଅଟେ"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "ଏହା ଅତ୍ୟଧିକ ଛୋଟ ଅଟେ"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "ଏହା ଯଥେଷ୍ଟ ଭିନ୍ନ ବର୍ଣ୍ଣ ଧାରଣ କରିନଥାଏ"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "ଏହା କେବଳ ଖାଲିସ୍ଥାନ ଅଟେ"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "ଏହା ଅତ୍ୟଧିକ ସରଳ/ନିୟମାନୁବର୍ତ୍ତୀ"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "ଏହା ଗୋଟିଏ ଜାତୀୟ ବୀମା ସଂଖ୍ୟା ପରି ଦେଖାଯାଉଛି।"
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "ଏହା ଅଭିଧାନ ଶବ୍ଦ ଉପରେ ଆଧାରିତ"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "ଏହା ଗୋଟିଏ (ଓଲଟା) ଅଭିଧାନ ଶବ୍ଦ ଉପରେ ଆଧାରିତ"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "ଅଭିଧାନ ଧାରଣ କରିବାରେ ତ୍ରୁଟି"
+diff -urN cracklib-2.9.6.old/po/pa.po cracklib-2.9.6.new/po/pa.po
+--- cracklib-2.9.6.old/po/pa.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/pa.po	2018-10-09 11:38:05.301740041 +0200
+@@ -5,24 +5,26 @@
+ #
+ # Amanpreet Singh Alam[ਆਲਮ] <amanpreetalam@yahoo.com>, 2005, 2009.
+ # A S Alam <aalam@users.sf.net>, 2009.
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# A S Alam <aalam@fedoraproject.org>, 2017. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib.pa\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-11-17 05:52+0530\n"
+-"Last-Translator: A S Alam <aalam@users.sf.net>\n"
++"PO-Revision-Date: 2017-08-18 07:15+0000\n"
++"Last-Translator: A S Alam <aalam@fedoraproject.org>\n"
+ "Language-Team: Punjabi/Panjabi <punjabi-users@lists.sf.net>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: Lokalize 1.0\n"
++"Language: pa\n"
+ "Plural-Forms: nplurals=2; plural=(n != 1);\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+-msgstr "ਇਹ ਤੁਹਾਡੇ ਯੂਜ਼ਰ-ਨਾਂ ਮੁਤਾਬਿਕ ਨਹੀਂ ਹੈ"
++msgstr "ਇਹ ਤੁਹਾਡੇ ਵਰਤੋਂਕਾਰ-ਨਾਂ ਮੁਤਾਬਕ ਹੈ"
+ 
+ #: lib/fascist.c:576
+ msgid "it is based upon your password entry"
+@@ -50,7 +52,7 @@
+ 
+ #: lib/fascist.c:709
+ msgid "it is WAY too short"
+-msgstr "ਇਹ ਬਹੁਤ ਹੀ ਛੋਟਾ ਢੰਗ ਹੈ"
++msgstr "ਇਹ ਬਹੁਤ ਹੀ ਛੋਟਾ ਹੈ"
+ 
+ #: lib/fascist.c:714
+ msgid "it is too short"
+@@ -70,7 +72,7 @@
+ 
+ #: lib/fascist.c:769
+ msgid "it looks like a National Insurance number."
+-msgstr "ਇਹ ਰਾਸ਼ਟਰੀ ਸੁਰੱਖਿਆ ਨੰਬਰ ਵਰਗਾ ਜਾਪਦਾ ਹੈ।"
++msgstr "ਇਹ ਨੈਸ਼ਨਲ ਇਨਸ਼ੋਅਰੈਂਸ ਨੰਬਰ ਵਰਗਾ ਜਾਪਦਾ ਹੈ।"
+ 
+ #: lib/fascist.c:801
+ msgid "it is based on a dictionary word"
+@@ -78,8 +80,8 @@
+ 
+ #: lib/fascist.c:820
+ msgid "it is based on a (reversed) dictionary word"
+-msgstr "ਇਹ (ਉਲਟੇ) ਡਿਕਸ਼ਨਰੀ ਸ਼ਬਦ ਉੱਤੇ ਅਧਾਰਿਤ ਹੈ"
++msgstr "ਇਹ (ਉਲਟ) ਡਿਕਸ਼ਨਰੀ ਸ਼ਬਦ ਉੱਤੇ ਅਧਾਰਿਤ ਹੈ"
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "ਡਿਕਸ਼ਨਰੀ ਲੋਡ ਕਰਨ ਦੌਰਾਨ ਗਲਤੀ"
+diff -urN cracklib-2.9.6.old/po/pl.po cracklib-2.9.6.new/po/pl.po
+--- cracklib-2.9.6.old/po/pl.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/pl.po	2018-10-09 11:38:10.401865781 +0200
+@@ -1,19 +1,22 @@
+ # translation of pl.po to Polish
+ # Piotr Bolek <pb@7bull.com>, 2005.
+ # Piotr Drąg <piotrdrag@gmail.com>, 2009.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Piotr Drąg <piotrdrag@gmail.com>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: pl\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-10-12 15:57+0200\n"
++"PO-Revision-Date: 2016-08-31 09:50+0000\n"
+ "Last-Translator: Piotr Drąg <piotrdrag@gmail.com>\n"
+ "Language-Team: Polish <fedora-trans-pl@redhat.com>\n"
+-"Language: pl\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
++"Language: pl\n"
++"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -21,27 +24,27 @@
+ 
+ #: lib/fascist.c:576
+ msgid "it is based upon your password entry"
+-msgstr "oparte na wpisie w pliku passwd"
++msgstr "oparte na wpisie w pliku passwd"
+ 
+ #: lib/fascist.c:591
+ msgid "it is derived from your password entry"
+-msgstr "pochodzi od wpisu w pliku passwd"
++msgstr "pochodzi od wpisu w pliku passwd"
+ 
+ #: lib/fascist.c:599
+ msgid "it's derived from your password entry"
+-msgstr "pochodzi od wpisu w pliku passwd"
++msgstr "pochodzi od wpisu w pliku passwd"
+ 
+ #: lib/fascist.c:608
+ msgid "it is derivable from your password entry"
+-msgstr "da się odtworzyć z wpisu w pliku passwd"
++msgstr "da się odtworzyć z wpisu w pliku passwd"
+ 
+ #: lib/fascist.c:617
+ msgid "it's derivable from your password entry"
+-msgstr "da się odtworzyć z wpisu w pliku passwd"
++msgstr "da się odtworzyć z wpisu w pliku passwd"
+ 
+ #: lib/fascist.c:674
+ msgid "you are not registered in the password file"
+-msgstr "nie zarejestrowano w pliku passwd"
++msgstr "nie zarejestrowano w pliku passwd"
+ 
+ #: lib/fascist.c:709
+ msgid "it is WAY too short"
+@@ -77,4 +80,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "błąd podczas wczytywania słownika"
+diff -urN cracklib-2.9.6.old/po/pt_BR.po cracklib-2.9.6.new/po/pt_BR.po
+--- cracklib-2.9.6.old/po/pt_BR.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/pt_BR.po	2018-10-09 11:38:18.293060531 +0200
+@@ -2,19 +2,21 @@
+ # Copyright (C) YEAR Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+ # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+-#
++# Daniel Lara <danniel@fedoraproject.org>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-18 15:02+0000\n"
+-"Last-Translator: Novell Language <language@novell.com>\n"
++"PO-Revision-Date: 2018-08-16 12:44+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: Novell Language <language@novell.com>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=utf-8\n"
++"Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
++"Language: pt_BR\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -78,4 +80,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "erro ao carregar dicionário"
+diff -urN cracklib-2.9.6.old/po/pt.po cracklib-2.9.6.new/po/pt.po
+--- cracklib-2.9.6.old/po/pt.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/pt.po	2018-10-09 11:37:57.475547088 +0200
+@@ -2,20 +2,22 @@
+ # Copyright (C) 2005 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+ # Antonio Cardoso Martins <digiplan@netvisao.pt>, 2005.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Ricardo Pinto <ricardo.bigote@gmail.com>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib.pt\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-08-05 00:45+0100\n"
+-"Last-Translator: Antonio Cardoso Martins <digiplan@netvisao.pt>\n"
++"PO-Revision-Date: 2016-09-05 10:12+0000\n"
++"Last-Translator: Ricardo Pinto <ricardo.bigote@gmail.com>\n"
+ "Language-Team: portuguese\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.10\n"
++"Language: pt\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -79,4 +81,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "erro ao carregar o dicionário"
+diff -urN cracklib-2.9.6.old/po/ru.po cracklib-2.9.6.new/po/ru.po
+--- cracklib-2.9.6.old/po/ru.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/ru.po	2018-10-09 11:38:50.654867472 +0200
+@@ -4,45 +4,46 @@
+ #
+ # Anton Dobkin <anton@viansib.ru>, 2008.
+ # Yulia Poyarko <ypoyarko@redhat.com>, 2009.
++# Igor Gorbounov <igor.gorbounov@gmail.com>, 2016. #zanata
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-12-03 10:17+1100\n"
+-"Last-Translator: Yulia <ypoyarko@redhat.com>\n"
++"PO-Revision-Date: 2018-08-16 12:43+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: \n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
+-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+-"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
++"Language: ru\n"
++"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+-msgstr "основан на вашем имени пользователя"
++msgstr "на основе вашего имени пользователя"
+ 
+ #: lib/fascist.c:576
+ msgid "it is based upon your password entry"
+-msgstr "основан на вашем входном пароле"
++msgstr "на основе введенного вами пароля"
+ 
+ #: lib/fascist.c:591
+ msgid "it is derived from your password entry"
+-msgstr "получен из вашего входного пароля"
++msgstr "получен из введенного вами пароля"
+ 
+ #: lib/fascist.c:599
+ msgid "it's derived from your password entry"
+-msgstr "получен из вашего входного пароля"
++msgstr "получен из введенного вами пароля"
+ 
+ #: lib/fascist.c:608
+ msgid "it is derivable from your password entry"
+-msgstr "получен из вашего входного пароля"
++msgstr "получается из введенного вами пароля"
+ 
+ #: lib/fascist.c:617
+ msgid "it's derivable from your password entry"
+-msgstr "получен из вашего входного пароля"
++msgstr "получается из введенного вами пароля"
+ 
+ #: lib/fascist.c:674
+ msgid "you are not registered in the password file"
+@@ -54,11 +55,11 @@
+ 
+ #: lib/fascist.c:714
+ msgid "it is too short"
+-msgstr "короткий"
++msgstr "слишком короткий"
+ 
+ #: lib/fascist.c:731
+ msgid "it does not contain enough DIFFERENT characters"
+-msgstr "не содержит достаточное число РАЗЛИЧНЫХ символов"
++msgstr "не содержит достаточного числа РАЗЛИЧНЫХ символов"
+ 
+ #: lib/fascist.c:745
+ msgid "it is all whitespace"
+@@ -70,16 +71,16 @@
+ 
+ #: lib/fascist.c:769
+ msgid "it looks like a National Insurance number."
+-msgstr "похож на число государственного страхования."
++msgstr "похож на номер государственного страхования."
+ 
+ #: lib/fascist.c:801
+ msgid "it is based on a dictionary word"
+-msgstr "основан на слове из словаря"
++msgstr "на основе слова из словаря"
+ 
+ #: lib/fascist.c:820
+ msgid "it is based on a (reversed) dictionary word"
+-msgstr "основан на измененном слове из словаря"
++msgstr "на основе (перевернутого) слова из словаря"
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "ошибка при загрузке словаря"
+diff -urN cracklib-2.9.6.old/po/sk.po cracklib-2.9.6.new/po/sk.po
+--- cracklib-2.9.6.old/po/sk.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/sk.po	2018-10-09 11:39:19.259580732 +0200
+@@ -1,20 +1,22 @@
+ # translation of cracklib.po to Slovak
+ # This file is put in the public domain.
+ # Stanislav Visnovsky <visnov@suse.cz>, 2003.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# feonsu <feonsu@gmail.com>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-06-23 13:12+02:00\n"
+-"Last-Translator: Stanislav Visnovsky <visnov@suse.cz>\n"
++"PO-Revision-Date: 2016-10-11 06:53+0000\n"
++"Last-Translator: feonsu <feonsu@gmail.com>\n"
+ "Language-Team: Slovak <sk-i18n@linux.sk>\n"
+-"Language: sk\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.2beta3\n"
++"Language: sk\n"
++"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -78,4 +80,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "chyba pri načítavaní slovníka"
+diff -urN cracklib-2.9.6.old/po/sq.po cracklib-2.9.6.new/po/sq.po
+--- cracklib-2.9.6.old/po/sq.po	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/po/sq.po	2018-10-09 11:39:15.354483358 +0200
+@@ -0,0 +1,79 @@
++# Jona Azizaj <jonaazizaj@gmail.com>, 2017. #zanata
++msgid ""
++msgstr ""
++"Project-Id-Version: cracklib 2.9.6\n"
++"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
++"POT-Creation-Date: 2015-08-18 13:45-0500\n"
++"PO-Revision-Date: 2017-04-17 10:20+0000\n"
++"Last-Translator: Anxhela Hyseni <anxhela.hyseni1996@gmail.com>\n"
++"Language-Team: Albanian\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Language: sq\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
++
++#: lib/fascist.c:516
++msgid "it is based on your username"
++msgstr "kjo është bazuar në emrin e përdoruesit tuaj"
++
++#: lib/fascist.c:576
++msgid "it is based upon your password entry"
++msgstr "kjo është bazuar në fjalëkalimin që ju keni dhënë"
++
++#: lib/fascist.c:591
++msgid "it is derived from your password entry"
++msgstr "kjo është përftuar nga fjalëkalimi që ju keni dhënë"
++
++#: lib/fascist.c:599
++msgid "it's derived from your password entry"
++msgstr "kjo është përftuar nga fjalëkalimi që ju keni dhënë"
++
++#: lib/fascist.c:608
++msgid "it is derivable from your password entry"
++msgstr "kjo u përfitua nga fjalëkalimi që ju keni dhënë"
++
++#: lib/fascist.c:617
++msgid "it's derivable from your password entry"
++msgstr "kjo u përfitua nga fjalëkalimi që ju keni dhënë"
++
++#: lib/fascist.c:674
++msgid "you are not registered in the password file"
++msgstr "ju nuk jeni regjistruar në skedarin e fjalëkalimit"
++
++#: lib/fascist.c:709
++msgid "it is WAY too short"
++msgstr "kjo është JASHTËZAKONISHT shumë e shkurtër"
++
++#: lib/fascist.c:714
++msgid "it is too short"
++msgstr "kjo është shumë e shkurtër"
++
++#: lib/fascist.c:731
++msgid "it does not contain enough DIFFERENT characters"
++msgstr "nuk përmban mjaftueshëm karaktere të NDRYSHME"
++
++#: lib/fascist.c:745
++msgid "it is all whitespace"
++msgstr "është e gjitha hapësirë e bardhë"
++
++#: lib/fascist.c:764
++msgid "it is too simplistic/systematic"
++msgstr "është shumë i thjeshtë/ sistematik"
++
++#: lib/fascist.c:769
++msgid "it looks like a National Insurance number."
++msgstr "ngjan sikur është numër Sigurimi Kombëtar."
++
++#: lib/fascist.c:801
++msgid "it is based on a dictionary word"
++msgstr "është bazuar në një fjalë në fjalor"
++
++#: lib/fascist.c:820
++msgid "it is based on a (reversed) dictionary word"
++msgstr "është bazuar në një fjalë (mbrapsht) në fjalor"
++
++#: lib/fascist.c:865
++msgid "error loading dictionary"
++msgstr "gabim në ngarkimin e fjalorit"
+diff -urN cracklib-2.9.6.old/po/sv.po cracklib-2.9.6.new/po/sv.po
+--- cracklib-2.9.6.old/po/sv.po	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/po/sv.po	2018-10-09 11:39:17.304531983 +0200
+@@ -0,0 +1,79 @@
++# Göran Uddeborg <goeran@uddeborg.se>, 2017. #zanata
++msgid ""
++msgstr ""
++"Project-Id-Version: cracklib 2.9.6\n"
++"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
++"POT-Creation-Date: 2015-08-18 13:45-0500\n"
++"PO-Revision-Date: 2017-03-29 03:16+0000\n"
++"Last-Translator: Göran Uddeborg <goeran@uddeborg.se>\n"
++"Language-Team: Swedish\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Language: sv\n"
++"Plural-Forms: nplurals=2; plural=(n != 1)\n"
++"X-Generator: Zanata 4.6.2\n"
++
++#: lib/fascist.c:516
++msgid "it is based on your username"
++msgstr "det är baserat på ditt användarnamn"
++
++#: lib/fascist.c:576
++msgid "it is based upon your password entry"
++msgstr "det är baserat på din lösenordspost"
++
++#: lib/fascist.c:591
++msgid "it is derived from your password entry"
++msgstr "det är härlett från din lösenordspost"
++
++#: lib/fascist.c:599
++msgid "it's derived from your password entry"
++msgstr "det är härlett från din lösenordspost"
++
++#: lib/fascist.c:608
++msgid "it is derivable from your password entry"
++msgstr "det är härledbart från din lösenordspost"
++
++#: lib/fascist.c:617
++msgid "it's derivable from your password entry"
++msgstr "det är härledbart från din lösenordspost"
++
++#: lib/fascist.c:674
++msgid "you are not registered in the password file"
++msgstr "du är inte registrerad i lösenordsfilen"
++
++#: lib/fascist.c:709
++msgid "it is WAY too short"
++msgstr "det är ALLDELES för kort"
++
++#: lib/fascist.c:714
++msgid "it is too short"
++msgstr "det är för kort"
++
++#: lib/fascist.c:731
++msgid "it does not contain enough DIFFERENT characters"
++msgstr "det innehåller inte tillräckligt med OLIKA tecken"
++
++#: lib/fascist.c:745
++msgid "it is all whitespace"
++msgstr "det är bara blanktecken"
++
++#: lib/fascist.c:764
++msgid "it is too simplistic/systematic"
++msgstr "det är för simplistiskt/systematiskt"
++
++#: lib/fascist.c:769
++msgid "it looks like a National Insurance number."
++msgstr "det ser ut som ett personnummer"
++
++#: lib/fascist.c:801
++msgid "it is based on a dictionary word"
++msgstr "det är baserat på ett ord ur ordlistan"
++
++#: lib/fascist.c:820
++msgid "it is based on a (reversed) dictionary word"
++msgstr "det är baserat på ett (omvänt) ord ur ordlistan"
++
++#: lib/fascist.c:865
++msgid "error loading dictionary"
++msgstr "fel när ordlistan lästes in"
+diff -urN cracklib-2.9.6.old/po/ta.po cracklib-2.9.6.new/po/ta.po
+--- cracklib-2.9.6.old/po/ta.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/ta.po	2018-10-09 11:57:33.761928776 +0200
+@@ -1,83 +1,84 @@
+ # translation of cracklib.default.cracklib.po to Tamil
+ # Copyright (C) 2009 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+-#
++# 
+ # I. Felix <ifelix@redhat.com>, 2009.
++# shkumar <shkumar@redhat.com>, 2013. #zanata
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: cracklib.default.cracklib\n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-11-11 14:21+0530\n"
+-"Last-Translator: I. Felix <ifelix@redhat.com>\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2012-12-14 16:11-0600\n"
++"PO-Revision-Date: 2013-11-11 09:51-0500\n"
++"Last-Translator: shkumar <shkumar@redhat.com>\n"
+ "Language-Team: Tamil <fedora-trans-ta@redhat.com>\n"
+-"Language: ta\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
++"Language: ta\n"
+ "Plural-Forms: nplurals=2; plural=(n!=1);\\n\n"
++"X-Generator: Zanata 3.1.2\n"
++
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "நீங்கள் கடவுச்சொல் கோப்பில் பதிவு செய்யவில்லை"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "இது உங்கள் பயனர்பெயர் அடிப்படையில் உள்ளது"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "இது உங்கள் கடவுச்சொல் உள்ளீடு படி உள்ளது"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "இது உங்கள் கடவுச்சொல் உள்ளீடிலிருந்து வரையறுக்கப்பட்டது"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "இது உங்கள் கடவுச்சொல் உள்ளீடிலிருந்து வரையறுக்கப்பட்டது"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "இது உங்கள் கடவுச்சொல் உள்ளீடிலிருந்து வரையறுக்கப்படக்கூடியது"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "இது உங்கள் கடவுச்சொல் உள்ளீடிலிருந்து வரையறுக்கப்படக்கூடியது"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "நீங்கள் கடவுச்சொல் கோப்பில் பதிவு செய்யவில்லை"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "இது மிகவும் சிறியது"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "இது மிகவும் சிறியது"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "இது போதிய வேறுபாடு எழுத்துக்களை கொண்டிருக்கவில்லை"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "இது எல்லாம் காலிஇடங்கள்"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "இது மிகவும் எளியது/அமைப்பானது"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "இது ஒரு தேசிய காப்பீடு எண் போலுள்ளது."
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "இது ஒரு அகராதி சொல்லை அடிப்படையாக கொண்டது"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "இது ஒரு (தலைகீழானது) அகராதி சொல்லை அடிப்படையாக கொண்டது"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "அகராதியை ஏற்றுவதில் பிழை"
+diff -urN cracklib-2.9.6.old/po/te.po cracklib-2.9.6.new/po/te.po
+--- cracklib-2.9.6.old/po/te.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/te.po	2018-10-09 11:57:33.761928776 +0200
+@@ -1,84 +1,85 @@
+ # translation of cracklib.pot to Telugu
+ # Copyright (C) 2009 Free Software Foundation, Inc.
+ # This file is distributed under the same license as the cracklib package.
+-#
++# 
+ # Krishna Babu K <kkrothap@redhat.com>, 2009.
++# kkrothap <kkrothap@redhat.com>, 2013. #zanata
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: cracklib\n"
+-"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+-"POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2009-11-11 15:13+0530\n"
+-"Last-Translator: Krishna Babu K <kkrothap@redhat.com>\n"
++"Report-Msgid-Bugs-To: \n"
++"POT-Creation-Date: 2012-12-14 16:11-0600\n"
++"PO-Revision-Date: 2013-09-26 10:54-0400\n"
++"Last-Translator: kkrothap <kkrothap@redhat.com>\n"
+ "Language-Team: Telugu <en@li.org>\n"
+-"Language: te\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
++"Language: te\n"
+ "Plural-Forms: nplurals=2; plural=(n!=1);\n"
+ "\n"
++"X-Generator: Zanata 3.1.2\n"
++
++#: ../lib/fascist.c:550
++msgid "you are not registered in the password file"
++msgstr "మీరు సంకేతపదపు ఫైలునందు నమోదు కాలేదు"
+ 
+-#: lib/fascist.c:516
++#: ../lib/fascist.c:564
+ msgid "it is based on your username"
+ msgstr "ఇది మీ వినియోగదారినామముపై ఆధారపడి వుంది"
+ 
+-#: lib/fascist.c:576
++#: ../lib/fascist.c:629
+ msgid "it is based upon your password entry"
+ msgstr "ఇది మీ సంకేతపదము ప్రవేశముపై ఆధారపడి వుంది"
+ 
+-#: lib/fascist.c:591
++#: ../lib/fascist.c:649
+ msgid "it is derived from your password entry"
+ msgstr "ఇది మీ సంకేతపదము ప్రవేశమునుండి ఉత్పాదించబడింది"
+ 
+-#: lib/fascist.c:599
++#: ../lib/fascist.c:662
+ msgid "it's derived from your password entry"
+ msgstr "ఇది మీ సంకేతపదము ప్రవేశమునుండి ఉత్పాదించబడింది"
+ 
+-#: lib/fascist.c:608
++#: ../lib/fascist.c:676
+ msgid "it is derivable from your password entry"
+ msgstr "ఇది మీ సంకేతపదము ప్రవేశమునుండి ఉత్పాదించబడ గలదు"
+ 
+-#: lib/fascist.c:617
++#: ../lib/fascist.c:690
+ msgid "it's derivable from your password entry"
+ msgstr "ఇది మీ సంకేతపదము ప్రవేశమునుండి ఉత్పాదించబడ గలదు"
+ 
+-#: lib/fascist.c:674
+-msgid "you are not registered in the password file"
+-msgstr "మీరు సంకేతపదపు ఫైలునందు నమోదు కాలేదు"
+-
+-#: lib/fascist.c:709
++#: ../lib/fascist.c:726
+ msgid "it is WAY too short"
+ msgstr "ఇది పొట్టి దానికి మార్గము"
+ 
+-#: lib/fascist.c:714
++#: ../lib/fascist.c:731
+ msgid "it is too short"
+ msgstr "ఇది మరీ పొట్టిదిగా వుంది"
+ 
+-#: lib/fascist.c:731
++#: ../lib/fascist.c:748
+ msgid "it does not contain enough DIFFERENT characters"
+ msgstr "ఇది కావలసినన్ని విభిన్న అక్షరాలను కలిగిలేదు"
+ 
+-#: lib/fascist.c:745
++#: ../lib/fascist.c:762
+ msgid "it is all whitespace"
+ msgstr "ఇది అంతా ఖాళీగానే వుంది"
+ 
+-#: lib/fascist.c:764
++#: ../lib/fascist.c:781
+ msgid "it is too simplistic/systematic"
+ msgstr "ఇదీ మరీ సాధారణంగా/క్రమపద్దతిలో వుంది"
+ 
+-#: lib/fascist.c:769
++#: ../lib/fascist.c:786
+ msgid "it looks like a National Insurance number."
+ msgstr "ఇది నేష్నల్ ఇన్సూరెన్స్ సంఖ్య వలె వుంది."
+ 
+-#: lib/fascist.c:801
++#: ../lib/fascist.c:813
+ msgid "it is based on a dictionary word"
+ msgstr "ఇది నిఘంటువు పదముపై ఆధారపడివుంది"
+ 
+-#: lib/fascist.c:820
++#: ../lib/fascist.c:832
+ msgid "it is based on a (reversed) dictionary word"
+ msgstr "ఇది నిఘంటువు(కలిగివున్న) పదముపై ఆధారపడివుంది"
+ 
+-#: lib/fascist.c:865
++#: ../lib/fascist.c:867
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "నిఘంటువును లోడు చేయుటలో దోషం"
+diff -urN cracklib-2.9.6.old/po/tr.po cracklib-2.9.6.new/po/tr.po
+--- cracklib-2.9.6.old/po/tr.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/tr.po	2018-10-09 11:38:00.427619872 +0200
+@@ -3,19 +3,21 @@
+ # This file is distributed under the same license as the PACKAGE package.
+ #
+ # Görkem Çetin <gorkem@uludag.org.tr>, 2006.
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2006-03-12 22:56+0200\n"
+-"Last-Translator: Görkem Çetin <gorkem@uludag.org.tr>\n"
+-"Language-Team:  <yerellestirme@kde.org.tr>\n"
+-"Language: \n"
++"PO-Revision-Date: 2016-06-18 01:03+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
++"Language-Team: <yerellestirme@kde.org.tr>\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11\n"
++"Language: tr\n"
++"Plural-Forms: nplurals=2; plural=(n>1)\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+diff -urN cracklib-2.9.6.old/po/uk.po cracklib-2.9.6.new/po/uk.po
+--- cracklib-2.9.6.old/po/uk.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/uk.po	2018-10-09 11:38:27.234283479 +0200
+@@ -2,21 +2,22 @@
+ # This file is distributed under the same license as the PACKAGE package.
+ #
+ # Yuri Chornoivan <yurchor@ukr.net>, 2010.
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Yuri Chornoivan <yurchor@ukr.net>, 2016. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: \n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2010-04-16 19:43+0300\n"
++"PO-Revision-Date: 2016-06-19 02:18+0000\n"
+ "Last-Translator: Yuri Chornoivan <yurchor@ukr.net>\n"
+ "Language-Team: Ukrainian <translation@linux.org.ua>\n"
+-"Language: uk\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: Lokalize 1.0\n"
+-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+-"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
++"Language: uk\n"
++"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -80,4 +81,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "помилка під час спроби завантажити словник"
+diff -urN cracklib-2.9.6.old/po/zh_CN.po cracklib-2.9.6.new/po/zh_CN.po
+--- cracklib-2.9.6.old/po/zh_CN.po	2011-07-26 11:55:29.000000000 +0200
++++ cracklib-2.9.6.new/po/zh_CN.po	2018-10-09 11:38:25.279234731 +0200
+@@ -1,78 +1,86 @@
+-# translation of cracklib.default.po to Wei Liu
++# translation of cracklib.po to Wei Liu
+ # Copyright (C) 2010 Free Software Foundation, Inc.
+-# This file is distributed under the same license as the PACKAGE package.
++# This file is distributed under the same license as the cracklib package.
+ #
+ # Leah Liu <lliu@redhat.com>, 2010.
++# translation of cracklib.default.po to Wei Liu
++# This file is distributed under the same license as the PACKAGE package.
++# Ludek Janda <ljanda@redhat.com>, 2018. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib.default\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2010-03-02 21:00-0600\n"
+-"PO-Revision-Date: 2010-09-07 23:42+1000\n"
+-"Last-Translator: Leah Liu <lliu@redhat.com>\n"
++"Project-Id-Version: cracklib 2.9.6\n"
++"Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
++"POT-Creation-Date: 2015-08-18 13:45-0500\n"
++"PO-Revision-Date: 2018-08-21 09:51+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: Wei Liu\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: KBabel 1.11.4\n"
+-
+-#: lib/fascist.c:550
+-msgid "you are not registered in the password file"
+-msgstr "尚未在口令文件中注册"
++"Language: zh_CN\n"
++"Plural-Forms: nplurals=1; plural=0\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+-#: lib/fascist.c:564
++#: lib/fascist.c:516
+ msgid "it is based on your username"
+-msgstr "它基于用户名"
++msgstr "它基于您的用户名"
+ 
+-#: lib/fascist.c:629
++#: lib/fascist.c:576
+ msgid "it is based upon your password entry"
+-msgstr "它基于输入的口令"
++msgstr "它基于您的密码"
+ 
+-#: lib/fascist.c:649
++#: lib/fascist.c:591
+ msgid "it is derived from your password entry"
+-msgstr "它派生自输入的口令"
++msgstr "它根据您的密码生成"
+ 
+-#: lib/fascist.c:662
++#: lib/fascist.c:599
+ msgid "it's derived from your password entry"
+-msgstr "它派生自输入的口令"
++msgstr "它根据您的密码生成"
+ 
+-#: lib/fascist.c:676
++#: lib/fascist.c:608
+ msgid "it is derivable from your password entry"
+-msgstr "可从输入的口令推断"
++msgstr "它可以根据您的密码生成"
+ 
+-#: lib/fascist.c:690
++#: lib/fascist.c:617
+ msgid "it's derivable from your password entry"
+-msgstr "可从输入的口令推断"
++msgstr "它可以根据您的密码生成"
++
++#: lib/fascist.c:674
++msgid "you are not registered in the password file"
++msgstr "您没有在密码文件中注册"
+ 
+-#: lib/fascist.c:726
++#: lib/fascist.c:709
+ msgid "it is WAY too short"
+-msgstr "WAY 过短"
++msgstr "太短"
+ 
+-#: lib/fascist.c:731
++#: lib/fascist.c:714
+ msgid "it is too short"
+-msgstr "过短"
++msgstr "太短"
+ 
+-#: lib/fascist.c:748
++#: lib/fascist.c:731
+ msgid "it does not contain enough DIFFERENT characters"
+-msgstr "它没有包含足够的不同字符"
++msgstr "不包括足够不同的字符"
+ 
+-#: lib/fascist.c:762
++#: lib/fascist.c:745
+ msgid "it is all whitespace"
+-msgstr "全是空格"
++msgstr "都是空白"
+ 
+-#: lib/fascist.c:781
++#: lib/fascist.c:764
+ msgid "it is too simplistic/systematic"
+-msgstr "过于简单化/系统化"
++msgstr "太简单或太有规律"
+ 
+-#: lib/fascist.c:786
++#: lib/fascist.c:769
+ msgid "it looks like a National Insurance number."
+-msgstr "看起来像国家保险号码。"
++msgstr "象国家保险号。"
+ 
+-#: lib/fascist.c:813
++#: lib/fascist.c:801
+ msgid "it is based on a dictionary word"
+-msgstr "它基于字典单词"
++msgstr "它基于一个字典中的词"
+ 
+-#: lib/fascist.c:832
++#: lib/fascist.c:820
+ msgid "it is based on a (reversed) dictionary word"
+-msgstr "它基于（颠倒的）字典单词"
++msgstr "它基于一个字典中的词的反向拼写"
+ 
++#: lib/fascist.c:865
++msgid "error loading dictionary"
++msgstr "加载字典错误"
+diff -urN cracklib-2.9.6.old/po/zh_TW.po cracklib-2.9.6.new/po/zh_TW.po
+--- cracklib-2.9.6.old/po/zh_TW.po	2015-08-18 20:48:15.000000000 +0200
++++ cracklib-2.9.6.new/po/zh_TW.po	2018-10-09 11:37:47.781308079 +0200
+@@ -2,19 +2,22 @@
+ # Copyright (C) YEAR Free Software Foundation, Inc.
+ # This file is distributed under the same license as the PACKAGE package.
+ # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+-#
++# Jan Dittberner <jandd@debian.org>, 2016. #zanata
++# Peter Pan <pan93412@gmail.com>, 2018. #zanata
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: cracklib\n"
++"Project-Id-Version: cracklib 2.9.6\n"
+ "Report-Msgid-Bugs-To: cracklib-devel@lists.sourceforge.net\n"
+ "POT-Creation-Date: 2015-08-18 13:45-0500\n"
+-"PO-Revision-Date: 2005-06-23 12:52+0200\n"
+-"Last-Translator: Novell Language <language@novell.com>\n"
++"PO-Revision-Date: 2018-08-16 12:45+0000\n"
++"Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+ "Language-Team: Novell Language <language@novell.com>\n"
+-"Language: \n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
++"Language: zh_TW\n"
++"Plural-Forms: nplurals=1; plural=0\n"
++"X-Generator: Zanata 4.6.2\n"
+ 
+ #: lib/fascist.c:516
+ msgid "it is based on your username"
+@@ -78,4 +81,4 @@
+ 
+ #: lib/fascist.c:865
+ msgid "error loading dictionary"
+-msgstr ""
++msgstr "讀取字典時錯誤"
+diff -urN cracklib-2.9.6.old/zanata.xml cracklib-2.9.6.new/zanata.xml
+--- cracklib-2.9.6.old/zanata.xml	1970-01-01 01:00:00.000000000 +0100
++++ cracklib-2.9.6.new/zanata.xml	2018-10-09 11:37:21.033648627 +0200
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
++<config xmlns="http://zanata.org/namespace/config/">
++  <url>https://fedora.zanata.org/</url>
++  <project>cracklib</project>
++  <project-version>master</project-version>
++  <project-type>gettext</project-type>
++</config>

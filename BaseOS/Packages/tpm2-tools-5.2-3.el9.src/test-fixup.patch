@@ -1,0 +1,12 @@
+diff -ur tpm2-tools-5.2/test/integration/helpers.sh tpm2-tools-5.2-new/test/integration/helpers.sh
+--- tpm2-tools-5.2/test/integration/helpers.sh	2021-08-23 09:47:20.000000000 -0700
++++ tpm2-tools-5.2-new/test/integration/helpers.sh	2022-05-31 16:06:07.939025537 -0700
+@@ -409,7 +409,7 @@
+         echo "Starting tpm2-abrmd"
+         # Start tpm2-abrmd
+         start_abrmd || exit 1
+-        run_startup=false
++        # run_startup=false
+     else
+         echo "not starting abrmd"
+     fi

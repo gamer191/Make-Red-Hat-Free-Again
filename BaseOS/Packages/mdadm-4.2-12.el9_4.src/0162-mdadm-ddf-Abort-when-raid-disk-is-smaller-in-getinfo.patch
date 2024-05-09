@@ -1,0 +1,45 @@
+From 246b4b40558f6f7f84882e9c34659f1b582944e2 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 11 Oct 2023 21:03:32 +0800
+Subject: [PATCH 162/165] mdadm/ddf: Abort when raid disk is smaller in
+ getinfo_super_ddf
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The metadata is corrupted when the raid_disk<0. So abort directly.
+This also can avoid a building error:
+super-ddf.c:1988:58: error: array subscript -1 is below array bounds of ‘struct phys_disk_entry[0]’
+
+Suggested-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Ackedy-by: Xiao Ni <xni@redhat.com>
+Acked-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ super-ddf.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/super-ddf.c b/super-ddf.c
+index c5242654..7571e3b7 100644
+--- a/super-ddf.c
++++ b/super-ddf.c
+@@ -1984,12 +1984,14 @@ static void getinfo_super_ddf(struct supertype *st, struct mdinfo *info, char *m
+ 		info->disk.number = be32_to_cpu(ddf->dlist->disk.refnum);
+ 		info->disk.raid_disk = find_phys(ddf, ddf->dlist->disk.refnum);
+ 
++		if (info->disk.raid_disk < 0)
++			return;
++
+ 		info->data_offset = be64_to_cpu(ddf->phys->
+ 						  entries[info->disk.raid_disk].
+ 						  config_size);
+ 		info->component_size = ddf->dlist->size - info->data_offset;
+-		if (info->disk.raid_disk >= 0)
+-			pde = ddf->phys->entries + info->disk.raid_disk;
++		pde = ddf->phys->entries + info->disk.raid_disk;
+ 		if (pde &&
+ 		    !(be16_to_cpu(pde->state) & DDF_Failed) &&
+ 		    !(be16_to_cpu(pde->state) & DDF_Missing))
+-- 
+2.40.1
+

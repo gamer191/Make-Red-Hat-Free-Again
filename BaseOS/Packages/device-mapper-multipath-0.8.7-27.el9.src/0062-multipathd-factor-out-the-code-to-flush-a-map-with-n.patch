@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 9 Aug 2022 16:46:26 -0500
+Subject: [PATCH] multipathd: factor out the code to flush a map with no paths
+
+The code to flush a multipath device because all of its paths have
+been removed will be used by another caller, so factor it out of
+ev_remove_path().
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ multipathd/main.c | 56 ++++++++++++++++++++++++-----------------------
+ 1 file changed, 29 insertions(+), 27 deletions(-)
+
+diff --git a/multipathd/main.c b/multipathd/main.c
+index ed2515e5..b00eae3f 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -488,6 +488,30 @@ int update_multipath (struct vectors *vecs, char *mapname, int reset)
+ 	return 0;
+ }
+ 
++static bool
++flush_map_nopaths(struct multipath *mpp, struct vectors *vecs) {
++	char alias[WWID_SIZE];
++
++	/*
++	 * flush_map will fail if the device is open
++	 */
++	strlcpy(alias, mpp->alias, WWID_SIZE);
++	if (mpp->flush_on_last_del == FLUSH_ENABLED) {
++		condlog(2, "%s Last path deleted, disabling queueing",
++			mpp->alias);
++		mpp->retry_tick = 0;
++		mpp->no_path_retry = NO_PATH_RETRY_FAIL;
++		mpp->disable_queueing = 1;
++		mpp->stat_map_failures++;
++		dm_queue_if_no_path(mpp->alias, 0);
++	}
++	if (!flush_map(mpp, vecs, 1)) {
++		condlog(2, "%s: removed map after removing all paths", alias);
++		return true;
++	}
++	return false;
++}
++
+ static int
+ update_map (struct multipath *mpp, struct vectors *vecs, int new_map)
+ {
+@@ -1247,34 +1271,12 @@ ev_remove_path (struct path *pp, struct vectors * vecs, int need_do_map)
+ 			vector_del_slot(mpp->paths, i);
+ 
+ 		/*
+-		 * remove the map IF removing the last path
++		 * remove the map IF removing the last path. If
++		 * flush_map_nopaths succeeds, the path has been removed.
+ 		 */
+-		if (VECTOR_SIZE(mpp->paths) == 0) {
+-			char alias[WWID_SIZE];
+-
+-			/*
+-			 * flush_map will fail if the device is open
+-			 */
+-			strlcpy(alias, mpp->alias, WWID_SIZE);
+-			if (mpp->flush_on_last_del == FLUSH_ENABLED) {
+-				condlog(2, "%s Last path deleted, disabling queueing", mpp->alias);
+-				mpp->retry_tick = 0;
+-				mpp->no_path_retry = NO_PATH_RETRY_FAIL;
+-				mpp->disable_queueing = 1;
+-				mpp->stat_map_failures++;
+-				dm_queue_if_no_path(mpp->alias, 0);
+-			}
+-			if (!flush_map(mpp, vecs, 1)) {
+-				condlog(2, "%s: removed map after"
+-					" removing all paths",
+-					alias);
+-				/* flush_map() has freed the path */
+-				goto out;
+-			}
+-			/*
+-			 * Not an error, continue
+-			 */
+-		}
++		if (VECTOR_SIZE(mpp->paths) == 0 &&
++		    flush_map_nopaths(mpp, vecs))
++			goto out;
+ 
+ 		if (setup_map(mpp, &params, vecs)) {
+ 			condlog(0, "%s: failed to setup map for"

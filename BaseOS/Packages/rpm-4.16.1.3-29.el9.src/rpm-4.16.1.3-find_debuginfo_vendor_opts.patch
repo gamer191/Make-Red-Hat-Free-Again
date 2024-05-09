@@ -1,0 +1,20 @@
+--- rpm.orig/macros.in	2022-06-30 11:37:18.975312592 +0100
++++ rpm-4.16.1.3/macros.in	2022-06-30 11:37:43.145158323 +0100
+@@ -167,6 +167,9 @@
+ #	A spec file can %%define _find_debuginfo_opts to pass options to
+ #	the script.  See the script for details.
+ #
++#	Vendor spec files (eg redhat-rpm-config:macros) can %%define
++#       _find_debuginfo_vendor_opts to pass options to the script.
++#
+ %__debug_install_post   \
+     %{_rpmconfigdir}/find-debuginfo.sh \\\
+     %{?_smp_build_ncpus:-j%{_smp_build_ncpus}} \\\
+@@ -179,6 +182,7 @@
+     %{?_unique_debug_srcs:--unique-debug-src-base "%{name}-%{VERSION}-%{RELEASE}.%{_arch}"} \\\
+     %{?_find_debuginfo_dwz_opts} \\\
+     %{?_find_debuginfo_opts} \\\
++    %{?_find_debuginfo_vendor_opts} \\\
+     %{?_debugsource_packages:-S debugsourcefiles.list} \\\
+     "%{_builddir}/%{?buildsubdir}"\
+ %{nil}

@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Thu, 17 Feb 2022 17:22:32 +0100
+Subject: [PATCH] libmultipath: enable linear ordering of bus/proto tuple
+
+We categorized protocols by bus/proto_id, while we only differentiate
+protocol IDs for SCSI. Allow transforming this into a linear sequence
+of bus/protocol IDs by having non-SCSI first, and follwing up with
+the different SCSI protocols.
+
+Signed-off-by: Martin Wilck <mwilck@suse.com>
+Reviewed-by: Benjamin Marzinski <bmarzins@redhat.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/structs.c | 10 ++++++++++
+ libmultipath/structs.h | 13 +++++++++++--
+ 2 files changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/libmultipath/structs.c b/libmultipath/structs.c
+index 6e5a1038..2b7cde0c 100644
+--- a/libmultipath/structs.c
++++ b/libmultipath/structs.c
+@@ -758,3 +758,13 @@ out:
+ 
+ 	return 0;
+ }
++
++unsigned int bus_protocol_id(const struct path *pp) {
++	if (!pp || pp->bus < 0 || pp->bus > SYSFS_BUS_SCSI)
++		return SYSFS_BUS_UNDEF;
++	if (pp->bus != SYSFS_BUS_SCSI)
++		return pp->bus;
++	if ((int)pp->sg_id.proto_id < 0 || pp->sg_id.proto_id > SCSI_PROTOCOL_UNSPEC)
++		return SYSFS_BUS_UNDEF;
++	return SYSFS_BUS_SCSI + pp->sg_id.proto_id;
++}
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index 1188363e..45294f11 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -56,12 +56,13 @@ enum failback_mode {
+ 	FAILBACK_FOLLOWOVER
+ };
+ 
++/* SYSFS_BUS_SCSI should be last, see bus_protocol_id() */
+ enum sysfs_buses {
+ 	SYSFS_BUS_UNDEF,
+-	SYSFS_BUS_SCSI,
+ 	SYSFS_BUS_CCW,
+ 	SYSFS_BUS_CCISS,
+ 	SYSFS_BUS_NVME,
++	SYSFS_BUS_SCSI,
+ };
+ 
+ enum pathstates {
+@@ -180,9 +181,17 @@ enum scsi_protocol {
+ 	SCSI_PROTOCOL_ADT = 7,	/* Media Changers */
+ 	SCSI_PROTOCOL_ATA = 8,
+ 	SCSI_PROTOCOL_USB = 9,  /* USB Attached SCSI (UAS), and others */
+-	SCSI_PROTOCOL_UNSPEC = 0xf, /* No specific protocol */
++	SCSI_PROTOCOL_UNSPEC = 0xa, /* No specific protocol */
+ };
+ 
++/*
++ * Linear ordering of bus/protocol
++ * This assumes that SYSFS_BUS_SCSI is last in enum sysfs_buses
++ * SCSI is the only bus type for which we distinguish protocols.
++ */
++#define LAST_BUS_PROTOCOL_ID (SYSFS_BUS_SCSI + SCSI_PROTOCOL_UNSPEC)
++unsigned int bus_protocol_id(const struct path *pp);
++
+ #define SCSI_INVALID_LUN ~0ULL
+ 
+ enum no_undef_states {

@@ -1,0 +1,59 @@
+From a63fbfe7eb109214fbcee726c9ba898ba3c954d3 Mon Sep 17 00:00:00 2001
+From: Antonio Alvarez Feijoo <antonio.feijoo@suse.com>
+Date: Wed, 14 Sep 2022 12:44:26 +0200
+Subject: [PATCH] fix(nvmf): nvme list-subsys prints the address using commas
+ as separator
+
+nvme-cli 1.x printed the address using spaces as separator, but nvme-cli 2.x
+prints the address using commas as separator (exact output from sysfs). E.g.,
+output from `cat /sys/class/nvme/nvme0/address`:
+
+traddr=nn-0x201700a09890f5bf:pn-0x201900a09890f5bf,host_traddr=nn-0x200000109b579ef5:pn-0x100000109b579ef5
+
+Also, I suppress rd.nvmf.discover= cmdline option if all fields are empty.
+
+Resolves: #1933787
+---
+ modules.d/95nvmf/module-setup.sh | 21 ++++++++++++++++++---
+ 1 file changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/modules.d/95nvmf/module-setup.sh b/modules.d/95nvmf/module-setup.sh
+index be1c85f3..0825b51c 100755
+--- a/modules.d/95nvmf/module-setup.sh
++++ b/modules.d/95nvmf/module-setup.sh
+@@ -61,6 +61,11 @@ cmdline() {
+     gen_nvmf_cmdline() {
+         local _dev=$1
+         local trtype
++        local traddr
++        local host_traddr
++        local trsvcid
++        local _address
++        local -a _address_parts
+ 
+         [[ -L "/sys/dev/block/$_dev" ]] || return 0
+         cd -P "/sys/dev/block/$_dev" || return 0
+@@ -76,9 +81,19 @@ cmdline() {
+         done
+ 
+         [ -z "$trtype" ] && return 0
+-        nvme list-subsys "${PWD##*/}" | while read -r _ _ trtype traddr host_traddr _; do
+-            [ "$trtype" != "${trtype#NQN}" ] && continue
+-            echo -n " rd.nvmf.discover=$trtype,${traddr#traddr=},${host_traddr#host_traddr=}"
++        nvme list-subsys "${PWD##*/}" | while read -r _ _ trtype _address _; do
++            [[ -z $trtype || $trtype != "${trtype#NQN}" ]] && continue
++            unset traddr
++            unset host_traddr
++            unset trsvcid
++            mapfile -t -d ',' _address_parts < <(printf "%s" "$_address")
++            for i in "${_address_parts[@]}"; do
++                [[ $i =~ ^traddr= ]] && traddr="${i#traddr=}"
++                [[ $i =~ ^host_traddr= ]] && host_traddr="${i#host_traddr=}"
++                [[ $i =~ ^trsvcid= ]] && trsvcid="${i#trsvcid=}"
++            done
++            [[ -z $traddr && -z $host_traddr && -z $trsvcid ]] && continue
++            echo -n " rd.nvmf.discover=$trtype,$traddr,$host_traddr,$trsvcid"
+         done
+     }
+ 
+

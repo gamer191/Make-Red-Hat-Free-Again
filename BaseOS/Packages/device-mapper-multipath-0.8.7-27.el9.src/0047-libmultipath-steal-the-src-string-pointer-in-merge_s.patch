@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 13 Apr 2022 23:27:35 -0500
+Subject: [PATCH] libmultipath: steal the src string pointer in merge_str()
+
+Instead of allocating a copy when the original string is going to be
+freed right after the merge, just steal the pointer. Also, merge_mpe()
+can't get called with NULL arguments.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/config.c | 16 +++++-----------
+ 1 file changed, 5 insertions(+), 11 deletions(-)
+
+diff --git a/libmultipath/config.c b/libmultipath/config.c
+index cee3bbb7..005d6b54 100644
+--- a/libmultipath/config.c
++++ b/libmultipath/config.c
+@@ -388,9 +388,9 @@ set_param_str(const char * str)
+ }
+ 
+ #define merge_str(s) \
+-	if (!dst->s && src->s) { \
+-		if (!(dst->s = set_param_str(src->s))) \
+-			return 1; \
++	if (!dst->s && src->s && strlen(src->s)) { \
++		dst->s = src->s; \
++		src->s = NULL; \
+ 	}
+ 
+ #define merge_num(s) \
+@@ -398,7 +398,7 @@ set_param_str(const char * str)
+ 		dst->s = src->s
+ 
+ 
+-static int
++static void
+ merge_hwe (struct hwentry * dst, struct hwentry * src)
+ {
+ 	char id[SCSI_VENDOR_SIZE+PATH_PRODUCT_SIZE];
+@@ -450,15 +450,11 @@ merge_hwe (struct hwentry * dst, struct hwentry * src)
+ 	reconcile_features_with_options(id, &dst->features,
+ 					&dst->no_path_retry,
+ 					&dst->retain_hwhandler);
+-	return 0;
+ }
+ 
+-static int
++static void
+ merge_mpe(struct mpentry *dst, struct mpentry *src)
+ {
+-	if (!dst || !src)
+-		return 1;
+-
+ 	merge_str(alias);
+ 	merge_str(uid_attribute);
+ 	merge_str(getuid);
+@@ -500,8 +496,6 @@ merge_mpe(struct mpentry *dst, struct mpentry *src)
+ 	merge_num(uid);
+ 	merge_num(gid);
+ 	merge_num(mode);
+-
+-	return 0;
+ }
+ 
+ void merge_mptable(vector mptable)

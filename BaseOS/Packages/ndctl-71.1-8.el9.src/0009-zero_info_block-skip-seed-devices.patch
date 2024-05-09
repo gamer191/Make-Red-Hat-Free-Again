@@ -1,0 +1,50 @@
+From fb13dfb8d84c4f0a749665c8f07179450b199f3e Mon Sep 17 00:00:00 2001
+From: Jeff Moyer <jmoyer@redhat.com>
+Date: Tue, 9 Feb 2021 16:51:53 -0500
+Subject: [PATCH 009/217] zero_info_block: skip seed devices
+
+Currently, ndctl destroy-namespace -f all will output errors of the
+form:
+
+  Error: destroy namespace: namespace0.0 failed to enable for zeroing, continuing
+
+for any zero-sized namespace.  That particular namespace looks like this:
+
+  {
+    "dev":"namespace0.0",
+    "mode":"raw",
+    "size":0,
+    "uuid":"00000000-0000-0000-0000-000000000000",
+    "sector_size":512,
+    "state":"disabled"
+  }
+
+This patch skips over namespaces with size=0 when zeroing out info
+blocks.
+
+Fixes: 46654c2d60b70 ("ndctl/namespace: Always zero info-blocks")
+Reported-by: Zhang Yi <yizhan@redhat.com>
+Signed-off-by: Jeff Moyer <jmoyer@redhat.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+Link: https://lore.kernel.org/r/x49r1lohpty.fsf@segfault.boston.devel.redhat.com
+---
+ ndctl/namespace.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/ndctl/namespace.c b/ndctl/namespace.c
+index 1feb74d..1e8a2cd 100644
+--- a/ndctl/namespace.c
++++ b/ndctl/namespace.c
+@@ -1052,6 +1052,9 @@ static int zero_info_block(struct ndctl_namespace *ndns)
+ 	void *buf = NULL, *read_buf = NULL;
+ 	char path[50];
+ 
++	if (ndctl_namespace_get_size(ndns) == 0)
++		return 1;
++
+ 	ndctl_namespace_set_raw_mode(ndns, 1);
+ 	rc = ndctl_namespace_enable(ndns);
+ 	if (rc < 0) {
+-- 
+2.27.0
+

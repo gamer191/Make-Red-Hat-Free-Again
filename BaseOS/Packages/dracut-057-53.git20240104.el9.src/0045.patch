@@ -1,0 +1,31 @@
+From 7bdb3fbdce70bea19dca3fec792b5266d7b9e48b Mon Sep 17 00:00:00 2001
+From: Pavel Valena <pvalena@redhat.com>
+Date: Tue, 14 Nov 2023 14:55:44 +0100
+Subject: [PATCH] fix(hwdb): follow shfmt-recommended format
+
+Related: RHEL-9479
+---
+ modules.d/95hwdb/module-setup.sh | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/modules.d/95hwdb/module-setup.sh b/modules.d/95hwdb/module-setup.sh
+index 16365377..7e4b1af6 100755
+--- a/modules.d/95hwdb/module-setup.sh
++++ b/modules.d/95hwdb/module-setup.sh
+@@ -11,11 +11,12 @@ install() {
+     local hwdb_bin
+ 
+     # systemd-hwdb ships the file in /etc, with /usr/lib as an alternative.
+-    # Therefore consider this location as preferred for configuration.
++    # The alternative location is preferred, as we can consider it being user
++    # configuration.
+     hwdb_bin="${udevdir}"/hwdb.bin
+ 
+-    if [[ ! -r "${hwdb_bin}" ]]; then
+-      hwdb_bin="${udevconfdir}"/hwdb.bin
++    if [[ ! -r ${hwdb_bin} ]]; then
++        hwdb_bin="${udevconfdir}"/hwdb.bin
+     fi
+ 
+     if [[ $hostonly ]]; then
+

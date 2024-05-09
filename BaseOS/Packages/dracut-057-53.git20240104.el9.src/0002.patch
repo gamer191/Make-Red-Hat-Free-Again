@@ -1,0 +1,55 @@
+From a6c4171117924cacaa727a9828e72f70e09b1fa9 Mon Sep 17 00:00:00 2001
+From: Pavel Valena <pvalena@redhat.com>
+Date: Tue, 12 Jul 2022 14:15:25 +0200
+Subject: [PATCH] fix(fips): enhance commit 'handle s390x OSTree systems'
+
+78557f05a69fe718a97df85d2ed741ce10d3f806
+
+Refactored to enhance readability.
+
+Related: rhbz#2050567
+---
+ modules.d/01fips/fips.sh         | 15 +++++++++++----
+ modules.d/01fips/module-setup.sh |  2 +-
+ 2 files changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/modules.d/01fips/fips.sh b/modules.d/01fips/fips.sh
+index 26f65414..6ad61df8 100755
+--- a/modules.d/01fips/fips.sh
++++ b/modules.d/01fips/fips.sh
+@@ -132,10 +132,17 @@ do_fips() {
+                 if [ -e "/boot/vmlinuz-${KERNEL}" ]; then
+                     BOOT_IMAGE="vmlinuz-${KERNEL}"
+                 elif [ -d /boot/loader/entries ]; then
+-                    bls=$(find /boot/loader/entries -name '*.conf' | sort -rV | sed -n "$((BOOT_IMAGE + 1))p")
+-                    if [ -e "${bls}" ]; then
+-                        BOOT_IMAGE=$(grep ^linux "${bls}" | cut -d' ' -f2)
+-                    fi
++                    i=0
++                    # shellcheck disable=SC2012
++                    for bls in $(ls -d /boot/loader/entries/*.conf | sort -rV); do
++                        if [ "$i" -eq "${BOOT_IMAGE:-0}" ] && [ -r "$bls" ]; then
++                            BOOT_IMAGE="$(grep -e '^linux' "$bls" | grep -o ' .*$')"
++                            BOOT_IMAGE=${BOOT_IMAGE## }
++                            break
++                        fi
++
++                        i=$((i + 1))
++                    done
+                 fi
+             fi
+ 
+diff --git a/modules.d/01fips/module-setup.sh b/modules.d/01fips/module-setup.sh
+index 8860159d..cc9d15ce 100755
+--- a/modules.d/01fips/module-setup.sh
++++ b/modules.d/01fips/module-setup.sh
+@@ -67,7 +67,7 @@ install() {
+     inst_hook pre-udev 01 "$moddir/fips-load-crypto.sh"
+     inst_script "$moddir/fips.sh" /sbin/fips.sh
+ 
+-    inst_multiple sha512hmac rmmod insmod mount uname umount grep sed cut find sort
++    inst_multiple sha512hmac rmmod insmod mount uname umount grep sed sort
+ 
+     inst_simple /etc/system-fips
+     [ -c "${initdir}"/dev/random ] || mknod "${initdir}"/dev/random c 1 8 \
+

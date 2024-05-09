@@ -1,0 +1,74 @@
+From f6feb3fbb50f48c193e9e4d775a20aa20f7b47b3 Mon Sep 17 00:00:00 2001
+From: Guanqin Miao <miaoguanqin@huawei.com>
+Date: Mon, 24 Apr 2023 16:06:36 +0800
+Subject: [PATCH 137/165] Fix memory leak in file Manage
+
+When we test mdadm with asan, we found some memory leaks in Manage.c
+We fix these memory leaks based on code logic.
+
+v2: Fix free() of uninitialized 'tst' in abort path.
+
+Signed-off-by: Guanqin Miao <miaoguanqin@huawei.com>
+Signed-off-by: Li Xiao Keng <lixiaokeng@huawei.com>
+Acked-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ Manage.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/Manage.c b/Manage.c
+index f54de7c6..f997b163 100644
+--- a/Manage.c
++++ b/Manage.c
+@@ -222,6 +222,7 @@ int Manage_stop(char *devname, int fd, int verbose, int will_retry)
+ 		if (verbose >= 0)
+ 			pr_err("Cannot get exclusive access to %s:Perhaps a running process, mounted filesystem or active volume group?\n",
+ 			       devname);
++		sysfs_free(mdi);
+ 		return 1;
+ 	}
+ 	/* If this is an mdmon managed array, just write 'inactive'
+@@ -801,8 +802,14 @@ int Manage_add(int fd, int tfd, struct mddev_dev *dv,
+ 						    rdev, update, devname,
+ 						    verbose, array);
+ 				dev_st->ss->free_super(dev_st);
+-				if (rv)
++				if (rv) {
++					free(dev_st);
+ 					return rv;
++				}
++			}
++			if (dev_st) {
++				dev_st->ss->free_super(dev_st);
++				free(dev_st);
+ 			}
+ 		}
+ 		if (dv->disposition == 'M') {
+@@ -1362,7 +1369,7 @@ int Manage_subdevs(char *devname, int fd,
+ 	unsigned long long array_size;
+ 	struct mddev_dev *dv;
+ 	int tfd = -1;
+-	struct supertype *tst;
++	struct supertype *tst = NULL;
+ 	char *subarray = NULL;
+ 	int sysfd = -1;
+ 	int count = 0; /* number of actions taken */
+@@ -1699,6 +1706,7 @@ int Manage_subdevs(char *devname, int fd,
+ 			break;
+ 		}
+ 	}
++	free(tst);
+ 	if (frozen > 0)
+ 		sysfs_set_str(&info, NULL, "sync_action","idle");
+ 	if (test && count == 0)
+@@ -1706,6 +1714,7 @@ int Manage_subdevs(char *devname, int fd,
+ 	return 0;
+ 
+ abort:
++	free(tst);
+ 	if (frozen > 0)
+ 		sysfs_set_str(&info, NULL, "sync_action","idle");
+ 	return !test && busy ? 2 : 1;
+-- 
+2.40.1
+

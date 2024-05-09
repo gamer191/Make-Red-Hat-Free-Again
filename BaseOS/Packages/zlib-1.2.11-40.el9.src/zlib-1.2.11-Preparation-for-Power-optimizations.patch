@@ -1,0 +1,282 @@
+From 14730a26e830eb2b09d1f7097910616f23c1476e Mon Sep 17 00:00:00 2001
+From: Ilya Leoshkevich <iii@linux.ibm.com>
+Date: Thu, 2 Feb 2023 19:40:32 +0100
+Subject: [PATCH] 0001-PATCH-Preparation-for-Power-optimizations.patch
+
+---
+ CMakeLists.txt         | 67 ++++++++++++++++++++++++++++++++++++++++++
+ configure              | 66 +++++++++++++++++++++++++++++++++++++++++
+ contrib/README.contrib |  8 +++++
+ contrib/gcc/zifunc.h   | 60 +++++++++++++++++++++++++++++++++++++
+ contrib/power/power.h  |  4 +++
+ 5 files changed, 205 insertions(+)
+ create mode 100644 contrib/gcc/zifunc.h
+ create mode 100644 contrib/power/power.h
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0fe939d..e762023 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -7,6 +7,7 @@ set(VERSION "1.2.11")
+ 
+ option(ASM686 "Enable building i686 assembly implementation")
+ option(AMD64 "Enable building amd64 assembly implementation")
++option(POWER "Enable building power implementation")
+ 
+ set(INSTALL_BIN_DIR "${CMAKE_INSTALL_PREFIX}/bin" CACHE PATH "Installation directory for executables")
+ set(INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib" CACHE PATH "Installation directory for libraries")
+@@ -140,6 +141,72 @@ if(CMAKE_COMPILER_IS_GNUCC)
+ 		add_definitions(-DASMV)
+ 		set_source_files_properties(${ZLIB_ASMS} PROPERTIES LANGUAGE C COMPILE_FLAGS -DNO_UNDERLINE)
+ 	endif()
++
++    # test to see if we can use a GNU indirect function to detect and load optimized code at runtime
++    CHECK_C_SOURCE_COMPILES("
++    static int test_ifunc_native(void)
++    {
++       return 1;
++    }
++    static int (*(check_ifunc_native(void)))(void)
++    {
++       return test_ifunc_native;
++    }
++    int test_ifunc(void) __attribute__ ((ifunc (\"check_ifunc_native\")));
++    int main(void)
++    {
++       return 0;
++    }
++    " HAS_C_ATTR_IFUNC)
++
++    if(HAS_C_ATTR_IFUNC)
++        add_definitions(-DHAVE_IFUNC)
++        set(ZLIB_PRIVATE_HDRS ${ZLIB_PRIVATE_HDRS} contrib/gcc/zifunc.h)
++    endif()
++
++    if(POWER)
++        # Test to see if we can use the optimizations for Power
++        CHECK_C_SOURCE_COMPILES("
++        #ifndef _ARCH_PPC
++            #error \"Target is not Power\"
++        #endif
++        #ifndef __BUILTIN_CPU_SUPPORTS__
++            #error \"Target doesn't support __builtin_cpu_supports()\"
++        #endif
++        int main() { return 0; }
++        " HAS_POWER_SUPPORT)
++
++        if(HAS_POWER_SUPPORT AND HAS_C_ATTR_IFUNC)
++            add_definitions(-DZ_POWER_OPT)
++
++            set(CMAKE_REQUIRED_FLAGS -mcpu=power8)
++            CHECK_C_SOURCE_COMPILES("int main(void){return 0;}" POWER8)
++
++            if(POWER8)
++                add_definitions(-DZ_POWER8)
++                set(ZLIB_POWER8 )
++
++                set_source_files_properties(
++                    ${ZLIB_POWER8}
++                    PROPERTIES COMPILE_FLAGS -mcpu=power8)
++            endif()
++
++            set(CMAKE_REQUIRED_FLAGS -mcpu=power9)
++            CHECK_C_SOURCE_COMPILES("int main(void){return 0;}" POWER9)
++
++            if(POWER9)
++                add_definitions(-DZ_POWER9)
++                set(ZLIB_POWER9 )
++
++                set_source_files_properties(
++                    ${ZLIB_POWER9}
++                    PROPERTIES COMPILE_FLAGS -mcpu=power9)
++            endif()
++
++            set(ZLIB_PRIVATE_HDRS ${ZLIB_PRIVATE_HDRS} contrib/power/power.h)
++            set(ZLIB_SRCS ${ZLIB_SRCS} ${ZLIB_POWER8} ${ZLIB_POWER9})
++        endif()
++    endif()
+ endif()
+ 
+ if(MSVC)
+diff --git a/configure b/configure
+index d026b35..0538d58 100755
+--- a/configure
++++ b/configure
+@@ -846,6 +846,72 @@ else
+     echo "Checking for sys/sdt.h ... No." | tee -a configure.log
+ fi
+ 
++# test to see if we can use a gnu indirection function to detect and load optimized code at runtime
++echo >> configure.log
++cat > $test.c <<EOF
++static int test_ifunc_native(void)
++{
++  return 1;
++}
++
++static int (*(check_ifunc_native(void)))(void)
++{
++  return test_ifunc_native;
++}
++
++int test_ifunc(void) __attribute__ ((ifunc ("check_ifunc_native")));
++EOF
++
++if tryboth $CC -c $CFLAGS $test.c; then
++  SFLAGS="${SFLAGS} -DHAVE_IFUNC"
++  CFLAGS="${CFLAGS} -DHAVE_IFUNC"
++  echo "Checking for attribute(ifunc) support... Yes." | tee -a configure.log
++else
++  echo "Checking for attribute(ifunc) support... No." | tee -a configure.log
++fi
++
++# Test to see if we can use the optimizations for Power
++echo >> configure.log
++cat > $test.c <<EOF
++#ifndef _ARCH_PPC
++  #error "Target is not Power"
++#endif
++#ifndef HAVE_IFUNC
++  #error "Target doesn't support ifunc"
++#endif
++#ifndef __BUILTIN_CPU_SUPPORTS__
++  #error "Target doesn't support __builtin_cpu_supports()"
++#endif
++EOF
++
++if tryboth $CC -c $CFLAGS $test.c; then
++  echo "int main(void){return 0;}" > $test.c
++
++  if tryboth $CC -c $CFLAGS -mcpu=power8 $test.c; then
++    POWER8="-DZ_POWER8"
++    PIC_OBJC="${PIC_OBJC}"
++    OBJC="${OBJC}"
++    echo "Checking for -mcpu=power8 support... Yes." | tee -a configure.log
++  else
++    echo "Checking for -mcpu=power8 support... No." | tee -a configure.log
++  fi
++
++  if tryboth $CC -c $CFLAGS -mcpu=power9 $test.c; then
++    POWER9="-DZ_POWER9"
++    PIC_OBJC="${PIC_OBJC}"
++    OBJC="${OBJC}"
++    echo "Checking for -mcpu=power9 support... Yes." | tee -a configure.log
++  else
++    echo "Checking for -mcpu=power9 support... No." | tee -a configure.log
++  fi
++
++  SFLAGS="${SFLAGS} ${POWER8} ${POWER9} -DZ_POWER_OPT"
++  CFLAGS="${CFLAGS} ${POWER8} ${POWER9} -DZ_POWER_OPT"
++  echo "Checking for Power optimizations support... Yes." | tee -a configure.log
++else
++  echo "Checking for Power optimizations support... No." | tee -a configure.log
++fi
++
+ # show the results in the log
+ echo >> configure.log
+ echo ALL = $ALL >> configure.log
+diff --git a/contrib/README.contrib b/contrib/README.contrib
+index b4d3b18..2a53f90 100644
+--- a/contrib/README.contrib
++++ b/contrib/README.contrib
+@@ -19,6 +19,10 @@ asm686/     by Brian Raiter <breadbox@muppetlabs.com>
+ blast/      by Mark Adler <madler@alumni.caltech.edu>
+         Decompressor for output of PKWare Data Compression Library (DCL)
+ 
++gcc/        by Matheus Castanho <msc@linux.ibm.com>
++            and Rogerio Alves <rcardoso@linux.ibm.com>
++        Optimization helpers using GCC-specific extensions
++
+ delphi/     by Cosmin Truta <cosmint@cs.ubbcluj.ro>
+         Support for Delphi and C++ Builder
+ 
+@@ -63,6 +67,10 @@ minizip/    by Gilles Vollant <info@winimage.com>
+ pascal/     by Bob Dellaca <bobdl@xtra.co.nz> et al.
+         Support for Pascal
+ 
++power/      by Matheus Castanho <msc@linux.ibm.com>
++            and Rogerio Alves <rcardoso@linux.ibm.com>
++        Optimized functions for Power processors
++
+ puff/       by Mark Adler <madler@alumni.caltech.edu>
+         Small, low memory usage inflate.  Also serves to provide an
+         unambiguous description of the deflate format.
+diff --git a/contrib/gcc/zifunc.h b/contrib/gcc/zifunc.h
+new file mode 100644
+index 0000000..daf4fe4
+--- /dev/null
++++ b/contrib/gcc/zifunc.h
+@@ -0,0 +1,60 @@
++/* Copyright (C) 2019 Matheus Castanho <msc@linux.ibm.com>, IBM
++ *               2019 Rogerio Alves    <rogerio.alves@ibm.com>, IBM
++ * For conditions of distribution and use, see copyright notice in zlib.h
++ */
++
++#ifndef Z_IFUNC_H_
++#define Z_IFUNC_H_
++
++/* Helpers for arch optimizations */
++
++#define Z_IFUNC(fname) \
++    typeof(fname) fname __attribute__ ((ifunc (#fname "_resolver"))); \
++    local typeof(fname) *fname##_resolver(void)
++/* This is a helper macro to declare a resolver for an indirect function
++ * (ifunc). Let's say you have function
++ *
++ *    int foo (int a);
++ *
++ * for which you want to provide different implementations, for example:
++ *
++ *    int foo_clever (int a) {
++ *      ... clever things ...
++ *    }
++ *
++ *    int foo_smart (int a) {
++ *      ... smart things ...
++ *    }
++ *
++ * You will have to declare foo() as an indirect function and also provide a
++ * resolver for it, to choose between foo_clever() and foo_smart() based on
++ * some criteria you define (e.g. processor features).
++ *
++ * Since most likely foo() has a default implementation somewhere in zlib, you
++ * may have to rename it so the 'foo' symbol can be used by the ifunc without
++ * conflicts.
++ *
++ *    #define foo foo_default
++ *    int foo (int a) {
++ *      ...
++ *    }
++ *    #undef foo
++ *
++ * Now you just have to provide a resolver function to choose which function
++ * should be used (decided at runtime on the first call to foo()):
++ *
++ *    Z_IFUNC(foo) {
++ *        if (... some condition ...)
++ *          return foo_clever;
++ *
++ *        if (... other condition ...)
++ *          return foo_smart;
++ *
++ *        return foo_default;
++ *    }
++ *
++ * All calls to foo() throughout the code can remain untouched, all the magic
++ * will be done by the linker using the resolver function.
++ */
++
++#endif /* Z_IFUNC_H_ */
+diff --git a/contrib/power/power.h b/contrib/power/power.h
+new file mode 100644
+index 0000000..b42c7d6
+--- /dev/null
++++ b/contrib/power/power.h
+@@ -0,0 +1,4 @@
++/* Copyright (C) 2019 Matheus Castanho <msc@linux.ibm.com>, IBM
++ *               2019 Rogerio Alves    <rogerio.alves@ibm.com>, IBM
++ * For conditions of distribution and use, see copyright notice in zlib.h
++ */
+-- 
+2.39.1
+

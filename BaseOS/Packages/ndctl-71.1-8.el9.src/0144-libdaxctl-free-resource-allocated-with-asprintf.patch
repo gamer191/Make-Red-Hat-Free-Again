@@ -1,0 +1,35 @@
+From 057ca6fc2ce63625236bf00e795e0847e6508ed8 Mon Sep 17 00:00:00 2001
+From: Alison Schofield <alison.schofield@intel.com>
+Date: Thu, 3 Mar 2022 16:01:33 -0800
+Subject: [PATCH 144/217] libdaxctl: free resource allocated with asprintf()
+
+Static analysis reported this resource leak.
+
+Link: https://lore.kernel.org/r/20220304000133.1053883-1-alison.schofield@intel.com
+Fixes: d07508a0cc3c ("libdaxctl: add daxctl_region_create_dev()")
+Signed-off-by: Alison Schofield <alison.schofield@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ daxctl/lib/libdaxctl.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/daxctl/lib/libdaxctl.c b/daxctl/lib/libdaxctl.c
+index f173bbb..5703992 100644
+--- a/daxctl/lib/libdaxctl.c
++++ b/daxctl/lib/libdaxctl.c
+@@ -624,10 +624,9 @@ DAXCTL_EXPORT int daxctl_region_create_dev(struct daxctl_region *region)
+ 	}
+ 
+ 	rc = sysfs_write_attr(ctx, path, num_devices);
+-	if (rc)
+-		return rc;
++	free(num_devices);
+ 
+-	return 0;
++	return rc;
+ }
+ 
+ DAXCTL_EXPORT int daxctl_region_destroy_dev(struct daxctl_region *region,
+-- 
+2.27.0
+

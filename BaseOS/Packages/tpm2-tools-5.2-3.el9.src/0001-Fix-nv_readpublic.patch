@@ -1,0 +1,62 @@
+From 4dffb4295392f69f00003b2879f60bd36076f22d Mon Sep 17 00:00:00 2001
+From: Imran Desai <imran.desai@intel.com>
+Date: Tue, 7 Dec 2021 13:21:58 -0700
+Subject: [PATCH 01/17] Fix nv_readpublic
+
+Based on 4af3e6b4 tpm2_nvreadpublic: Add option to output cpHash
+---
+ lib/tpm2.c         | 11 +++++++++--
+ lib/tpm2_nv_util.h | 14 +-------------
+ 2 files changed, 10 insertions(+), 15 deletions(-)
+
+diff --git a/lib/tpm2.c b/lib/tpm2.c
+index 4ee27c8c..d91072ae 100644
+--- a/lib/tpm2.c
++++ b/lib/tpm2.c
+@@ -101,9 +101,16 @@ tool_rc tpm2_close(ESYS_CONTEXT *esys_context, ESYS_TR *rsrc_handle) {
+ tool_rc tpm2_nv_readpublic(ESYS_CONTEXT *esys_context, ESYS_TR nv_index,
+         TPM2B_NV_PUBLIC **nv_public, TPM2B_NAME **nv_name) {
+ 
+-    TSS2_RC rval = Esys_NV_ReadPublic(esys_context, nv_index,
+-            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, nv_public, nv_name);
++    ESYS_TR esys_tr_nv_index;
++    TSS2_RC rval = Esys_TR_FromTPMPublic(esys_context, nv_index, ESYS_TR_NONE,
++            ESYS_TR_NONE, ESYS_TR_NONE, &esys_tr_nv_index);
++    if (rval != TPM2_RC_SUCCESS) {
++        LOG_PERR(Esys_TR_FromTPMPublic, rval);
++        return tool_rc_from_tpm(rval);
++    }
+ 
++    rval = Esys_NV_ReadPublic(esys_context, esys_tr_nv_index,
++            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, nv_public, nv_name);
+     if (rval != TSS2_RC_SUCCESS) {
+         LOG_PERR(Esys_NV_ReadPublic, rval);
+         return tool_rc_from_tpm(rval);
+diff --git a/lib/tpm2_nv_util.h b/lib/tpm2_nv_util.h
+index 99843156..daf8b624 100644
+--- a/lib/tpm2_nv_util.h
++++ b/lib/tpm2_nv_util.h
+@@ -28,19 +28,7 @@
+ static inline tool_rc tpm2_util_nv_read_public(ESYS_CONTEXT *context,
+         TPMI_RH_NV_INDEX nv_index, TPM2B_NV_PUBLIC **nv_public) {
+ 
+-    ESYS_TR tr_object;
+-    tool_rc rc = tpm2_from_tpm_public(context, nv_index, ESYS_TR_NONE,
+-            ESYS_TR_NONE, ESYS_TR_NONE, &tr_object);
+-    if (rc != tool_rc_success) {
+-        return rc;
+-    }
+-
+-    rc = tpm2_nv_readpublic(context, tr_object, nv_public, NULL);
+-    tool_rc tmp_rc = tpm2_close(context, &tr_object);
+-    if (tmp_rc != tool_rc_success) {
+-        rc = tmp_rc;
+-    }
+-    return rc;
++    return tpm2_nv_readpublic(context, nv_index, nv_public, 0);
+ }
+ 
+ /**
+-- 
+2.40.1
+

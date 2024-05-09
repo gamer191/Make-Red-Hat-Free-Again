@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 29 Apr 2022 15:57:12 -0500
+Subject: [PATCH] updated HPE MSA builtin config
+
+Make the config better align to MSA 4th, 5th and 6th Generation systems.
+
+Cc: Jon.Paul@hpe.com
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index a8ba28e3..d7c487b1 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -182,8 +182,8 @@ static struct hwentry default_hw[] = {
+ 	},
+ 	{
+ 		/* MSA 1040, 1050, 1060, 2040, 2050 and 2060 families */
+-		.vendor        = "HP",
+-		.product       = "MSA [12]0[456]0 SA[NS]",
++		.vendor        = "(HP|HPE)",
++		.product       = "MSA [12]0[456]0 (SAN|SAS|FC|iSCSI)",
+ 		.pgpolicy      = GROUP_BY_PRIO,
+ 		.pgfailback    = -FAILBACK_IMMEDIATE,
+ 		.no_path_retry = 18,

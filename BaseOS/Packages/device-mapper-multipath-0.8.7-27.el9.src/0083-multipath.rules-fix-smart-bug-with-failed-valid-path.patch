@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 7 Feb 2023 15:39:26 -0600
+Subject: [PATCH] multipath.rules: fix "smart" bug with failed valid path check
+
+If "multipath -u" fails, udev doesn't import any values from the
+program. This means that multipath.rules will continue to use the values
+for DM_MULTIPATH_DEVICE_PATH and FIND_MULTIPATHS_WAIT_UNTIL that it has
+already imported from the database. This is the correct thing to do for
+every case except the MAYBE case for "find_multipaths smart". In that
+case, DM_MULTIPATH_DEVICE_PATH will be set to 1, and the rules will
+assume that the device has been definitively claimed.
+
+In this case, we know that the device shouldn't have been claimed
+before, but we don't know if it should be claimed now, or if we have hit
+the timeout and it should be released, since we didn't get any
+information from multipath. The safest thing to do is assume that this
+was the timeout, and the device shouldn't be claimed. The only time when
+this could be the wrong answer is when we first see a new multipath
+device, and it could only cause problems if there is metadata on the
+device that will cause it to get autoassembled by something else, before
+multipathd can autoassemble it. If we assume that it is a multipath
+device, or we assume that this wasn't actually the timeout uevent, we
+can keep a necessary device from getting released to the reset of the
+system.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/multipath.rules.in | 22 ++++++++++++++++------
+ 1 file changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/multipath/multipath.rules.in b/multipath/multipath.rules.in
+index 5c4447a2..70b69a06 100644
+--- a/multipath/multipath.rules.in
++++ b/multipath/multipath.rules.in
+@@ -32,7 +32,8 @@ IMPORT{db}="DM_MULTIPATH_DEVICE_PATH"
+ 
+ # multipath -u sets DM_MULTIPATH_DEVICE_PATH and,
+ # if "find_multipaths smart", also FIND_MULTIPATHS_WAIT_UNTIL.
+-IMPORT{program}="$env{MPATH_SBIN_PATH}/multipath -u %k"
++IMPORT{program}=="$env{MPATH_SBIN_PATH}/multipath -u %k", \
++	ENV{.MPATH_CHECK_PASSED}="1"
+ 
+ # case 1: this is definitely multipath
+ ENV{DM_MULTIPATH_DEVICE_PATH}=="1", \
+@@ -83,10 +84,19 @@ LABEL="stop_wait"
+ # If timeout hasn't expired but we're not in "maybe" state any more, stop timer
+ # Do this only once, and only if the timer has been started before
+ IMPORT{db}="FIND_MULTIPATHS_WAIT_CANCELLED"
+-ENV{FIND_MULTIPATHS_WAIT_CANCELLED}!="?*", \
+-	ENV{FIND_MULTIPATHS_WAIT_UNTIL}=="?*", \
+-	ENV{FIND_MULTIPATHS_WAIT_UNTIL}!="0", \
+-	ENV{FIND_MULTIPATHS_WAIT_CANCELLED}="1", \
+-	RUN+="/usr/bin/systemctl stop cancel-multipath-wait-$kernel.timer"
++ENV{FIND_MULTIPATHS_WAIT_CANCELLED}=="?*", GOTO="end_mpath"
++ENV{FIND_MULTIPATHS_WAIT_UNTIL}!="?*", GOTO="end_mpath"
++ENV{FIND_MULTIPATHS_WAIT_UNTIL}=="0", GOTO="end_mpath"
++
++ENV{FIND_MULTIPATHS_WAIT_CANCELLED}="1"
++RUN+="/usr/bin/systemctl stop cancel-multipath-wait-$kernel.timer"
++
++# If "multipath -u" failed, no values are imported from the program,
++# and we are still using the values for DM_MULTIPATH_DEVICE_PATH and
++# FIND_MULTIPATHS_WAIT_UNTIL that were imported from the database.
++# If we are in "smart" mode, we need to give up on the path now,
++# since this may have been the timeout event. Without the imports
++# from "multipath -u", we can't tell.
++ENV{.MPATH_CHECK_PASSED}!="?*", ENV{DM_MULTIPATH_DEVICE_PATH}="0"
+ 
+ LABEL="end_mpath"

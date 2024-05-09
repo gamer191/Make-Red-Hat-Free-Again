@@ -1,0 +1,90 @@
+From 2ceddb91d3a0d70a59242b3a9dab401be6e5c825 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Fri, 5 Aug 2022 13:38:20 -0700
+Subject: [PATCH 205/217] cxl/list: Add 'depth' to port listings
+
+Simplify the task of determining how deep a port is in the hierarchy by
+just emitting what libcxl already counted. This is useful for validating
+interleave math.
+
+Link: https://lore.kernel.org/r/165973190022.1528532.6351628365510289908.stgit@dwillia2-xfh.jf.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/lib/libcxl.txt | 1 +
+ cxl/json.c                       | 4 ++++
+ cxl/lib/libcxl.c                 | 5 +++++
+ cxl/lib/libcxl.sym               | 1 +
+ cxl/libcxl.h                     | 1 +
+ 5 files changed, 12 insertions(+)
+
+diff --git a/Documentation/cxl/lib/libcxl.txt b/Documentation/cxl/lib/libcxl.txt
+index 6756d2f..fd2962a 100644
+--- a/Documentation/cxl/lib/libcxl.txt
++++ b/Documentation/cxl/lib/libcxl.txt
+@@ -290,6 +290,7 @@ int cxl_port_is_enabled(struct cxl_port *port);
+ bool cxl_port_is_root(struct cxl_port *port);
+ bool cxl_port_is_switch(struct cxl_port *port);
+ bool cxl_port_is_endpoint(struct cxl_port *port);
++int cxl_port_get_depth(struct cxl_port *port);
+ bool cxl_port_hosts_memdev(struct cxl_port *port, struct cxl_memdev *memdev);
+ int cxl_port_get_nr_dports(struct cxl_port *port);
+ ----
+diff --git a/cxl/json.c b/cxl/json.c
+index c3d9299..63c1751 100644
+--- a/cxl/json.c
++++ b/cxl/json.c
+@@ -769,6 +769,10 @@ static struct json_object *__util_cxl_port_to_json(struct cxl_port *port,
+ 	if (jobj)
+ 		json_object_object_add(jport, "host", jobj);
+ 
++	jobj = json_object_new_int(cxl_port_get_depth(port));
++	if (jobj)
++		json_object_object_add(jport, "depth", jobj);
++
+ 	if (!cxl_port_is_enabled(port)) {
+ 		jobj = json_object_new_string("disabled");
+ 		if (jobj)
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index ff85b23..021d59f 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -2417,6 +2417,11 @@ CXL_EXPORT bool cxl_port_is_endpoint(struct cxl_port *port)
+ 	return port->type == CXL_PORT_ENDPOINT;
+ }
+ 
++CXL_EXPORT int cxl_port_get_depth(struct cxl_port *port)
++{
++	return port->depth;
++}
++
+ CXL_EXPORT struct cxl_bus *cxl_port_get_bus(struct cxl_port *port)
+ {
+ 	struct cxl_bus *bus;
+diff --git a/cxl/lib/libcxl.sym b/cxl/lib/libcxl.sym
+index 385a8f0..8bb91e0 100644
+--- a/cxl/lib/libcxl.sym
++++ b/cxl/lib/libcxl.sym
+@@ -96,6 +96,7 @@ global:
+ 	cxl_port_get_parent;
+ 	cxl_port_is_root;
+ 	cxl_port_is_switch;
++	cxl_port_get_depth;
+ 	cxl_port_to_bus;
+ 	cxl_port_is_endpoint;
+ 	cxl_port_to_endpoint;
+diff --git a/cxl/libcxl.h b/cxl/libcxl.h
+index 2498fa1..9fe4e99 100644
+--- a/cxl/libcxl.h
++++ b/cxl/libcxl.h
+@@ -90,6 +90,7 @@ int cxl_port_is_enabled(struct cxl_port *port);
+ struct cxl_port *cxl_port_get_parent(struct cxl_port *port);
+ bool cxl_port_is_root(struct cxl_port *port);
+ bool cxl_port_is_switch(struct cxl_port *port);
++int cxl_port_get_depth(struct cxl_port *port);
+ struct cxl_bus *cxl_port_to_bus(struct cxl_port *port);
+ bool cxl_port_is_endpoint(struct cxl_port *port);
+ struct cxl_endpoint *cxl_port_to_endpoint(struct cxl_port *port);
+-- 
+2.27.0
+

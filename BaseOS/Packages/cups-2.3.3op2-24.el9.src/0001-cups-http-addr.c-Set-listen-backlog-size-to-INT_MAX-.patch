@@ -1,0 +1,35 @@
+From 876fdc1c90a885a58644c8757bc1283c9fd5bcb7 Mon Sep 17 00:00:00 2001
+From: Vasilis Liaskovitis <vliaskovitis@suse.com>
+Date: Wed, 1 Mar 2023 13:46:28 +0100
+Subject: [PATCH] cups/http-addr.c: Set listen backlog size to INT_MAX (fixes
+ #308)
+
+Use a listen queue size of INT_MAX, which should default to the maximum
+supported queue size on the system.
+
+This avoids the problem of the listening backlog queue getting full when
+there are too many requests at the same time. The problem was observed
+with the previous backlog size (128) by customers when submitting large
+batches of print jobs, resulting in some jobs getting lost.
+
+Signed-off-by: Vasilis Liaskovitis <vliaskovitis@suse.com>
+---
+ cups/http-addr.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cups/http-addr.c b/cups/http-addr.c
+index a61ee0449..6aeeb8074 100644
+--- a/cups/http-addr.c
++++ b/cups/http-addr.c
+@@ -249,7 +249,7 @@ httpAddrListen(http_addr_t *addr,	/* I - Address to bind to */
+   * Listen...
+   */
+ 
+-  if (listen(fd, 128))
++  if (listen(fd, INT_MAX))
+   {
+     _cupsSetHTTPError(HTTP_STATUS_ERROR);
+ 
+-- 
+2.41.0
+

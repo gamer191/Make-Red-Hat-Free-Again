@@ -1,0 +1,49 @@
+From 3ead5b8c5464c208cdbf11c0844b519518845e3e Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 28 Apr 2022 15:10:22 -0700
+Subject: [PATCH 158/217] cxl/port: Fix disable-port man page
+
+The man page was copied from the enable-port. Fix up some enable-port
+leftovers, and duplicated --endpoint option description.
+
+Link: https://lore.kernel.org/r/165118382203.1676208.17234717366569348622.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/cxl-disable-port.txt | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/Documentation/cxl/cxl-disable-port.txt b/Documentation/cxl/cxl-disable-port.txt
+index de13c07..ac56f20 100644
+--- a/Documentation/cxl/cxl-disable-port.txt
++++ b/Documentation/cxl/cxl-disable-port.txt
+@@ -5,7 +5,7 @@ cxl-disable-port(1)
+ 
+ NAME
+ ----
+-cxl-disable-port - activate / hot-add a given CXL port
++cxl-disable-port - disable / hot-remove a given CXL port and descendants
+ 
+ SYNOPSIS
+ --------
+@@ -22,7 +22,6 @@ OPTIONS
+ 	Toggle from treating the port arguments as Switch Port identifiers to
+ 	Endpoint Port identifiers.
+ 
+-
+ -f::
+ --force::
+ 	DANGEROUS: Override the safety measure that blocks attempts to disable a
+@@ -31,9 +30,6 @@ OPTIONS
+ 	firmware and disabling an active device is akin to force removing memory
+ 	from a running system.
+ 
+-	Toggle from treating the port arguments as Switch Port identifiers to
+-	Endpoint Port identifiers.
+-
+ --debug::
+ 	If the cxl tool was built with debug disabled, turn on debug
+ 	messages.
+-- 
+2.27.0
+

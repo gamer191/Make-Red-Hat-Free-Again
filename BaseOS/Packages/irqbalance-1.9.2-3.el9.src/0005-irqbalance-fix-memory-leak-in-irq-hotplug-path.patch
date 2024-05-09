@@ -1,0 +1,27 @@
+From ac4ba0667ba691985796f92e1a4b1932b03895a0 Mon Sep 17 00:00:00 2001
+From: qyu <qinyu32@huawei.com>
+Date: Fri, 20 Jan 2023 15:29:45 +0800
+Subject: [PATCH 05/13] irqbalance: fix memory leak in irq hotplug path
+
+tmp_info.name duplicate a name string in init_irq_class_and_type(),
+free() it before return.
+---
+ classify.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/classify.c b/classify.c
+index 4ea4b44..dac813c 100644
+--- a/classify.c
++++ b/classify.c
+@@ -778,6 +778,8 @@ int proc_irq_hotplug(char *savedline, int irq, struct irq_info **pinfo)
+ 		/* secondly, init irq info by parse savedline */
+ 		init_irq_class_and_type(savedline, &tmp_info, irq);
+ 		add_new_irq(NULL, &tmp_info);
++		free(tmp_info.name);
++
+ 		*pinfo = get_irq_info(irq);
+ 	}
+ 	if (*pinfo == NULL) {
+-- 
+2.33.1
+

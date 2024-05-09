@@ -1,0 +1,41 @@
+From c4860205ea28136a75bfbfb5f70a793770c73c82 Mon Sep 17 00:00:00 2001
+From: Josh Boyer <jwboyer@redhat.com>
+Date: Fri, 7 Apr 2023 13:05:09 -0400
+Subject: [PATCH 08/12] Don't leak expanded
+
+---
+ window-customize.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/window-customize.c b/window-customize.c
+index 50cfbdf7..7d3cbb18 100644
+--- a/window-customize.c
++++ b/window-customize.c
+@@ -658,7 +658,7 @@ window_customize_draw_option(struct window_customize_modedata *data,
+ 	struct grid_cell			  gc;
+ 	const char				**choice, *text, *name;
+ 	const char				 *space = "", *unit = "";
+-	char					 *value = NULL, *expanded;
++	char					 *value = NULL, *expanded = NULL;
+ 	char					 *default_value = NULL;
+ 	char					  choices[256] = "";
+ 	struct cmd_find_state			  fs;
+@@ -745,6 +745,7 @@ window_customize_draw_option(struct window_customize_modedata *data,
+ 				goto out;
+ 		}
+ 		free(expanded);
++		expanded = NULL;
+ 	}
+ 	if (oe != NULL && oe->type == OPTIONS_TABLE_CHOICE) {
+ 		for (choice = oe->choices; *choice != NULL; choice++) {
+@@ -835,6 +836,7 @@ window_customize_draw_option(struct window_customize_modedata *data,
+ out:
+ 	free(value);
+ 	free(default_value);
++	free(expanded);
+ 	format_free(ft);
+ }
+ 
+-- 
+2.31.1
+

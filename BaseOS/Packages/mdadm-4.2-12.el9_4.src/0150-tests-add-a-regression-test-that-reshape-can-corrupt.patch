@@ -1,0 +1,60 @@
+From 481433482942c2ee2990965af394eff059990901 Mon Sep 17 00:00:00 2001
+From: Yu Kuai <yukuai3@huawei.com>
+Date: Mon, 29 May 2023 21:28:25 +0800
+Subject: [PATCH 150/165] tests: add a regression test that reshape can corrupt
+ data
+
+This is a regression test for commit 1544e95c6dd8 ("md: fix data
+corruption for raid456 when reshape restart while grow up").
+
+Signed-off-by: Yu Kuai <yukuai3@huawei.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ tests/25raid456-reshape-corrupt-data | 35 ++++++++++++++++++++++++++++
+ 1 file changed, 35 insertions(+)
+ create mode 100644 tests/25raid456-reshape-corrupt-data
+
+diff --git a/tests/25raid456-reshape-corrupt-data b/tests/25raid456-reshape-corrupt-data
+new file mode 100644
+index 00000000..fdb875fb
+--- /dev/null
++++ b/tests/25raid456-reshape-corrupt-data
+@@ -0,0 +1,35 @@
++devs="$dev0 $dev1 $dev2"
++
++set_up_test()
++{
++	mdadm -Cv -R -n 3 -l5 $md0 $devs --size=50M || die "create array failed"
++	mdadm -a $md0 $dev3 || die "failed to bind new disk to array"
++	mkfs.xfs -f $md0 || die "mkfs failed"
++	xfs_ncheck $md0 || die "check fs failed"
++}
++
++clean_up_test()
++{
++	mdadm -S $md0
++}
++
++trap 'clean_up_test' EXIT
++
++set_up_test || die "set up test failed"
++
++# trigger reshape
++echo 1000 > /sys/block/md0/md/sync_speed_max
++mdadm --grow -l 6 $md0
++sleep 1
++
++# stop and start reshape
++echo frozen > /sys/block/md0/md/sync_action
++echo system > /sys/block/md0/md/sync_speed_max
++echo reshape > /sys/block/md0/md/sync_action
++
++mdadm -W $md0
++
++# check if data is corrupted
++xfs_ncheck $md0 || die "data is corrupted after reshape"
++
++exit 0
+-- 
+2.40.1
+

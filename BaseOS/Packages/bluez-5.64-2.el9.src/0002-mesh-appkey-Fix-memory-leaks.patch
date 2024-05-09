@@ -1,0 +1,43 @@
+From 5eb96b3ec8545047a74d7204664267c7aa749070 Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:06 +0530
+Subject: [PATCH BlueZ 02/12] mesh/appkey: Fix memory leaks
+
+While performing the static analysis using the coverity tool found
+following memory leak reports
+
+bluez-5.64/mesh/appkey.c:143: leaked_storage: Variable "key" going
+out of scope leaks the storage it points to.
+
+Error: RESOURCE_LEAK (CWE-772):
+bluez-5.64/mesh/appkey.c:146: leaked_storage: Variable "key" going
+out of scope leaks the storage it points to.
+---
+ mesh/appkey.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/mesh/appkey.c b/mesh/appkey.c
+index 5088a1812..52fed8c31 100644
+--- a/mesh/appkey.c
++++ b/mesh/appkey.c
+@@ -139,11 +139,15 @@ bool appkey_key_init(struct mesh_net *net, uint16_t net_idx, uint16_t app_idx,
+ 	key->net_idx = net_idx;
+ 	key->app_idx = app_idx;
+ 
+-	if (key_value && !set_key(key, app_idx, key_value, false))
++	if (key_value && !set_key(key, app_idx, key_value, false)) {
++		appkey_key_free(key);
+ 		return false;
++	}
+ 
+-	if (new_key_value && !set_key(key, app_idx, new_key_value, true))
++	if (new_key_value && !set_key(key, app_idx, new_key_value, true)) {
++		appkey_key_free(key);
+ 		return false;
++	}
+ 
+ 	l_queue_push_tail(app_keys, key);
+ 
+-- 
+2.26.2
+

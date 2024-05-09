@@ -1,0 +1,38 @@
+From 7564aeeae7bc8c3813bd80676769bd11a1055ca0 Mon Sep 17 00:00:00 2001
+From: Alison Schofield <alison.schofield@intel.com>
+Date: Thu, 3 Mar 2022 17:36:43 -0800
+Subject: [PATCH 146/217] cxl/list: always free the path var in
+ add_cxl_decoder()
+
+Static analysis reported a resource leak where the 'path' variable was
+not always freed before returns.
+
+Link: https://lore.kernel.org/r/20220304013643.1054605-1-alison.schofield@intel.com
+Fixes: 46564977afb7 ("cxl/list: Add decoder support")
+Signed-off-by: Alison Schofield <alison.schofield@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 1782f42..59e1644 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -1018,11 +1018,13 @@ static void *add_cxl_decoder(void *parent, int id, const char *cxldecoder_base)
+ 	cxl_decoder_foreach(port, decoder_dup)
+ 		if (decoder_dup->id == decoder->id) {
+ 			free_decoder(decoder, NULL);
++			free(path);
+ 			return decoder_dup;
+ 		}
+ 
+ 	list_add(&port->decoders, &decoder->list);
+ 
++	free(path);
+ 	return decoder;
+ 
+ err_decoder:
+-- 
+2.27.0
+

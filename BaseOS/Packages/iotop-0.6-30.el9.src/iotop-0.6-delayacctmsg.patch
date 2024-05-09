@@ -1,0 +1,41 @@
+diff -up iotop-0.6/iotop/data.py.delayacctmsg iotop-0.6/iotop/data.py
+--- iotop-0.6/iotop/data.py.delayacctmsg	2022-02-15 21:52:27.206378348 +0100
++++ iotop-0.6/iotop/data.py	2022-02-15 21:52:27.208378321 +0100
+@@ -32,7 +32,6 @@ import time
+ # Check for requirements:
+ #   o Linux >= 2.6.20 with I/O accounting and VM event counters
+ #
+-
+ ioaccounting = os.path.exists('/proc/self/io')
+ 
+ try:
+@@ -77,7 +76,7 @@ class Stats(DumpableObject):
+         ('cancelled_write_bytes', 264)
+     ]
+ 
+-    has_blkio_delay_total = False
++    has_blkio_delay_total = None
+ 
+     def __init__(self, task_stats_buffer):
+         sd = self.__dict__
+@@ -88,7 +87,7 @@ class Stats(DumpableObject):
+         # This is a heuristic to detect if CONFIG_TASK_DELAY_ACCT is enabled in
+         # the kernel.
+         if not Stats.has_blkio_delay_total:
+-            Stats.has_blkio_delay_total = self.blkio_delay_total != 0
++            Stats.has_blkio_delay_total = sysctl_task_delayacct()
+ 
+     def accumulate(self, other_stats, destination, coeff=1):
+         """Update destination from operator(self, other_stats)"""
+diff -up iotop-0.6/iotop/ui.py.delayacctmsg iotop-0.6/iotop/ui.py
+--- iotop-0.6/iotop/ui.py.delayacctmsg	2022-02-15 21:52:27.208378321 +0100
++++ iotop-0.6/iotop/ui.py	2022-02-15 21:52:54.607013860 +0100
+@@ -489,7 +489,7 @@ class IOTopUI(object):
+                 title = title[:remaining_cols]
+                 remaining_cols -= len(title)
+                 self.win.addstr(title, attr)
+-            if self.has_swapin_io:
++            if self.has_swapin_io is not False:
+                 status_msg = None
+             else:
+                 status_msg = ('CONFIG_TASK_DELAY_ACCT '

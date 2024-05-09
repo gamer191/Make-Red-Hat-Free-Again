@@ -1,0 +1,74 @@
+Signed-off-by: Dean Nelson <dnelson@redhat.com>
+Reviewed-by: Al Stone <ahs3@redhat.com>
+---
+ source/common/dmtbdump2.c  |   11 ++++++-----
+ source/compiler/dttable2.c |    4 ++--
+ 2 files changed, 8 insertions(+), 7 deletions(-)
+
+Index: acpica-unix2-20210604/source/common/dmtbdump2.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/common/dmtbdump2.c
++++ acpica-unix2-20210604/source/common/dmtbdump2.c
+@@ -1959,13 +1959,14 @@ AcpiDmDumpPrmt (
+     ACPI_PRMT_MODULE_INFO   *PrmtModuleInfo;
+     ACPI_PRMT_HANDLER_INFO  *PrmtHandlerInfo;
+     ACPI_STATUS             Status;
++    UINT32                  TableLength = AcpiUtReadUint32 (&Table->Length);
+     UINT32                  i, j;
+ 
+ 
+     /* Main table header */
+ 
+     PrmtHeader = ACPI_ADD_PTR (ACPI_TABLE_PRMT_HEADER, Table, CurrentOffset);
+-    Status = AcpiDmDumpTable (Table->Length, CurrentOffset, PrmtHeader,
++    Status = AcpiDmDumpTable (TableLength, CurrentOffset, PrmtHeader,
+         sizeof (ACPI_TABLE_PRMT_HEADER), AcpiDmTableInfoPrmtHdr);
+     if (ACPI_FAILURE (Status))
+     {
+@@ -1977,20 +1978,20 @@ AcpiDmDumpPrmt (
+ 
+     /* PRM Module Information Structure array */
+ 
+-    for (i = 0; i < PrmtHeader->ModuleInfoCount; ++i)
++    for (i = 0; i < AcpiUtReadUint32 (&PrmtHeader->ModuleInfoCount); ++i)
+     {
+         PrmtModuleInfo = ACPI_ADD_PTR (ACPI_PRMT_MODULE_INFO, Table, CurrentOffset);
+-        Status = AcpiDmDumpTable (Table->Length, CurrentOffset, PrmtModuleInfo,
++        Status = AcpiDmDumpTable (TableLength, CurrentOffset, PrmtModuleInfo,
+             sizeof (ACPI_PRMT_MODULE_INFO), AcpiDmTableInfoPrmtModule);
+ 
+         CurrentOffset += sizeof (ACPI_PRMT_MODULE_INFO);
+ 
+         /* PRM handler information structure array */
+ 
+-        for (j = 0; j < PrmtModuleInfo->HandlerInfoCount; ++j)
++        for (j = 0; j < AcpiUtReadUint16 (&PrmtModuleInfo->HandlerInfoCount); ++j)
+         {
+             PrmtHandlerInfo = ACPI_ADD_PTR (ACPI_PRMT_HANDLER_INFO, Table, CurrentOffset);
+-            Status = AcpiDmDumpTable (Table->Length, CurrentOffset, PrmtHandlerInfo,
++            Status = AcpiDmDumpTable (TableLength, CurrentOffset, PrmtHandlerInfo,
+                 sizeof (ACPI_PRMT_HANDLER_INFO), AcpiDmTableInfoPrmtHandler);
+ 
+             CurrentOffset += sizeof (ACPI_PRMT_HANDLER_INFO);
+Index: acpica-unix2-20210604/source/compiler/dttable2.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/compiler/dttable2.c
++++ acpica-unix2-20210604/source/compiler/dttable2.c
+@@ -1278,7 +1278,7 @@ DtCompilePrmt (
+     DtInsertSubtable (ParentTable, Subtable);
+     PrmtHeader = ACPI_CAST_PTR (ACPI_TABLE_PRMT_HEADER, Subtable->Buffer);
+ 
+-    for (i = 0; i < PrmtHeader->ModuleInfoCount; i++)
++    for (i = 0; i < AcpiUtReadUint32 (&PrmtHeader->ModuleInfoCount); i++)
+     {
+         Status = DtCompileTable (PFieldList, AcpiDmTableInfoPrmtModule,
+             &Subtable);
+@@ -1289,7 +1289,7 @@ DtCompilePrmt (
+         DtInsertSubtable (ParentTable, Subtable);
+         PrmtModuleInfo = ACPI_CAST_PTR (ACPI_PRMT_MODULE_INFO, Subtable->Buffer);
+ 
+-        for (j = 0; j < PrmtModuleInfo->HandlerInfoCount; j++)
++        for (j = 0; j < AcpiUtReadUint16 (&PrmtModuleInfo->HandlerInfoCount); j++)
+         {
+             Status = DtCompileTable (PFieldList, AcpiDmTableInfoPrmtHandler,
+                 &Subtable);

@@ -1,0 +1,51 @@
+From 5d0d4dc5ae1de82de92212c98297b24fbba09227 Mon Sep 17 00:00:00 2001
+From: QI Fuli <qi.fuli@fujitsu.com>
+Date: Tue, 2 Feb 2021 22:02:06 +0900
+Subject: [PATCH 010/217] ndctl: update .gitignore
+
+Add Documentation/ndctl/attrs.adoc and *.lo to .gitignore.
+
+Signed-off-by: QI Fuli <qi.fuli@fujitsu.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+Link: https://lore.kernel.org/r/20210202130206.3761-1-qi.fuli@fujitsu.com
+---
+ .gitignore | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/.gitignore b/.gitignore
+index 3ef9ff7..53512b2 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,4 +1,5 @@
+ *.o
++*.lo
+ *.xml
+ .deps/
+ .libs/
+@@ -15,13 +16,13 @@ Makefile.in
+ *.1
+ Documentation/daxctl/asciidoc.conf
+ Documentation/ndctl/asciidoc.conf
++Documentation/ndctl/attrs.adoc
+ Documentation/daxctl/asciidoctor-extensions.rb
+ Documentation/ndctl/asciidoctor-extensions.rb
+ .dirstamp
+ daxctl/config.h
+ daxctl/daxctl
+ daxctl/lib/libdaxctl.la
+-daxctl/lib/libdaxctl.lo
+ daxctl/lib/libdaxctl.pc
+ *.a
+ ndctl/config.h
+@@ -29,8 +30,6 @@ ndctl/lib/libndctl.pc
+ ndctl/ndctl
+ rhel/
+ sles/ndctl.spec
+-util/log.lo
+-util/sysfs.lo
+ version.m4
+ *.swp
+ cscope.files
+-- 
+2.27.0
+

@@ -1,0 +1,58 @@
+commit ddd74b5d971a734c7e88cda3764f7e059f163b51
+Author: Pavel Zhukov <pzhukov@redhat.com>
+Date:   Wed Jul 14 11:43:39 2021 +0200
+
+    Add fallback to hostname determination
+    
+    Use hostname in case if hostnamectl is not available/not functional.
+    fallback to uname in case if both hostname and hostnamectl are
+    missed (in containers)
+
+diff --git a/profile b/profile
+index 783fe17..542add4 100644
+--- a/profile
++++ b/profile
+@@ -42,7 +42,10 @@ else
+     pathmunge /usr/sbin after
+ fi
+ 
+-HOSTNAME=`/usr/bin/hostnamectl --transient  2>/dev/null`
++HOSTNAME=$(/usr/bin/hostnamectl --transient 2>/dev/null) || \
++HOSTNAME=$(/usr/bin/hostname 2>/dev/null) || \
++HOSTNAME=$(/usr/bin/uname -n)
++
+ HISTSIZE=1000
+ if [ "$HISTCONTROL" = "ignorespace" ] ; then
+     export HISTCONTROL=ignoreboth
+commit f20b64fc99267d2343aa9141cf709ac1131bc178
+Author: Pavel Zhukov <pzhukov@redhat.com>
+Date:   Thu Jul 15 10:31:57 2021 +0200
+
+    Do not use hostnamectl in csh
+
+diff --git a/csh.cshrc b/csh.cshrc
+index c3a37a3..eda4aa7 100644
+--- a/csh.cshrc
++++ b/csh.cshrc
+@@ -20,7 +20,7 @@ if ($?prompt) then
+     # make completion work better by default
+     set autolist
+   else
+-    set prompt=\[$user@`/usr/bin/hostnamectl --transient | cut -d'.' -f1`\]\$\ 
++    set prompt=\[$user@`/usr/bin/hostname`\]\$\ 
+   endif
+ endif
+ 
+diff --git a/csh.login b/csh.login
+index 2da86c9..e4b1990 100644
+--- a/csh.login
++++ b/csh.login
+@@ -25,7 +25,7 @@ else
+ 	end
+ endif
+ 
+-setenv HOSTNAME `/usr/bin/hostnamectl --transient`
++setenv HOSTNAME `/usr/bin/hostname`
+ set history=1000
+ 
+ if ( -d /etc/profile.d ) then

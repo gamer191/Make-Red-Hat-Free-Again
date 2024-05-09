@@ -1,0 +1,32 @@
+From 5e83beff72bed8f8e96fbfe63b7a814d34205354 Mon Sep 17 00:00:00 2001
+From: Josh Boyer <jwboyer@redhat.com>
+Date: Fri, 7 Apr 2023 11:54:51 -0400
+Subject: [PATCH 03/12] Fix memory leak with time_format
+
+---
+ format.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/format.c b/format.c
+index 673a6085..01204b8a 100644
+--- a/format.c
++++ b/format.c
+@@ -4416,6 +4416,7 @@ done:
+ 	free(sub);
+ 	format_free_modifiers(list, count);
+ 	free(copy0);
++	free(time_format);
+ 	return (0);
+ 
+ fail:
+@@ -4424,6 +4425,7 @@ fail:
+ 	free(sub);
+ 	format_free_modifiers(list, count);
+ 	free(copy0);
++	free(time_format);
+ 	return (-1);
+ }
+ 
+-- 
+2.31.1
+

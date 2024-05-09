@@ -1,0 +1,33 @@
+From cf1577bf54afe76b77ecaa62df25901739ca8ae9 Mon Sep 17 00:00:00 2001
+From: Mateusz Grzonka <mateusz.grzonka@intel.com>
+Date: Wed, 5 Jul 2023 16:34:56 +0200
+Subject: [PATCH 126/165] imsm: Fix possible segfault in check_no_platform()
+
+conf_line() may return NULL, which is not handled and might cause
+segfault.
+
+Signed-off-by: Mateusz Grzonka <mateusz.grzonka@intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ super-intel.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/super-intel.c b/super-intel.c
+index ae0f4a8c..4ef33d31 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -650,6 +650,11 @@ static int check_no_platform(void)
+ 		char *l = conf_line(fp);
+ 		char *w = l;
+ 
++		if (l == NULL) {
++			fclose(fp);
++			return 0;
++		}
++
+ 		do {
+ 			if (strcmp(w, search) == 0)
+ 				no_platform = 1;
+-- 
+2.40.1
+

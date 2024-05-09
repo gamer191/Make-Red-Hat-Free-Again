@@ -1,0 +1,34 @@
+From 5cdaeaefc350ea3c42719284b88406579d032fb6 Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:17 +0530
+Subject: [PATCH BlueZ 12/12] mesh-gatt: Fix use_after_free
+
+Following scenario happens when prov is false and we have double free as
+mentioned in the below
+
+bluez-5.64/tools/mesh-gatt/prov-db.c:847: freed_arg: "g_free" frees
+"in_str".
+
+bluez-5.64/tools/mesh-gatt/prov-db.c:867: double_free: Calling "g_free"
+frees pointer "in_str" which has already been freed.
+---
+ tools/mesh-gatt/prov-db.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/tools/mesh-gatt/prov-db.c b/tools/mesh-gatt/prov-db.c
+index 2fb08f799..a5b6997e0 100644
+--- a/tools/mesh-gatt/prov-db.c
++++ b/tools/mesh-gatt/prov-db.c
+@@ -859,7 +859,8 @@ bool prov_db_local_set_iv_index(uint32_t iv_index, bool update, bool prov)
+ 
+ 		set_local_iv_index(jmain, iv_index, update);
+ 		prov_file_write(jmain, false);
+-	}
++	} else
++		return true;
+ 
+ 	res = true;
+ done:
+-- 
+2.26.2
+

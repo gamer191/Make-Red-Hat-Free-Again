@@ -1,0 +1,57 @@
+From 67f541056f4dd3ba1ccc5d11464d67afdab0f2a3 Mon Sep 17 00:00:00 2001
+From: "Darrick J. Wong" <djwong@kernel.org>
+Date: Mon, 5 Jun 2023 08:37:39 -0700
+Subject: [PATCH] xfs_repair: don't spray correcting imap all by itself
+
+In xfs/155, I occasionally see this in the xfs_repair output:
+
+correcting imap
+correcting imap
+correcting imap
+...
+
+This is completely useless, since we don't actually log which inode
+prompted this message.  This logic has been here for a really long time,
+but ... I can't make heads nor tails of it.  If we're running in verbose
+or dry-run mode, then print the inode number, but not if we're running
+in fixit mode?
+
+A few lines later, if we're running in verbose dry-run mode, we print
+"correcting imap" even though we're not going to write anything.
+
+If we get here, the inode looks like it's in use, but the inode index
+says it isn't.  This is a corruption, so either we fix it or we say that
+we would fix it.
+
+Fixes: 6c39a3cbda3 ("Don't trash lost+found in phase 4 Merge of master-melb:xfs-cmds:29144a by kenmcd.")
+Signed-off-by: Darrick J. Wong <djwong@kernel.org>
+Reviewed-by: Carlos Maiolino <cmaiolino@redhat.com>
+Signed-off-by: Carlos Maiolino <cem@kernel.org>
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+---
+ repair/dino_chunks.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/repair/dino_chunks.c b/repair/dino_chunks.c
+index 0e09132b..0841e65b 100644
+--- a/repair/dino_chunks.c
++++ b/repair/dino_chunks.c
+@@ -871,13 +871,11 @@ next_readbuf:
+ 		 */
+ 		if (is_used)  {
+ 			if (is_inode_free(ino_rec, irec_offset))  {
+-				if (verbose || no_modify)  {
+-					do_warn(
++				do_warn(
+ 	_("imap claims in-use inode %" PRIu64 " is free, "),
+ 						ino);
+-				}
+ 
+-				if (verbose || !no_modify)
++				if (!no_modify)
+ 					do_warn(_("correcting imap\n"));
+ 				else
+ 					do_warn(_("would correct imap\n"));
+-- 
+2.41.0
+

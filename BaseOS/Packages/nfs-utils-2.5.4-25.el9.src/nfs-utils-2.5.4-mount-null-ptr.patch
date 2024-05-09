@@ -1,0 +1,27 @@
+commit ea536a2e641664c8ea439e5e571e757785f587c9
+Author: Zhi Li <yieli@redhat.com>
+Date:   Mon Oct 24 13:31:41 2022 -0400
+
+    mount.nfs: fix NULL pointer derefernce in nfs_parse_square_bracket
+    
+    In function nfs_parse_square_bracket, hostname could be NULL,
+    dereferencing it in free(*hostname) may cause an unexpected segfault.
+    
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2136807
+    Signed-off-by: Zhi Li <yieli@redhat.com>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/utils/mount/parse_dev.c b/utils/mount/parse_dev.c
+index 0d3bcb95..2ade5d5d 100644
+--- a/utils/mount/parse_dev.c
++++ b/utils/mount/parse_dev.c
+@@ -170,7 +170,8 @@ static int nfs_parse_square_bracket(const char *dev,
+ 	if (pathname) {
+ 		*pathname = strndup(cbrace, path_len);
+ 		if (*pathname == NULL) {
+-			free(*hostname);
++			if (hostname)
++				free(*hostname);
+ 			return nfs_pdn_nomem_err();
+ 		}
+ 	}

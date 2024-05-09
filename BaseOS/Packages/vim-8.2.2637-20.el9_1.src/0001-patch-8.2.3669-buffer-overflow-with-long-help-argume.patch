@@ -1,0 +1,32 @@
+diff --git a/src/help.c b/src/help.c
+index ee6ff18..67e4fb2 100644
+--- a/src/help.c
++++ b/src/help.c
+@@ -422,8 +422,7 @@ find_help_tags(
+ 		    || (vim_strchr((char_u *)"%_z@", arg[1]) != NULL
+ 							   && arg[2] != NUL)))
+ 	{
+-	    STRCPY(d, "/\\\\");
+-	    STRCPY(d + 3, arg + 1);
++	    vim_snprintf((char *)d, IOSIZE, "/\\\\%s", arg + 1);
+ 	    // Check for "/\\_$", should be "/\\_\$"
+ 	    if (d[3] == '_' && d[4] == '$')
+ 		STRCPY(d + 4, "\\$");
+diff --git a/src/testdir/test_help.vim b/src/testdir/test_help.vim
+index ff2bc41..c8ff5b8 100644
+--- a/src/testdir/test_help.vim
++++ b/src/testdir/test_help.vim
+@@ -123,5 +123,13 @@ func Test_helptag_cmd_readonly()
+   call delete('Xdir', 'rf')
+ endfunc
+ 
++func Test_help_long_argument()
++  try
++    exe 'help \%' .. repeat('0', 1021)
++  catch
++    call assert_match("E149:", v:exception)
++  endtry
++endfunc
++
+ 
+ " vim: shiftwidth=2 sts=2 expandtab

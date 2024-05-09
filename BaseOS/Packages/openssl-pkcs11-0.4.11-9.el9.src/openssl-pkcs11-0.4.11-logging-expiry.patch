@@ -1,0 +1,497 @@
+From b56082faa03ce5d85fbce13583b27a7a563ebeb1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Trojnara?= <Michal.Trojnara@stunnel.org>
+Date: Mon, 9 Aug 2021 01:29:12 +0200
+Subject: [PATCH] Fix object searching by label
+
+Removed checking whether obj_id is not NULL, because obj_id is a stack
+pointer declared as "unsigned char obj_id[MAX_VALUE_LEN / 2]".
+
+Removed checking whether *obj_id is not (unsigned char)0, because this
+is an uninitialized stack memory reference unless an "id" value was
+provided in the URI.
+
+closes #417
+
+closes #418
+---
+ src/eng_back.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/eng_back.c b/src/eng_back.c
+index 82eb06ec..e0a0988e 100644
+--- a/src/eng_back.c
++++ b/src/eng_back.c
+@@ -619,7 +619,7 @@ static void *match_cert(ENGINE_CTX *ctx, PKCS11_TOKEN *tok,
+ 		return NULL;
+ 
+ 	ctx_log(ctx, 1, "Found %u cert%s:\n", cert_count, cert_count <= 1 ? "s" : "");
+-	if (obj_id && *obj_id && (obj_id_len != 0 || obj_label)) {
++	if (obj_id_len != 0 || obj_label) {
+ 		for (m = 0; m < cert_count; m++) {
+ 			PKCS11_CERT *k = certs + m;
+ 
+@@ -688,7 +688,7 @@ static void *match_key(ENGINE_CTX *ctx, const char *key_type,
+ 	ctx_log(ctx, 1, "Found %u %s key%s:\n", key_count, key_type,
+ 		key_count <= 1 ? "" : "s");
+ 
+-	if (obj_id && *obj_id && (obj_id_len != 0 || obj_label)) {
++	if (obj_id_len != 0 || obj_label) {
+ 		for (m = 0; m < key_count; m++) {
+ 			PKCS11_KEY *k = keys + m;
+ 
+
+
+From ef53f58462a41dbd5033e5827a3db9f8f1f4c02c Mon Sep 17 00:00:00 2001
+From: minfrin <minfrin@users.noreply.github.com>
+Date: Tue, 7 Dec 2021 13:48:38 +0200
+Subject: [PATCH 1/4] Tighten up debug logging to include detail of each step.
+
+Make lists more obvious. Include details of the module being loaded,
+the tokens being scanned, and the reasons for not finding objects.
+---
+ src/eng_back.c | 31 +++++++++++++++++++------------
+ 1 file changed, 19 insertions(+), 12 deletions(-)
+
+diff --git a/src/eng_back.c b/src/eng_back.c
+index e0a0988e..ae563593 100644
+--- a/src/eng_back.c
++++ b/src/eng_back.c
+@@ -298,7 +298,7 @@ static int ctx_init_libp11_unlocked(ENGINE_CTX *ctx)
+ 	if (ctx->pkcs11_ctx && ctx->slot_list)
+ 		return 0;
+ 
+-	ctx_log(ctx, 1, "PKCS#11: Initializing the engine\n");
++	ctx_log(ctx, 1, "PKCS#11: Initializing the engine: %s\n", ctx->module);
+ 
+ 	pkcs11_ctx = PKCS11_CTX_new();
+ 	PKCS11_CTX_init_args(pkcs11_ctx, ctx->init_args);
+@@ -388,6 +388,8 @@ static void *ctx_try_load_object(ENGINE_CTX *ctx,
+ 					ctx->pin_length = tmp_pin_len;
+ 				}
+ 			}
++			ctx_log(ctx, 1, "Looking in slots for %s %s login: ",
++				object_typestr, login ? "with" : "without");
+ 		} else {
+ 			n = parse_slot_id_string(ctx, object_uri, &slot_nr,
+ 				obj_id, &obj_id_len, &obj_label);
+@@ -401,9 +403,9 @@ static void *ctx_try_load_object(ENGINE_CTX *ctx,
+ 				ENGerr(ENG_F_CTX_LOAD_OBJECT, ENG_R_INVALID_ID);
+ 				goto error;
+ 			}
++			ctx_log(ctx, 1, "Looking in slot %d for %s %s login: ",
++				slot_nr, object_typestr, login ? "with" : "without");
+ 		}
+-		ctx_log(ctx, 1, "Looking in slot %d for %s: ",
+-			slot_nr, object_typestr);
+ 		if (obj_id_len != 0) {
+ 			ctx_log(ctx, 1, "id=");
+ 			dump_hex(ctx, 1, obj_id, obj_id_len);
+@@ -457,7 +459,7 @@ static void *ctx_try_load_object(ENGINE_CTX *ctx,
+ 					!strcmp(match_tok->model, slot->token->model))) {
+ 			found_slot = slot;
+ 		}
+-		ctx_log(ctx, 1, "[%lu] %-25.25s  %-16s",
++		ctx_log(ctx, 1, "- [%lu] %-25.25s  %-36s",
+ 			PKCS11_get_slotid_from_slot(slot),
+ 			slot->description, flags);
+ 		if (slot->token) {
+@@ -467,9 +469,6 @@ static void *ctx_try_load_object(ENGINE_CTX *ctx,
+ 		}
+ 		ctx_log(ctx, 1, "\n");
+ 
+-		if (found_slot && found_slot->token && !found_slot->token->initialized)
+-			ctx_log(ctx, 0, "Found uninitialized token\n");
+-
+ 		/* Ignore slots without tokens or with uninitialized token */
+ 		if (found_slot && found_slot->token && found_slot->token->initialized) {
+ 			matched_slots[matched_count] = found_slot;
+@@ -480,13 +479,20 @@ static void *ctx_try_load_object(ENGINE_CTX *ctx,
+ 
+ 	if (matched_count == 0) {
+ 		if (match_tok) {
+-			ctx_log(ctx, 0, "Specified object not found\n");
++			if (found_slot) {
++				ctx_log(ctx, 0, "The %s was not found on token %s\n",
++					object_typestr, found_slot->token->label[0] ?
++					found_slot->token->label : "no label");
++			} else {
++				ctx_log(ctx, 0, "No matching initialized token was found for %s\n",
++					object_typestr);
++			}
+ 			goto error;
+ 		}
+ 
+ 		/* If the legacy slot ID format was used */
+ 		if (slot_nr != -1) {
+-			ctx_log(ctx, 0, "Invalid slot number: %d\n", slot_nr);
++			ctx_log(ctx, 0, "The %s was not found on slot %d\n", object_typestr, slot_nr);
+ 			goto error;
+ 		} else {
+ 			found_slot = PKCS11_find_token(ctx->pkcs11_ctx,
+@@ -507,7 +513,7 @@ static void *ctx_try_load_object(ENGINE_CTX *ctx,
+ 		slot = matched_slots[n];
+ 		tok = slot->token;
+ 		if (!tok) {
+-			ctx_log(ctx, 0, "Empty token found\n");
++			ctx_log(ctx, 0, "Empty slot found\n");
+ 			break;
+ 		}
+ 
+@@ -531,7 +537,7 @@ static void *ctx_try_load_object(ENGINE_CTX *ctx,
+ 						" login\n", matched_count);
+ 					for (m = 0; m < matched_count; m++){
+ 						slot = matched_slots[m];
+-						ctx_log(ctx, 0, "[%u] %s: %s\n", m + 1,
++						ctx_log(ctx, 0, "- [%u] %s: %s\n", m + 1,
+ 								slot->description? slot->description:
+ 								"(no description)",
+ 								(slot->token && slot->token->label)?
+@@ -593,7 +599,8 @@ static void *ctx_load_object(ENGINE_CTX *ctx,
+ 		obj = ctx_try_load_object(ctx, object_typestr, match_func,
+ 			object_uri, 1, ui_method, callback_data);
+ 		if (!obj) {
+-			ctx_log(ctx, 0, "The %s was not found.\n", object_typestr);
++			ctx_log(ctx, 0, "The %s was not found at: %s\n",
++				object_typestr, object_uri);
+ 		}
+ 	}
+ 
+
+From 8e16e4a312636ef7ec8bfede8c476c796123bb61 Mon Sep 17 00:00:00 2001
+From: minfrin <minfrin@users.noreply.github.com>
+Date: Tue, 7 Dec 2021 16:42:21 +0200
+Subject: [PATCH 2/4] Correct the handling of the plural on certificates.
+
+---
+ src/eng_back.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/eng_back.c b/src/eng_back.c
+index ae563593..355007b2 100644
+--- a/src/eng_back.c
++++ b/src/eng_back.c
+@@ -625,7 +625,7 @@ static void *match_cert(ENGINE_CTX *ctx, PKCS11_TOKEN *tok,
+ 	if (cert_count == 0)
+ 		return NULL;
+ 
+-	ctx_log(ctx, 1, "Found %u cert%s:\n", cert_count, cert_count <= 1 ? "s" : "");
++	ctx_log(ctx, 1, "Found %u certificate%s:\n", cert_count, cert_count == 1 ? "" : "s");
+ 	if (obj_id_len != 0 || obj_label) {
+ 		for (m = 0; m < cert_count; m++) {
+ 			PKCS11_CERT *k = certs + m;
+
+From 0fe47096494db3929c99653fe9f6ecb1efbd524b Mon Sep 17 00:00:00 2001
+From: minfrin <minfrin@users.noreply.github.com>
+Date: Tue, 7 Dec 2021 18:04:18 +0200
+Subject: [PATCH 3/4] Log how we came to choose a certificate or key.
+
+---
+ src/eng_back.c | 43 +++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 39 insertions(+), 4 deletions(-)
+
+diff --git a/src/eng_back.c b/src/eng_back.c
+index 355007b2..0372afe1 100644
+--- a/src/eng_back.c
++++ b/src/eng_back.c
+@@ -617,6 +617,7 @@ static void *match_cert(ENGINE_CTX *ctx, PKCS11_TOKEN *tok,
+ {
+ 	PKCS11_CERT *certs, *selected_cert = NULL;
+ 	unsigned int m, cert_count;
++	const char *which;
+ 
+ 	if (PKCS11_enumerate_certs(tok, &certs, &cert_count)) {
+ 		ctx_log(ctx, 0, "Unable to enumerate certificates\n");
+@@ -627,9 +628,14 @@ static void *match_cert(ENGINE_CTX *ctx, PKCS11_TOKEN *tok,
+ 
+ 	ctx_log(ctx, 1, "Found %u certificate%s:\n", cert_count, cert_count == 1 ? "" : "s");
+ 	if (obj_id_len != 0 || obj_label) {
++		which = "last matching";
+ 		for (m = 0; m < cert_count; m++) {
+ 			PKCS11_CERT *k = certs + m;
+ 
++			ctx_log(ctx, 1, "  %2u    id=", m + 1);
++			dump_hex(ctx, 1, k->id, k->id_len);
++			ctx_log(ctx, 1, " label=%s\n", k->label ? k->label : "(null)");
++
+ 			if (obj_label && k->label && strcmp(k->label, obj_label) == 0)
+ 				selected_cert = k;
+ 			if (obj_id_len != 0 && k->id_len == obj_id_len &&
+@@ -637,16 +643,32 @@ static void *match_cert(ENGINE_CTX *ctx, PKCS11_TOKEN *tok,
+ 				selected_cert = k;
+ 		}
+ 	} else {
++		which = "first (with id present)";
+ 		for (m = 0; m < cert_count; m++) {
+ 			PKCS11_CERT *k = certs + m;
+-			if (k->id && *k->id) {
++
++			ctx_log(ctx, 1, "  %2u    id=", m + 1);
++			dump_hex(ctx, 1, k->id, k->id_len);
++			ctx_log(ctx, 1, " label=%s\n", k->label ? k->label : "(null)");
++
++			if (!selected_cert && k->id && *k->id) {
+ 				selected_cert = k; /* Use the first certificate with nonempty id */
+-				break;
+ 			}
+ 		}
+-		if (!selected_cert)
++		if (!selected_cert) {
++			which = "first";
+ 			selected_cert = certs; /* Use the first certificate */
++		}
+ 	}
++
++	if (selected_cert) {
++		ctx_log(ctx, 1, "Returning %s certificate: id=", which);
++		dump_hex(ctx, 1, selected_cert->id, selected_cert->id_len);
++		ctx_log(ctx, 1, " label=%s\n", selected_cert->label ? selected_cert->label : "(null)");
++	} else {
++		ctx_log(ctx, 1, "No matching certificate returned.\n");
++	}
++
+ 	return selected_cert;
+ }
+ 
+@@ -688,14 +710,16 @@ static void *match_key(ENGINE_CTX *ctx, const char *key_type,
+ {
+ 	PKCS11_KEY *selected_key = NULL;
+ 	unsigned int m;
++	const char *which;
+ 
+ 	if (key_count == 0)
+ 		return NULL;
+ 
+ 	ctx_log(ctx, 1, "Found %u %s key%s:\n", key_count, key_type,
+-		key_count <= 1 ? "" : "s");
++		key_count == 1 ? "" : "s");
+ 
+ 	if (obj_id_len != 0 || obj_label) {
++		which = "last matching";
+ 		for (m = 0; m < key_count; m++) {
+ 			PKCS11_KEY *k = keys + m;
+ 
+@@ -704,6 +728,7 @@ static void *match_key(ENGINE_CTX *ctx, const char *key_type,
+ 					k->needLogin ? 'L' : ' ');
+ 			dump_hex(ctx, 1, k->id, k->id_len);
+ 			ctx_log(ctx, 1, " label=%s\n", k->label ? k->label : "(null)");
++
+ 			if (obj_label && k->label && strcmp(k->label, obj_label) == 0)
+ 				selected_key = k;
+ 			if (obj_id_len != 0 && k->id_len == obj_id_len
+@@ -711,8 +736,18 @@ static void *match_key(ENGINE_CTX *ctx, const char *key_type,
+ 				selected_key = k;
+ 		}
+ 	} else {
++		which = "first";
+ 		selected_key = keys; /* Use the first key */
+ 	}
++
++	if (selected_key) {
++		ctx_log(ctx, 1, "Returning %s %s key: id=", which, key_type);
++		dump_hex(ctx, 1, selected_key->id, selected_key->id_len);
++		ctx_log(ctx, 1, " label=%s\n", selected_key->label ? selected_key->label : "(null)");
++	} else {
++		ctx_log(ctx, 1, "No matching %s key returned.\n", key_type);
++	}
++
+ 	return selected_key;
+ }
+ 
+
+From 4eb1a0132ef34943bca78a61d2bdd8b4736a029a Mon Sep 17 00:00:00 2001
+From: minfrin <minfrin@users.noreply.github.com>
+Date: Thu, 9 Dec 2021 16:10:57 +0200
+Subject: [PATCH 4/4] When ID and label are specified, both need to match, not
+ either.
+
+To fix this id-match OR label-match was replaced with id-match AND
+label-match.
+
+A tiebreak was added when multiple matching certificates could be
+returned. The certificate with the latest expiry wins, and if we
+still have a tie we deterministically choose a certificate using
+X509_cmp().
+
+If we do not specify a certificate, we return the first certificate
+(or first certificate with an ID) as before.
+
+Debug logging updated to show the expiry date used in the decision.
+---
+ src/eng_back.c | 123 +++++++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 108 insertions(+), 15 deletions(-)
+
+diff --git a/src/eng_back.c b/src/eng_back.c
+index 0372afe1..bb6788a1 100644
+--- a/src/eng_back.c
++++ b/src/eng_back.c
+@@ -87,6 +87,38 @@ static void dump_hex(ENGINE_CTX *ctx, int level,
+ 		ctx_log(ctx, level, "%02x", val[n]);
+ }
+ 
++static void dump_expiry(ENGINE_CTX *ctx, int level,
++		const PKCS11_CERT *cert)
++{
++	BIO *bio;
++	const ASN1_TIME *exp;
++
++	char *data = NULL;
++	int len = 0;
++
++	if (level > ctx->verbose) {
++		return;
++	}
++
++	if (!cert || !cert->x509 || !(exp = X509_get0_notAfter(cert->x509))) {
++		ctx_log(ctx, level, "none");
++	}
++
++	if ((bio = BIO_new(BIO_s_mem())) == NULL) {
++		return;
++	}
++
++	ASN1_TIME_print(bio, exp);
++
++	len = BIO_get_mem_data(bio, &data);
++
++	ctx_log(ctx, level, "%.*s", len, data);
++
++	BIO_free(bio);
++
++	return;
++}
++
+ /******************************************************************************/
+ /* PIN handling                                                               */
+ /******************************************************************************/
+@@ -612,6 +644,39 @@ static void *ctx_load_object(ENGINE_CTX *ctx,
+ /* Certificate handling                                                       */
+ /******************************************************************************/
+ 
++static PKCS11_CERT *cert_cmp(PKCS11_CERT *a, PKCS11_CERT *b, time_t *ptime)
++{
++	const ASN1_TIME *aa, *ba;
++	int pday, psec;
++
++	/* the best certificate exists */
++	if (!a || !a->x509) {
++		return b;
++	}
++	if (!b || !b->x509) {
++		return a;
++	}
++
++	aa = X509_get0_notAfter(a->x509);
++	ba = X509_get0_notAfter(b->x509);
++
++	/* the best certificate expires last */
++	if (ASN1_TIME_diff(&pday, &psec, aa, ba)) {
++		if (pday < 0 || psec < 0) {
++			return a;
++		} else if (pday > 0 || psec > 0) {
++			return b;
++		}
++	}
++
++	/* deterministic tie break */
++	if (X509_cmp(a->x509, b->x509) < 1) {
++		return b;
++	} else {
++		return a;
++	}
++}
++
+ static void *match_cert(ENGINE_CTX *ctx, PKCS11_TOKEN *tok,
+ 		const unsigned char *obj_id, size_t obj_id_len, const char *obj_label)
+ {
+@@ -628,19 +693,32 @@ static void *match_cert(ENGINE_CTX *ctx, PKCS11_TOKEN *tok,
+ 
+ 	ctx_log(ctx, 1, "Found %u certificate%s:\n", cert_count, cert_count == 1 ? "" : "s");
+ 	if (obj_id_len != 0 || obj_label) {
+-		which = "last matching";
++		which = "longest expiry matching";
+ 		for (m = 0; m < cert_count; m++) {
+ 			PKCS11_CERT *k = certs + m;
+ 
+ 			ctx_log(ctx, 1, "  %2u    id=", m + 1);
+ 			dump_hex(ctx, 1, k->id, k->id_len);
+-			ctx_log(ctx, 1, " label=%s\n", k->label ? k->label : "(null)");
+-
+-			if (obj_label && k->label && strcmp(k->label, obj_label) == 0)
+-				selected_cert = k;
+-			if (obj_id_len != 0 && k->id_len == obj_id_len &&
+-					memcmp(k->id, obj_id, obj_id_len) == 0)
+-				selected_cert = k;
++			ctx_log(ctx, 1, " label=%s expiry=", k->label ? k->label : "(null)");
++			dump_expiry(ctx, 1, k);
++			ctx_log(ctx, 1, "\n");
++
++			if (obj_label && obj_id_len != 0) {
++				if (k->label && strcmp(k->label, obj_label) == 0 &&
++						k->id_len == obj_id_len &&
++						memcmp(k->id, obj_id, obj_id_len) == 0) {
++					selected_cert = cert_cmp(selected_cert, k, NULL);
++				}
++			} else if (obj_label && !obj_id_len) {
++				if (k->label && strcmp(k->label, obj_label) == 0) {
++					selected_cert = cert_cmp(selected_cert, k, NULL);
++				}
++			} else if (obj_id_len && !obj_label) {
++				if (k->id_len == obj_id_len &&
++						memcmp(k->id, obj_id, obj_id_len) == 0) {
++					selected_cert = cert_cmp(selected_cert, k, NULL);
++				}
++			}
+ 		}
+ 	} else {
+ 		which = "first (with id present)";
+@@ -649,7 +727,9 @@ static void *match_cert(ENGINE_CTX *ctx, PKCS11_TOKEN *tok,
+ 
+ 			ctx_log(ctx, 1, "  %2u    id=", m + 1);
+ 			dump_hex(ctx, 1, k->id, k->id_len);
+-			ctx_log(ctx, 1, " label=%s\n", k->label ? k->label : "(null)");
++			ctx_log(ctx, 1, " label=%s expiry=", k->label ? k->label : "(null)");
++			dump_expiry(ctx, 1, k);
++			ctx_log(ctx, 1, "\n");
+ 
+ 			if (!selected_cert && k->id && *k->id) {
+ 				selected_cert = k; /* Use the first certificate with nonempty id */
+@@ -664,7 +744,9 @@ static void *match_cert(ENGINE_CTX *ctx, PKCS11_TOKEN *tok,
+ 	if (selected_cert) {
+ 		ctx_log(ctx, 1, "Returning %s certificate: id=", which);
+ 		dump_hex(ctx, 1, selected_cert->id, selected_cert->id_len);
+-		ctx_log(ctx, 1, " label=%s\n", selected_cert->label ? selected_cert->label : "(null)");
++		ctx_log(ctx, 1, " label=%s expiry=", selected_cert->label ? selected_cert->label : "(null)");
++		dump_expiry(ctx, 1, selected_cert);
++		ctx_log(ctx, 1, "\n");
+ 	} else {
+ 		ctx_log(ctx, 1, "No matching certificate returned.\n");
+ 	}
+@@ -729,11 +811,22 @@ static void *match_key(ENGINE_CTX *ctx, const char *key_type,
+ 			dump_hex(ctx, 1, k->id, k->id_len);
+ 			ctx_log(ctx, 1, " label=%s\n", k->label ? k->label : "(null)");
+ 
+-			if (obj_label && k->label && strcmp(k->label, obj_label) == 0)
+-				selected_key = k;
+-			if (obj_id_len != 0 && k->id_len == obj_id_len
+-					&& memcmp(k->id, obj_id, obj_id_len) == 0)
+-				selected_key = k;
++			if (obj_label && obj_id_len != 0) {
++				if (k->label && strcmp(k->label, obj_label) == 0 &&
++						k->id_len == obj_id_len &&
++						memcmp(k->id, obj_id, obj_id_len) == 0) {
++					selected_key = k;
++				}
++			} else if (obj_label && !obj_id_len) {
++				if (k->label && strcmp(k->label, obj_label) == 0) {
++					selected_key = k;
++				}
++			} else if (obj_id_len && !obj_label) {
++				if (k->id_len == obj_id_len &&
++						memcmp(k->id, obj_id, obj_id_len) == 0) {
++					selected_key = k;
++				}
++			}
+ 		}
+ 	} else {
+ 		which = "first";
+

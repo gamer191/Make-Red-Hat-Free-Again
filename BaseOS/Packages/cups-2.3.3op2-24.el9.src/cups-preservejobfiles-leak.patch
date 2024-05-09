@@ -1,0 +1,31 @@
+diff --git a/scheduler/colorman.c b/scheduler/colorman.c
+index 8af4e5c..9bfdb0c 100644
+--- a/scheduler/colorman.c
++++ b/scheduler/colorman.c
+@@ -1083,7 +1083,7 @@ colord_create_profile(
+ 
+   dbus_message_iter_get_basic(&args, &profile_path);
+   cupsdLogMessage(CUPSD_LOG_DEBUG, "Created profile \"%s\".", profile_path);
+-  cupsArrayAdd(profiles, strdup(profile_path));
++  cupsArrayAdd(profiles, profile_path);
+ 
+ out:
+ 
+diff --git a/scheduler/job.c b/scheduler/job.c
+index 0223bee..47d4c72 100644
+--- a/scheduler/job.c
++++ b/scheduler/job.c
+@@ -1496,11 +1496,11 @@ cupsdDeleteJob(cupsd_job_t       *job,	/* I - Job */
+     job->num_files = 0;
+   }
+ 
++  unload_job(job);
++
+   if (job->history)
+     free_job_history(job);
+ 
+-  unload_job(job);
+-
+   cupsArrayRemove(Jobs, job);
+   cupsArrayRemove(ActiveJobs, job);
+   cupsArrayRemove(PrintingJobs, job);

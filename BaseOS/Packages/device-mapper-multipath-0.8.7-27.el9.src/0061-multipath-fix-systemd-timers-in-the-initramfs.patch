@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 5 Aug 2022 18:16:03 -0500
+Subject: [PATCH] multipath: fix systemd timers in the initramfs
+
+The systemd timers created for "find_multipaths smart" conflict with
+shutdown.target, but not with initrd-cleanup.service.  This can make
+these timers trigger after the inirtd has started shutting down,
+restarting multipathd (which then stops initrd-cleanup.service, since it
+conflicts).  To avoid this, make sure the timers and the unit they
+trigger conflict with inird-cleanup.service. Also don't make them start
+multipathd.  "multipath -u" will not return "maybe" if multipathd isn't
+running or set to run, and since we no longer wait for udev-settle,
+multipathd starts up pretty quickly, so it shouldn't be a problem to
+not trigger it here.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ multipath/multipath.rules | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/multipath/multipath.rules b/multipath/multipath.rules
+index 0486bf70..68c30644 100644
+--- a/multipath/multipath.rules
++++ b/multipath/multipath.rules
+@@ -72,7 +72,7 @@ ENV{.SAVED_FM_WAIT_UNTIL}=="?*", GOTO="pretend_mpath"
+ #
+ # We must trigger an "add" event because LVM2 will only act on those.
+ 
+-RUN+="/usr/bin/systemd-run --unit=cancel-multipath-wait-$kernel --description 'cancel waiting for multipath siblings of $kernel' --no-block --timer-property DefaultDependencies=no --timer-property Conflicts=shutdown.target --timer-property Before=shutdown.target --timer-property AccuracySec=500ms --property DefaultDependencies=no --property Conflicts=shutdown.target --property Before=shutdown.target --property Wants=multipathd.service --property After=multipathd.service --on-active=$env{FIND_MULTIPATHS_WAIT_UNTIL} /usr/bin/udevadm trigger --action=add $sys$devpath"
++RUN+="/usr/bin/systemd-run --unit=cancel-multipath-wait-$kernel --description 'cancel waiting for multipath siblings of $kernel' --no-block --timer-property DefaultDependencies=no --timer-property Conflicts=shutdown.target --timer-property Before=shutdown.target --timer-property Conflicts=initrd-cleanup.service --timer-property Before=initrd-cleanup.service --timer-property AccuracySec=500ms --property DefaultDependencies=no --property Conflicts=shutdown.target --property Before=shutdown.target --property Conflicts=initrd-cleanup.service --property Before=initrd-cleanup.service --on-active=$env{FIND_MULTIPATHS_WAIT_UNTIL} /usr/bin/udevadm trigger --action=add $sys$devpath"
+ 
+ LABEL="pretend_mpath"
+ ENV{DM_MULTIPATH_DEVICE_PATH}="1"

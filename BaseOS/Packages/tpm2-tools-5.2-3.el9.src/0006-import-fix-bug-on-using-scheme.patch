@@ -1,0 +1,100 @@
+From acc82191f519f8bcdfcc0827faf024dcd2f56f78 Mon Sep 17 00:00:00 2001
+From: William Roberts <william.c.roberts@intel.com>
+Date: Fri, 20 May 2022 10:49:04 -0500
+Subject: [PATCH 06/17] import: fix bug on using scheme
+
+When scheme is specified in the template, the openssl load functions
+clobber the scheme value and set it to TPM2_ALG_NULL. Only set the
+algorithm to NULL if zero value is specified.
+
+Fixes: #2997
+
+Signed-off-by: William Roberts <william.c.roberts@intel.com>
+---
+ lib/tpm2_openssl.c               | 24 ++++++++++++++++++------
+ test/integration/tests/import.sh | 13 +++++++++----
+ 2 files changed, 27 insertions(+), 10 deletions(-)
+
+diff --git a/lib/tpm2_openssl.c b/lib/tpm2_openssl.c
+index 01bfc9ef..ad43c8e1 100644
+--- a/lib/tpm2_openssl.c
++++ b/lib/tpm2_openssl.c
+@@ -534,9 +534,15 @@ static bool load_public_RSA_from_key(EVP_PKEY *key, TPM2B_PUBLIC *pub) {
+     pt->type = TPM2_ALG_RSA;
+ 
+     TPMS_RSA_PARMS *rdetail = &pub->publicArea.parameters.rsaDetail;
+-    rdetail->scheme.scheme = TPM2_ALG_NULL;
+-    rdetail->symmetric.algorithm = TPM2_ALG_NULL;
+-    rdetail->scheme.details.anySig.hashAlg = TPM2_ALG_NULL;
++    /*
++     * If the scheme is not TPM2_ALG_ERROR (0),
++     * its a valid scheme so don't set it to NULL scheme
++     */
++    if (rdetail->scheme.scheme == TPM2_ALG_ERROR) {
++        rdetail->scheme.scheme = TPM2_ALG_NULL;
++        rdetail->symmetric.algorithm = TPM2_ALG_NULL;
++        rdetail->scheme.details.anySig.hashAlg = TPM2_ALG_NULL;
++    }
+ 
+     /* NULL out sym details */
+     TPMT_SYM_DEF_OBJECT *sym = &rdetail->symmetric;
+@@ -809,9 +815,15 @@ static bool load_public_ECC_from_key(EVP_PKEY *key, TPM2B_PUBLIC *pub) {
+      * no kdf - not sure what this should be
+      */
+     pp->kdf.scheme = TPM2_ALG_NULL;
+-    pp->scheme.scheme = TPM2_ALG_NULL;
+-    pp->symmetric.algorithm = TPM2_ALG_NULL;
+-    pp->scheme.details.anySig.hashAlg = TPM2_ALG_NULL;
++
++    /*
++     * If the scheme is not TPM2_ALG_ERROR (0),
++     * its a valid scheme so don't set it to NULL scheme
++     */
++    if (pp->scheme.scheme == TPM2_ALG_ERROR) {
++        pp->scheme.scheme = TPM2_ALG_NULL;
++        pp->scheme.details.anySig.hashAlg = TPM2_ALG_NULL;
++    }
+ 
+     /* NULL out sym details */
+     TPMT_SYM_DEF_OBJECT *sym = &pp->symmetric;
+diff --git a/test/integration/tests/import.sh b/test/integration/tests/import.sh
+index 9f6a474e..9cb6096f 100644
+--- a/test/integration/tests/import.sh
++++ b/test/integration/tests/import.sh
+@@ -4,8 +4,8 @@ source helpers.sh
+ 
+ cleanup() {
+     rm -f import_key.ctx import_key.name import_key.priv import_key.pub \
+-    parent.ctx plain.dec.ssl  plain.enc plain.txt sym.key import_rsa_key.pub \
+-    import_rsa_key.priv import_rsa_key.ctx import_rsa_key.name private.pem \
++    parent.ctx plain.dec.ssl  plain.enc plain.txt sym.key import_rsa_key*.pub \
++    import_rsa_key*.priv import_rsa_key.ctx import_rsa_key.name private.pem \
+     public.pem plain.rsa.enc plain.rsa.dec public.pem data.in.raw \
+     data.in.digest data.out.signed ticket.out ecc.pub ecc.priv ecc.name \
+     ecc.ctx private.ecc.pem public.ecc.pem passfile aes.key policy.dat \
+@@ -67,6 +67,10 @@ run_rsa_import_test() {
+     tpm2 import -Q -G rsa -g "$name_alg" -i private.pem -C $1 \
+     -u import_rsa_key.pub -r import_rsa_key.priv
+ 
++    # test in import with scheme and discard
++    tpm2 import -G rsa:rsassa-sha256 -g "$name_alg" -i private.pem -C $1 \
++    -u import_rsa_key2.pub -r import_rsa_key2.priv | grep -q 'rsassa'
++
+     tpm2 load -Q -C $1 -u import_rsa_key.pub -r import_rsa_key.priv \
+     -n import_rsa_key.name -c import_rsa_key.ctx
+ 
+@@ -118,8 +122,9 @@ run_ecc_import_test() {
+     shasum -a 256 data.in.raw | awk '{ print "000000 " $1 }' | xxd -r -c 32 > \
+     data.in.digest
+ 
+-    tpm2 import -Q -G ecc -g "$name_alg" -i private.ecc.pem -C $1 -u ecc.pub \
+-    -r ecc.priv
++    # test import with scheme
++    tpm2 import -G ecc:ecdsa-sha256 -g "$name_alg" -i private.ecc.pem -C $1 -u ecc.pub \
++    -r ecc.priv | grep -q 'ecdsa'
+ 
+     tpm2 load -Q -C $1 -u ecc.pub -r ecc.priv -n ecc.name -c ecc.ctx
+ 
+-- 
+2.40.1
+

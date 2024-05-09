@@ -1,0 +1,35 @@
+From 0bc13d75b5883ccf4d6579f7a60fb1badd104649 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Thu, 10 Feb 2022 10:23:22 +0200
+Subject: [PATCH] Eliminate code duplication from rpmfiNext()
+
+Now that we can, let rpmfiSetFX() take care of the details.
+---
+ lib/rpmfi.c | 11 ++---------
+ 1 file changed, 2 insertions(+), 9 deletions(-)
+
+diff --git a/lib/rpmfi.c b/lib/rpmfi.c
+index 689ead2c5..aec8220a3 100644
+--- a/lib/rpmfi.c
++++ b/lib/rpmfi.c
+@@ -856,15 +856,8 @@ int rpmfiNext(rpmfi fi)
+ 	    next = fi->next(fi);
+ 	} while (next == RPMERR_ITER_SKIP);
+ 
+-	if (next >= 0 && next < rpmfilesFC(fi->files)) {
+-	    fi->i = next;
+-	    fi->j = rpmfilesDI(fi->files, fi->i);
+-	} else {
+-	    fi->i = -1;
+-	    if (next >= 0) {
+-		next = -1;
+-	    }
+-	}
++	if (next >= 0)
++	    next = rpmfiSetFX(fi, next);
+     }
+     return next;
+ }
+-- 
+2.41.0
+

@@ -1,0 +1,30 @@
+From d783e7962e268b45c13ad800fca636bb922005fa Mon Sep 17 00:00:00 2001
+From: Juergen Repp <juergen_repp@web.de>
+Date: Tue, 18 Oct 2022 10:32:43 +0200
+Subject: [PATCH 09/17] tss2_provision: fix usage of -L parameter.
+
+The -L short parameter was not marked as parameter with required
+arg in the short opt list.
+Fixes #3147.
+
+Signed-off-by: Juergen Repp <juergen_repp@web.de>
+---
+ tools/fapi/tss2_provision.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/fapi/tss2_provision.c b/tools/fapi/tss2_provision.c
+index 5be7b4dc..7edf2dd3 100644
+--- a/tools/fapi/tss2_provision.c
++++ b/tools/fapi/tss2_provision.c
+@@ -33,7 +33,7 @@ static bool tss2_tool_onstart(tpm2_options **opts) {
+         {"authValueSh",         required_argument, NULL, 'S'},
+         {"authValueLockout",    required_argument, NULL, 'L'},
+     };
+-    return (*opts = tpm2_options_new ("E:S:L",
++    return (*opts = tpm2_options_new ("E:S:L:",
+         ARRAY_LEN(topts), topts, on_option, NULL, 0)) != NULL;
+ }
+ 
+-- 
+2.40.1
+

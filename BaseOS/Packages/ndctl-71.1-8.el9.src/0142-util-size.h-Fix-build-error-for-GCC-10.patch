@@ -1,0 +1,48 @@
+From 3b5fb8b6428dfaab39bab58d67412427f514c1f4 Mon Sep 17 00:00:00 2001
+From: Vaibhav Jain <vaibhav@linux.ibm.com>
+Date: Sat, 26 Feb 2022 17:09:55 +0530
+Subject: [PATCH 142/217] util/size.h: Fix build error for GCC < 10
+
+Building with GCC 8.4.1 results in following build error for 'util/size.c':
+
+../util/size.h:57:16: error: missing binary operator before token "("
+   __has_builtin(__builtin_mul_overflow) && \
+
+This is caused due to missing '__has_builtin' preprocessor operator in GCC
+versions < 10.0.0. The patch updates the check for CLANG's availability of
+__builtin_{mul,add}_overflow to prevent preprocessor from evaluating the
+expression "___has_builtin(__builtin_mul_overflow) &&
+__has_builtin(__builtin_add_overflow)".
+
+Link: https://lore.kernel.org/r/20220226113955.526036-1-vaibhav@linux.ibm.com
+Fixes:10653a171bc0("util/size.h: fix build for older compilers")
+Reported-by: Tarun Sahu <tsahu@linux.ibm.com>
+Reviewed-by: Joao Martins <joao.m.martins@oracle.com>
+Signed-off-by: Vaibhav Jain <vaibhav@linux.ibm.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ util/size.h | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/util/size.h b/util/size.h
+index 1cb0669..02baa77 100644
+--- a/util/size.h
++++ b/util/size.h
+@@ -53,11 +53,12 @@ static inline bool is_power_of_2(unsigned long long v)
+ #define COMPILER_HAS_GENERIC_BUILTIN_OVERFLOW 1
+ #endif
+ 
+-#if __clang__ && \
+-    __has_builtin(__builtin_mul_overflow) && \
++#if __clang__
++#if __has_builtin(__builtin_mul_overflow) && \
+     __has_builtin(__builtin_add_overflow)
+ #define COMPILER_HAS_GENERIC_BUILTIN_OVERFLOW 1
+ #endif
++#endif
+ 
+ #if COMPILER_HAS_GENERIC_BUILTIN_OVERFLOW
+ 
+-- 
+2.27.0
+

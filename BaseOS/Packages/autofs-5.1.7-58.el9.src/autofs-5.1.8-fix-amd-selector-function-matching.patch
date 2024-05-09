@@ -1,0 +1,49 @@
+autofs-5.1.8 - fix amd selector function matching
+
+From: Ian Kent <raven@themaw.net>
+
+The top level lexical analyser matching of 1 and 2 arg selector
+functions did not have enough context to match correctly.
+
+This was causing it to attempt to match the selector function and its
+parameter(s) against the selector function names which wasn't working.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG         |    1 +
+ modules/amd_tok.l |    8 +++++---
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -135,6 +135,7 @@
+ - fix fix mount tree startup reconnect.
+ - fix use_ignore_mount_option description.
+ - include addtional log info for mounts.
++- fix amd selector function matching.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/modules/amd_tok.l
++++ autofs-5.1.7/modules/amd_tok.l
+@@ -159,15 +159,17 @@ CUTSEP		(\|\||\/)
+ 		return SELECTOR;
+ 	}
+ 
+-	"!"/({SEL1ARG}|{SEL2ARG}) { return NOT; }
++	"!"/({SEL1ARG})(\([^,]+\)) { return NOT; }
+ 
+-	{SEL1ARG} {
++	"!"/({SEL2ARG})(\(([^,]+)(,([^,]+))?\)) { return NOT; }
++
++	({SEL1ARG})/(\([^,]+\)) {
+ 		BEGIN(SELARGVAL);
+ 		amd_copy_buffer();
+ 		return SELECTOR;
+ 	}
+ 
+-	{SEL2ARG} {
++	({SEL2ARG})/(\([^,]+)(,([^,]+))?\) {
+ 		BEGIN(SELARGVAL);
+ 		amd_copy_buffer();
+ 		return SELECTOR;

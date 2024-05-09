@@ -1,0 +1,65 @@
+diff -up which-2.21/tilde/tilde.c.coverity which-2.21/tilde/tilde.c
+--- which-2.21/tilde/tilde.c.coverity	2008-01-16 18:51:57.000000000 +0100
++++ which-2.21/tilde/tilde.c	2021-03-21 11:43:00.338160051 +0100
+@@ -193,10 +193,10 @@ tilde_expand (string)
+      const char *string;
+ {
+   char *result;
+-  int result_size, result_index;
++  int result_size = 0, result_index = 0;
+ 
+-  result_index = result_size = 0;
+-  if (result = strchr (string, '~'))
++  result = strchr (string, '~');
++  if (result)
+     result = (char *)xmalloc (result_size = (strlen (string) + 16));
+   else
+     result = (char *)xmalloc (result_size = (strlen (string) + 1));
+@@ -270,7 +270,7 @@ isolate_tilde_prefix (fname, lenp)
+   char *ret;
+   int i;
+ 
+-  ret = (char *)xmalloc (strlen (fname));
++  ret = (char *)xmalloc (strlen (fname) + 1);
+ #if defined (__MSDOS__)
+   for (i = 1; fname[i] && fname[i] != '/' && fname[i] != '\\'; i++)
+ #else
+diff -up which-2.21/which.c.coverity which-2.21/which.c
+--- which-2.21/which.c.coverity	2015-03-19 17:50:24.000000000 +0100
++++ which-2.21/which.c	2021-03-21 12:19:31.289160885 +0100
+@@ -76,16 +76,16 @@ static int skip_functions = 0, read_func
+ 
+ static char *find_command_in_path(const char *name, const char *path_list, int *path_index)
+ {
+-  char *found = NULL, *full_path;
++  char *found = NULL, *full_path = NULL;
+   int status, name_len;
+ 
+   name_len = strlen(name);
++  char *p;
+ 
+   if (!absolute_program(name))
+     absolute_path_given = 0;
+   else
+   {
+-    char *p;
+     absolute_path_given = 1;
+ 
+     if (abs_path)
+@@ -159,6 +159,7 @@ static char *find_command_in_path(const
+     free(full_path);
+   }
+ 
++  name = NULL; p = NULL; path_list = NULL;
+   return (found);
+ }
+ 
+@@ -540,7 +541,7 @@ int main(int argc, char *argv[])
+   int function_start_type = 0;
+   if (read_alias || read_functions)
+   {
+-    char buf[1024];
++    char buf[1024] = {};
+     int processing_aliases = read_alias;
+ 
+     if (isatty(0))

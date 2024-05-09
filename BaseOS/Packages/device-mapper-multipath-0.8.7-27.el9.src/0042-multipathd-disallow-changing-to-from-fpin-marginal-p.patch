@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 11 Feb 2022 17:23:39 -0600
+Subject: [PATCH] multipathd: disallow changing to/from fpin marginal paths on
+ reconfig
+
+Setting marginal_pathgroups to fpin causes two new threads to be created
+when multipathd starts.  Turning it on after multipathd starts up won't
+cause the theads to start, and turing it off won't keep the threads from
+working. So disallow changing marginal_pathgroups to/from "fpin" on
+reconfigure.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/multipath.conf.5 | 13 ++++++++-----
+ multipathd/main.c          |  9 +++++++++
+ 2 files changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index 5ed2cd3c..58ad5c9c 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -1102,15 +1102,18 @@ have been tried first. This prevents the possibility of IO errors occuring
+ while marginal paths are still usable. After the path has been monitored
+ for the configured time, and is declared healthy, it will be returned to its
+ normal pathgroup.
+-However if this option is set to \fIfpin\fR multipathd will receive fpin
++If this option is set to \fIfpin\fR, multipathd will receive fpin
+ notifications, set path states to "marginal" accordingly, and regroup paths
+-as described for "marginal_pathgroups yes". This option can't be used in combination
+-with other options for "Shaky path detection" (see below).If it is set to fpin,
+-marginal_path_xyz and san_path_err_xyz parameters are implicitly set to 0.
++as described for \fIon\fR. This option can't be used in combination
++with other options for "Shaky path detection" (see below). \fBNote:\fR If this
++is set to \fIfpin\fR, the \fImarginal_path_*\fR and \fIsan_path_err_*\fR
++options are implicitly set to \fIno\fP. Also, this option cannot be switched
++either to or from \fIfpin\fR on a multipathd reconfigure. multipathd must be
++restarted for the change to take effect.
+ See "Shaky paths detection" below for more information.
+ .RS
+ .TP
+-The default is: \fBno\fR
++The default is: \fBoff\fR
+ .RE
+ .
+ .
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 53be9b95..45b9572f 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -2792,6 +2792,7 @@ int
+ reconfigure (struct vectors * vecs)
+ {
+ 	struct config * old, *conf;
++	int old_marginal_pathgroups;
+ 
+ 	conf = load_config(DEFAULT_CONFIGFILE);
+ 	if (!conf)
+@@ -2819,6 +2820,14 @@ reconfigure (struct vectors * vecs)
+ 	uxsock_timeout = conf->uxsock_timeout;
+ 
+ 	old = rcu_dereference(multipath_conf);
++	old_marginal_pathgroups = old->marginal_pathgroups;
++	if ((old_marginal_pathgroups == MARGINAL_PATHGROUP_FPIN) !=
++	    (conf->marginal_pathgroups == MARGINAL_PATHGROUP_FPIN)) {
++		condlog(1, "multipathd must be restarted to turn %s fpin marginal paths",
++			(old_marginal_pathgroups == MARGINAL_PATHGROUP_FPIN)?
++			"off" : "on");
++		conf->marginal_pathgroups = old_marginal_pathgroups;
++	}
+ 	conf->sequence_nr = old->sequence_nr + 1;
+ 	rcu_assign_pointer(multipath_conf, conf);
+ 	call_rcu(&old->rcu, rcu_free_config);

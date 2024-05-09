@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 26 Jan 2024 15:40:42 -0500
+Subject: [PATCH] libmultipath: fix displaying auto_resize config setting
+
+When 56476ebd3 ("multipathd: fix auto-resize configuration") removed
+AUTO_RESIZE_UNDEFINED, it didn't update print_auto_resize() to print
+a value for when it was set to 0 (which is now AUTO_RESIZE_NEVER).
+
+Fixes: 56476ebd3 ("multipathd: fix auto-resize configuration")
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/dict.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/libmultipath/dict.c b/libmultipath/dict.c
+index c4db60df..ce1b6c99 100644
+--- a/libmultipath/dict.c
++++ b/libmultipath/dict.c
+@@ -1763,8 +1763,6 @@ def_auto_resize_handler(struct config *conf, vector strvec, const char *file,
+ int
+ print_auto_resize(struct strbuf *buff, long v)
+ {
+-	if (!v)
+-		return 0;
+ 	return append_strbuf_quoted(buff,
+ 			v == AUTO_RESIZE_GROW_ONLY ? "grow_only" :
+ 			v == AUTO_RESIZE_GROW_SHRINK ? "grow_shrink" :

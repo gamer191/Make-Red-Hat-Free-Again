@@ -1,0 +1,32 @@
+From a26f6655546158153807017e7ded2aff5e4e10e4 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Mon, 31 Jan 2022 11:13:35 +0200
+Subject: [PATCH] Bump hash for rpmdb cookie to SHA256 to appease FIPS
+
+The rpmdb cookie is not a security feature, but as these existing
+hashes are more convenient than coming up with our own... we then
+run into the great big wall of FIPS which in its current incarnation
+disallows use of SHA1. And so rpmdbCookie() fails under current FIPS.
+
+Just bumping the algorithm to SHA256 seems the path of lowest
+resistance, whether that algo makes sense for this purpose or not.
+---
+ lib/rpmdb.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/rpmdb.c b/lib/rpmdb.c
+index 01d49a641..00bd4236f 100644
+--- a/lib/rpmdb.c
++++ b/lib/rpmdb.c
+@@ -2642,7 +2642,7 @@ char *rpmdbCookie(rpmdb db)
+     rpmdbIndexIterator ii = rpmdbIndexIteratorInit(db, RPMDBI_NAME);
+ 
+     if (ii) {
+-	DIGEST_CTX ctx = rpmDigestInit(PGPHASHALGO_SHA1, RPMDIGEST_NONE);
++	DIGEST_CTX ctx = rpmDigestInit(PGPHASHALGO_SHA256, RPMDIGEST_NONE);
+ 	const void *key = 0;
+ 	size_t keylen = 0;
+ 	while ((rpmdbIndexIteratorNext(ii, &key, &keylen)) == 0) {
+-- 
+2.34.1
+

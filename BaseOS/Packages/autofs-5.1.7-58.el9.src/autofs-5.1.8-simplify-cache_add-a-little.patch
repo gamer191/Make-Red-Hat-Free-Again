@@ -1,0 +1,44 @@
+autofs-5.1.8 - simplify cache_add() a little
+
+From: Ian Kent <raven@themaw.net>
+
+If a map entry is being added to an existing hash chain there's an
+unneccessarily complicted setting of ->next of the last entry.
+
+Just initialize the map entry ->next field instead and remove the
+confusing assignment.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG   |    1 +
+ lib/cache.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -89,6 +89,7 @@
+ - fix nonstrict fail handling of last offset mount.
+ - dont fail on duplicate offset entry tree add.
+ - fix loop under run in cache_get_offset_parent().
++- simplify cache_add() a little.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/lib/cache.c
++++ autofs-5.1.7/lib/cache.c
+@@ -564,6 +564,7 @@ int cache_add(struct mapent_cache *mc, s
+ 	me->dev = (dev_t) -1;
+ 	me->ino = (ino_t) -1;
+ 	me->flags = 0;
++	me->next = NULL;
+ 
+ 	/* 
+ 	 * We need to add to the end if values exist in order to
+@@ -583,7 +584,6 @@ int cache_add(struct mapent_cache *mc, s
+ 
+ 			existing = next;
+ 		}
+-		me->next = existing->next;
+ 		existing->next = me;
+ 	}
+ 	return CHE_OK;

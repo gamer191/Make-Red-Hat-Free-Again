@@ -1,0 +1,50 @@
+From 490cf87dd27926d16fb10735b467cbc490d5c9f1 Mon Sep 17 00:00:00 2001
+From: Jan Kolarik <jkolarik@redhat.com>
+Date: Wed, 23 Nov 2022 08:44:41 +0000
+Subject: [PATCH] Ignore processing variable files with unsupported encoding
+ (RhBug:2141215)
+
+This issue could be seen for example when there are some temporary files stored by text editors in the `/etc/dnf/vars` folder. These files could be in the binary format and causes `UnicodeDecodeError` exception to be thrown during processing of the var files.
+
+= changelog =
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2141215
+---
+ dnf/conf/substitutions.py | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/dnf/conf/substitutions.py b/dnf/conf/substitutions.py
+index 1281bdf0..4d0f0d55 100644
+--- a/dnf/conf/substitutions.py
++++ b/dnf/conf/substitutions.py
+@@ -18,13 +18,15 @@
+ # Red Hat, Inc.
+ #
+ 
++import logging
+ import os
+ import re
+ 
+-import dnf
+-import dnf.exceptions
++from dnf.i18n import _
+ 
+ ENVIRONMENT_VARS_RE = re.compile(r'^DNF_VAR_[A-Za-z0-9_]+$')
++logger = logging.getLogger('dnf')
++
+ 
+ class Substitutions(dict):
+     # :api
+@@ -60,7 +62,8 @@ class Substitutions(dict):
+                             val = fp.readline()
+                         if val and val[-1] == '\n':
+                             val = val[:-1]
+-                    except (OSError, IOError):
++                    except (OSError, IOError, UnicodeDecodeError) as e:
++                        logger.warning(_("Error when parsing a variable from file '{0}': {1}").format(filepath, e))
+                         continue
+                 if val is not None:
+                     self[fsvar] = val
+-- 
+2.39.0
+

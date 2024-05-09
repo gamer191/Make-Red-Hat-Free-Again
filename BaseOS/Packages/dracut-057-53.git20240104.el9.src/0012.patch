@@ -1,0 +1,51 @@
+From a84df47afae75a0b4068c78d8201a515a841f353 Mon Sep 17 00:00:00 2001
+From: David Tardon <dtardon@redhat.com>
+Date: Tue, 16 Aug 2022 13:30:16 +0200
+Subject: [PATCH] fix(skipcpio): ignore broken pipe
+
+If lsinitrd is called from a context in which SIGPIPE is ignored (e.g.,
+from a systemd unit with default setting of IgnoreSIGPIPE=), the
+following line will result in an error being issued:
+
+bin="$($SKIP "$image" | { read -r -N 6 bin && echo "$bin"; })"
+
+An example error from `kdumpctl start` (which internally just calls
+`systemctl start kdump.service`):
+
+kdumpctl[1287]: ERROR: src/skipcpio/skipcpio.c:191:main(): fwrite
+
+A minimal reproducer:
+
+systemd-run -t sh -c '/path/to/skipcpio /path/to/any/file | false'
+
+(cherry-picked from e9a4d73b73b716a9d2d5f01ceb7b427ef544ed9b)
+
+Resolves: #2109803
+---
+ src/skipcpio/skipcpio.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/skipcpio/skipcpio.c b/src/skipcpio/skipcpio.c
+index 13bfaf53..f66c1869 100644
+--- a/src/skipcpio/skipcpio.c
++++ b/src/skipcpio/skipcpio.c
+@@ -23,6 +23,7 @@
+ #define _GNU_SOURCE
+ #endif
+ 
++#include <errno.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -187,8 +188,10 @@ cat_rest:
+                         goto end;
+                 }
+ 
++                errno = 0;
+                 if (fwrite(buf.copy_buffer, 1, s, stdout) != s) {
+-                        pr_err("fwrite\n");
++                        if (errno != EPIPE)
++                                pr_err("fwrite\n");
+                         goto end;
+                 }
+         }

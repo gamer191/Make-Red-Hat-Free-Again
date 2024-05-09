@@ -1,0 +1,32 @@
+commit c547ad481dca5bc0b0a2e365ebcff3439848f664
+Author: Rohan Sable <rsable@redhat.com>
+Date:   Mon Feb 14 11:15:22 2022 -0500
+
+    mount.nfs Fix error reporting for already mounted shares
+    
+    When mount is triggered for an already mounted
+    share (using auto negotiation), it displays
+    "mount.nfs: Protocol not supported" or
+    "mount.nfs: access denied by server while mounting"
+    instead of EBUSY. This easily causes confusion if
+    the mount was not tried verbose :
+    
+    Signed-off-by: Rohan Sable <rsable@redhat.com>
+    Signed-off-by: Yongcheng Yang <yoyang@redhat.com>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/utils/mount/stropts.c b/utils/mount/stropts.c
+index 3c4e218a..573df6ee 100644
+--- a/utils/mount/stropts.c
++++ b/utils/mount/stropts.c
+@@ -973,7 +973,9 @@ fall_back:
+ 	if ((result = nfs_try_mount_v3v2(mi, FALSE)))
+ 		return result;
+ 
+-	errno = olderrno;
++	if (errno != EBUSY && errno != EACCES)
++		errno = olderrno;
++
+ 	return result;
+ }
+ 

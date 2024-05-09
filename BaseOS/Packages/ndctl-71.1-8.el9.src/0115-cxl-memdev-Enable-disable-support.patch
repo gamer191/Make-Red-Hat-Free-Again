@@ -1,0 +1,379 @@
+From 782694f9aeff6e146cfd00b31822995790546175 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:54:22 -0800
+Subject: [PATCH 115/217] cxl/memdev: Enable / disable support
+
+Introduce the 'cxl {enable,disable}-memdev' commands. When a memdev is
+disabled the ports in the topology may be unregistered. CXL memory regions
+require each endpoint in the interleave to attach to the cxl_mem driver
+before regions are activated.
+
+Note that this starts out with the deliberate bug that it has false
+positive detection of active memdevs. The fix for that bug requires kernel
+support to detect the device's active participation in a region, until then
+require all disable attempts to specify the --force override. This way
+there are never any releases of cxl-cli that lack disable-memdev safety.
+
+Link: https://lore.kernel.org/r/164298566245.3021641.12696907310209056878.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/cxl-disable-memdev.txt | 37 +++++++++++++++
+ Documentation/cxl/cxl-enable-memdev.txt  | 34 ++++++++++++++
+ Documentation/cxl/lib/libcxl.txt         | 23 +++++++++
+ Documentation/cxl/meson.build            |  2 +
+ cxl/builtin.h                            |  2 +
+ cxl/cxl.c                                |  2 +
+ cxl/lib/libcxl.c                         | 58 +++++++++++++++++++++++
+ cxl/lib/libcxl.sym                       |  2 +
+ cxl/libcxl.h                             |  2 +
+ cxl/memdev.c                             | 60 +++++++++++++++++++++++-
+ 10 files changed, 221 insertions(+), 1 deletion(-)
+ create mode 100644 Documentation/cxl/cxl-disable-memdev.txt
+ create mode 100644 Documentation/cxl/cxl-enable-memdev.txt
+
+diff --git a/Documentation/cxl/cxl-disable-memdev.txt b/Documentation/cxl/cxl-disable-memdev.txt
+new file mode 100644
+index 0000000..edd5385
+--- /dev/null
++++ b/Documentation/cxl/cxl-disable-memdev.txt
+@@ -0,0 +1,37 @@
++// SPDX-License-Identifier: GPL-2.0
++
++cxl-disable-memdev(1)
++=====================
++
++NAME
++----
++cxl-disable-memdev - deactivate / hot-remove a given CXL memdev
++
++SYNOPSIS
++--------
++[verse]
++'cxl disable-memdev' <mem0> [<mem1>..<memN>] [<options>]
++
++
++OPTIONS
++-------
++<memory device(s)>::
++include::memdev-option.txt[]
++
++-f::
++--force::
++	DANGEROUS: Override the safety measure that blocks attempts to disable
++	a device if the tool determines the memdev is in active usage. Recall
++	that CXL memory ranges might have been established by platform
++	firmware and disabling an active device is akin to force removing
++	memory from a running system.
++
++-v::
++	Turn on verbose debug messages in the library (if libcxl was built with
++	logging and debug enabled).
++
++include::../copyright.txt[]
++
++SEE ALSO
++--------
++linkcxl:cxl-enable-memdev[1]
+diff --git a/Documentation/cxl/cxl-enable-memdev.txt b/Documentation/cxl/cxl-enable-memdev.txt
+new file mode 100644
+index 0000000..088d5e0
+--- /dev/null
++++ b/Documentation/cxl/cxl-enable-memdev.txt
+@@ -0,0 +1,34 @@
++// SPDX-License-Identifier: GPL-2.0
++
++cxl-enable-memdev(1)
++====================
++
++NAME
++----
++cxl-enable-memdev - activate / hot-add a given CXL memdev
++
++SYNOPSIS
++--------
++[verse]
++'cxl enable-memdev' <mem0> [<mem1>..<memN>] [<options>]
++
++A memdev typically autoenables at initial device discovery. However, if
++it was manually disabled this command can trigger the kernel to activate
++it again. This involves detecting the state of the HDM (Host Managed
++Device Memory) Decoders and validating that CXL.mem is enabled for each
++port in the device's hierarchy.
++
++OPTIONS
++-------
++<memory device(s)>::
++include::memdev-option.txt[]
++
++-v::
++	Turn on verbose debug messages in the library (if libcxl was built with
++	logging and debug enabled).
++
++include::../copyright.txt[]
++
++SEE ALSO
++--------
++linkcxl:cxl-disable-memdev[1]
+diff --git a/Documentation/cxl/lib/libcxl.txt b/Documentation/cxl/lib/libcxl.txt
+index de88d19..49edb71 100644
+--- a/Documentation/cxl/lib/libcxl.txt
++++ b/Documentation/cxl/lib/libcxl.txt
+@@ -93,6 +93,29 @@ device.
+ cxl_memdev_get_numa_node() returns the affinitized CPU node number if
+ available or -1 otherwise.
+ 
++=== MEMDEV: Control
++----
++int cxl_memdev_disable_invalidate(struct cxl_memdev *memdev);
++int cxl_memdev_enable(struct cxl_memdev *memdev);
++----
++When a memory device is disabled it unregisters its associated endpoints
++and potentially intervening switch ports if there are no other memdevs
++pinning that port active. That means that any existing port objects that
++the library has previously returned are in valid and need to be re-read.
++Callers must be careful to re-retrieve port objects after
++cxl_memdev_disable_invalidate(). Any usage of a previously obtained port
++object after a cxl_memdev_disable_invalidate() call is a use-after-free
++programming error. It follows that after cxl_memdev_enable() new ports
++may appear in the topology that were not previously enumerable.
++
++NOTE: cxl_memdev_disable_invalidate() will force disable the memdev
++regardless of whether the memory provided by the device is in active use
++by the operating system. Callers take responisbility for assuring that
++it is safe to disable the memory device. Otherwise, this call can be as
++destructive as ripping a DIMM out of a running system. Like all other
++libcxl calls that mutate the system state or divulge security sensitive
++information this call requires root / CAP_SYS_ADMIN.
++
+ === MEMDEV: Commands
+ ----
+ struct cxl_cmd *cxl_cmd_new_raw(struct cxl_memdev *memdev, int opcode);
+diff --git a/Documentation/cxl/meson.build b/Documentation/cxl/meson.build
+index 0a6346b..7618c97 100644
+--- a/Documentation/cxl/meson.build
++++ b/Documentation/cxl/meson.build
+@@ -30,6 +30,8 @@ cxl_manpages = [
+   'cxl-read-labels.txt',
+   'cxl-write-labels.txt',
+   'cxl-zero-labels.txt',
++  'cxl-enable-memdev.txt',
++  'cxl-disable-memdev.txt',
+ ]
+ 
+ foreach man : cxl_manpages
+diff --git a/cxl/builtin.h b/cxl/builtin.h
+index 78eca6e..621c85c 100644
+--- a/cxl/builtin.h
++++ b/cxl/builtin.h
+@@ -10,4 +10,6 @@ int cmd_read_labels(int argc, const char **argv, struct cxl_ctx *ctx);
+ int cmd_zero_labels(int argc, const char **argv, struct cxl_ctx *ctx);
+ int cmd_init_labels(int argc, const char **argv, struct cxl_ctx *ctx);
+ int cmd_check_labels(int argc, const char **argv, struct cxl_ctx *ctx);
++int cmd_disable_memdev(int argc, const char **argv, struct cxl_ctx *ctx);
++int cmd_enable_memdev(int argc, const char **argv, struct cxl_ctx *ctx);
+ #endif /* _CXL_BUILTIN_H_ */
+diff --git a/cxl/cxl.c b/cxl/cxl.c
+index 4b1661d..78d2e9a 100644
+--- a/cxl/cxl.c
++++ b/cxl/cxl.c
+@@ -64,6 +64,8 @@ static struct cmd_struct commands[] = {
+ 	{ "zero-labels", .c_fn = cmd_zero_labels },
+ 	{ "read-labels", .c_fn = cmd_read_labels },
+ 	{ "write-labels", .c_fn = cmd_write_labels },
++	{ "disable-memdev", .c_fn = cmd_disable_memdev },
++	{ "enable-memdev", .c_fn = cmd_enable_memdev },
+ };
+ 
+ int main(int argc, const char **argv)
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 14c7db8..2fdaf71 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -500,6 +500,64 @@ CXL_EXPORT const char *cxl_memdev_get_firmware_verison(struct cxl_memdev *memdev
+ 	return memdev->firmware_version;
+ }
+ 
++CXL_EXPORT int cxl_memdev_disable_invalidate(struct cxl_memdev *memdev)
++{
++	struct cxl_ctx *ctx = cxl_memdev_get_ctx(memdev);
++	const char *devname = cxl_memdev_get_devname(memdev);
++	struct cxl_port *port, *_p, *bus_port;
++	struct cxl_bus *bus;
++
++	if (!cxl_memdev_is_enabled(memdev))
++		return 0;
++
++	bus = cxl_memdev_get_bus(memdev);
++	if (!bus) {
++		err(ctx, "%s: failed to invalidate\n", devname);
++		return -ENXIO;
++	}
++
++	util_unbind(memdev->dev_path, ctx);
++
++	if (cxl_memdev_is_enabled(memdev)) {
++		err(ctx, "%s: failed to disable\n", devname);
++		return -EBUSY;
++	}
++
++	/*
++	 * The state of all ports is now indeterminate, delete them all
++	 * and start over.
++	 */
++	bus_port = cxl_bus_get_port(bus);
++	list_for_each_safe(&bus_port->child_ports, port, _p, list)
++		free_port(port, &bus_port->child_ports);
++	bus_port->ports_init = 0;
++	memdev->endpoint = NULL;
++
++	dbg(ctx, "%s: disabled\n", devname);
++
++	return 0;
++}
++
++CXL_EXPORT int cxl_memdev_enable(struct cxl_memdev *memdev)
++{
++	struct cxl_ctx *ctx = cxl_memdev_get_ctx(memdev);
++	const char *devname = cxl_memdev_get_devname(memdev);
++
++	if (cxl_memdev_is_enabled(memdev))
++		return 0;
++
++	util_bind(devname, memdev->module, "cxl", ctx);
++
++	if (!cxl_memdev_is_enabled(memdev)) {
++		err(ctx, "%s: failed to enable\n", devname);
++		return -ENXIO;
++	}
++
++	dbg(ctx, "%s: enabled\n", devname);
++
++	return 0;
++}
++
+ static struct cxl_endpoint *cxl_port_find_endpoint(struct cxl_port *parent_port,
+ 						   struct cxl_memdev *memdev)
+ {
+diff --git a/cxl/lib/libcxl.sym b/cxl/lib/libcxl.sym
+index b13a2d6..f235e99 100644
+--- a/cxl/lib/libcxl.sym
++++ b/cxl/lib/libcxl.sym
+@@ -115,4 +115,6 @@ global:
+ 	cxl_memdev_get_endpoint;
+ 	cxl_memdev_is_enabled;
+ 	cxl_memdev_get_bus;
++	cxl_memdev_disable_invalidate;
++	cxl_memdev_enable;
+ } LIBCXL_1;
+diff --git a/cxl/libcxl.h b/cxl/libcxl.h
+index be656ed..53f68dd 100644
+--- a/cxl/libcxl.h
++++ b/cxl/libcxl.h
+@@ -48,6 +48,8 @@ unsigned long long cxl_memdev_get_pmem_size(struct cxl_memdev *memdev);
+ unsigned long long cxl_memdev_get_ram_size(struct cxl_memdev *memdev);
+ const char *cxl_memdev_get_firmware_verison(struct cxl_memdev *memdev);
+ size_t cxl_memdev_get_label_size(struct cxl_memdev *memdev);
++int cxl_memdev_disable_invalidate(struct cxl_memdev *memdev);
++int cxl_memdev_enable(struct cxl_memdev *memdev);
+ struct cxl_endpoint;
+ struct cxl_endpoint *cxl_memdev_get_endpoint(struct cxl_memdev *memdev);
+ int cxl_memdev_nvdimm_bridge_active(struct cxl_memdev *memdev);
+diff --git a/cxl/memdev.c b/cxl/memdev.c
+index ef5343a..90b33e1 100644
+--- a/cxl/memdev.c
++++ b/cxl/memdev.c
+@@ -25,13 +25,14 @@ static struct parameters {
+ 	unsigned offset;
+ 	bool verbose;
+ 	bool serial;
++	bool force;
+ } param;
+ 
+ static struct log_ctx ml;
+ 
+ #define BASE_OPTIONS() \
+ OPT_BOOLEAN('v',"verbose", &param.verbose, "turn on debug"), \
+-OPT_BOOLEAN('S', "serial", &param.serial, "user serials numbers to id memdevs")
++OPT_BOOLEAN('S', "serial", &param.serial, "use serial numbers to id memdevs")
+ 
+ #define READ_OPTIONS() \
+ OPT_STRING('o', "output", &param.outfile, "output-file", \
+@@ -46,6 +47,10 @@ OPT_UINTEGER('s', "size", &param.len, "number of label bytes to operate"), \
+ OPT_UINTEGER('O', "offset", &param.offset, \
+ 	"offset into the label area to start operation")
+ 
++#define DISABLE_OPTIONS()                                              \
++OPT_BOOLEAN('f', "force", &param.force,                                \
++	    "DANGEROUS: override active memdev safety checks")
++
+ static const struct option read_options[] = {
+ 	BASE_OPTIONS(),
+ 	LABEL_OPTIONS(),
+@@ -66,6 +71,37 @@ static const struct option zero_options[] = {
+ 	OPT_END(),
+ };
+ 
++static const struct option disable_options[] = {
++	BASE_OPTIONS(),
++	DISABLE_OPTIONS(),
++	OPT_END(),
++};
++
++static const struct option enable_options[] = {
++	BASE_OPTIONS(),
++	OPT_END(),
++};
++
++static int action_disable(struct cxl_memdev *memdev, struct action_context *actx)
++{
++	if (!cxl_memdev_is_enabled(memdev))
++		return 0;
++
++	if (!param.force) {
++		/* TODO: actually detect rather than assume active */
++		log_err(&ml, "%s is part of an active region\n",
++			cxl_memdev_get_devname(memdev));
++		return -EBUSY;
++	}
++
++	return cxl_memdev_disable_invalidate(memdev);
++}
++
++static int action_enable(struct cxl_memdev *memdev, struct action_context *actx)
++{
++	return cxl_memdev_enable(memdev);
++}
++
+ static int action_zero(struct cxl_memdev *memdev, struct action_context *actx)
+ {
+ 	size_t size;
+@@ -340,3 +376,25 @@ int cmd_zero_labels(int argc, const char **argv, struct cxl_ctx *ctx)
+ 		 count > 1 ? "s" : "");
+ 	return count >= 0 ? 0 : EXIT_FAILURE;
+ }
++
++int cmd_disable_memdev(int argc, const char **argv, struct cxl_ctx *ctx)
++{
++	int count = memdev_action(
++		argc, argv, ctx, action_disable, disable_options,
++		"cxl disable-memdev <mem0> [<mem1>..<memN>] [<options>]");
++
++	log_info(&ml, "disabled %d mem%s\n", count >= 0 ? count : 0,
++		 count > 1 ? "s" : "");
++	return count >= 0 ? 0 : EXIT_FAILURE;
++}
++
++int cmd_enable_memdev(int argc, const char **argv, struct cxl_ctx *ctx)
++{
++	int count = memdev_action(
++		argc, argv, ctx, action_enable, enable_options,
++		"cxl enable-memdev <mem0> [<mem1>..<memN>] [<options>]");
++
++	log_info(&ml, "enabled %d mem%s\n", count >= 0 ? count : 0,
++		 count > 1 ? "s" : "");
++	return count >= 0 ? 0 : EXIT_FAILURE;
++}
+-- 
+2.27.0
+

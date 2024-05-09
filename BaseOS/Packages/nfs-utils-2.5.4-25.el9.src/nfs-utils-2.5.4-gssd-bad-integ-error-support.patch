@@ -1,0 +1,239 @@
+diff --git a/aclocal/libtirpc.m4 b/aclocal/libtirpc.m4
+index 27368ff2..4379b14d 100644
+--- a/aclocal/libtirpc.m4
++++ b/aclocal/libtirpc.m4
+@@ -26,6 +26,11 @@ AC_DEFUN([AC_LIBTIRPC], [
+                                     [Define to 1 if your tirpc library provides libtirpc_set_debug])],,
+                          [${LIBS}])])
+ 
++     AS_IF([test -n "${LIBTIRPC}"],
++           [AC_CHECK_LIB([tirpc], [rpc_gss_seccreate],
++                         [AC_DEFINE([HAVE_TIRPC_GSS_SECCREATE], [1],
++                                    [Define to 1 if your tirpc library provides rpc_gss_seccreate])],,
++                         [${LIBS}])])
+   AC_SUBST([AM_CPPFLAGS])
+   AC_SUBST(LIBTIRPC)
+ 
+diff --git a/utils/gssd/gssd_proc.c b/utils/gssd/gssd_proc.c
+index ae568f15..7629de0b 100644
+--- a/utils/gssd/gssd_proc.c
++++ b/utils/gssd/gssd_proc.c
+@@ -70,6 +70,9 @@
+ #include <sys/types.h>
+ #include <sys/wait.h>
+ #include <syscall.h>
++#ifdef HAVE_TIRPC_GSS_SECCREATE
++#include <rpc/rpcsec_gss.h>
++#endif
+ 
+ #include "gssd.h"
+ #include "err_util.h"
+@@ -330,6 +333,11 @@ create_auth_rpc_client(struct clnt_info *clp,
+ 	struct timeval	timeout;
+ 	struct sockaddr		*addr = (struct sockaddr *) &clp->addr;
+ 	socklen_t		salen;
++#ifdef HAVE_TIRPC_GSS_SECCREATE
++	rpc_gss_options_req_t	req;
++	rpc_gss_options_ret_t	ret;
++	char			mechanism[] = "kerberos_v5";
++#endif
+ 	pthread_t tid = pthread_self();
+ 
+ 	sec.qop = GSS_C_QOP_DEFAULT;
+@@ -410,15 +418,43 @@ create_auth_rpc_client(struct clnt_info *clp,
+ 
+ 	printerr(3, "create_auth_rpc_client(0x%lx): creating context with server %s\n", 
+ 		tid, tgtname);
++#ifdef HAVE_TIRPC_GSS_SECCREATE
++	memset(&req, 0, sizeof(req));
++	req.my_cred = sec.cred;
++	auth = rpc_gss_seccreate(rpc_clnt, tgtname, mechanism,
++			rpcsec_gss_svc_none, NULL, &req, &ret);
++#else
+ 	auth = authgss_create_default(rpc_clnt, tgtname, &sec);
++#endif
+ 	if (!auth) {
++#ifdef HAVE_TIRPC_GSS_SECCREATE
++		if (ret.minor_status == KRB5KRB_AP_ERR_BAD_INTEGRITY) {
++			printerr(2, "WARNING: server=%s failed context "
++				 "creation with KRB5_AP_ERR_BAD_INTEGRITY\n",
++				 clp->servername);
++			if (cred == GSS_C_NO_CREDENTIAL)
++				retval = gssd_refresh_krb5_machine_credential(clp->servername,
++					"*", NULL, 1);
++			else
++				retval = gssd_k5_remove_bad_service_cred(clp->servername);
++			if (!retval) {
++				auth = rpc_gss_seccreate(rpc_clnt, tgtname,
++						mechanism, rpcsec_gss_svc_none,
++						NULL, &req, &ret);
++				if (auth)
++					goto success;
++			}
++		}
++#endif
+ 		/* Our caller should print appropriate message */
+ 		printerr(2, "WARNING: Failed to create krb5 context for "
+ 			    "user with uid %d for server %s\n",
+ 			 uid, tgtname);
+ 		goto out_fail;
+ 	}
+-
++#ifdef HAVE_TIRPC_GSS_SECCREATE
++success:
++#endif
+ 	/* Success !!! */
+ 	rpc_clnt->cl_auth = auth;
+ 	*clnt_return = rpc_clnt;
+@@ -571,7 +607,7 @@ krb5_use_machine_creds(struct clnt_info *clp, uid_t uid,
+ 
+ 	do {
+ 		gssd_refresh_krb5_machine_credential(clp->servername,
+-						     service, srchost);
++						     service, srchost, 0);
+ 	/*
+ 	 * Get a list of credential cache names and try each
+ 	 * of them until one works or we've tried them all
+diff --git a/utils/gssd/krb5_util.c b/utils/gssd/krb5_util.c
+index e3f270e9..6f66ef4f 100644
+--- a/utils/gssd/krb5_util.c
++++ b/utils/gssd/krb5_util.c
+@@ -165,7 +165,7 @@ static int select_krb5_ccache(const struct dirent *d);
+ static int gssd_find_existing_krb5_ccache(uid_t uid, char *dirname,
+ 		const char **cctype, struct dirent **d);
+ static int gssd_get_single_krb5_cred(krb5_context context,
+-		krb5_keytab kt, struct gssd_k5_kt_princ *ple);
++		krb5_keytab kt, struct gssd_k5_kt_princ *ple, int force_renew);
+ static int query_krb5_ccache(const char* cred_cache, char **ret_princname,
+ 		char **ret_realm);
+ 
+@@ -391,7 +391,8 @@ gssd_check_if_cc_exists(struct gssd_k5_kt_princ *ple)
+ static int
+ gssd_get_single_krb5_cred(krb5_context context,
+ 			  krb5_keytab kt,
+-			  struct gssd_k5_kt_princ *ple)
++			  struct gssd_k5_kt_princ *ple,
++			  int force_renew)
+ {
+ #ifdef HAVE_KRB5_GET_INIT_CREDS_OPT_SET_ADDRESSLESS
+ 	krb5_get_init_creds_opt *init_opts = NULL;
+@@ -421,7 +422,7 @@ gssd_get_single_krb5_cred(krb5_context context,
+ 	 */
+ 	now += 300;
+ 	pthread_mutex_lock(&ple_lock);
+-	if (ple->ccname && ple->endtime > now && !nocache) {
++	if (ple->ccname && ple->endtime > now && !nocache && !force_renew) {
+ 		printerr(3, "%s(0x%lx): Credentials in CC '%s' are good until %s",
+ 			 __func__, tid, ple->ccname, ctime((time_t *)&ple->endtime));
+ 		code = 0;
+@@ -1155,7 +1156,8 @@ err_cache:
+ static int
+ gssd_refresh_krb5_machine_credential_internal(char *hostname,
+ 				     struct gssd_k5_kt_princ *ple,
+-				     char *service, char *srchost)
++				     char *service, char *srchost,
++				     int force_renew)
+ {
+ 	krb5_error_code code = 0;
+ 	krb5_context context;
+@@ -1221,7 +1223,7 @@ gssd_refresh_krb5_machine_credential_internal(char *hostname,
+ 			goto out_free_kt;
+ 		}
+ 	}
+-	retval = gssd_get_single_krb5_cred(context, kt, ple);
++	retval = gssd_get_single_krb5_cred(context, kt, ple, force_renew);
+ out_free_kt:
+ 	krb5_kt_close(context, kt);
+ out_free_context:
+@@ -1344,7 +1346,7 @@ gssd_get_krb5_machine_cred_list(char ***list)
+ 		pthread_mutex_unlock(&ple_lock);
+ 		/* Make sure cred is up-to-date before returning it */
+ 		retval = gssd_refresh_krb5_machine_credential_internal(NULL, ple,
+-								       NULL, NULL);
++								       NULL, NULL, 0);
+ 		pthread_mutex_lock(&ple_lock);
+ 		if (gssd_k5_kt_princ_list == NULL) {
+ 			/* Looks like we did shutdown... abort */
+@@ -1456,10 +1458,12 @@ gssd_destroy_krb5_principals(int destroy_machine_creds)
+  */
+ int
+ gssd_refresh_krb5_machine_credential(char *hostname,
+-				     char *service, char *srchost)
++				     char *service, char *srchost,
++				     int force_renew)
+ {
+     return gssd_refresh_krb5_machine_credential_internal(hostname, NULL,
+-							 service, srchost);
++							 service, srchost,
++							 force_renew);
+ }
+ 
+ /*
+@@ -1549,6 +1553,48 @@ gssd_acquire_user_cred(gss_cred_id_t *gss_cred)
+ 	return ret;
+ }
+ 
++/* Removed a service ticket for nfs/<name> from the ticket cache
++ */
++int
++gssd_k5_remove_bad_service_cred(char *name)
++{
++        krb5_creds in_creds, out_creds;
++        krb5_error_code ret;
++        krb5_context context;
++        krb5_ccache cache;
++        krb5_principal principal;
++        int retflags = KRB5_TC_MATCH_SRV_NAMEONLY;
++        char srvname[1024];
++
++        ret = krb5_init_context(&context);
++        if (ret)
++                goto out_cred;
++        ret = krb5_cc_default(context, &cache);
++        if (ret)
++                goto out_free_context;
++        ret = krb5_cc_get_principal(context, cache, &principal);
++        if (ret)
++                goto out_close_cache;
++        memset(&in_creds, 0, sizeof(in_creds));
++        in_creds.client = principal;
++        sprintf(srvname, "nfs/%s", name);
++        ret = krb5_parse_name(context, srvname, &in_creds.server);
++        if (ret)
++                goto out_free_principal;
++        ret = krb5_cc_retrieve_cred(context, cache, retflags, &in_creds, &out_creds);
++        if (ret)
++                goto out_free_principal;
++        ret = krb5_cc_remove_cred(context, cache, 0, &out_creds);
++out_free_principal:
++        krb5_free_principal(context, principal);
++out_close_cache:
++        krb5_cc_close(context, cache);
++out_free_context:
++        krb5_free_context(context);
++out_cred:
++        return ret;
++}
++
+ #ifdef HAVE_SET_ALLOWABLE_ENCTYPES
+ /*
+  * this routine obtains a credentials handle via gss_acquire_cred()
+diff --git a/utils/gssd/krb5_util.h b/utils/gssd/krb5_util.h
+index 2415205a..7ef87018 100644
+--- a/utils/gssd/krb5_util.h
++++ b/utils/gssd/krb5_util.h
+@@ -16,11 +16,13 @@ int  gssd_get_krb5_machine_cred_list(char ***list);
+ void gssd_free_krb5_machine_cred_list(char **list);
+ void gssd_destroy_krb5_principals(int destroy_machine_creds);
+ int  gssd_refresh_krb5_machine_credential(char *hostname,
+-					  char *service, char *srchost);
++					  char *service, char *srchost,
++					  int force_renew);
+ char *gssd_k5_err_msg(krb5_context context, krb5_error_code code);
+ void gssd_k5_get_default_realm(char **def_realm);
+ 
+ int gssd_acquire_user_cred(gss_cred_id_t *gss_cred);
++int gssd_k5_remove_bad_service_cred(char *srvname);
+ 
+ #ifdef HAVE_SET_ALLOWABLE_ENCTYPES
+ extern int limit_to_legacy_enctypes;

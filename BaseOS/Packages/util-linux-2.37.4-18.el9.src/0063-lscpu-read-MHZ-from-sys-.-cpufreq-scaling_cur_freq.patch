@@ -1,0 +1,44 @@
+From 259178cd356109c861bf41ec32cea905faeabbca Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Tue, 25 May 2021 13:23:39 +0200
+Subject: lscpu: read MHZ from /sys/.../cpufreq/scaling_cur_freq
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is more portable and provides more stable results than
+/proc/cpuinfo.
+
+Addresses: https://issues.redhat.com/browse/RHEL-12783
+Upstream: http://github.com/util-linux/util-linux/commit/f2d08d4ddc9bc601107df28dd8e4598cf2e0b420
+Fixes: https://github.com/karelzak/util-linux/pull/1317
+Co-Author: Thomas Weißschuh
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ sys-utils/lscpu-topology.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/sys-utils/lscpu-topology.c b/sys-utils/lscpu-topology.c
+index bba727643..fe4da7cd5 100644
+--- a/sys-utils/lscpu-topology.c
++++ b/sys-utils/lscpu-topology.c
+@@ -551,6 +551,16 @@ static int read_mhz(struct lscpu_cxt *cxt, struct lscpu_cpu *cpu)
+ 	if (ul_path_readf_s32(sys, &mhz, "cpu%d/cpufreq/cpuinfo_min_freq", num) == 0)
+ 		cpu->mhz_min_freq = (float) mhz / 1000;
+ 
++	/* The default current-frequency value comes is from /proc/cpuinfo (if
++	 * available).  This /proc value is usually based on MSR registers
++	 * (APERF/APERF) and it changes pretty often. It seems better to read
++	 * frequency from cpufreq subsystem that provides the current frequency
++	 * for the current policy. There is also cpuinfo_cur_freq in sysfs, but
++	 * it's not always available.
++	 */
++	if (ul_path_readf_s32(sys, &mhz, "cpu%d/cpufreq/scaling_cur_freq", num) == 0)
++		cpu->mhz_cur_freq = (float) mhz / 1000;
++
+ 	if (cpu->type && (cpu->mhz_min_freq || cpu->mhz_max_freq))
+ 		cpu->type->has_freq = 1;
+ 
+-- 
+2.43.0
+

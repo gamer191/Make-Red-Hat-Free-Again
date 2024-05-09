@@ -1,0 +1,53 @@
+autofs-5.1.8 - fix memory leak in update_hosts_mounts()
+
+From: Ian Kent <raven@themaw.net>
+
+Coverity has reported a memory leak in update_hosts_mounts() introduced
+by the map reload deadlock fix.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG              |    1 +
+ modules/lookup_hosts.c |   13 +++++++------
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -109,6 +109,7 @@
+ - coverity fix for invalid access.
+ - fix hosts map deadlock on restart.
+ - fix deadlock with hosts map reload.
++- fix memory leak in update_hosts_mounts().
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/modules/lookup_hosts.c
++++ autofs-5.1.7/modules/lookup_hosts.c
+@@ -307,20 +307,21 @@ next:
+ 	}
+ 	pthread_cleanup_pop(1);
+ 
+-	while (head) {
++	entries = head;
++	while (entries) {
+ 		debug(ap->logopt, MODPREFIX
+-		      "attempt to update exports for %s", head->key);
++		      "attempt to update exports for %s", entries->key);
+ 
+ 		master_source_current_wait(ap->entry);
+ 		ap->entry->current = source;
+ 		ap->flags |= MOUNT_FLAG_REMOUNT;
+-		ret = ctxt->parse->parse_mount(ap, head->key, strlen(head->key),
+-					       head->entry, ctxt->parse->context);
++		ret = ctxt->parse->parse_mount(ap, entries->key, strlen(entries->key),
++					       entries->entry, ctxt->parse->context);
+ 		if (ret)
+ 			warn(ap->logopt, MODPREFIX
+-			     "failed to parse mount %s", head->entry);
++			     "failed to parse mount %s", entries->entry);
+ 		ap->flags &= ~MOUNT_FLAG_REMOUNT;
+-		head = head->next;
++		entries = entries->next;
+ 	}
+ 	pthread_cleanup_pop(1);
+ }

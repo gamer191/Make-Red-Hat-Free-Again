@@ -1,0 +1,200 @@
+From 15cae420681c5e8efad2b4cbaf0470960e2eba52 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:54:55 -0800
+Subject: [PATCH 121/217] cxl/list: Support filtering memdevs by ports
+
+The ability to filter memdevs by decoders falls short when the decoder does
+not have its target list programmed. So, introduce a by port filter to show
+the potential memdevs that can be targeted by the decoder.
+
+Link: https://lore.kernel.org/r/164298569568.3021641.888802471376117408.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/cxl-list.txt   |  3 +-
+ Documentation/cxl/lib/libcxl.txt |  7 ++++-
+ cxl/filter.c                     | 50 ++++++++++++++++++++++++++++++++
+ cxl/lib/libcxl.c                 | 23 +++++++++++++++
+ cxl/lib/libcxl.sym               |  2 ++
+ cxl/libcxl.h                     |  3 ++
+ 6 files changed, 86 insertions(+), 2 deletions(-)
+
+diff --git a/Documentation/cxl/cxl-list.txt b/Documentation/cxl/cxl-list.txt
+index 04e831e..90e6d9f 100644
+--- a/Documentation/cxl/cxl-list.txt
++++ b/Documentation/cxl/cxl-list.txt
+@@ -63,7 +63,8 @@ one or more memdevs. For example:
+ ----
+ Additionally, when provisioning new interleave configurations it is
+ useful to know which memdevs can be referenced by a given decoder like a
+-root decoder:
++root decoder, or mapped by a given port if the decoders are not
++configured.
+ ----
+ # cxl list -Mu -d decoder0.0
+ {
+diff --git a/Documentation/cxl/lib/libcxl.txt b/Documentation/cxl/lib/libcxl.txt
+index 5ad3027..a0fcee9 100644
+--- a/Documentation/cxl/lib/libcxl.txt
++++ b/Documentation/cxl/lib/libcxl.txt
+@@ -276,11 +276,12 @@ CXL / PCIe host bridge.
+ ----
+ struct cxl_dport *cxl_dport_get_first(struct cxl_port *port);
+ struct cxl_dport *cxl_dport_get_next(struct cxl_dport *dport);
++struct cxl_dport *cxl_port_get_dport_by_memdev(struct cxl_port *port,
++                                               struct cxl_memdev *memdev);
+ 
+ #define cxl_dport_foreach(port, dport)                                     \
+        for (dport = cxl_dport_get_first(port); dport != NULL;              \
+             dport = cxl_dport_get_next(dport))
+-
+ ----
+ 
+ ===== DPORT: Attributes
+@@ -288,12 +289,16 @@ struct cxl_dport *cxl_dport_get_next(struct cxl_dport *dport);
+ const char *cxl_dport_get_devname(struct cxl_dport *dport);
+ const char *cxl_dport_get_physical_node(struct cxl_dport *dport);
+ int cxl_dport_get_id(struct cxl_dport *dport);
++bool cxl_dport_maps_memdev(struct cxl_dport *dport, struct cxl_memdev *memdev);
+ ----
+ The id of a dport is the hardware idenfifier used by an upstream port to
+ reference a downstream port. The physical node of a dport is only
+ available for platform firmware defined downstream ports and alias the
+ companion object, like a PCI host bridge, in the PCI device hierarchy.
+ 
++The cxl_dport_maps_memdev() helper checks if a dport is an ancestor of a
++given memdev.
++
+ ENDPOINTS
+ ---------
+ CXL endpoint objects encapsulate the set of host-managed device-memory
+diff --git a/cxl/filter.c b/cxl/filter.c
+index c972545..c691edf 100644
+--- a/cxl/filter.c
++++ b/cxl/filter.c
+@@ -486,6 +486,53 @@ util_cxl_memdev_filter_by_decoder(struct cxl_memdev *memdev, const char *ident)
+ 	return NULL;
+ }
+ 
++static bool __memdev_filter_by_port(struct cxl_memdev *memdev,
++				    struct cxl_port *port,
++				    const char *port_ident)
++{
++	struct cxl_endpoint *endpoint;
++
++	if (util_cxl_port_filter(port, port_ident, CXL_PF_SINGLE) &&
++	    cxl_port_get_dport_by_memdev(port, memdev))
++		return true;
++
++	cxl_endpoint_foreach(port, endpoint)
++		if (__memdev_filter_by_port(memdev,
++					    cxl_endpoint_get_port(endpoint),
++					    port_ident))
++			return true;
++	return false;
++}
++
++static struct cxl_memdev *
++util_cxl_memdev_filter_by_port(struct cxl_memdev *memdev, const char *bus_ident,
++			       const char *port_ident)
++{
++	struct cxl_ctx *ctx = cxl_memdev_get_ctx(memdev);
++	struct cxl_bus *bus;
++
++	if (!bus_ident && !port_ident)
++		return memdev;
++
++	cxl_bus_foreach(ctx, bus) {
++		struct cxl_port *port, *top;
++
++		port = cxl_bus_get_port(bus);
++		if (util_cxl_bus_filter(bus, bus_ident))
++			if (__memdev_filter_by_port(memdev, port,
++						    cxl_bus_get_devname(bus)))
++				return memdev;
++		if (__memdev_filter_by_port(memdev, port, port_ident))
++				return memdev;
++		top = port;
++		cxl_port_foreach_all(top, port)
++			if (__memdev_filter_by_port(memdev, port, port_ident))
++				return memdev;
++	}
++
++	return NULL;
++}
++
+ static unsigned long params_to_flags(struct cxl_filter_params *param)
+ {
+ 	unsigned long flags = 0;
+@@ -647,6 +694,9 @@ static void walk_endpoints(struct cxl_port *port, struct cxl_filter_params *p,
+ 			if (!util_cxl_memdev_filter_by_decoder(
+ 				    memdev, p->decoder_filter))
+ 				continue;
++			if (!util_cxl_memdev_filter_by_port(
++				    memdev, p->bus_filter, p->port_filter))
++				continue;
+ 			if (!p->idle && !cxl_memdev_is_enabled(memdev))
+ 				continue;
+ 			jobj = util_cxl_memdev_to_json(memdev, flags);
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 4ebb8b9..dcfc826 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -1452,6 +1452,29 @@ CXL_EXPORT int cxl_dport_get_id(struct cxl_dport *dport)
+ 	return dport->id;
+ }
+ 
++CXL_EXPORT bool cxl_dport_maps_memdev(struct cxl_dport *dport,
++				      struct cxl_memdev *memdev)
++{
++	struct cxl_ctx *ctx = cxl_memdev_get_ctx(memdev);
++
++	dbg(ctx, "memdev: %s dport: %s\n", memdev->host_path, dport->dev_path);
++
++	if (dport->phys_path)
++		return !!strstr(memdev->host_path, dport->phys_path);
++	return !!strstr(memdev->host_path, dport->dev_path);
++}
++
++CXL_EXPORT struct cxl_dport *
++cxl_port_get_dport_by_memdev(struct cxl_port *port, struct cxl_memdev *memdev)
++{
++	struct cxl_dport *dport;
++
++	cxl_dport_foreach(port, dport)
++		if (cxl_dport_maps_memdev(dport, memdev))
++			return dport;
++	return NULL;
++}
++
+ static void *add_cxl_bus(void *parent, int id, const char *cxlbus_base)
+ {
+ 	const char *devname = devpath_to_devname(cxlbus_base);
+diff --git a/cxl/lib/libcxl.sym b/cxl/lib/libcxl.sym
+index 0190b13..2c8358e 100644
+--- a/cxl/lib/libcxl.sym
++++ b/cxl/lib/libcxl.sym
+@@ -149,4 +149,6 @@ global:
+ 	cxl_dport_get_devname;
+ 	cxl_dport_get_physical_node;
+ 	cxl_dport_get_id;
++	cxl_port_get_dport_by_memdev;
++	cxl_dport_maps_memdev;
+ } LIBCXL_1;
+diff --git a/cxl/libcxl.h b/cxl/libcxl.h
+index 874c381..c8d07bb 100644
+--- a/cxl/libcxl.h
++++ b/cxl/libcxl.h
+@@ -111,6 +111,9 @@ struct cxl_dport *cxl_dport_get_next(struct cxl_dport *dport);
+ const char *cxl_dport_get_devname(struct cxl_dport *dport);
+ const char *cxl_dport_get_physical_node(struct cxl_dport *dport);
+ int cxl_dport_get_id(struct cxl_dport *dport);
++bool cxl_dport_maps_memdev(struct cxl_dport *dport, struct cxl_memdev *memdev);
++struct cxl_dport *cxl_port_get_dport_by_memdev(struct cxl_port *port,
++					       struct cxl_memdev *memdev);
+ 
+ #define cxl_dport_foreach(port, dport)                                         \
+ 	for (dport = cxl_dport_get_first(port); dport != NULL;                 \
+-- 
+2.27.0
+

@@ -1,0 +1,145 @@
+From dfdd500a339804075900bd1af42e433cf8d8f632 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Wed, 3 Jan 2024 14:13:28 +0100
+Subject: libmount: introduce /run/mount/utab.event
+
+The mnt_monitor_...() API uses /run/mount/utab.lock to monitor utab
+changes. The same file is used to control access to the utab file.
+
+The utab can be updated more than once during one mount(8) call, for
+example, one update is done in /sbin/mount.nfs and next in mount(8).
+This situation triggers two (e.g. inotify) events when monitoring is
+based on the lock file.
+
+It seems better to introduce separate file to trigger the event and do
+not trigger this event in /sbin/mount.<type> helpers.
+
+Addresses: https://issues.redhat.com/browse/RHEL-14612
+Upstream: http://github.com/util-linux/util-linux/commit/544824929a740ed5f8108c752872c7f082f301cf
+References: 477401f0de404aafbc7630f70c2f8b1d670e32f8
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libmount/src/context.c    |  6 ++++--
+ libmount/src/monitor.c    | 16 +++++++---------
+ libmount/src/mountP.h     |  1 +
+ libmount/src/tab_update.c | 19 +++++++++++++++++++
+ 4 files changed, 31 insertions(+), 11 deletions(-)
+
+diff --git a/libmount/src/context.c b/libmount/src/context.c
+index 71b8d730a..c03b0ea64 100644
+--- a/libmount/src/context.c
++++ b/libmount/src/context.c
+@@ -2293,7 +2293,7 @@ int mnt_context_update_tabs(struct libmnt_context *cxt)
+ 
+ 		if (mnt_update_already_done(cxt->update, cxt->lock)) {
+ 			DBG(CXT, ul_debugobj(cxt, "don't update: error evaluate or already updated"));
+-			goto end;
++			goto emit;
+ 		}
+ 	} else if (cxt->helper) {
+ 		DBG(CXT, ul_debugobj(cxt, "don't update: external helper"));
+@@ -2317,7 +2317,9 @@ int mnt_context_update_tabs(struct libmnt_context *cxt)
+ 				cxt->mountflags & MS_RDONLY);
+ 
+ 	rc = mnt_update_table(cxt->update, cxt->lock);
+-
++emit:
++	if (rc == 0 && !mnt_context_within_helper(cxt))
++		mnt_update_emit_event(cxt->update);
+ end:
+ 	if (!mnt_context_switch_ns(cxt, ns_old))
+ 		return -MNT_ERR_NAMESPACE;
+diff --git a/libmount/src/monitor.c b/libmount/src/monitor.c
+index dada02ed3..4db56c2e0 100644
+--- a/libmount/src/monitor.c
++++ b/libmount/src/monitor.c
+@@ -224,18 +224,16 @@ static int userspace_add_watch(struct monitor_entry *me, int *final, int *fd)
+ 	assert(me->path);
+ 
+ 	/*
+-	 * libmount uses rename(2) to atomically update utab, monitor
+-	 * rename changes is too tricky. It seems better to monitor utab
+-	 * lockfile close.
++	 * libmount uses utab.event file to monitor and control utab updates
+ 	 */
+-	if (asprintf(&filename, "%s.lock", me->path) <= 0) {
++	if (asprintf(&filename, "%s.event", me->path) <= 0) {
+ 		rc = -errno;
+ 		goto done;
+ 	}
+ 
+-	/* try lock file if already exists */
++	/* try event file if already exists */
+ 	errno = 0;
+-	wd = inotify_add_watch(me->fd, filename, IN_CLOSE_NOWRITE);
++	wd = inotify_add_watch(me->fd, filename, IN_CLOSE_WRITE);
+ 	if (wd >= 0) {
+ 		DBG(MONITOR, ul_debug(" added inotify watch for %s [fd=%d]", filename, wd));
+ 		rc = 0;
+@@ -254,7 +252,7 @@ static int userspace_add_watch(struct monitor_entry *me, int *final, int *fd)
+ 		if (!*filename)
+ 			break;
+ 
+-		/* try directory where is the lock file */
++		/* try directory where is the event file */
+ 		errno = 0;
+ 		wd = inotify_add_watch(me->fd, filename, IN_CREATE|IN_ISDIR);
+ 		if (wd >= 0) {
+@@ -337,10 +335,10 @@ static int userspace_event_verify(struct libmnt_monitor *mn,
+ 			e = (const struct inotify_event *) p;
+ 			DBG(MONITOR, ul_debugobj(mn, " inotify event 0x%x [%s]\n", e->mask, e->len ? e->name : ""));
+ 
+-			if (e->mask & IN_CLOSE_NOWRITE)
++			if (e->mask & IN_CLOSE_WRITE)
+ 				status = 1;
+ 			else {
+-				/* event on lock file */
++				/* add watch for the event file */
+ 				userspace_add_watch(me, &status, &fd);
+ 
+ 				if (fd != e->wd) {
+diff --git a/libmount/src/mountP.h b/libmount/src/mountP.h
+index 4b4c5de1e..99b913c99 100644
+--- a/libmount/src/mountP.h
++++ b/libmount/src/mountP.h
+@@ -476,6 +476,7 @@ extern int mnt_context_deferred_delete_veritydev(struct libmnt_context *cxt);
+ /* tab_update.c */
+ extern int mnt_update_set_filename(struct libmnt_update *upd,
+ 				   const char *filename, int userspace_only);
++extern int mnt_update_emit_event(struct libmnt_update *upd);
+ extern int mnt_update_already_done(struct libmnt_update *upd,
+ 				   struct libmnt_lock *lc);
+ 
+diff --git a/libmount/src/tab_update.c b/libmount/src/tab_update.c
+index f60f522ce..5ae369b74 100644
+--- a/libmount/src/tab_update.c
++++ b/libmount/src/tab_update.c
+@@ -1003,6 +1003,25 @@ done:
+ 	return rc;
+ }
+ 
++int mnt_update_emit_event(struct libmnt_update *upd)
++{
++	char *filename;
++	int fd;
++
++	if (!upd || !upd->filename)
++		return -EINVAL;
++
++	if (asprintf(&filename, "%s.event", upd->filename) <= 0)
++		return -errno;
++
++	fd = open(filename, O_WRONLY|O_CREAT|O_CLOEXEC,
++			    S_IWUSR|S_IRUSR|S_IRGRP|S_IROTH);
++	free(filename);
++	if (fd < 0)
++		return -errno;
++	close(fd);
++	return 0;
++}
+ 
+ #ifdef TEST_PROGRAM
+ 
+-- 
+2.43.0
+

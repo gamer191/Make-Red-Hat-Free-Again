@@ -1,0 +1,22 @@
+diff -Nupr a/squashfs-tools/mksquashfs.c b/squashfs-tools/mksquashfs.c
+--- a/squashfs-tools/mksquashfs.c	2020-10-30 06:13:56.000000000 -0500
++++ b/squashfs-tools/mksquashfs.c	2022-01-12 10:58:37.704782953 -0600
+@@ -290,6 +290,7 @@ int all_time_opt = FALSE;
+ int clamping = TRUE;
+ 
+ /* user options that control parallelisation */
++#define MAX_CPUS 256
+ int processors = -1;
+ int bwriter_size;
+ 
+@@ -4385,6 +4386,10 @@ void initialise_threads(int readq, int f
+ #endif
+ 	}
+ 
++	/* Limit the number of processors we're going to use */
++	if(processors > MAX_CPUS)
++		processors = MAX_CPUS;
++
+ 	if(multiply_overflow(processors, 3) ||
+ 			multiply_overflow(processors * 3, sizeof(pthread_t)))
+ 		BAD_ERROR("Processors too large\n");

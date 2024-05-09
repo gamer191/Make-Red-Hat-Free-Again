@@ -1,0 +1,36 @@
+diff --git a/rsync.1.md b/rsync.1.md
+index ec971ecc..7bb4c5a1 100644
+--- a/rsync.1.md
++++ b/rsync.1.md
+@@ -949,7 +949,9 @@ your home directory (remove the '=' for that).
+     existing content in the file (it only verifies the content that it is
+     appending).  Rsync skips any files that exist on the receiving side that
+     are not shorter than the associated file on the sending side (which means
+-    that new files are trasnferred).
++    that new files are trasnferred).  It also skips any files whose size on the
++    sending side gets shorter during the send negotiations (rsync warns about a
++    "diminished" file when this happens).
+ 
+     This does not interfere with the updating of a file's non-content
+     attributes (e.g.  permissions, ownership, etc.) when the file does not need
+diff --git a/sender.c b/sender.c
+index 94761c26..9cfca134 100644
+--- a/sender.c
++++ b/sender.c
+@@ -362,6 +362,16 @@ void send_files(int f_in, int f_out)
+ 			exit_cleanup(RERR_FILEIO);
+ 		}
+ 
++		if (append_mode > 0 && st.st_size < F_LENGTH(file)) {
++			rprintf(FWARNING, "skipped diminished file: %s\n",
++				full_fname(fname));
++			free_sums(s);
++			close(fd);
++			if (protocol_version >= 30)
++				send_msg_int(MSG_NO_SEND, ndx);
++			continue;
++		}
++
+ 		if (IS_DEVICE(st.st_mode) && st.st_size == 0)
+ 			st.st_size = get_device_size(fd, fname);
+ 

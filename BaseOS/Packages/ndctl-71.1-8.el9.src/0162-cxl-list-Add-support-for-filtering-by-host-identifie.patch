@@ -1,0 +1,73 @@
+From cf0e0586bf45fd7e4ab17ce2b234bf68995daca3 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 28 Apr 2022 15:10:42 -0700
+Subject: [PATCH 162/217] cxl/list: Add support for filtering by host
+ identifiers
+
+Accept host device names as valid filters for memdevs, ports, and
+endpoints.
+
+# cxl list -u -m 7
+{
+  "memdev":"mem7",
+  "pmem_size":"256.00 MiB (268.44 MB)",
+  "ram_size":"256.00 MiB (268.44 MB)",
+  "serial":"0x6",
+  "numa_node":0,
+  "host":"cxl_mem.6"
+}
+
+# cxl list -u -m cxl_mem.6
+{
+  "memdev":"mem7",
+  "pmem_size":"256.00 MiB (268.44 MB)",
+  "ram_size":"256.00 MiB (268.44 MB)",
+  "serial":"0x6",
+  "numa_node":0,
+  "host":"cxl_mem.6"
+}
+
+Link: https://lore.kernel.org/r/165118384289.1676208.4779565283924668304.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/filter.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/cxl/filter.c b/cxl/filter.c
+index c6ab9eb..66fd742 100644
+--- a/cxl/filter.c
++++ b/cxl/filter.c
+@@ -73,6 +73,9 @@ struct cxl_endpoint *util_cxl_endpoint_filter(struct cxl_endpoint *endpoint,
+ 
+ 		if (strcmp(arg, cxl_endpoint_get_devname(endpoint)) == 0)
+ 			break;
++
++		if (strcmp(arg, cxl_endpoint_get_host(endpoint)) == 0)
++			break;
+ 	}
+ 
+ 	free(ident);
+@@ -116,6 +119,9 @@ static struct cxl_port *__util_cxl_port_filter(struct cxl_port *port,
+ 
+ 		if (strcmp(arg, cxl_port_get_devname(port)) == 0)
+ 			break;
++
++		if (strcmp(arg, cxl_port_get_host(port)) == 0)
++			break;
+ 	}
+ 
+ 	free(ident);
+@@ -303,6 +309,9 @@ struct cxl_memdev *util_cxl_memdev_filter(struct cxl_memdev *memdev,
+ 
+ 		if (strcmp(name, cxl_memdev_get_devname(memdev)) == 0)
+ 			break;
++
++		if (strcmp(name, cxl_memdev_get_host(memdev)) == 0)
++			break;
+ 	}
+ 
+ 	free(ident);
+-- 
+2.27.0
+

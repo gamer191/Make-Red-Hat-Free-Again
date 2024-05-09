@@ -1,0 +1,38 @@
+From 5b6ddf6e989f44211e799fec9aac6b7afb36e1ce Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.de>
+Date: Sat, 17 Sep 2022 00:54:25 +0200
+Subject: [PATCH] fix(nvmf): avoid calling "exit" in a cmdline hook
+
+"exit" should never be executed in dracut hooks, because the
+hooks are sourced by the main script.
+
+Resolves: #1933787
+---
+ modules.d/95nvmf/parse-nvmf-boot-connections.sh | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/modules.d/95nvmf/parse-nvmf-boot-connections.sh b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+index c8078a76..cc545ee0 100755
+--- a/modules.d/95nvmf/parse-nvmf-boot-connections.sh
++++ b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+@@ -101,12 +101,12 @@ for d in $(getargs rd.nvmf.discover -d nvmf.discover=); do
+ done
+ 
+ # Host NQN and host id are mandatory for NVMe-oF
+-[ -f "/etc/nvme/hostnqn" ] || exit 0
+-[ -f "/etc/nvme/hostid" ] || exit 0
++if [ -f "/etc/nvme/hostnqn" ] && [ -f "/etc/nvme/hostid" ]; then
+ 
+-# If no nvme command line arguments present, try autodiscovery
+-if [ $NVMF_FC_AUTO ] || [ ! -f "/etc/nvme/discovery.conf" ]; then
+-    /sbin/initqueue --settled --onetime --unique --name nvme-fc-autoconnect /sbin/nvmf-autoconnect.sh
+-else
+-    /sbin/initqueue --settled --onetime --unique --name nvme-discover /usr/sbin/nvme connect-all
++    # If no nvme command line arguments present, try autodiscovery
++    if [ $NVMF_FC_AUTO ] || [ ! -f "/etc/nvme/discovery.conf" ]; then
++        /sbin/initqueue --settled --onetime --unique --name nvme-fc-autoconnect /sbin/nvmf-autoconnect.sh
++    else
++        /sbin/initqueue --settled --onetime --unique --name nvme-discover /usr/sbin/nvme connect-all
++    fi
+ fi
+

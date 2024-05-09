@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Thu, 9 Nov 2023 18:46:13 -0500
+Subject: [PATCH] multipathd: check and update all paths when in cli_resize
+
+When resizing a multipath device, make sure that all the paths have
+been updated to the new size first.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ multipathd/cli_handlers.c | 31 ++++++++++++++++++-------------
+ 1 file changed, 18 insertions(+), 13 deletions(-)
+
+diff --git a/multipathd/cli_handlers.c b/multipathd/cli_handlers.c
+index f322f10f..93c32c5b 100644
+--- a/multipathd/cli_handlers.c
++++ b/multipathd/cli_handlers.c
+@@ -866,9 +866,11 @@ cli_resize(void *v, char **reply, int *len, void *data)
+ 	char * mapname = get_keyparam(v, MAP);
+ 	struct multipath *mpp;
+ 	int minor;
+-	unsigned long long size;
++	unsigned long long size = 0;
+ 	struct pathgroup *pgp;
+ 	struct path *pp;
++	unsigned int i, j;
++	bool mismatch = false;
+ 
+ 	mapname = convert_dev(mapname, 0);
+ 	condlog(2, "%s: resize map (operator)", mapname);
+@@ -888,21 +890,24 @@ cli_resize(void *v, char **reply, int *len, void *data)
+ 		return 1;
+ 	}
+ 
+-	pgp = VECTOR_SLOT(mpp->pg, 0);
+-
+-	if (!pgp){
+-		condlog(0, "%s: couldn't get path group. cannot resize",
+-			mapname);
+-		return 1;
++	vector_foreach_slot(mpp->pg, pgp, i) {
++		vector_foreach_slot (pgp->paths, pp, j) {
++			sysfs_get_size(pp, &pp->size);
++			if (!pp->size)
++				continue;
++			if (!size)
++				size = pp->size;
++			else if (pp->size != size)
++				mismatch = true;
++		}
+ 	}
+-	pp = VECTOR_SLOT(pgp->paths, 0);
+-
+-	if (!pp){
+-		condlog(0, "%s: couldn't get path. cannot resize", mapname);
++	if (!size) {
++		condlog(0, "%s: couldn't get size from sysfs. cannot resize",
++			mapname);
+ 		return 1;
+ 	}
+-	if (!pp->udev || sysfs_get_size(pp, &size)) {
+-		condlog(0, "%s: couldn't get size for sysfs. cannot resize",
++	if (mismatch) {
++		condlog(0, "%s: path size not consistent. cannot resize",
+ 			mapname);
+ 		return 1;
+ 	}

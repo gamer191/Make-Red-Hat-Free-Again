@@ -1,0 +1,49 @@
+From 3ae5fc9a6a881e0be381e4cc70080ac5908d7520 Mon Sep 17 00:00:00 2001
+From: Bram Moolenaar <Bram@vim.org>
+Date: Mon, 6 Sep 2021 18:57:30 +0200
+Subject: [PATCH] patch 8.2.3406: on some systems tests fail without _REENTRANT
+
+Problem:    On some systems tests fail without _REENTRANT. (Elimar
+            Riesebieter)
+Solution:   Add -D_REENTRANT in configure. (closes #7402)
+---
+ src/auto/configure | 4 ++++
+ src/configure.ac   | 6 ++++++
+ src/version.c      | 2 ++
+ 3 files changed, 12 insertions(+)
+
+diff --git a/src/auto/configure b/src/auto/configure
+index fba6a19b5..4f4363224 100755
+--- a/src/auto/configure
++++ b/src/auto/configure
+@@ -14960,6 +14960,10 @@ $as_echo "no" >&6; }
+   fi
+ fi
+ 
++if `echo "$CFLAGS" | grep -v D_XEENTRANT >/dev/null`; then
++  CFLAGS="$CFLAGS -D_REENTRANT"
++fi
++
+ DEPEND_CFLAGS_FILTER=
+ if test "$GCC" = yes; then
+   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for GCC 3 or later" >&5
+diff --git a/src/configure.ac b/src/configure.ac
+index 5ec955757..4cd6dea1f 100644
+--- a/src/configure.ac
++++ b/src/configure.ac
+@@ -4504,6 +4504,12 @@ if test "$MACOS_X" = "yes"; then
+   fi
+ fi
+ 
++dnl On some systems REENTRANT needs to be defined.  It should not hurt to use
++dnl it everywhere.
++if `echo "$CFLAGS" | grep -v D_REENTRANT >/dev/null`; then
++  CFLAGS="$CFLAGS -D_REENTRANT"
++fi
++
+ dnl gcc 3.1 changed the meaning of -MM.  The only solution appears to be to
+ dnl use "-isystem" instead of "-I" for all non-Vim include dirs.
+ dnl But only when making dependencies, cproto and lint don't take "-isystem".
+-- 
+2.31.1
+

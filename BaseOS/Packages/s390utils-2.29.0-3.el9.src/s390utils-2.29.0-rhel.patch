@@ -1,0 +1,5719 @@
+From a32824922cb273703bacd44e6a29cbc33ae48cf5 Mon Sep 17 00:00:00 2001
+From: Ingo Franzki <ifranzki@linux.ibm.com>
+Date: Fri, 21 Jul 2023 14:06:18 +0200
+Subject: [PATCH 01/13] zkey: Support EP11 AES keys with prepended header to
+ retain EP11 session (RHEL-11440)
+
+The pkey kernel module supports two key blob formats for EP11 AES keys.
+The first one (PKEY_TYPE_EP11) contains a 16 bytes header that overlays
+the first 32 bytes of the key blob which usually contain the ID of the
+EP11 session to which the key is bound. For zkey/dm-crypt that session
+ID used to be all zeros. The second blob format (PKEY_TYPE_EP11_AES)
+prepends the 16 bytes header to the blob, an thus does not overlay the
+blob. This format can be used for key blobs that are session-bound, i.e.
+have a non-zero session ID in the first 32 bytes.
+
+Change zkey to generate EP11 keys using the new format (i.e. pkey type
+PKEY_TYPE_EP11_AES), but existing key blobs using the old format can
+still be used.
+
+Signed-off-by: Ingo Franzki <ifranzki@linux.ibm.com>
+Reviewed-by: Joerg Schmidbauer <jschmidb@de.ibm.com>
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+(cherry picked from commit 1b044b8a40ab59e4f5ffe66e3ad81499b0beccce)
+---
+ zkey/ep11.c            |  48 +++++++++-----
+ zkey/keystore.c        |   4 +-
+ zkey/kmip/zkey-kmip.c  |  76 ++++++++++++++++++----
+ zkey/kms.c             |   9 ++-
+ zkey/pkey.c            | 141 +++++++++++++++++++++++++++++++++++++++--
+ zkey/pkey.h            |  45 +++++++++----
+ zkey/zkey-cryptsetup.c |  15 ++++-
+ zkey/zkey.c            |   8 ++-
+ 8 files changed, 295 insertions(+), 51 deletions(-)
+
+diff --git a/zkey/ep11.c b/zkey/ep11.c
+index 8359929..df8b57d 100644
+--- a/zkey/ep11.c
++++ b/zkey/ep11.c
+@@ -365,8 +365,9 @@ int select_ep11_apqn_by_mkvp(struct ep11_lib *ep11, u8 *mkvp,
+  * @param[in] target    the target handle to use for the re-encipher operation
+  * @param[in] card      the card that corresponds to the target handle
+  * @param[in] domain    the domain that corresponds to the target handle
+- * @param[in/out] ep11key the EP11 key token to reencipher. The re-enciphered
+- *                      secure key will be returned in this buffer.
++ * @param[in/out] ep11key_blob the EP11 key token to reencipher. The
++ *                      re-enciphered secure key will be returned in this
++ *                      buffer.
+  * @param[in] ep11key_size the size of the secure key
+  * @param[in] verbose   if true, verbose messages are printed
+  *
+@@ -374,21 +375,29 @@ int select_ep11_apqn_by_mkvp(struct ep11_lib *ep11, u8 *mkvp,
+  */
+ static int ep11_adm_reencrypt(struct ep11_lib *ep11, target_t target,
+ 			      unsigned int card, unsigned int domain,
+-			      struct ep11keytoken *ep11key,
++			      u8 *ep11key_blob,
+ 			      unsigned int ep11key_size, bool verbose)
+ {
++	struct ep11kblob_header *hdr = (struct ep11kblob_header *)ep11key_blob;
++	struct ep11keytoken *ep11key;
+ 	CK_BYTE resp[MAX_BLOBSIZE];
+ 	CK_BYTE req[MAX_BLOBSIZE];
+-	char ep11_token_header[sizeof(ep11key->head)];
++	char ep11_token_header[sizeof(ep11key->head)] = { 0 };
+ 	struct XCPadmresp lrb;
+ 	struct XCPadmresp rb;
++	bool with_header;
+ 	size_t resp_len;
+ 	size_t blob_len;
+ 	long req_len;
+ 	CK_RV rv;
+ 	int rc;
+ 
+-	blob_len = ep11key->head.length;
++	with_header = is_ep11_aes_key_with_header(ep11key_blob, ep11key_size);
++	ep11key = (struct ep11keytoken *)(with_header ?
++				ep11key_blob + sizeof(struct ep11kblob_header) :
++				ep11key_blob);
++	blob_len = with_header ? hdr->len - sizeof(struct ep11kblob_header) :
++				 ep11key->head.len;
+ 	if (blob_len > ep11key_size) {
+ 		pr_verbose(verbose, "Blob length larger than secure key size");
+ 		return -EINVAL;
+@@ -397,9 +406,14 @@ static int ep11_adm_reencrypt(struct ep11_lib *ep11, target_t target,
+ 	rb.domain = domain;
+ 	lrb.domain = domain;
+ 
+-	/* The token header is an overlay over the (all zero) session field */
+-	memcpy(ep11_token_header, ep11key, sizeof(ep11_token_header));
+-	memset(ep11key->session, 0, sizeof(ep11key->session));
++	if (!with_header) {
++		/*
++		 * The token header is an overlay over the (all zero) session
++		 * field
++		 */
++		memcpy(ep11_token_header, ep11key, sizeof(ep11_token_header));
++		memset(ep11key->session, 0, sizeof(ep11key->session));
++	}
+ 
+ 	resp_len = sizeof(resp);
+ 	req_len = ep11->dll_xcpa_cmdblock(req, sizeof(req), XCP_ADM_REENCRYPT,
+@@ -446,7 +460,8 @@ static int ep11_adm_reencrypt(struct ep11_lib *ep11, target_t target,
+ 	}
+ 
+ 	memcpy(ep11key, lrb.payload, blob_len);
+-	memcpy(ep11key, ep11_token_header, sizeof(ep11_token_header));
++	if (!with_header)
++		memcpy(ep11key, ep11_token_header, sizeof(ep11_token_header));
+ 
+ 	return 0;
+ }
+@@ -469,7 +484,6 @@ int reencipher_ep11_key(struct ep11_lib *ep11, target_t target,
+ 			unsigned int card, unsigned int domain, u8 *secure_key,
+ 			unsigned int secure_key_size, bool verbose)
+ {
+-	struct ep11keytoken *ep11key = (struct ep11keytoken *)secure_key;
+ 	CK_IBM_DOMAIN_INFO dinf;
+ 	CK_ULONG dinf_len = sizeof(dinf);
+ 	CK_RV rv;
+@@ -493,17 +507,21 @@ int reencipher_ep11_key(struct ep11_lib *ep11, target_t target,
+ 		return -ENODEV;
+ 	}
+ 
+-	rc = ep11_adm_reencrypt(ep11, target, card, domain, ep11key,
++	rc = ep11_adm_reencrypt(ep11, target, card, domain, secure_key,
+ 				secure_key_size, verbose);
+ 	if (rc != 0)
+ 		return rc;
+ 
+ 	if (is_xts_key(secure_key, secure_key_size)) {
+-		secure_key += EP11_KEY_SIZE;
+-		secure_key_size -= EP11_KEY_SIZE;
+-		ep11key = (struct ep11keytoken *)secure_key;
++		if (is_ep11_aes_key_with_header(secure_key, secure_key_size)) {
++			secure_key += EP11_AES_KEY_SIZE;
++			secure_key_size -= EP11_AES_KEY_SIZE;
++		} else {
++			secure_key += EP11_KEY_SIZE;
++			secure_key_size -= EP11_KEY_SIZE;
++		}
+ 
+-		rc = ep11_adm_reencrypt(ep11, target, card, domain, ep11key,
++		rc = ep11_adm_reencrypt(ep11, target, card, domain, secure_key,
+ 					secure_key_size, verbose);
+ 		if (rc != 0)
+ 			return rc;
+diff --git a/zkey/keystore.c b/zkey/keystore.c
+index 4efa2e4..c0a7037 100644
+--- a/zkey/keystore.c
++++ b/zkey/keystore.c
+@@ -3398,7 +3398,9 @@ static int _keystore_perform_reencipher(struct keystore *keystore,
+ 				      "CURRENT master key", name);
+ 				if (!selected &&
+ 				    !is_ep11_aes_key(secure_key,
+-						     secure_key_size))
++						     secure_key_size) &&
++				    !is_ep11_aes_key_with_header(secure_key,
++							secure_key_size))
+ 					print_msg_for_cca_envvars(
+ 							"secure AES key");
+ 			}
+diff --git a/zkey/kmip/zkey-kmip.c b/zkey/kmip/zkey-kmip.c
+index a00c5dd..e7b7c73 100644
+--- a/zkey/kmip/zkey-kmip.c
++++ b/zkey/kmip/zkey-kmip.c
+@@ -5278,9 +5278,11 @@ static int _ep11_unwrap_key_rsa(struct plugin_handle *ph,
+ 	m_UnwrapKey_t dll_m_UnwrapKey;
+ 	const unsigned char *key_blob;
+ 	struct ep11keytoken *ep11key;
++	struct ep11kblob_header *hdr;
+ 	CK_MECHANISM mech = { 0 };
+ 	CK_BYTE csum[7] = { 0 };
+ 	CK_BBOOL ck_true = true;
++	int pkey_fd, rc;
+ 	CK_RV rv;
+ 
+ 	CK_ATTRIBUTE template[] = {
+@@ -5306,7 +5308,8 @@ static int _ep11_unwrap_key_rsa(struct plugin_handle *ph,
+ 	pr_verbose(&ph->pd, "Wrap hashing algorithm: %d",
+ 		   ph->profile->wrap_hashing_algo);
+ 
+-	if (*unwrapped_key_len < sizeof(struct ep11keytoken)) {
++	if (*unwrapped_key_len < sizeof(struct ep11kblob_header) +
++						sizeof(struct ep11keytoken)) {
+ 		_set_error(ph, "Key buffer is too small");
+ 		return -EINVAL;
+ 	}
+@@ -5381,19 +5384,68 @@ static int _ep11_unwrap_key_rsa(struct plugin_handle *ph,
+ 		  256 * 256 * csum[csum_len - 3] +
+ 		  256 * 256 * 256 * csum[csum_len - 4];
+ 
+-	/* Setup the EP11 token header */
+-	ep11key = (struct ep11keytoken *)unwrapped_key;
+-	memset(&ep11key->session, 0, sizeof(ep11key->session));
+-	ep11key->head.type = TOKEN_TYPE_NON_CCA;
+-	ep11key->head.length = *unwrapped_key_len;
+-	ep11key->head.version = TOKEN_VERSION_EP11_AES;
+-	ep11key->head.keybitlen = bit_len;
+-
+-	pr_verbose(&ph->pd, "unwrapped bit length: %u",
+-		   ep11key->head.keybitlen);
++	/* Prepend and setup the EP11 token header */
++	hdr = (struct ep11kblob_header *)unwrapped_key;
++	ep11key = (struct ep11keytoken *)
++			(unwrapped_key + sizeof(struct ep11kblob_header));
++	memmove(ep11key, unwrapped_key, *unwrapped_key_len);
++	*unwrapped_key_len += sizeof(struct ep11kblob_header);
++	memset(hdr, 0, sizeof(struct ep11kblob_header));
++	hdr->type = TOKEN_TYPE_NON_CCA;
++	hdr->hver = 0;
++	hdr->len = *unwrapped_key_len;
++	hdr->version = TOKEN_VERSION_EP11_AES_WITH_HEADER;
++	hdr->bitlen = bit_len;
++
++	pr_verbose(&ph->pd, "unwrapped bit length: %u", hdr->bitlen);
+ 
+ 	/* return full length, blob is already zero padded */
+-	*unwrapped_key_len = sizeof(struct ep11keytoken);
++	*unwrapped_key_len =
++		sizeof(struct ep11kblob_header) + sizeof(struct ep11keytoken);
++
++	/*
++	 * Check if the pkey module supports keys of type
++	 * TOKEN_VERSION_EP11_AES_WITH_HEADER, older kernels may not support
++	 * such keys. If it does not support such keys, convert the key to
++	 * TOKEN_VERSION_EP11_AES type, if its session field is all zero
++	 * (i.e. the key is not session bound).
++	 */
++	pkey_fd = open_pkey_device(ph->pd.verbose);
++	if (pkey_fd < 0) {
++		_set_error(ph, "Failed to open pkey device");
++		return -EIO;
++	}
++
++	rc = validate_secure_key(pkey_fd, unwrapped_key, *unwrapped_key_len,
++				 NULL, NULL, NULL, ph->pd.verbose);
++	close(pkey_fd);
++	if (rc == -EINVAL || rc == -ENODEV) {
++		pr_verbose(&ph->pd, "The pkey kernel module does not support "
++			   "PKEY_TYPE_EP11_AES, fall back to PKEY_TYPE_EP11");
++
++		if (is_ep11_key_session_bound(unwrapped_key,
++					      *unwrapped_key_len)) {
++			_set_error(ph, "The unwrapped key is session bound. "
++				   "Kernel support is required for such keys");
++			return -EIO;
++		}
++
++		key_blob_len = hdr->len;
++		*unwrapped_key_len -= sizeof(struct ep11kblob_header);
++		memmove(unwrapped_key,
++			unwrapped_key + sizeof(struct ep11kblob_header),
++			*unwrapped_key_len);
++		ep11key = (struct ep11keytoken *)unwrapped_key;
++		memset(&ep11key->session, 0, sizeof(ep11key->session));
++		ep11key->head.type = TOKEN_TYPE_NON_CCA;
++		ep11key->head.len = key_blob_len -
++						sizeof(struct ep11kblob_header);
++		ep11key->head.version = TOKEN_VERSION_EP11_AES;
++		ep11key->head.bitlen = bit_len;
++	} else if (rc != 0) {
++		_set_error(ph, "Failed to validate unwrapped key");
++		return rc;
++	}
+ 
+ 	return 0;
+ }
+diff --git a/zkey/kms.c b/zkey/kms.c
+index 9892a9e..2e33b22 100644
+--- a/zkey/kms.c
++++ b/zkey/kms.c
+@@ -2175,7 +2175,7 @@ int generate_kms_key(struct kms_info *kms_info, const char *name,
+ 	else if (strcasecmp(key_type, KEY_TYPE_CCA_AESCIPHER) == 0)
+ 		key_size = AESCIPHER_KEY_SIZE;
+ 	else if (strcasecmp(key_type, KEY_TYPE_EP11_AES) == 0)
+-		key_size = EP11_KEY_SIZE;
++		key_size = EP11_AES_KEY_SIZE;
+ 	else
+ 		return -ENOTSUP;
+ 
+@@ -2248,6 +2248,9 @@ int generate_kms_key(struct kms_info *kms_info, const char *name,
+ 	if (verbose)
+ 		util_hexdump_grp(stderr, NULL, key_blob, 4, key_blob_size, 0);
+ 
++	if (is_ep11_aes_key(key_blob, key_blob_size))
++		key_size = EP11_KEY_SIZE;
++
+ 	/* Save ID and label of 1st key */
+ 	rc = properties_set(key_props, xts ? PROP_NAME_KMS_XTS_KEY1_ID :
+ 			    PROP_NAME_KMS_KEY_ID, key1_id);
+@@ -3132,6 +3135,8 @@ int import_kms_key(struct kms_info *kms_info, const char *key1_id,
+ 		key_size =  AESCIPHER_KEY_SIZE;
+ 	else if (is_ep11_aes_key(key_blob, key_blob_size))
+ 		key_size =  EP11_KEY_SIZE;
++	else if (is_ep11_aes_key_with_header(key_blob, key_blob_size))
++		key_size =  EP11_AES_KEY_SIZE;
+ 
+ 	if (key_size == 0 || key_blob_size > key_size) {
+ 		pr_verbose(verbose, "Key '%s' has an unknown or unsupported "
+@@ -3366,6 +3371,8 @@ int refresh_kms_key(struct kms_info *kms_info, struct properties *key_props,
+ 		key_size =  AESCIPHER_KEY_SIZE;
+ 	else if (is_ep11_aes_key(key_blob, key_blob_size))
+ 		key_size =  EP11_KEY_SIZE;
++	else if (is_ep11_aes_key_with_header(key_blob, key_blob_size))
++		key_size =  EP11_AES_KEY_SIZE;
+ 
+ 	if (key_size == 0 || key_blob_size > key_size) {
+ 		pr_verbose(verbose, "Key '%s' has an unknown or unsupported "
+diff --git a/zkey/pkey.c b/zkey/pkey.c
+index e013e06..2582088 100644
+--- a/zkey/pkey.c
++++ b/zkey/pkey.c
+@@ -858,7 +858,7 @@ static enum pkey_key_type key_type_to_pkey_type(const char *key_type)
+ 	if (strcasecmp(key_type, KEY_TYPE_CCA_AESCIPHER) == 0)
+ 		return PKEY_TYPE_CCA_CIPHER;
+ 	if (strcasecmp(key_type, KEY_TYPE_EP11_AES) == 0)
+-		return PKEY_TYPE_EP11;
++		return PKEY_TYPE_EP11_AES;
+ 
+ 	return 0;
+ }
+@@ -879,6 +879,8 @@ static size_t key_size_for_type(enum pkey_key_type type)
+ 		return AESCIPHER_KEY_SIZE;
+ 	case PKEY_TYPE_EP11:
+ 		return EP11_KEY_SIZE;
++	case PKEY_TYPE_EP11_AES:
++		return EP11_AES_KEY_SIZE;
+ 	default:
+ 		return 0;
+ 	}
+@@ -924,6 +926,7 @@ int generate_secure_key_random(int pkey_fd, const char *keyfile,
+ 		return -ENOTSUP;
+ 	}
+ 
++retry:
+ 	genseck2.size = keybits_to_keysize(keybits);
+ 	if (genseck2.size == 0) {
+ 		warnx("Invalid value for '--keybits'/'-c': '%lu'", keybits);
+@@ -957,10 +960,33 @@ int generate_secure_key_random(int pkey_fd, const char *keyfile,
+ 	genseck2.keylen = size;
+ 
+ 	rc = pkey_genseck2(pkey_fd, &genseck2, verbose);
++	if (rc == -EINVAL && genseck2.type == PKEY_TYPE_EP11_AES) {
++		/*
++		 * Older kernels may not support gensek2 with key type
++		 * PKEY_TYPE_EP11_AES, retry with PKEY_TYPE_EP11.
++		 */
++		pr_verbose(verbose,
++			   "ioctl PKEY_GENSECK2 does not support "
++			   "PKEY_TYPE_EP11_AES, fall back to PKEY_TYPE_EP11");
++
++		genseck2.type = PKEY_TYPE_EP11;
++		free(genseck2.apqns);
++		genseck2.apqns = NULL;
++		genseck2.apqn_entries = 0;
++		free(secure_key);
++		goto retry;
++	}
+ 	if (rc != 0) {
+ 		warnx("Failed to generate a secure key: %s", strerror(-rc));
+ 		goto out;
+ 	}
++	if (rc == 0 && genseck2.type == PKEY_TYPE_EP11) {
++		if (is_ep11_key_session_bound(secure_key, size)) {
++			warnx("The generated key is session bound. Kernel "
++			      "support is required for such keys");
++			goto out;
++		}
++	}
+ 
+ 	if (xts) {
+ 		free(genseck2.apqns);
+@@ -1062,6 +1088,7 @@ int generate_secure_key_clear(int pkey_fd, const char *keyfile,
+ 		return -ENOTSUP;
+ 	}
+ 
++retry:
+ 	clr2seck2.size = keybits_to_keysize(HALF_KEYSIZE_FOR_XTS(
+ 						clear_key_size * 8, xts));
+ 	if (clr2seck2.size == 0) {
+@@ -1096,10 +1123,33 @@ int generate_secure_key_clear(int pkey_fd, const char *keyfile,
+ 	clr2seck2.keylen = size;
+ 
+ 	rc = pkey_clr2seck2(pkey_fd, &clr2seck2, verbose);
++	if (rc == -EINVAL && clr2seck2.type == PKEY_TYPE_EP11_AES) {
++		/*
++		 * Older kernels may not support clr2seck2 with key type
++		 * PKEY_TYPE_EP11_AES, retry with PKEY_TYPE_EP11.
++		 */
++		pr_verbose(verbose,
++			   "ioctl PKEY_CLR2SECK2 does not support "
++			   "PKEY_TYPE_EP11_AES, fall back to PKEY_TYPE_EP11");
++
++		clr2seck2.type = PKEY_TYPE_EP11;
++		free(clr2seck2.apqns);
++		clr2seck2.apqns = NULL;
++		clr2seck2.apqn_entries = 0;
++		free(secure_key);
++		goto retry;
++	}
+ 	if (rc != 0) {
+ 		warnx("Failed to generate a secure key: %s", strerror(-rc));
+ 		goto out;
+ 	}
++	if (rc == 0 && clr2seck2.type == PKEY_TYPE_EP11) {
++		if (is_ep11_key_session_bound(secure_key, size)) {
++			warnx("The generated key is session bound. Kernel "
++			      "support is required for such keys");
++			goto out;
++		}
++	}
+ 
+ 	if (xts) {
+ 		free(clr2seck2.apqns);
+@@ -1486,6 +1536,8 @@ int get_master_key_verification_pattern(const u8 *key, size_t key_size,
+ 	struct aesdatakeytoken *datakey = (struct aesdatakeytoken *)key;
+ 	struct aescipherkeytoken *cipherkey = (struct aescipherkeytoken *)key;
+ 	struct ep11keytoken *ep11key = (struct ep11keytoken *)key;
++	struct ep11keytoken *ep11key2 =
++		(struct ep11keytoken *)(key + sizeof(struct ep11kblob_header));
+ 
+ 	util_assert(key != NULL, "Internal error: secure_key is NULL");
+ 	util_assert(mkvp != NULL, "Internal error: mkvp is NULL");
+@@ -1497,6 +1549,8 @@ int get_master_key_verification_pattern(const u8 *key, size_t key_size,
+ 		memcpy(mkvp, &cipherkey->kvp, sizeof(cipherkey->kvp));
+ 	else if (is_ep11_aes_key(key, key_size))
+ 		memcpy(mkvp, &ep11key->wkvp, sizeof(ep11key->wkvp));
++	else if (is_ep11_aes_key_with_header(key, key_size))
++		memcpy(mkvp, &ep11key2->wkvp, sizeof(ep11key2->wkvp));
+ 	else
+ 		return -EINVAL;
+ 
+@@ -1593,9 +1647,43 @@ bool is_ep11_aes_key(const u8 *key, size_t key_size)
+ 
+ 	if (ep11key->head.type != TOKEN_TYPE_NON_CCA)
+ 		return false;
++	if (ep11key->head.hver != 0)
++		return false;
+ 	if (ep11key->head.version != TOKEN_VERSION_EP11_AES)
+ 		return false;
+-	if (ep11key->head.length > key_size)
++	if (ep11key->head.len > key_size)
++		return false;
++
++	if (ep11key->version != 0x1234)
++		return false;
++
++	return true;
++}
++
++/**
++ * Check if the specified key is a EP11 AES key token with external header.
++ *
++ * @param[in] key           the secure key token
++ * @param[in] key_size      the size of the secure key
++ *
++ * @returns true if the key is an EP11 AES token with external header type
++ */
++bool is_ep11_aes_key_with_header(const u8 *key, size_t key_size)
++{
++	struct ep11kblob_header *header = (struct ep11kblob_header *)key;
++	struct ep11keytoken *ep11key =
++		(struct ep11keytoken *)(key + sizeof(struct ep11kblob_header));
++
++	if (key == NULL || key_size < EP11_AES_KEY_SIZE)
++		return false;
++
++	if (header->type != TOKEN_TYPE_NON_CCA)
++		return false;
++	if (header->hver != 0)
++		return false;
++	if (header->version != TOKEN_VERSION_EP11_AES_WITH_HEADER)
++		return false;
++	if (header->len > key_size)
+ 		return false;
+ 
+ 	if (ep11key->version != 0x1234)
+@@ -1604,6 +1692,33 @@ bool is_ep11_aes_key(const u8 *key, size_t key_size)
+ 	return true;
+ }
+ 
++/**
++ * Check if the specified EP11 AES key is session bound.
++ *
++ * @param[in] key           the secure key token
++ * @param[in] key_size      the size of the secure key
++ *
++ * @returns true if the key is an EP11 AES token type
++ */
++bool is_ep11_key_session_bound(const u8 *key, size_t key_size)
++{
++	struct ep11keytoken *ep11key;
++
++	if (is_ep11_aes_key(key, key_size)) {
++		ep11key = (struct ep11keytoken *)key;
++		return memcmp(ep11key->session + sizeof(ep11key->head),
++			      ZERO_SESSION, sizeof(ep11key->session) -
++					sizeof(ep11key->head)) != 0;
++	} else if (is_ep11_aes_key_with_header(key, key_size)) {
++		ep11key = (struct ep11keytoken *)
++				(key + sizeof(struct ep11kblob_header));
++		return memcmp(ep11key->session, ZERO_SESSION,
++			      sizeof(ep11key->session)) != 0;
++	} else {
++		return false;
++	}
++}
++
+ /**
+  * Check if the specified key is an XTS type key
+  *
+@@ -1629,6 +1744,11 @@ bool is_xts_key(const u8 *key, size_t key_size)
+ 		    is_ep11_aes_key(key + EP11_KEY_SIZE,
+ 					  key_size - EP11_KEY_SIZE))
+ 			return true;
++	} else if (is_ep11_aes_key_with_header(key, key_size)) {
++		if (key_size == 2 * EP11_AES_KEY_SIZE &&
++		    is_ep11_aes_key_with_header(key + EP11_AES_KEY_SIZE,
++						key_size - EP11_AES_KEY_SIZE))
++			return true;
+ 	}
+ 
+ 	return false;
+@@ -1650,6 +1770,7 @@ int get_key_bit_size(const u8 *key, size_t key_size, size_t *bitsize)
+ 	struct aesdatakeytoken *datakey = (struct aesdatakeytoken *)key;
+ 	struct aescipherkeytoken *cipherkey = (struct aescipherkeytoken *)key;
+ 	struct ep11keytoken *ep11key = (struct ep11keytoken *)key;
++	struct ep11kblob_header *hdr = (struct ep11kblob_header *)key;
+ 
+ 	util_assert(bitsize != NULL, "Internal error: bitsize is NULL");
+ 
+@@ -1672,10 +1793,17 @@ int get_key_bit_size(const u8 *key, size_t key_size, size_t *bitsize)
+ 				*bitsize += cipherkey->pl - 384;
+ 		}
+ 	} else if (is_ep11_aes_key(key, key_size)) {
+-		*bitsize = ep11key->head.keybitlen;
++		*bitsize = ep11key->head.bitlen;
+ 		if (key_size == 2 * EP11_KEY_SIZE) {
+ 			ep11key = (struct ep11keytoken *)(key + EP11_KEY_SIZE);
+-			*bitsize += ep11key->head.keybitlen;
++			*bitsize += ep11key->head.bitlen;
++		}
++	} else if (is_ep11_aes_key_with_header(key, key_size)) {
++		*bitsize = hdr->bitlen;
++		if (key_size == 2 * EP11_AES_KEY_SIZE) {
++			hdr = (struct ep11kblob_header *)
++						(key + EP11_AES_KEY_SIZE);
++			*bitsize += hdr->bitlen;
+ 		}
+ 	} else {
+ 		return -EINVAL;
+@@ -1700,6 +1828,8 @@ const char *get_key_type(const u8 *key, size_t key_size)
+ 		return KEY_TYPE_CCA_AESCIPHER;
+ 	if (is_ep11_aes_key(key, key_size))
+ 		return KEY_TYPE_EP11_AES;
++	if (is_ep11_aes_key_with_header(key, key_size))
++		return KEY_TYPE_EP11_AES;
+ 	return NULL;
+ }
+ 
+@@ -2016,7 +2146,8 @@ int reencipher_secure_key(struct ext_lib *lib, u8 *secure_key,
+ 		return rc;
+ 	}
+ 
+-	if (is_ep11_aes_key(secure_key, secure_key_size)) {
++	if (is_ep11_aes_key(secure_key, secure_key_size) ||
++	    is_ep11_aes_key_with_header(secure_key, secure_key_size)) {
+ 		/* EP11 secure key: need the EP11 host library */
+ 		if (lib->ep11->lib_ep11 == NULL) {
+ 			rc = load_ep11_library(lib->ep11, verbose);
+diff --git a/zkey/pkey.h b/zkey/pkey.h
+index 5a5bc3c..3b57c5f 100644
+--- a/zkey/pkey.h
++++ b/zkey/pkey.h
+@@ -39,6 +39,8 @@ struct tokenheader {
+ #define TOKEN_VERSION_PROTECTED_KEY	0x01
+ #define TOKEN_VERSION_CLEAR_KEY		0x02
+ #define TOKEN_VERSION_EP11_AES		0x03
++#define TOKEN_VERSION_EP11_AES_WITH_HEADER	0x06
++#define TOKEN_VERSION_EP11_ECC_WITH_HEADER	0x07
+ 
+ struct aesdatakeytoken {
+ 	u8  type;     /* TOKEN_TYPE_INTERNAL (0x01) for internal key token */
+@@ -89,17 +91,20 @@ struct aescipherkeytoken {
+ 	u8  varpart[80]; /* variable part */
+ } __packed;
+ 
++struct ep11kblob_header {
++	u8  type;	/* always 0x00 */
++	u8  hver;	/* header version,  currently needs to be 0x00 */
++	u16 len;	/* total length in bytes (including this header) */
++	u8  version;	/* PKEY_TYPE_EP11_AES or PKEY_TYPE_EP11_ECC */
++	u8  res0;	/* unused */
++	u16 bitlen;	/* clear key bit len, 0 for unknown */
++	u8  res1[8];	/* unused */
++} __packed;
++
+ struct ep11keytoken {
+ 	union {
+ 		u8 session[32];
+-		struct {
+-			u8  type;      /* TOKEN_TYPE_NON_CCA (0x00) */
+-			u8  res0;      /* unused */
+-			u16 length;    /* length of token */
+-			u8  version;   /* TOKEN_VERSION_EP11_AES (0x03) */
+-			u8  res1;      /* unused */
+-			u16 keybitlen; /* clear key bit len, 0 for unknown */
+-		} head;
++		struct ep11kblob_header head;
+ 	};
+ 	u8  wkvp[16]; /* wrapping key verification pattern */
+ 	u64 attr;     /* boolean key attributes */
+@@ -111,18 +116,29 @@ struct ep11keytoken {
+ 	u8  padding[64];
+ } __packed;
+ 
++#define ZERO_SESSION							\
++	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
++
+ #define AESDATA_KEY_SIZE	sizeof(struct aesdatakeytoken)
+ #define AESCIPHER_KEY_SIZE	sizeof(struct aescipherkeytoken)
+ #define EP11_KEY_SIZE		sizeof(struct ep11keytoken)
++#define EP11_AES_KEY_SIZE	(sizeof(struct ep11kblob_header) +	\
++					sizeof(struct ep11keytoken))
+ 
+ /* MAX/MIN from zt_common.h produces warnings for variable length arrays */
+ #define _MIN(a, b)  ((a) < (b) ? (a) : (b))
+ #define _MAX(a, b)  ((a) > (b) ? (a) : (b))
+ 
+-#define MAX_SECURE_KEY_SIZE	_MAX(EP11_KEY_SIZE, \
+-				     _MAX(AESDATA_KEY_SIZE, AESCIPHER_KEY_SIZE))
+-#define MIN_SECURE_KEY_SIZE	_MIN(EP11_KEY_SIZE, \
+-				     _MIN(AESDATA_KEY_SIZE, AESCIPHER_KEY_SIZE))
++#define MAX_SECURE_KEY_SIZE	_MAX(					\
++				     _MAX(EP11_KEY_SIZE,		\
++					  EP11_AES_KEY_SIZE),		\
++				     _MAX(AESDATA_KEY_SIZE,		\
++					  AESCIPHER_KEY_SIZE))
++#define MIN_SECURE_KEY_SIZE	_MIN(					\
++				     _MIN(EP11_KEY_SIZE,		\
++					  EP11_AES_KEY_SIZE),		\
++				     _MIN(AESDATA_KEY_SIZE,		\
++					  AESCIPHER_KEY_SIZE))
+ 
+ struct pkey_seckey {
+ 	u8  seckey[AESDATA_KEY_SIZE];  /* the secure key blob */
+@@ -175,6 +191,9 @@ enum pkey_key_type {
+ 	PKEY_TYPE_CCA_DATA   = (u32) 1,
+ 	PKEY_TYPE_CCA_CIPHER = (u32) 2,
+ 	PKEY_TYPE_EP11       = (u32) 3,
++	PKEY_TYPE_CCA_ECC    = (u32) 0x1f,
++	PKEY_TYPE_EP11_AES   = (u32) 6,
++	PKEY_TYPE_EP11_ECC   = (u32) 7,
+ };
+ 
+ enum pkey_key_size {
+@@ -321,6 +340,8 @@ int get_master_key_verification_pattern(const u8 *key, size_t key_size,
+ bool is_cca_aes_data_key(const u8 *key, size_t key_size);
+ bool is_cca_aes_cipher_key(const u8 *key, size_t key_size);
+ bool is_ep11_aes_key(const u8 *key, size_t key_size);
++bool is_ep11_aes_key_with_header(const u8 *key, size_t key_size);
++bool is_ep11_key_session_bound(const u8 *key, size_t key_size);
+ bool is_xts_key(const u8 *key, size_t key_size);
+ int get_key_bit_size(const u8 *key, size_t key_size, size_t *bitsize);
+ const char *get_key_type(const u8 *key, size_t key_size);
+diff --git a/zkey/zkey-cryptsetup.c b/zkey/zkey-cryptsetup.c
+index fae78c7..8b55f7d 100644
+--- a/zkey/zkey-cryptsetup.c
++++ b/zkey/zkey-cryptsetup.c
+@@ -1673,7 +1673,10 @@ static int reencipher_prepare(int token)
+ 				warnx("Failed to re-encipher the secure volume "
+ 				      "key for device '%s'\n", g.pos_arg);
+ 				if (!selected &&
+-				    !is_ep11_aes_key((u8 *)key, securekeysize))
++				    !is_ep11_aes_key((u8 *)key,
++						     securekeysize) &&
++				    !is_ep11_aes_key_with_header((u8 *)key,
++								securekeysize))
+ 					print_msg_for_cca_envvars(
+ 						"secure AES volume key");
+ 				rc = -EINVAL;
+@@ -1696,7 +1699,10 @@ static int reencipher_prepare(int token)
+ 				warnx("Failed to re-encipher the secure volume "
+ 				      "key for device '%s'\n", g.pos_arg);
+ 				if (!selected &&
+-				    !is_ep11_aes_key((u8 *)key, securekeysize))
++				    !is_ep11_aes_key((u8 *)key,
++						     securekeysize) &&
++				    !is_ep11_aes_key_with_header((u8 *)key,
++								securekeysize))
+ 					print_msg_for_cca_envvars(
+ 						"secure AES volume key");
+ 				rc = -EINVAL;
+@@ -1836,7 +1842,10 @@ static int reencipher_complete(int token)
+ 				warnx("Failed to re-encipher the secure volume "
+ 				      "key for device '%s'\n", g.pos_arg);
+ 				if (!selected &&
+-				    !is_ep11_aes_key((u8 *)key, securekeysize))
++				    !is_ep11_aes_key((u8 *)key,
++						     securekeysize) &&
++				    !is_ep11_aes_key_with_header((u8 *)key,
++								securekeysize))
+ 					print_msg_for_cca_envvars(
+ 						"secure AES volume key");
+ 				rc = -EINVAL;
+diff --git a/zkey/zkey.c b/zkey/zkey.c
+index 3000290..843e554 100644
+--- a/zkey/zkey.c
++++ b/zkey/zkey.c
+@@ -1968,7 +1968,9 @@ static int command_reencipher_file(void)
+ 				      "master key has failed\n");
+ 				if (!selected &&
+ 				    !is_ep11_aes_key(secure_key,
+-						     secure_key_size))
++						     secure_key_size) &&
++				    !is_ep11_aes_key_with_header(secure_key,
++							secure_key_size))
+ 					print_msg_for_cca_envvars(
+ 							"secure AES key");
+ 			}
+@@ -1993,7 +1995,9 @@ static int command_reencipher_file(void)
+ 				      "master key has failed\n");
+ 				if (!selected &&
+ 				    !is_ep11_aes_key(secure_key,
+-						     secure_key_size))
++						     secure_key_size) &&
++				    !is_ep11_aes_key_with_header(secure_key,
++							secure_key_size))
+ 					print_msg_for_cca_envvars(
+ 							"secure AES key");
+ 			}
+-- 
+2.43.0
+
+
+From df0819ca69dbef1f99321f51cd9c4d33c6374992 Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Mon, 7 Aug 2023 16:56:54 +0200
+Subject: [PATCH 02/13] rust/Makefile: Fix use of Cargoflags for 'make clean'
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Marc Hartmayer <mhartmay@linux.ibm.com>
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+Signed-off-by: Jan Höppner <hoeppner@linux.ibm.com>
+(cherry picked from commit ee669294650a2f96585357447fa5e93794e5b48f)
+---
+ rust/Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/rust/Makefile b/rust/Makefile
+index cf2fda7..420bafd 100644
+--- a/rust/Makefile
++++ b/rust/Makefile
+@@ -68,7 +68,7 @@ clean:
+ 	$(foreach target,$(CARGO_TARGETS),\
+ 		$(CARGO_CLEAN) --manifest-path=$(target)/Cargo.toml ${ALL_CARGOFLAGS} ;)
+ 	$(foreach target,$(PV_TARGETS),\
+-		$(CARGO_CLEAN) --manifest-path=$(target)/Cargo.toml ${CARGOFLAGS} ;)
++		$(CARGO_CLEAN) --manifest-path=$(target)/Cargo.toml ${ALL_CARGOFLAGS} ;)
+ 	$(RM) -- .check-dep-pvtools .detect-openssl.dep.c .check-cargo
+ 
+ rust-test: .check-cargo .no-cross-compile
+-- 
+2.43.0
+
+
+From b6ce8c7fc10c225c0b1d59af32edd323f5817ab7 Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Mon, 7 Aug 2023 16:56:55 +0200
+Subject: [PATCH 03/13] rust/README.md: Fix some typos
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Marc Hartmayer <mhartmay@linux.ibm.com>
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+Signed-off-by: Jan Höppner <hoeppner@linux.ibm.com>
+(cherry picked from commit d5f806390012b1fe0afb52eb9d78a883cc5b4cdf)
+---
+ rust/README.md | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/rust/README.md b/rust/README.md
+index 2622bba..61b0af8 100644
+--- a/rust/README.md
++++ b/rust/README.md
+@@ -7,21 +7,21 @@ https://www.rust-lang.org/learn/get-started
+ ## Building rust code
+ ### s390-tools build system
+ If `cargo` is installed  a simple `make` should do the job. Note that,
+-compiling rust programs take significaltly longer than C code. To closely
+-monitor the prgress use `make V=1` By default release builds are made.
++compiling rust programs take significantly longer than C code. To closely
++monitor the progress use `make V=1` By default release builds are made.
+ 
+ With `make CARGOFLAGS=<flags>` one can pass additional flags to cargo.
+ With `make HAVE_CARGO=0` one can turn of any compilation that requires cargo.
+ With `make CARGO=<...>` one can set the cargo binary
+ 
+ ### cargo
+-If you need to run cargo directly, cd to each project you want to build and
++If you need to run cargo directly, `cd` to each project you want to build and
+ issue your cargo commands. Do **NOT** forget to specify `--release` if you are
+ building tools for a release. The s390-tools expect the environment variable
+ `S390_TOOLS_RELEASE` to be present at build time. This is the version string the
+ rust tools provide.
+ 
+-Tpp: You can use `make version` to get the version string.
++Tip: You can use `make version` to get the version string.
+ 
+ ## Internal Libraries
+ * __utils__ _Library for rust tools that bundles common stuff for the 390-tools_
+@@ -43,7 +43,7 @@ Exiting tools may be rewritten in Rust.
+ 
+ ### What (third-party) crates can be used for s390-tools?
+ A huge list of libraries are made available through Rusts' ecosystem and is one
+-of many upsides. However, just like with Coding Style Guidlines, it is
++of many upsides. However, just like with Coding Style Guidelines, it is
+ important to limit the usage of those libraries so that within a project,
+ everyone is on the same page and that code written in Rust uses similar
+ approaches. It makes it easier for code review and maintainability in general.
+@@ -98,8 +98,8 @@ use utils::release_string;
+ fn print_version() {
+     println!(
+         "{} version {}\nCopyright IBM Corp. 2023",
+-        env!("CARGO_PKG_NAME"), // collapes into the crates name
+-        release_string!() // this (very likely) collapes into a compile time constant
++        env!("CARGO_PKG_NAME"), // collapses into the crates name
++        release_string!() // this (very likely) collapses into a compile time constant
+     );
+ }
+ ```
+-- 
+2.43.0
+
+
+From 883d28afea6ea18b1001ebf9e3d921d86be9c593 Mon Sep 17 00:00:00 2001
+From: Marc Hartmayer <mhartmay@linux.ibm.com>
+Date: Mon, 4 Sep 2023 14:18:50 +0200
+Subject: [PATCH 04/13] rust/**/*.rs: fix `cargo clippy` findings
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Automatically fixed by the command `cargo clippy --fix` and `cargo fmt`.
+
+Reviewed-by: Steffen Eiden <seiden@linux.ibm.com>
+Signed-off-by: Marc Hartmayer <mhartmay@linux.ibm.com>
+Signed-off-by: Jan Höppner <hoeppner@linux.ibm.com>
+(cherry picked from commit 3849b2959414feae3e984d4cae0a0cfcb529006d)
+---
+ rust/pv/src/brcb.rs                  |  4 +-
+ rust/pv/src/crypto.rs                |  2 +-
+ rust/pv/src/req.rs                   |  2 +-
+ rust/pv/src/uvsecret/guest_secret.rs |  2 +-
+ rust/pv/src/uvsecret/secret_list.rs  |  2 +-
+ rust/pv/src/verify/helper.rs         | 10 ++--
+ rust/pv/src/verify/test.rs           | 72 ++++++++++++----------------
+ rust/pv/tests/add_secret_request.rs  | 17 ++-----
+ 8 files changed, 47 insertions(+), 64 deletions(-)
+
+diff --git a/rust/pv/src/brcb.rs b/rust/pv/src/brcb.rs
+index 4bf5f16..9ef58e2 100644
+--- a/rust/pv/src/brcb.rs
++++ b/rust/pv/src/brcb.rs
+@@ -205,7 +205,7 @@ mod tests {
+     #[test]
+     fn from_se_image_hdr() {
+         let bin_hdr = get_test_asset!("exp/secure_guest.hdr");
+-        let hdr_tags = BootHdrTags::from_se_image(&mut Cursor::new(bin_hdr.clone())).unwrap();
++        let hdr_tags = BootHdrTags::from_se_image(&mut Cursor::new(*bin_hdr)).unwrap();
+         assert_eq!(hdr_tags, EXP_HDR);
+     }
+ 
+@@ -220,7 +220,7 @@ mod tests {
+         ));
+ 
+         // mess up magic
+-        let mut bin_hdr_copy = bin_hdr.clone();
++        let mut bin_hdr_copy = *bin_hdr;
+         bin_hdr_copy.swap(0, 1);
+         assert!(matches!(
+             BootHdrTags::from_se_image(&mut Cursor::new(bin_hdr_copy)),
+diff --git a/rust/pv/src/crypto.rs b/rust/pv/src/crypto.rs
+index 910419e..8132e9d 100644
+--- a/rust/pv/src/crypto.rs
++++ b/rust/pv/src/crypto.rs
+@@ -315,7 +315,7 @@ mod tests {
+         ];
+ 
+         let res = encrypt_aes(
+-            &&SymKey::Aes256(aes_gcm_key.into()),
++            &SymKey::Aes256(aes_gcm_key.into()),
+             &aes_gcm_iv,
+             &aes_gcm_plain,
+         )
+diff --git a/rust/pv/src/req.rs b/rust/pv/src/req.rs
+index cda448b..b9acd73 100644
+--- a/rust/pv/src/req.rs
++++ b/rust/pv/src/req.rs
+@@ -451,7 +451,7 @@ mod tests {
+         let ks = vec![
+             Keyslot::new(host_key.clone()),
+             Keyslot::new(host_key.clone()),
+-            Keyslot::new(host_key.clone()),
++            Keyslot::new(host_key),
+         ];
+         let mut aad = Vec::<Aad>::new();
+         ks.iter().for_each(|ks| aad.push(Aad::Ks(ks)));
+diff --git a/rust/pv/src/uvsecret/guest_secret.rs b/rust/pv/src/uvsecret/guest_secret.rs
+index 8ad4fa5..8c44421 100644
+--- a/rust/pv/src/uvsecret/guest_secret.rs
++++ b/rust/pv/src/uvsecret/guest_secret.rs
+@@ -105,7 +105,7 @@ mod test {
+             0xef, 0xc7, 0x3c, 0x62,
+         ];
+         let name = "association secret".to_string();
+-        let secret = GuestSecret::association("association secret", secret_value.clone()).unwrap();
++        let secret = GuestSecret::association("association secret", secret_value).unwrap();
+         let exp = GuestSecret::Association {
+             name,
+             id: exp_id,
+diff --git a/rust/pv/src/uvsecret/secret_list.rs b/rust/pv/src/uvsecret/secret_list.rs
+index 724702a..6943bd3 100644
+--- a/rust/pv/src/uvsecret/secret_list.rs
++++ b/rust/pv/src/uvsecret/secret_list.rs
+@@ -117,7 +117,7 @@ impl Display for SecretEntry {
+         writeln!(f, "{} {}:", self.index, stype_str(self.stype.get()))?;
+         write!(f, "  ")?;
+         for b in self.id {
+-            write!(f, "{:02x}", b)?;
++            write!(f, "{b:02x}")?;
+         }
+         Ok(())
+     }
+diff --git a/rust/pv/src/verify/helper.rs b/rust/pv/src/verify/helper.rs
+index 89f92b8..a2f313b 100644
+--- a/rust/pv/src/verify/helper.rs
++++ b/rust/pv/src/verify/helper.rs
+@@ -484,20 +484,20 @@ mod test {
+         let ibm_wrong_subj = load_gen_cert("ibm_wrong_subject.crt");
+         let no_sign_crt = load_gen_cert("inter_ca.crt");
+ 
+-        assert!(super::get_ibm_z_sign_key(&vec!(ibm_crt.clone())).is_ok());
++        assert!(super::get_ibm_z_sign_key(&[ibm_crt.clone()]).is_ok());
+         assert!(matches!(
+-            super::get_ibm_z_sign_key(&vec!(ibm_crt.clone(), ibm_crt.clone())),
++            super::get_ibm_z_sign_key(&[ibm_crt.clone(), ibm_crt.clone()]),
+             Err(Error::HkdVerify(ManyIbmSignKeys))
+         ));
+         assert!(matches!(
+-            super::get_ibm_z_sign_key(&vec!(ibm_wrong_subj)),
++            super::get_ibm_z_sign_key(&[ibm_wrong_subj]),
+             Err(Error::HkdVerify(NoIbmSignKey))
+         ));
+         assert!(matches!(
+-            super::get_ibm_z_sign_key(&vec!(no_sign_crt.clone())),
++            super::get_ibm_z_sign_key(&[no_sign_crt.clone()]),
+             Err(Error::HkdVerify(NoIbmSignKey))
+         ));
+-        assert!(super::get_ibm_z_sign_key(&vec!(ibm_crt.clone(), no_sign_crt.clone())).is_ok(),);
++        assert!(super::get_ibm_z_sign_key(&[ibm_crt, no_sign_crt]).is_ok(),);
+     }
+ 
+     #[test]
+diff --git a/rust/pv/src/verify/test.rs b/rust/pv/src/verify/test.rs
+index 8a6258d..1c0d2b5 100644
+--- a/rust/pv/src/verify/test.rs
++++ b/rust/pv/src/verify/test.rs
+@@ -26,7 +26,7 @@ fn verify_sign_error(exp_raw: libc::c_int, obs: Error) {
+ }
+ fn verify_sign_error_slice(exp_raw: &[libc::c_int], obs: Error) {
+     if exp_raw
+-        .into_iter()
++        .iter()
+         .filter(|e| match &obs {
+             Error::HkdVerify(ty) => match ty {
+                 IbmSignInvalid(err, _d) => &&err.as_raw() == e,
+@@ -51,7 +51,7 @@ fn store_setup() {
+     let ibm_str = get_cert_asset_path_string("ibm.crt");
+     let inter_str = get_cert_asset_path_string("inter.crt");
+ 
+-    let store = helper::store_setup(&None, &vec![], &vec![ibm_str, inter_str]);
++    let store = helper::store_setup(&None, &[], &[ibm_str, inter_str]);
+     assert!(store.is_ok());
+ }
+ 
+@@ -63,7 +63,7 @@ fn verify_chain_online() {
+ 
+     let mock_inter = mock_endpt("inter_ca.crl");
+ 
+-    let mut store = helper::store_setup(&Some(root_crt), &vec![], &vec![]).unwrap();
++    let mut store = helper::store_setup(&Some(root_crt), &[], &[]).unwrap();
+     download_crls_into_store(&mut store, slice::from_ref(&ibm_crt)).unwrap();
+     let store = store.build();
+ 
+@@ -71,8 +71,8 @@ fn verify_chain_online() {
+ 
+     let mut sk = Stack::<X509>::new().unwrap();
+     sk.push(inter_crt).unwrap();
+-    verify_chain(&store, &sk, &vec![ibm_crt.clone()]).unwrap();
+-    assert!(verify_chain(&store, &sk, &vec!(ibm_crt)).is_ok());
++    verify_chain(&store, &sk, &[ibm_crt.clone()]).unwrap();
++    assert!(verify_chain(&store, &sk, &[ibm_crt]).is_ok());
+ }
+ 
+ #[test]
+@@ -82,13 +82,13 @@ fn verify_chain_offline() {
+     let inter_crt = load_gen_cert("inter_ca.crt");
+     let root_crt = get_cert_asset_path_string("root_ca.chained.crt");
+ 
+-    let store = helper::store_setup(&Some(root_crt), &vec![inter_crl], &vec![])
++    let store = helper::store_setup(&Some(root_crt), &[inter_crl], &[])
+         .unwrap()
+         .build();
+ 
+     let mut sk = Stack::<X509>::new().unwrap();
+     sk.push(inter_crt).unwrap();
+-    assert!(verify_chain(&store, &sk, &vec![ibm_crt]).is_ok());
++    assert!(verify_chain(&store, &sk, &[ibm_crt]).is_ok());
+ }
+ 
+ #[test]
+@@ -107,8 +107,8 @@ fn verify_online() {
+     let inter_crl = get_cert_asset_path_string("inter_ca.crl");
+     let ibm_crl = get_cert_asset_path_string("ibm.crl");
+     let verifier = CertVerifier::new(
+-        &vec![ibm_crt, inter_crt],
+-        &vec![ibm_crl, inter_crl],
++        &[ibm_crt, inter_crt],
++        &[ibm_crl, inter_crl],
+         &Some(root_crt),
+         false,
+     )
+@@ -148,8 +148,8 @@ fn verify_offline() {
+     let hkd = load_gen_cert("host.crt");
+ 
+     let verifier = CertVerifier::new(
+-        &vec![ibm_crt, inter_crt],
+-        &vec![ibm_crl, inter_crl],
++        &[ibm_crt, inter_crt],
++        &[ibm_crl, inter_crl],
+         &Some(root_crt),
+         true,
+     )
+@@ -186,25 +186,20 @@ fn verifier_new() {
+     let ibm_rev_crt = get_cert_asset_path_string("ibm_rev.crt");
+ 
+     // To many signing keys
+-    let verifier = CertVerifier::new(
+-        &vec![ibm_crt.clone(), ibm_rev_crt.clone()],
+-        &vec![],
+-        &None,
+-        true,
+-    );
++    let verifier = CertVerifier::new(&[ibm_crt.clone(), ibm_rev_crt.clone()], &[], &None, true);
+     assert!(matches!(verifier, Err(Error::HkdVerify(ManyIbmSignKeys))));
+ 
+     // no CRL for each X509
+     let verifier = CertVerifier::new(
+-        &vec![inter_crt.clone(), ibm_crt.clone()],
+-        &vec![inter_crl.clone()],
+-        &Some(root_crt.clone()),
++        &[inter_crt.clone(), ibm_crt.clone()],
++        &[inter_crl.clone()],
++        &Some(root_crt),
+         false,
+     );
+     verify_sign_error(3, verifier.unwrap_err());
+     let verifier = CertVerifier::new(
+-        &vec![inter_crt.clone(), ibm_crt.clone()],
+-        &vec![],
++        &[inter_crt.clone(), ibm_crt.clone()],
++        &[],
+         &Some(root_chn_crt.clone()),
+         false,
+     );
+@@ -212,8 +207,8 @@ fn verifier_new() {
+ 
+     // wrong intermediate (or ibm key)
+     let verifier = CertVerifier::new(
+-        &vec![inter_fake_crt, ibm_crt.clone()],
+-        &vec![inter_fake_crl],
++        &[inter_fake_crt, ibm_crt.clone()],
++        &[inter_fake_crl],
+         &Some(root_chn_crt.clone()),
+         true,
+     );
+@@ -222,8 +217,8 @@ fn verifier_new() {
+ 
+     //wrong root ca
+     let verifier = CertVerifier::new(
+-        &vec![inter_crt.clone(), ibm_crt.clone()],
+-        &vec![inter_crl.clone()],
++        &[inter_crt.clone(), ibm_crt.clone()],
++        &[inter_crl.clone()],
+         &None,
+         true,
+     );
+@@ -231,33 +226,28 @@ fn verifier_new() {
+ 
+     //correct signing key + intermediate cert
+     let _verifier = CertVerifier::new(
+-        &vec![inter_crt.clone(), ibm_crt.clone()],
+-        &vec![inter_crl.clone()],
++        &[inter_crt.clone(), ibm_crt.clone()],
++        &[inter_crl.clone()],
+         &Some(root_chn_crt.clone()),
+         false,
+     )
+     .unwrap();
+ 
+     // no intermediate key
+-    let verifier = CertVerifier::new(
+-        &vec![ibm_crt.clone()],
+-        &vec![],
+-        &Some(root_chn_crt.clone()),
+-        false,
+-    );
++    let verifier = CertVerifier::new(&[ibm_crt], &[], &Some(root_chn_crt.clone()), false);
+     verify_sign_error(20, verifier.unwrap_err());
+ 
+     //Ibm Sign outdated
+     let verifier = CertVerifier::new(
+-        &vec![inter_crt.clone(), ibm_early_crt.clone()],
+-        &vec![inter_crl.clone()],
++        &[inter_crt.clone(), ibm_early_crt],
++        &[inter_crl.clone()],
+         &Some(root_chn_crt.clone()),
+         false,
+     );
+     assert!(matches!(verifier, Err(Error::HkdVerify(NoIbmSignKey))));
+     let verifier = CertVerifier::new(
+-        &vec![inter_crt.clone(), ibm_late_crt.clone()],
+-        &vec![inter_crl.clone()],
++        &[inter_crt.clone(), ibm_late_crt],
++        &[inter_crl.clone()],
+         &Some(root_chn_crt.clone()),
+         false,
+     );
+@@ -265,9 +255,9 @@ fn verifier_new() {
+ 
+     // revoked
+     let verifier = CertVerifier::new(
+-        &vec![inter_crt.clone(), ibm_rev_crt.clone()],
+-        &vec![inter_crl.clone()],
+-        &Some(root_chn_crt.clone()),
++        &[inter_crt, ibm_rev_crt],
++        &[inter_crl],
++        &Some(root_chn_crt),
+         false,
+     );
+     verify_sign_error(23, verifier.unwrap_err());
+diff --git a/rust/pv/tests/add_secret_request.rs b/rust/pv/tests/add_secret_request.rs
+index 2b3e861..bf491c6 100644
+--- a/rust/pv/tests/add_secret_request.rs
++++ b/rust/pv/tests/add_secret_request.rs
+@@ -18,7 +18,7 @@ use pv::{
+ const TAGS: BootHdrTags = BootHdrTags::new([1; 64], [2; 64], [3; 64], [4; 16]);
+ const CUID: ConfigUid = [0x42u8; 16];
+ const ASSOC_SECRET: [u8; 32] = [0x11; 32];
+-const ASSOC_ID: &'static str = "add_secret_request";
++const ASSOC_ID: &str = "add_secret_request";
+ 
+ fn create_asrcb(
+     guest_secret: GuestSecret,
+@@ -38,7 +38,7 @@ fn create_asrcb(
+     };
+ 
+     asrcb.add_hostkey(hkd);
+-    Ok(asrcb.encrypt(ctx)?)
++    asrcb.encrypt(ctx)
+ }
+ 
+ fn get_crypto() -> (PKey<Public>, ReqEncrCtx) {
+@@ -63,17 +63,10 @@ where
+ {
+     let (host_key, ctx) = get_crypto();
+     let cuid = match cuid {
+-        true => Some(CUID.into()),
++        true => Some(CUID),
+         false => None,
+     };
+-    create_asrcb(
+-        guest_secret,
+-        ext_secret.into(),
+-        flags,
+-        cuid.into(),
+-        host_key,
+-        &ctx,
+-    )
++    create_asrcb(guest_secret, ext_secret.into(), flags, cuid, host_key, &ctx)
+ }
+ 
+ fn association() -> GuestSecret {
+@@ -156,7 +149,7 @@ fn null_none_default_cuid_seven() {
+     let mut asrcb =
+         AddSecretRequest::new(AddSecretVersion::One, GuestSecret::Null, TAGS, no_flag());
+     (0..7).for_each(|_| asrcb.add_hostkey(hkd.clone()));
+-    asrcb.set_cuid(CUID.into());
++    asrcb.set_cuid(CUID);
+     let asrcb = asrcb.encrypt(&ctx).unwrap();
+ 
+     let exp = get_test_asset!("exp/asrcb/null_none_default_cuid_seven");
+-- 
+2.43.0
+
+
+From 4c8072cebe9add441c42e62663d4089d14d32389 Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Wed, 25 Oct 2023 15:26:14 +0200
+Subject: [PATCH 05/13] rust/pv: fix Invalid write of size 1
+
+Fix a valgrind finding. Fix an invalid read/write of one byte after the
+actual struct to clear. Not fixing this may result in a illegal write or
+memory corruption of the program. Fortunately, for the actual only user,
+pvsecret this is not the case.
+
+Fixes: c6f621d0 ("rust: Add library for pv tools")
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+(cherry picked from commit 71b93d55effae6a74bbbbafe7057e1f97d692a74)
+---
+ rust/pv/src/secret.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/rust/pv/src/secret.rs b/rust/pv/src/secret.rs
+index cdef9ef..88287c8 100644
+--- a/rust/pv/src/secret.rs
++++ b/rust/pv/src/secret.rs
+@@ -34,8 +34,8 @@ impl Zeroize for Vec<u8> {
+             // * Vec allocated at least capacity elements continuously
+             // * dst points always to a valid location
+             unsafe {
++                std::ptr::write_volatile(dst, 0);
+                 dst = dst.add(1);
+-                std::ptr::write_volatile(dst, 0)
+             }
+         }
+         std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+-- 
+2.43.0
+
+
+From 49eabe2d13ea3909f4c522fefaf8db998c7ab888 Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Wed, 4 Oct 2023 10:59:34 +0200
+Subject: [PATCH 06/13] rust: Create workspace
+
+A workspaces simplifies the build and packaging process significantly.
+All build artifacts and binaries are now built in a single location
+(e.g., rust/target/release/*), and a unified dependency resolution is
+used. Hence one Cargo.lock for all crates at rust/Cargo.lock.
+
+Closes: https://github.com/ibm-s390-linux/s390-tools/issues/156
+Reviewed-by: Marc Hartmayer <marc@linux.ibm.com>
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+(cherry picked from commit 32b68a5fad652589c85eae098e799563b88864b5)
+---
+ rust/Cargo.toml                       | 15 ++++++++++
+ rust/Makefile                         | 43 +++++++++++----------------
+ rust/README.md                        | 20 +++++++++++--
+ rust/pv/Cargo.toml                    |  8 ++---
+ rust/pv/openssl_extensions/Cargo.toml |  4 +--
+ rust/pvsecret/Cargo.toml              |  8 ++---
+ rust/utils/Cargo.toml                 |  4 +--
+ 7 files changed, 59 insertions(+), 43 deletions(-)
+ create mode 100644 rust/Cargo.toml
+
+diff --git a/rust/Cargo.toml b/rust/Cargo.toml
+new file mode 100644
+index 0000000..65a70a9
+--- /dev/null
++++ b/rust/Cargo.toml
+@@ -0,0 +1,15 @@
++[workspace]
++members = [
++	"pv",
++	"pvsecret",
++	"utils",
++]
++resolver = "2"
++
++[workspace.package]
++edition = "2021"
++license = "MIT"
++
++[profile.release]
++lto = true
++panic = "abort"
+diff --git a/rust/Makefile b/rust/Makefile
+index 420bafd..e4e9885 100644
+--- a/rust/Makefile
++++ b/rust/Makefile
+@@ -15,16 +15,17 @@ ifneq (${HAVE_CARGO},0)
+ 
+ 	BUILD_TARGETS = $(CARGO_TARGETS)
+ 	INSTALL_TARGETS := install-rust-tools install-man
+-	CARGO_TEST_TARGETS = $(addsuffix, _test, $(CARGO_TARGETS))
++	CARGO_TEST_TARGETS = $(addsuffix .test, $(CARGO_TARGETS))
+ 
+ ifneq (${HAVE_OPENSSL},0)
+ ifneq (${HAVE_LIBCURL},0)
+ 	PV_TARGETS := pvsecret
+ 
+-	PV_BUILD_TARGETS = $(PV_TARGETS)
+-	CARGO_TEST_TARGETS += $(addsuffix, _test, $(PV_TARGETS)) pv
++	PV_BUILD_TARGETS := $(PV_TARGETS)
++	CARGO_TEST_TARGETS += $(addsuffix .test,pv $(PV_TARGETS))
+ endif #LIBCURL
+ endif #OPENSSL
++	TEST_TARGETS := $(addsuffix _build,$(CARGO_TEST_TARGETS))
+ endif #CARGO
+ 
+ BUILD_TARGETS += $(PV_BUILD_TARGETS)
+@@ -39,18 +40,15 @@ endif
+ $(BUILD_TARGETS) rust-test: CC = $(CC_SILENT)
+ $(BUILD_TARGETS) rust-test: AR = $(AR_SILENT)
+ 
+-$(CARGO_TARGETS): .check-cargo .no-cross-compile
+-	$(CARGO_BUILD) --manifest-path=$@/Cargo.toml $(ALL_CARGOFLAGS)
+-.PHONY: $(CARGO_TARGETS)
++$(PV_TARGETS): .check-dep-pvtools
++$(PV_TARGETS) $(CARGO_TARGETS): .check-cargo .no-cross-compile
++	$(CARGO_BUILD) --bin $@ $(ALL_CARGOFLAGS)
++.PHONY: $(PV_TARGETS) $(CARGO_TARGETS)
+ 
+-
+-$(CARGO_TEST_TARGETS): .check-cargo .no-cross-compile
+-	$(CARGO_TEST) --manifest-path=$@/Cargo.toml --all-features $(CARGOFLAGS)
+-.PHONY: $(CARGO_TEST_TARGETS)
+-
+-$(PV_TARGETS): .check-cargo .no-cross-compile .check-dep-pvtools
+-	$(CARGO_BUILD) --manifest-path=$@/Cargo.toml $(ALL_CARGOFLAGS)
+-.PHONY: $(PV_TARGETS)
++$(TEST_TARGETS): ALL_CARGOFLAGS += --no-run
++$(CARGO_TEST_TARGETS) $(TEST_TARGETS): .check-cargo .no-cross-compile
++	$(CARGO_TEST) --package $(basename $@) --all-features $(ALL_CARGOFLAGS)
++.PHONY: $(TEST_TARGETS) $(CARGO_TEST_TARGETS)
+ 
+ skip-build:
+ 	echo "  SKIP    rust-tools due to unresolved dependencies"
+@@ -65,22 +63,17 @@ print-rust-targets:
+ 	echo $(BUILD_TARGETS)
+ 
+ clean:
+-	$(foreach target,$(CARGO_TARGETS),\
+-		$(CARGO_CLEAN) --manifest-path=$(target)/Cargo.toml ${ALL_CARGOFLAGS} ;)
+-	$(foreach target,$(PV_TARGETS),\
+-		$(CARGO_CLEAN) --manifest-path=$(target)/Cargo.toml ${ALL_CARGOFLAGS} ;)
++	$(CARGO_CLEAN) ${ALL_CARGOFLAGS}
+ 	$(RM) -- .check-dep-pvtools .detect-openssl.dep.c .check-cargo
+ 
+-rust-test: .check-cargo .no-cross-compile
+-	$(foreach target,$(CARGO_TEST_TARGETS),\
+-		$(CARGO_TEST) --manifest-path=$(target)/Cargo.toml --all-features ${ALL_CARGOFLAGS} ;)
++rust-test: $(CARGO_TEST_TARGETS)
+ 
+ install-rust-tools: $(BUILD_TARGETS)
+ 	$(INSTALL) -d -m 755 $(DESTDIR)$(USRBINDIR)
+ 	$(foreach target,$(CARGO_TARGETS),\
+-		$(INSTALL) $(target)/target/release/$(target) $(DESTDIR)$(USRBINDIR);)
++		$(INSTALL) target/release/$(target) $(DESTDIR)$(USRBINDIR);)
+ 	$(foreach target,$(PV_TARGETS),\
+-		$(INSTALL) $(target)/target/release/$(target) $(DESTDIR)$(USRBINDIR);)
++		$(INSTALL) target/release/$(target) $(DESTDIR)$(USRBINDIR);)
+ 
+ install-man:
+ 	$(foreach target,$(CARGO_TARGETS),\
+@@ -118,13 +111,13 @@ endif
+ 
+ .check-dep-pvtools: .detect-openssl.dep.c
+ 	$(call check_dep, \
+-		"$(BIN_PROGRAM)", \
++		"Rust-pv", \
+ 		$^, \
+ 		"openssl-devel / libssl-dev version >= 1.1.1", \
+ 		"HAVE_OPENSSL=0", \
+ 		"-I.")
+ 	$(call check_dep, \
+-		"$(BIN_PROGRAM)", \
++		"Rust-pv", \
+ 		"curl/curl.h", \
+ 		"libcurl-devel", \
+ 		"HAVE_LIBCURL=0")
+diff --git a/rust/README.md b/rust/README.md
+index 61b0af8..16603bf 100644
+--- a/rust/README.md
++++ b/rust/README.md
+@@ -81,11 +81,27 @@ is a start, but can change over time.
+ Dependencies used by the crates listed above can be used, too.
+ 
+ ### Add new tool
+-To add a new tool issue `cargo new <TOOLNAME>` in the `rust` directory.
++To add a new tool issue `cargo new $TOOLNAME` in the `rust` directory.
+ 
+ Add the tool to the _s390-tools_ build system:
+ ```Makefile
+-CARGO_TARGETS := TOOLNAME
++CARGO_TARGETS := $TOOLNAME
++```
++Add the library to the _s390-tools_ test list:
++```Makefile
++CARGO_TEST_TARGETS := $LIBNAME
++```
++
++Add the tool/library to the cargo workspace:
++```toml
++[workspace]
++members = [
++	"pv",
++	"pvsecret",
++	"$TOOLNAME",
++	"$LIBNAME"
++	"utils",
++]
+ ```
+ 
+ ### Versions
+diff --git a/rust/pv/Cargo.toml b/rust/pv/Cargo.toml
+index 689d624..825386a 100644
+--- a/rust/pv/Cargo.toml
++++ b/rust/pv/Cargo.toml
+@@ -1,8 +1,8 @@
+ [package]
+ name = "pv"
+ version = "0.9.0"
+-edition = "2021"
+-license = "MIT"
++edition.workspace = true
++license.workspace = true
+ 
+ [dependencies]
+ libc = "0.2"
+@@ -30,7 +30,3 @@ lazy_static = "1"
+ default = []
+ request = ["dep:openssl", "dep:curl", "dep:openssl_extensions", "dep:serde", "dep:clap"]
+ uvsecret = ["dep:byteorder", "dep:serde"]
+-
+-[profile.release]
+-lto = true
+-panic = "abort" # release builds now do not clean up stack after panics. .1 Mb
+diff --git a/rust/pv/openssl_extensions/Cargo.toml b/rust/pv/openssl_extensions/Cargo.toml
+index 17d4c0e..90907ce 100644
+--- a/rust/pv/openssl_extensions/Cargo.toml
++++ b/rust/pv/openssl_extensions/Cargo.toml
+@@ -1,8 +1,8 @@
+ [package]
+ name = "openssl_extensions"
+ version = "0.1.0"
+-edition = "2021"
+-license = "MIT"
++edition.workspace = true
++license.workspace = true
+ 
+ [dependencies]
+ foreign-types = "0.3"
+diff --git a/rust/pvsecret/Cargo.toml b/rust/pvsecret/Cargo.toml
+index da4deab..d1e75b1 100644
+--- a/rust/pvsecret/Cargo.toml
++++ b/rust/pvsecret/Cargo.toml
+@@ -1,8 +1,8 @@
+ [package]
+ name = "pvsecret"
+ version = "0.9.0"
+-edition = "2021"
+-license = "MIT"
++edition.workspace = true
++license.workspace = true
+ 
+ [dependencies]
+ anyhow = { version = "1", features = ["std"] }
+@@ -12,7 +12,3 @@ serde_yaml = "0.9"
+ 
+ pv = { path = "../pv", features = ["uvsecret", "request"] }
+ utils = { path = "../utils" }
+-
+-[profile.release]
+-lto = true
+-panic = "abort" # release builds now do not clean up stack after panics. .1 Mb
+diff --git a/rust/utils/Cargo.toml b/rust/utils/Cargo.toml
+index 30bbbc8..215381b 100644
+--- a/rust/utils/Cargo.toml
++++ b/rust/utils/Cargo.toml
+@@ -1,5 +1,5 @@
+ [package]
+ name = "utils"
+ version = "0.1.0"
+-edition = "2021"
+-license = "MIT"
++edition.workspace = true
++license.workspace = true
+-- 
+2.43.0
+
+
+From be47ce72f4ee7dc7ed2dafb9b89079b0c2b154fa Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Wed, 4 Oct 2023 11:08:20 +0200
+Subject: [PATCH 07/13] rust: Update dependency files
+
+With the last patch introducing the rust workspace the location of
+Cargo.lock has changed. Therefore, remove all crate level lock-files and
+add rust/Cargo.lock as the only lock-file.
+
+Steps to reproduce:
+```
+cd rust
+mv pvsecret/Cargo.lock .
+cargo build
+cargo update -p openssl
+cargo update -p curl-sys
+cargo update -p rustix
+
+```
+
+While at it update some dependencies to get fixes for security issues.
+
+Reviewed-by: Marc Hartmayer <marc@linux.ibm.com>
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+(cherry picked from commit d1b61c37fa78c95d0512b417aa21fbc66bddcd4b)
+---
+ rust/.gitignore                |   3 -
+ rust/{pvsecret => }/Cargo.lock | 222 +++++++++++++++++++++++++++++++--
+ 2 files changed, 210 insertions(+), 15 deletions(-)
+ rename rust/{pvsecret => }/Cargo.lock (77%)
+
+diff --git a/rust/.gitignore b/rust/.gitignore
+index 4760f82..f9f3955 100644
+--- a/rust/.gitignore
++++ b/rust/.gitignore
+@@ -9,6 +9,3 @@ target/
+ # Generated during make build can be removed at any point
+ .check-dep-pvtools
+ .check-cargo
+-
+-# Ignore lock files by default
+-Cargo.lock
+diff --git a/rust/pvsecret/Cargo.lock b/rust/Cargo.lock
+similarity index 77%
+rename from rust/pvsecret/Cargo.lock
+rename to rust/Cargo.lock
+index 1db32c2..f7d1cf0 100644
+--- a/rust/pvsecret/Cargo.lock
++++ b/rust/Cargo.lock
+@@ -2,6 +2,15 @@
+ # It is not intended for manual editing.
+ version = 3
+ 
++[[package]]
++name = "aho-corasick"
++version = "1.1.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b2969dcb958b36655471fc61f7e416fa76033bdd4bfed0678d8fee1e2d07a1f0"
++dependencies = [
++ "memchr",
++]
++
+ [[package]]
+ name = "anstream"
+ version = "0.3.2"
+@@ -57,6 +66,16 @@ version = "1.0.71"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "9c7d0618f0e0b7e8ff11427422b64564d5fb0be1940354bfe2e0529b18a9d9b8"
+ 
++[[package]]
++name = "assert-json-diff"
++version = "2.0.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "47e4f2b81832e72834d7518d8487a0396a28cc408186a2e8854c0f98011faf12"
++dependencies = [
++ "serde",
++ "serde_json",
++]
++
+ [[package]]
+ name = "autocfg"
+ version = "1.1.0"
+@@ -69,6 +88,12 @@ version = "1.3.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
+ 
++[[package]]
++name = "bitflags"
++version = "2.4.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "327762f6e5a765692301e5bb513e0d9fef63be86bbc14528052b1cd3e6f03e07"
++
+ [[package]]
+ name = "byteorder"
+ version = "1.4.3"
+@@ -106,7 +131,7 @@ checksum = "c1458a1df40e1e2afebb7ab60ce55c1fa8f431146205aa5f4887e0b111c27636"
+ dependencies = [
+  "anstream",
+  "anstyle",
+- "bitflags",
++ "bitflags 1.3.2",
+  "clap_lex",
+  "strsim",
+  "terminal_size",
+@@ -153,9 +178,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "curl-sys"
+-version = "0.4.63+curl-8.1.2"
++version = "0.4.68+curl-8.4.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "aeb0fef7046022a1e2ad67a004978f0e3cacb9e3123dc62ce768f92197b771dc"
++checksum = "b4a0d18d88360e374b16b2273c832b5e57258ffc1d4aa4f96b108e0738d5752f"
+ dependencies = [
+  "cc",
+  "libc",
+@@ -163,7 +188,7 @@ dependencies = [
+  "openssl-sys",
+  "pkg-config",
+  "vcpkg",
+- "winapi",
++ "windows-sys 0.48.0",
+ ]
+ 
+ [[package]]
+@@ -202,6 +227,26 @@ version = "0.1.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
+ 
++[[package]]
++name = "form_urlencoded"
++version = "1.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a62bc1cf6f830c2ec14a513a9fb124d0a213a629668a4186f329db21fe045652"
++dependencies = [
++ "percent-encoding",
++]
++
++[[package]]
++name = "getrandom"
++version = "0.2.10"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "be4136b2a15dd319360be1c07d9933517ccf0be8f16bf62a3bee4f0d618df427"
++dependencies = [
++ "cfg-if",
++ "libc",
++ "wasi",
++]
++
+ [[package]]
+ name = "hashbrown"
+ version = "0.12.3"
+@@ -220,6 +265,12 @@ version = "0.3.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "fed44880c466736ef9a5c5b5facefb5ed0785676d0c02d612db14e54f0d84286"
+ 
++[[package]]
++name = "httparse"
++version = "1.8.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d897f394bad6a705d5f4104762e116a75639e470d80901eed05a860a95cb1904"
++
+ [[package]]
+ name = "indexmap"
+ version = "1.9.3"
+@@ -259,6 +310,12 @@ version = "1.0.6"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
+ 
++[[package]]
++name = "lazy_static"
++version = "1.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
++
+ [[package]]
+ name = "libc"
+ version = "0.2.146"
+@@ -289,6 +346,29 @@ version = "0.4.19"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "b06a4cde4c0f271a446782e3eff8de789548ce57dbc8eca9292c27f4a42004b4"
+ 
++[[package]]
++name = "memchr"
++version = "2.6.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f665ee40bc4a3c5590afb1e9677db74a508659dfd71e126420da8274909a0167"
++
++[[package]]
++name = "mockito"
++version = "0.31.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "80f9fece9bd97ab74339fe19f4bcaf52b76dcc18e5364c7977c1838f76b38de9"
++dependencies = [
++ "assert-json-diff",
++ "httparse",
++ "lazy_static",
++ "log",
++ "rand",
++ "regex",
++ "serde_json",
++ "serde_urlencoded",
++ "similar",
++]
++
+ [[package]]
+ name = "once_cell"
+ version = "1.18.0"
+@@ -297,11 +377,11 @@ checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
+ 
+ [[package]]
+ name = "openssl"
+-version = "0.10.54"
++version = "0.10.60"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "69b3f656a17a6cbc115b5c7a40c616947d213ba182135b014d6051b73ab6f019"
++checksum = "79a4c6c3a2b158f7f8f2a2fc5a969fa3a068df6fc9dbb4a43845436e3af7c800"
+ dependencies = [
+- "bitflags",
++ "bitflags 2.4.1",
+  "cfg-if",
+  "foreign-types",
+  "libc",
+@@ -329,9 +409,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
+ 
+ [[package]]
+ name = "openssl-sys"
+-version = "0.9.88"
++version = "0.9.96"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "c2ce0f250f34a308dcfdbb351f511359857d4ed2134ba715a4eadd46e1ffd617"
++checksum = "3812c071ba60da8b5677cc12bcb1d42989a65553772897a7e0355545a819838f"
+ dependencies = [
+  "cc",
+  "libc",
+@@ -350,12 +430,24 @@ dependencies = [
+  "openssl-sys",
+ ]
+ 
++[[package]]
++name = "percent-encoding"
++version = "2.3.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
++
+ [[package]]
+ name = "pkg-config"
+ version = "0.3.27"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
+ 
++[[package]]
++name = "ppv-lite86"
++version = "0.2.17"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
++
+ [[package]]
+ name = "proc-macro2"
+ version = "1.0.60"
+@@ -373,11 +465,14 @@ dependencies = [
+  "cfg-if",
+  "clap",
+  "curl",
++ "lazy_static",
+  "libc",
+  "log",
++ "mockito",
+  "openssl",
+  "openssl_extensions",
+  "serde",
++ "serde_test",
+  "thiserror",
+  "zerocopy",
+ ]
+@@ -403,13 +498,72 @@ dependencies = [
+  "proc-macro2",
+ ]
+ 
++[[package]]
++name = "rand"
++version = "0.8.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
++dependencies = [
++ "libc",
++ "rand_chacha",
++ "rand_core",
++]
++
++[[package]]
++name = "rand_chacha"
++version = "0.3.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
++dependencies = [
++ "ppv-lite86",
++ "rand_core",
++]
++
++[[package]]
++name = "rand_core"
++version = "0.6.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
++dependencies = [
++ "getrandom",
++]
++
++[[package]]
++name = "regex"
++version = "1.10.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "380b951a9c5e80ddfd6136919eef32310721aa4aacd4889a8d39124b026ab343"
++dependencies = [
++ "aho-corasick",
++ "memchr",
++ "regex-automata",
++ "regex-syntax",
++]
++
++[[package]]
++name = "regex-automata"
++version = "0.4.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5f804c7828047e88b2d32e2d7fe5a105da8ee3264f01902f796c8e067dc2483f"
++dependencies = [
++ "aho-corasick",
++ "memchr",
++ "regex-syntax",
++]
++
++[[package]]
++name = "regex-syntax"
++version = "0.8.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
++
+ [[package]]
+ name = "rustix"
+-version = "0.37.20"
++version = "0.37.27"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "b96e891d04aa506a6d1f318d2771bcb1c7dfda84e126660ace067c9b474bb2c0"
++checksum = "fea8ca367a3a01fe35e6943c400addf443c0f57670e6ec51196f71a4b8762dd2"
+ dependencies = [
+- "bitflags",
++ "bitflags 1.3.2",
+  "errno",
+  "io-lifetimes",
+  "libc",
+@@ -452,6 +606,38 @@ dependencies = [
+  "syn 2.0.18",
+ ]
+ 
++[[package]]
++name = "serde_json"
++version = "1.0.99"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "46266871c240a00b8f503b877622fe33430b3c7d963bdc0f2adc511e54a1eae3"
++dependencies = [
++ "itoa",
++ "ryu",
++ "serde",
++]
++
++[[package]]
++name = "serde_test"
++version = "1.0.176"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5a2f49ace1498612d14f7e0b8245519584db8299541dfe31a06374a828d620ab"
++dependencies = [
++ "serde",
++]
++
++[[package]]
++name = "serde_urlencoded"
++version = "0.7.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
++dependencies = [
++ "form_urlencoded",
++ "itoa",
++ "ryu",
++ "serde",
++]
++
+ [[package]]
+ name = "serde_yaml"
+ version = "0.9.21"
+@@ -465,6 +651,12 @@ dependencies = [
+  "unsafe-libyaml",
+ ]
+ 
++[[package]]
++name = "similar"
++version = "2.3.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2aeaf503862c419d66959f5d7ca015337d864e9c49485d771b732e2a20453597"
++
+ [[package]]
+ name = "socket2"
+ version = "0.4.9"
+@@ -561,6 +753,12 @@ version = "0.2.15"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+ 
++[[package]]
++name = "wasi"
++version = "0.11.0+wasi-snapshot-preview1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
++
+ [[package]]
+ name = "winapi"
+ version = "0.3.9"
+-- 
+2.43.0
+
+
+From c25115c0d605c9c79efd8e17d4917a35603c0766 Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Tue, 21 Nov 2023 13:27:21 +0100
+Subject: [PATCH 08/13] rust: Sanitize minimal dependencies
+
+The crate dependencies were a bit to slack. Due to the rust dependency
+resolver's strategy of always selecting the latest version this never
+lead to any issues.
+
+This has no impact on the workspaces Cargo.lock
+
+Reviewed-by: Marc Hartmayer <marc@linux.ibm.com>
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+(cherry picked from commit 9019c6864a4d39f940994b3858cc331983c605ee)
+---
+ rust/pv/Cargo.toml                    | 16 ++++++++--------
+ rust/pv/openssl_extensions/Cargo.toml | 10 +++++-----
+ rust/pvsecret/Cargo.toml              |  4 ++--
+ 3 files changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/rust/pv/Cargo.toml b/rust/pv/Cargo.toml
+index 825386a..22d5fd3 100644
+--- a/rust/pv/Cargo.toml
++++ b/rust/pv/Cargo.toml
+@@ -5,26 +5,26 @@ edition.workspace = true
+ license.workspace = true
+ 
+ [dependencies]
+-libc = "0.2"
+-log = { version = "0.4", features = ["std", "release_max_level_debug"] }
+-thiserror = "1"
++libc = "0.2.49"
++log = { version = "0.4.6", features = ["std", "release_max_level_debug"] }
++thiserror = "1.0.33"
+ zerocopy = "0.6"
+ cfg-if = "1.0.0"
+ 
+ # dependencies for request feature
+ clap = { version ="4", features = ["derive", "wrap_help"], optional = true }
+-curl = { version ="0.4", optional = true }
+-openssl = {version = "0.10", optional = true }
++curl = { version ="0.4.7", optional = true }
++openssl = {version = "0.10.49", optional = true }
+ openssl_extensions = { path = "openssl_extensions", optional = true }
+-serde = { version = "1", features = ["derive"], optional = true  }
++serde = { version = "1.0.139", features = ["derive"], optional = true  }
+ 
+ # misc optional dependencies
+-byteorder = {version = "1", optional = true }
++byteorder = {version = "1.3", optional = true }
+ 
+ [dev-dependencies]
+ mockito = {version = "0.31", default-features = false }
+ serde_test = "1"
+-lazy_static = "1"
++lazy_static = "1.1"
+ 
+ [features]
+ default = []
+diff --git a/rust/pv/openssl_extensions/Cargo.toml b/rust/pv/openssl_extensions/Cargo.toml
+index 90907ce..7bdeece 100644
+--- a/rust/pv/openssl_extensions/Cargo.toml
++++ b/rust/pv/openssl_extensions/Cargo.toml
+@@ -5,8 +5,8 @@ edition.workspace = true
+ license.workspace = true
+ 
+ [dependencies]
+-foreign-types = "0.3"
+-libc = {version = "0.2", features = [ "extra_traits"] }
+-log = { version = "0.4", features = ["std", "release_max_level_debug"] }
+-openssl = "0.10"
+-openssl-sys = "0.9"
++foreign-types = "0.3.1"
++libc = {version = "0.2.49", features = [ "extra_traits"] }
++log = { version = "0.4.6", features = ["std", "release_max_level_debug"] }
++openssl = "0.10.49"
++openssl-sys = "0.9.85"
+diff --git a/rust/pvsecret/Cargo.toml b/rust/pvsecret/Cargo.toml
+index d1e75b1..e236c00 100644
+--- a/rust/pvsecret/Cargo.toml
++++ b/rust/pvsecret/Cargo.toml
+@@ -5,9 +5,9 @@ edition.workspace = true
+ license.workspace = true
+ 
+ [dependencies]
+-anyhow = { version = "1", features = ["std"] }
++anyhow = { version = "1.0.70", features = ["std"] }
+ clap = { version ="4", features = ["derive", "wrap_help"]}
+-log = { version = "0.4", features = ["std", "release_max_level_debug"] }
++log = { version = "0.4.6", features = ["std", "release_max_level_debug"] }
+ serde_yaml = "0.9"
+ 
+ pv = { path = "../pv", features = ["uvsecret", "request"] }
+-- 
+2.43.0
+
+
+From b6009c80b112ad85ca2aa649126b913af5af253c Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Wed, 29 Nov 2023 17:06:50 +0100
+Subject: [PATCH 09/13] rust: Use default panic behaviour
+
+Reviewed-by: Marc Hartmayer <marc@linux.ibm.com>
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+(cherry picked from commit ae0cbf00b11bfe195c9e6e3b4168a3dccacde983)
+---
+ rust/Cargo.toml | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/rust/Cargo.toml b/rust/Cargo.toml
+index 65a70a9..7ba1faa 100644
+--- a/rust/Cargo.toml
++++ b/rust/Cargo.toml
+@@ -12,4 +12,3 @@ license = "MIT"
+ 
+ [profile.release]
+ lto = true
+-panic = "abort"
+-- 
+2.43.0
+
+
+From c4e48d060b7d92d7c6cd150728ecb55b301afa62 Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Thu, 30 Nov 2023 16:02:16 +0100
+Subject: [PATCH 10/13] rust/pv: Update mockito to version 1
+
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+(cherry picked from commit 21662d38e68b58bad033cdb1fca99987dd07cf78)
+---
+ rust/Cargo.lock            | 468 ++++++++++++++++++++++++++++++++++++-
+ rust/pv/Cargo.toml         |   2 +-
+ rust/pv/src/verify/test.rs |   4 +-
+ 3 files changed, 465 insertions(+), 9 deletions(-)
+
+diff --git a/rust/Cargo.lock b/rust/Cargo.lock
+index f7d1cf0..067be05 100644
+--- a/rust/Cargo.lock
++++ b/rust/Cargo.lock
+@@ -2,6 +2,21 @@
+ # It is not intended for manual editing.
+ version = 3
+ 
++[[package]]
++name = "addr2line"
++version = "0.21.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8a30b2e23b9e17a9f90641c7ab1549cd9b44f296d3ccbf309d2863cfe398a0cb"
++dependencies = [
++ "gimli",
++]
++
++[[package]]
++name = "adler"
++version = "1.0.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
++
+ [[package]]
+ name = "aho-corasick"
+ version = "1.1.2"
+@@ -82,6 +97,21 @@ version = "1.1.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
+ 
++[[package]]
++name = "backtrace"
++version = "0.3.69"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2089b7e3f35b9dd2d0ed921ead4f6d318c27680d4a5bd167b3ee120edb105837"
++dependencies = [
++ "addr2line",
++ "cc",
++ "cfg-if",
++ "libc",
++ "miniz_oxide",
++ "object",
++ "rustc-demangle",
++]
++
+ [[package]]
+ name = "bitflags"
+ version = "1.3.2"
+@@ -100,6 +130,12 @@ version = "1.4.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
+ 
++[[package]]
++name = "bytes"
++version = "1.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
++
+ [[package]]
+ name = "cc"
+ version = "1.0.79"
+@@ -172,7 +208,7 @@ dependencies = [
+  "openssl-probe",
+  "openssl-sys",
+  "schannel",
+- "socket2",
++ "socket2 0.4.9",
+  "winapi",
+ ]
+ 
+@@ -191,6 +227,12 @@ dependencies = [
+  "windows-sys 0.48.0",
+ ]
+ 
++[[package]]
++name = "equivalent"
++version = "1.0.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
++
+ [[package]]
+ name = "errno"
+ version = "0.3.1"
+@@ -212,6 +254,12 @@ dependencies = [
+  "libc",
+ ]
+ 
++[[package]]
++name = "fnv"
++version = "1.0.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
++
+ [[package]]
+ name = "foreign-types"
+ version = "0.3.2"
+@@ -236,6 +284,95 @@ dependencies = [
+  "percent-encoding",
+ ]
+ 
++[[package]]
++name = "futures"
++version = "0.3.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "da0290714b38af9b4a7b094b8a37086d1b4e61f2df9122c3cad2577669145335"
++dependencies = [
++ "futures-channel",
++ "futures-core",
++ "futures-executor",
++ "futures-io",
++ "futures-sink",
++ "futures-task",
++ "futures-util",
++]
++
++[[package]]
++name = "futures-channel"
++version = "0.3.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ff4dd66668b557604244583e3e1e1eada8c5c2e96a6d0d6653ede395b78bbacb"
++dependencies = [
++ "futures-core",
++ "futures-sink",
++]
++
++[[package]]
++name = "futures-core"
++version = "0.3.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "eb1d22c66e66d9d72e1758f0bd7d4fd0bee04cad842ee34587d68c07e45d088c"
++
++[[package]]
++name = "futures-executor"
++version = "0.3.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0f4fb8693db0cf099eadcca0efe2a5a22e4550f98ed16aba6c48700da29597bc"
++dependencies = [
++ "futures-core",
++ "futures-task",
++ "futures-util",
++]
++
++[[package]]
++name = "futures-io"
++version = "0.3.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8bf34a163b5c4c52d0478a4d757da8fb65cabef42ba90515efee0f6f9fa45aaa"
++
++[[package]]
++name = "futures-macro"
++version = "0.3.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "53b153fd91e4b0147f4aced87be237c98248656bb01050b96bf3ee89220a8ddb"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 2.0.18",
++]
++
++[[package]]
++name = "futures-sink"
++version = "0.3.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e36d3378ee38c2a36ad710c5d30c2911d752cb941c00c72dbabfb786a7970817"
++
++[[package]]
++name = "futures-task"
++version = "0.3.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "efd193069b0ddadc69c46389b740bbccdd97203899b48d09c5f7969591d6bae2"
++
++[[package]]
++name = "futures-util"
++version = "0.3.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a19526d624e703a3179b3d322efec918b6246ea0fa51d41124525f00f1cc8104"
++dependencies = [
++ "futures-channel",
++ "futures-core",
++ "futures-io",
++ "futures-macro",
++ "futures-sink",
++ "futures-task",
++ "memchr",
++ "pin-project-lite",
++ "pin-utils",
++ "slab",
++]
++
+ [[package]]
+ name = "getrandom"
+ version = "0.2.10"
+@@ -247,12 +384,43 @@ dependencies = [
+  "wasi",
+ ]
+ 
++[[package]]
++name = "gimli"
++version = "0.28.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4271d37baee1b8c7e4b708028c57d816cf9d2434acb33a549475f78c181f6253"
++
++[[package]]
++name = "h2"
++version = "0.3.22"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4d6250322ef6e60f93f9a2162799302cd6f68f79f6e5d85c8c16f14d1d958178"
++dependencies = [
++ "bytes",
++ "fnv",
++ "futures-core",
++ "futures-sink",
++ "futures-util",
++ "http",
++ "indexmap 2.1.0",
++ "slab",
++ "tokio",
++ "tokio-util",
++ "tracing",
++]
++
+ [[package]]
+ name = "hashbrown"
+ version = "0.12.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+ 
++[[package]]
++name = "hashbrown"
++version = "0.14.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
++
+ [[package]]
+ name = "heck"
+ version = "0.4.1"
+@@ -265,12 +433,64 @@ version = "0.3.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "fed44880c466736ef9a5c5b5facefb5ed0785676d0c02d612db14e54f0d84286"
+ 
++[[package]]
++name = "http"
++version = "0.2.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8947b1a6fad4393052c7ba1f4cd97bed3e953a95c79c92ad9b051a04611d9fbb"
++dependencies = [
++ "bytes",
++ "fnv",
++ "itoa",
++]
++
++[[package]]
++name = "http-body"
++version = "0.4.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
++dependencies = [
++ "bytes",
++ "http",
++ "pin-project-lite",
++]
++
+ [[package]]
+ name = "httparse"
+ version = "1.8.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "d897f394bad6a705d5f4104762e116a75639e470d80901eed05a860a95cb1904"
+ 
++[[package]]
++name = "httpdate"
++version = "1.0.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
++
++[[package]]
++name = "hyper"
++version = "0.14.27"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ffb1cfd654a8219eaef89881fdb3bb3b1cdc5fa75ded05d6933b2b382e395468"
++dependencies = [
++ "bytes",
++ "futures-channel",
++ "futures-core",
++ "futures-util",
++ "h2",
++ "http",
++ "http-body",
++ "httparse",
++ "httpdate",
++ "itoa",
++ "pin-project-lite",
++ "socket2 0.4.9",
++ "tokio",
++ "tower-service",
++ "tracing",
++ "want",
++]
++
+ [[package]]
+ name = "indexmap"
+ version = "1.9.3"
+@@ -278,7 +498,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
+ dependencies = [
+  "autocfg",
+- "hashbrown",
++ "hashbrown 0.12.3",
++]
++
++[[package]]
++name = "indexmap"
++version = "2.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d530e1a18b1cb4c484e6e34556a0d948706958449fca0cab753d649f2bce3d1f"
++dependencies = [
++ "equivalent",
++ "hashbrown 0.14.3",
+ ]
+ 
+ [[package]]
+@@ -340,6 +570,16 @@ version = "0.3.8"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "ef53942eb7bf7ff43a617b3e2c1c4a5ecf5944a7c1bc12d7ee39bbb15e5c1519"
+ 
++[[package]]
++name = "lock_api"
++version = "0.4.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3c168f8615b12bc01f9c17e2eb0cc07dcae1940121185446edc3744920e8ef45"
++dependencies = [
++ "autocfg",
++ "scopeguard",
++]
++
+ [[package]]
+ name = "log"
+ version = "0.4.19"
+@@ -352,21 +592,61 @@ version = "2.6.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "f665ee40bc4a3c5590afb1e9677db74a508659dfd71e126420da8274909a0167"
+ 
++[[package]]
++name = "miniz_oxide"
++version = "0.7.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e7810e0be55b428ada41041c41f32c9f1a42817901b4ccf45fa3d4b6561e74c7"
++dependencies = [
++ "adler",
++]
++
++[[package]]
++name = "mio"
++version = "0.8.8"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "927a765cd3fc26206e66b296465fa9d3e5ab003e651c1b3c060e7956d96b19d2"
++dependencies = [
++ "libc",
++ "wasi",
++ "windows-sys 0.48.0",
++]
++
+ [[package]]
+ name = "mockito"
+-version = "0.31.1"
++version = "1.2.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "80f9fece9bd97ab74339fe19f4bcaf52b76dcc18e5364c7977c1838f76b38de9"
++checksum = "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
+ dependencies = [
+  "assert-json-diff",
+- "httparse",
+- "lazy_static",
++ "futures",
++ "hyper",
+  "log",
+  "rand",
+  "regex",
+  "serde_json",
+  "serde_urlencoded",
+  "similar",
++ "tokio",
++]
++
++[[package]]
++name = "num_cpus"
++version = "1.16.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
++dependencies = [
++ "hermit-abi",
++ "libc",
++]
++
++[[package]]
++name = "object"
++version = "0.32.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9cf5f9dd3933bd50a9e1f149ec995f39ae2c496d31fd772c1fd45ebc27e902b0"
++dependencies = [
++ "memchr",
+ ]
+ 
+ [[package]]
+@@ -430,12 +710,47 @@ dependencies = [
+  "openssl-sys",
+ ]
+ 
++[[package]]
++name = "parking_lot"
++version = "0.12.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
++dependencies = [
++ "lock_api",
++ "parking_lot_core",
++]
++
++[[package]]
++name = "parking_lot_core"
++version = "0.9.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4c42a9226546d68acdd9c0a280d17ce19bfe27a46bf68784e4066115788d008e"
++dependencies = [
++ "cfg-if",
++ "libc",
++ "redox_syscall",
++ "smallvec",
++ "windows-targets",
++]
++
+ [[package]]
+ name = "percent-encoding"
+ version = "2.3.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
+ 
++[[package]]
++name = "pin-project-lite"
++version = "0.2.13"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8afb450f006bf6385ca15ef45d71d2288452bc3683ce2e2cacc0d18e4be60b58"
++
++[[package]]
++name = "pin-utils"
++version = "0.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
++
+ [[package]]
+ name = "pkg-config"
+ version = "0.3.27"
+@@ -528,6 +843,15 @@ dependencies = [
+  "getrandom",
+ ]
+ 
++[[package]]
++name = "redox_syscall"
++version = "0.4.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4722d768eff46b75989dd134e5c353f0d6296e5aaa3132e776cbdb56be7731aa"
++dependencies = [
++ "bitflags 1.3.2",
++]
++
+ [[package]]
+ name = "regex"
+ version = "1.10.2"
+@@ -557,6 +881,12 @@ version = "0.8.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
+ 
++[[package]]
++name = "rustc-demangle"
++version = "0.1.23"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d626bb9dae77e28219937af045c257c28bfd3f69333c512553507f5f9798cb76"
++
+ [[package]]
+ name = "rustix"
+ version = "0.37.27"
+@@ -586,6 +916,12 @@ dependencies = [
+  "windows-sys 0.42.0",
+ ]
+ 
++[[package]]
++name = "scopeguard"
++version = "1.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
++
+ [[package]]
+ name = "serde"
+ version = "1.0.164"
+@@ -644,19 +980,43 @@ version = "0.9.21"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "d9d684e3ec7de3bf5466b32bd75303ac16f0736426e5a4e0d6e489559ce1249c"
+ dependencies = [
+- "indexmap",
++ "indexmap 1.9.3",
+  "itoa",
+  "ryu",
+  "serde",
+  "unsafe-libyaml",
+ ]
+ 
++[[package]]
++name = "signal-hook-registry"
++version = "1.4.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d8229b473baa5980ac72ef434c4415e70c4b5e71b423043adb4ba059f89c99a1"
++dependencies = [
++ "libc",
++]
++
+ [[package]]
+ name = "similar"
+ version = "2.3.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "2aeaf503862c419d66959f5d7ca015337d864e9c49485d771b732e2a20453597"
+ 
++[[package]]
++name = "slab"
++version = "0.4.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
++dependencies = [
++ "autocfg",
++]
++
++[[package]]
++name = "smallvec"
++version = "1.11.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
++
+ [[package]]
+ name = "socket2"
+ version = "0.4.9"
+@@ -667,6 +1027,16 @@ dependencies = [
+  "winapi",
+ ]
+ 
++[[package]]
++name = "socket2"
++version = "0.5.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4031e820eb552adee9295814c0ced9e5cf38ddf1e8b7d566d6de8e2538ea989e"
++dependencies = [
++ "libc",
++ "windows-sys 0.48.0",
++]
++
+ [[package]]
+ name = "strsim"
+ version = "0.10.0"
+@@ -725,6 +1095,81 @@ dependencies = [
+  "syn 2.0.18",
+ ]
+ 
++[[package]]
++name = "tokio"
++version = "1.33.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4f38200e3ef7995e5ef13baec2f432a6da0aa9ac495b2c0e8f3b7eec2c92d653"
++dependencies = [
++ "backtrace",
++ "bytes",
++ "libc",
++ "mio",
++ "num_cpus",
++ "parking_lot",
++ "pin-project-lite",
++ "signal-hook-registry",
++ "socket2 0.5.4",
++ "tokio-macros",
++ "windows-sys 0.48.0",
++]
++
++[[package]]
++name = "tokio-macros"
++version = "2.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 2.0.18",
++]
++
++[[package]]
++name = "tokio-util"
++version = "0.7.10"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5419f34732d9eb6ee4c3578b7989078579b7f039cbbb9ca2c4da015749371e15"
++dependencies = [
++ "bytes",
++ "futures-core",
++ "futures-sink",
++ "pin-project-lite",
++ "tokio",
++ "tracing",
++]
++
++[[package]]
++name = "tower-service"
++version = "0.3.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
++
++[[package]]
++name = "tracing"
++version = "0.1.40"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c3523ab5a71916ccf420eebdf5521fcef02141234bbc0b8a49f2fdc4544364ef"
++dependencies = [
++ "pin-project-lite",
++ "tracing-core",
++]
++
++[[package]]
++name = "tracing-core"
++version = "0.1.32"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
++dependencies = [
++ "once_cell",
++]
++
++[[package]]
++name = "try-lock"
++version = "0.2.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
++
+ [[package]]
+ name = "unicode-ident"
+ version = "1.0.9"
+@@ -753,6 +1198,15 @@ version = "0.2.15"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+ 
++[[package]]
++name = "want"
++version = "0.3.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "bfa7760aed19e106de2c7c0b581b509f2f25d3dacaf737cb82ac61bc6d760b0e"
++dependencies = [
++ "try-lock",
++]
++
+ [[package]]
+ name = "wasi"
+ version = "0.11.0+wasi-snapshot-preview1"
+diff --git a/rust/pv/Cargo.toml b/rust/pv/Cargo.toml
+index 22d5fd3..ff84526 100644
+--- a/rust/pv/Cargo.toml
++++ b/rust/pv/Cargo.toml
+@@ -22,7 +22,7 @@ serde = { version = "1.0.139", features = ["derive"], optional = true  }
+ byteorder = {version = "1.3", optional = true }
+ 
+ [dev-dependencies]
+-mockito = {version = "0.31", default-features = false }
++mockito = {version = "1", default-features = false }
+ serde_test = "1"
+ lazy_static = "1.1"
+ 
+diff --git a/rust/pv/src/verify/test.rs b/rust/pv/src/verify/test.rs
+index 1c0d2b5..5ca2e71 100644
+--- a/rust/pv/src/verify/test.rs
++++ b/rust/pv/src/verify/test.rs
+@@ -14,7 +14,9 @@ use crate::test_utils::*;
+ pub fn mock_endpt(res: &str) -> mockito::Mock {
+     let res_path = get_cert_asset_path(res);
+ 
+-    mockito::mock("GET", format!("/crl/{res}").as_str())
++    let mut server = mockito::Server::new();
++    server
++        .mock("GET", format!("/crl/{res}").as_str())
+         .with_header("content-type", "application/pkix-crl")
+         .with_body_from_file(res_path)
+         .create()
+-- 
+2.43.0
+
+
+From 66783f1901dcaca6f567ad13b05acc7dbe412ff0 Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Wed, 20 Dec 2023 13:31:18 +0100
+Subject: [PATCH 11/13] rust/Makefile: Fix CC/AR variables for TEST_TARGETS
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+Signed-off-by: Jan Höppner <hoeppner@linux.ibm.com>
+(cherry picked from commit 6fd02279da20acba882426496e3b87e556bdeabc)
+---
+ rust/Makefile | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/rust/Makefile b/rust/Makefile
+index e4e9885..fa3cf04 100644
+--- a/rust/Makefile
++++ b/rust/Makefile
+@@ -37,8 +37,8 @@ endif
+ 
+ # the cc crate uses these variables to compile c code. It does not open a shell
+ # to call the compiler, so no echo etc. allowed here, just a path to a program
+-$(BUILD_TARGETS) rust-test: CC = $(CC_SILENT)
+-$(BUILD_TARGETS) rust-test: AR = $(AR_SILENT)
++$(BUILD_TARGETS) $(TEST_TARGETS) rust-test: CC = $(CC_SILENT)
++$(BUILD_TARGETS) $(TEST_TARGETS) rust-test: AR = $(AR_SILENT)
+ 
+ $(PV_TARGETS): .check-dep-pvtools
+ $(PV_TARGETS) $(CARGO_TARGETS): .check-cargo .no-cross-compile
+-- 
+2.43.0
+
+
+From d54a8aa4d7b77338fd5511d895eadbb074b6024a Mon Sep 17 00:00:00 2001
+From: Steffen Eiden <seiden@linux.ibm.com>
+Date: Fri, 15 Dec 2023 11:30:14 +0100
+Subject: [PATCH 12/13] rust/pv: Provide access for SecretList members
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds getter for SecretList and SecretEntry.
+Adds enum to represent secret types.
+Add Iterator functionality for SecretList.
+
+While at it, make the datatype of the capacity of the list transparent
+for users.
+
+Signed-off-by: Steffen Eiden <seiden@linux.ibm.com>
+Signed-off-by: Jan Höppner <hoeppner@linux.ibm.com>
+(cherry picked from commit 0764460eafdfd91f78bbed5ac818f19d60e14b70)
+---
+ rust/pv/src/lib.rs                  |   2 +-
+ rust/pv/src/uvsecret/secret_list.rs | 170 ++++++++++++++++++++++++----
+ 2 files changed, 151 insertions(+), 21 deletions(-)
+
+diff --git a/rust/pv/src/lib.rs b/rust/pv/src/lib.rs
+index d72ac93..ed89140 100644
+--- a/rust/pv/src/lib.rs
++++ b/rust/pv/src/lib.rs
+@@ -70,7 +70,7 @@ pub mod uv {
+     };
+     #[cfg(feature = "uvsecret")]
+     pub use crate::uvsecret::{
+-        secret_list::SecretList,
++        secret_list::{ListableSecretType, SecretEntry, SecretList},
+         uvc::{AddCmd, ListCmd, LockCmd},
+     };
+ }
+diff --git a/rust/pv/src/uvsecret/secret_list.rs b/rust/pv/src/uvsecret/secret_list.rs
+index 6943bd3..72a05b2 100644
+--- a/rust/pv/src/uvsecret/secret_list.rs
++++ b/rust/pv/src/uvsecret/secret_list.rs
+@@ -2,13 +2,14 @@
+ //
+ // Copyright IBM Corp. 2023
+ 
+-use crate::{misc::to_u16, uv::ListCmd, uvdevice::UvCmd, Error, Result};
++use crate::{assert_size, misc::to_u16, uv::ListCmd, uvdevice::UvCmd, Error, Result};
+ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+ use serde::{Serialize, Serializer};
+-use std::usize;
+ use std::{
+     fmt::Display,
+     io::{Cursor, Read, Seek, Write},
++    slice::Iter,
++    vec::IntoIter,
+ };
+ use zerocopy::{AsBytes, FromBytes, U16, U32};
+ 
+@@ -19,16 +20,79 @@ use super::ser_gsid;
+ /// Requires the `uvsecret` feature.
+ #[derive(Debug, PartialEq, Eq, Serialize)]
+ pub struct SecretList {
+-    total_num_secrets: u16,
++    total_num_secrets: usize,
+     secrets: Vec<SecretEntry>,
+ }
+ 
++impl<'a> IntoIterator for &'a SecretList {
++    type Item = &'a SecretEntry;
++    type IntoIter = Iter<'a, SecretEntry>;
++
++    fn into_iter(self) -> Self::IntoIter {
++        self.iter()
++    }
++}
++
++impl IntoIterator for SecretList {
++    type Item = SecretEntry;
++    type IntoIter = IntoIter<Self::Item>;
++
++    fn into_iter(self) -> Self::IntoIter {
++        self.secrets.into_iter()
++    }
++}
++
++impl FromIterator<SecretEntry> for SecretList {
++    fn from_iter<T: IntoIterator<Item = SecretEntry>>(iter: T) -> Self {
++        let secrets: Vec<_> = iter.into_iter().collect();
++        let total_num_secrets = secrets.len() as u16;
++        Self::new(total_num_secrets, secrets)
++    }
++}
++
+ impl SecretList {
++    #[doc(hidden)]
++    /// For testing purposes.
++    pub fn new(total_num_secrets: u16, secrets: Vec<SecretEntry>) -> Self {
++        Self {
++            total_num_secrets: total_num_secrets as usize,
++            secrets,
++        }
++    }
++
++    /// Returns an iterator over the slice.
++    ///
++    /// The iterator yields all secret entries from start to end.
++    pub fn iter(&self) -> Iter<'_, SecretEntry> {
++        self.secrets.iter()
++    }
++
++    /// Returns the length of this [`SecretList`].
++    pub fn len(&self) -> usize {
++        self.secrets.len()
++    }
++
++    /// Check for is_empty of this [`SecretList`].
++    pub fn is_empty(&self) -> bool {
++        self.secrets.is_empty()
++    }
++
++    /// Reports the number of secrets stored in UV
++    ///
++    /// This number may be not equal to the provided number of [`SecretEntry`]
++    pub fn total_num_secrets(&self) -> usize {
++        self.total_num_secrets
++    }
++
+     /// Encodes the list in the same binary format the UV would do
+     pub fn encode<T: Write>(&self, w: &mut T) -> Result<()> {
+         let num_s = to_u16(self.secrets.len()).ok_or(Error::ManySecrets)?;
+         w.write_u16::<BigEndian>(num_s)?;
+-        w.write_u16::<BigEndian>(self.total_num_secrets)?;
++        w.write_u16::<BigEndian>(
++            self.total_num_secrets
++                .try_into()
++                .map_err(|_| Error::ManySecrets)?,
++        )?;
+         w.write_all(&[0u8; 12])?;
+         for secret in &self.secrets {
+             w.write_all(secret.as_bytes())?;
+@@ -39,10 +103,10 @@ impl SecretList {
+     /// Decodes the list from the binary format of the UV into this internal representation
+     pub fn decode<R: Read + Seek>(r: &mut R) -> std::io::Result<Self> {
+         let num_s = r.read_u16::<BigEndian>()?;
+-        let total_num_secrets = r.read_u16::<BigEndian>()?;
++        let total_num_secrets = r.read_u16::<BigEndian>()? as usize;
+         let mut v: Vec<SecretEntry> = Vec::with_capacity(num_s as usize);
+         r.seek(std::io::SeekFrom::Current(12))?; //skip reserved bytes
+-        let mut buf = [0u8; SECRET_ENTRY_SIZE];
++        let mut buf = [0u8; SecretEntry::STRUCT_SIZE];
+         for _ in 0..num_s {
+             r.read_exact(&mut buf)?;
+             //cannot fail. buffer has the same size as the secret entry
+@@ -84,9 +148,56 @@ fn ser_u16<S: Serializer>(v: &U16<BigEndian>, ser: S) -> Result<S::Ok, S::Error>
+     ser.serialize_u16(v.get())
+ }
+ 
++/// Secret types that can appear in a [`SecretList`]
++#[non_exhaustive]
++#[derive(PartialEq, Eq)]
++pub enum ListableSecretType {
++    /// Association Secret
++    Association,
++    /// Invalid secret type, that should never appear in a list
++    ///
++    /// 0 is reserved
++    /// 1 is Null secret, with no id and not listable
++    Invalid(u16),
++    /// Unknown secret type
++    Unknown(u16),
++}
++impl ListableSecretType {
++    const ASSOCIATION: u16 = 0x0002;
++}
++
++impl Display for ListableSecretType {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        match self {
++            Self::Association => write!(f, "Association"),
++            Self::Invalid(n) => write!(f, "Invalid({n})"),
++            Self::Unknown(n) => write!(f, "Unknown({n})"),
++        }
++    }
++}
++
++impl From<U16<BigEndian>> for ListableSecretType {
++    fn from(value: U16<BigEndian>) -> Self {
++        match value.get() {
++            0x0000 => Self::Invalid(0),
++            0x0001 => Self::Invalid(1),
++            Self::ASSOCIATION => ListableSecretType::Association,
++            n => Self::Unknown(n),
++        }
++    }
++}
++
++impl From<ListableSecretType> for U16<BigEndian> {
++    fn from(value: ListableSecretType) -> Self {
++        match value {
++            ListableSecretType::Association => ListableSecretType::ASSOCIATION,
++            ListableSecretType::Invalid(n) | ListableSecretType::Unknown(n) => n,
++        }
++        .into()
++    }
++}
++
+ /// A secret in a [`SecretList`]
+-///
+-/// Fields are in big endian
+ #[repr(C)]
+ #[derive(Debug, PartialEq, Eq, AsBytes, FromBytes, Serialize)]
+ pub struct SecretEntry {
+@@ -101,20 +212,43 @@ pub struct SecretEntry {
+     #[serde(serialize_with = "ser_gsid")]
+     id: [u8; 32],
+ }
+-const SECRET_ENTRY_SIZE: usize = 0x30;
++assert_size!(SecretEntry, SecretEntry::STRUCT_SIZE);
++
++impl SecretEntry {
++    const STRUCT_SIZE: usize = 0x30;
++
++    #[doc(hidden)]
++    /// For testing purposes.
++    pub fn new(index: u16, stype: ListableSecretType, id: [u8; 32], secret_len: u32) -> Self {
++        Self {
++            index: index.into(),
++            stype: stype.into(),
++            len: secret_len.into(),
++            res_8: 0,
++            id,
++        }
++    }
+ 
+-fn stype_str(stype: u16) -> String {
+-    match stype {
+-        // should never match (not incl in list), but here for completeness
+-        1 => "Null".to_string(),
+-        2 => "Association".to_string(),
+-        n => format!("Unknown {n}"),
++    /// Returns the index of this [`SecretEntry`].
++    pub fn index(&self) -> u16 {
++        self.index.get()
++    }
++
++    /// Returns the secret type of this [`SecretEntry`].
++    pub fn stype(&self) -> ListableSecretType {
++        self.stype.into()
++    }
++
++    /// Returns a reference to the id of this [`SecretEntry`].
++    pub fn id(&self) -> &[u8] {
++        &self.id
+     }
+ }
+ 
+ impl Display for SecretEntry {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+-        writeln!(f, "{} {}:", self.index, stype_str(self.stype.get()))?;
++        let stype: ListableSecretType = self.stype.into();
++        writeln!(f, "{} {}:", self.index, stype)?;
+         write!(f, "  ")?;
+         for b in self.id {
+             write!(f, "{b:02x}")?;
+@@ -128,10 +262,6 @@ mod test {
+     use super::*;
+     use std::io::{BufReader, BufWriter, Cursor};
+ 
+-    #[test]
+-    fn secret_entry_size() {
+-        assert_eq!(::std::mem::size_of::<SecretEntry>(), SECRET_ENTRY_SIZE);
+-    }
+     #[test]
+     fn dump_secret_entry() {
+         const EXP: &[u8] = &[
+-- 
+2.43.0
+
+
+From e75bbd754e5912d34c0aedfe35ccedd54ca850be Mon Sep 17 00:00:00 2001
+From: Harald Freudenberger <freude@linux.ibm.com>
+Date: Fri, 1 Dec 2023 12:10:20 +0100
+Subject: [PATCH 13/13] rust/pvapconfig: Introduce new tool pvapconfig
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+pvapconfig is a new tool for automatically configuring the APQNs
+within an Secure Execution KVM guest with AP pass-through support.
+Based on a given AP configuration it tries to find a matching
+APQN and bind and associate it with the correct secret.
+
+Signed-off-by: Harald Freudenberger <freude@linux.ibm.com>
+Reviewed-by: Ingo Franzki <ifranzki@linux.ibm.com>
+Reviewed-by: Holger Dengler <dengler@linux.ibm.com>
+Reviewed-by: Steffen Eiden <seiden@linux.ibm.com>
+Signed-off-by: Jan Höppner <hoeppner@linux.ibm.com>
+(cherry picked from commit 94a38ebc3aec9ee954f1ae9a4a0a09ea7f29f11c)
+---
+ rust/Cargo.lock                  |  16 +
+ rust/Cargo.toml                  |   1 +
+ rust/Makefile                    |   2 +-
+ rust/pvapconfig/Cargo.toml       |  19 +
+ rust/pvapconfig/README.md        |   9 +
+ rust/pvapconfig/man/pvapconfig.1 | 174 +++++++
+ rust/pvapconfig/src/ap.rs        | 817 +++++++++++++++++++++++++++++++
+ rust/pvapconfig/src/cli.rs       |  63 +++
+ rust/pvapconfig/src/config.rs    | 391 +++++++++++++++
+ rust/pvapconfig/src/helper.rs    | 272 ++++++++++
+ rust/pvapconfig/src/main.rs      | 668 +++++++++++++++++++++++++
+ rust/pvapconfig/src/uv.rs        | 105 ++++
+ 12 files changed, 2536 insertions(+), 1 deletion(-)
+ create mode 100644 rust/pvapconfig/Cargo.toml
+ create mode 100644 rust/pvapconfig/README.md
+ create mode 100644 rust/pvapconfig/man/pvapconfig.1
+ create mode 100644 rust/pvapconfig/src/ap.rs
+ create mode 100644 rust/pvapconfig/src/cli.rs
+ create mode 100644 rust/pvapconfig/src/config.rs
+ create mode 100644 rust/pvapconfig/src/helper.rs
+ create mode 100644 rust/pvapconfig/src/main.rs
+ create mode 100644 rust/pvapconfig/src/uv.rs
+
+diff --git a/rust/Cargo.lock b/rust/Cargo.lock
+index 067be05..3a6c423 100644
+--- a/rust/Cargo.lock
++++ b/rust/Cargo.lock
+@@ -792,6 +792,22 @@ dependencies = [
+  "zerocopy",
+ ]
+ 
++[[package]]
++name = "pvapconfig"
++version = "0.9.0"
++dependencies = [
++ "clap",
++ "lazy_static",
++ "openssl",
++ "openssl-sys",
++ "pv",
++ "rand",
++ "regex",
++ "serde",
++ "serde_yaml",
++ "utils",
++]
++
+ [[package]]
+ name = "pvsecret"
+ version = "0.9.0"
+diff --git a/rust/Cargo.toml b/rust/Cargo.toml
+index 7ba1faa..f358dbd 100644
+--- a/rust/Cargo.toml
++++ b/rust/Cargo.toml
+@@ -1,6 +1,7 @@
+ [workspace]
+ members = [
+ 	"pv",
++	"pvapconfig",
+ 	"pvsecret",
+ 	"utils",
+ ]
+diff --git a/rust/Makefile b/rust/Makefile
+index fa3cf04..818694d 100644
+--- a/rust/Makefile
++++ b/rust/Makefile
+@@ -19,7 +19,7 @@ ifneq (${HAVE_CARGO},0)
+ 
+ ifneq (${HAVE_OPENSSL},0)
+ ifneq (${HAVE_LIBCURL},0)
+-	PV_TARGETS := pvsecret
++	PV_TARGETS := pvsecret pvapconfig
+ 
+ 	PV_BUILD_TARGETS := $(PV_TARGETS)
+ 	CARGO_TEST_TARGETS += $(addsuffix .test,pv $(PV_TARGETS))
+diff --git a/rust/pvapconfig/Cargo.toml b/rust/pvapconfig/Cargo.toml
+new file mode 100644
+index 0000000..2a69468
+--- /dev/null
++++ b/rust/pvapconfig/Cargo.toml
+@@ -0,0 +1,19 @@
++[package]
++name = "pvapconfig"
++description = "A tool to configure the AP resources inside a SE guest based on UV secrets and an AP config file."
++authors = ["Harald Freudenberger <freude@linux.ibm.com>"]
++version = "0.9.0"
++edition.workspace = true
++license.workspace = true
++
++[dependencies]
++clap = { version ="4.1", features = ["derive", "wrap_help"]}
++lazy_static = "1.1"
++openssl = { version = "0.10" }
++openssl-sys = { version = "0.9" }
++pv = { path = "../pv", features = ["uvsecret", "request"] }
++rand = "0.8"
++regex = "1"
++serde = { version = "1.0", features = ["derive"] }
++serde_yaml = "0.9"
++utils = { path = "../utils" }
+diff --git a/rust/pvapconfig/README.md b/rust/pvapconfig/README.md
+new file mode 100644
+index 0000000..d30cb76
+--- /dev/null
++++ b/rust/pvapconfig/README.md
+@@ -0,0 +1,9 @@
++<!--
++Copyright 2023 IBM Corp.
++s390-tools is free software; you can redistribute it and/or modify
++it under the terms of the MIT license. See LICENSE for details.
++-->
++# pvapconfig
++## Description
++**pvapconfig** is used to automatically set up the AP configuration
++within an IBM Secure Execution guest.
+diff --git a/rust/pvapconfig/man/pvapconfig.1 b/rust/pvapconfig/man/pvapconfig.1
+new file mode 100644
+index 0000000..73ce8ce
+--- /dev/null
++++ b/rust/pvapconfig/man/pvapconfig.1
+@@ -0,0 +1,174 @@
++.\" pvapconfig.1
++.\"
++.\" Copyright 2023 IBM Corp.
++.\" s390-tools is free software; you can redistribute it and/or modify
++.\" it under the terms of the MIT license. See LICENSE for details.
++.\"
++.\" use
++.\"   groff -man -Tutf8 pvapconfig.1
++.\" or
++.\"   nroff -man pvapconfig.1
++.\" to process this source
++.\"
++.TH PVAPCONFIG 1 "DEC 2023" "s390-tools"
++.SH NAME
++pvapconfig \- automatic configure APQNs within an SE KVM guest.
++.SH SYNOPSIS
++.TP 9
++.B pvapconfig [OPTIONS]
++.SH DESCRIPTION
++pvapconfig is a tool for automatically configuring the APQNs within an
++Secure Execution KVM guest with AP pass-through support. Based on a
++given AP configuration it tries to find matching APQNs and binds and
++associates them with the given secret(s).
++
++Here is a description of pvapconfig's process:
++.TP 3
++1. Check AP bus: Support for AP bus needs to be available and the AP
++bus needs to support APSB. APSB is only available within an KVM SE
++guest with AP pass-through support.
++.TP 3
++2. Check Ultravisor: UV support needs to be available and the UV needs
++to support the
++.I list secrets
++feature.
++.TP 3
++3. Read in and validate the AP configuration file. By default if not
++overwritten by the --config option the AP configuration is read from
++.I /etc/pvapconfig.yaml
++and syntactically verified. See section CONFIGFILE for details about
++the syntax and semantic of the configuration file.
++.TP 3
++4. Fetch the list of association secrets from the UV. Actually the
++index of the secret and the secret id for each entry is collected. The
++secret value is NOT fetched as it is NOT accessible but only usable
++within the UV firmware.
++.TP 3
++5. Gather all APQNs available within this KVM SE guest. Collect
++information about each APQN like online states, crypto card serial
++numbers and master key verification patterns (MKVP).
++.TP 3
++6. Go through all AP config entries. For each AP config entry try to
++find an APQN which is already configured (bound/associated) to
++satisfy this config entry. If such a match is found, the AP config
++entry is assumed to be fulfilled and marked as done.
++.TP 3
++7. All remaining APQNs which do not already satisfy an AP config entry
++are now examined for their bind and association state and maybe reset
++to unbound state.
++.TP 3
++8. Go through all AP config entries which are still not
++fulfilled. For each such AP config entry try to search for an APQN
++which would match to this entry and then prepare this APQN (bind,
++maybe associate). If successful, mark the AP config entry as done.
++.TP 3
++9. Evaluation of the applied AP config entries. Applied means the AP
++config entry has been fulfilled either in step 6 or in step 8. With
++the strict option given ALL AP config entries need to apply otherwise
++an error message is printed and pvapconfig returns with exit failure.
++If the strict option is not given, it is enough to satisfy at least one
++AP config entry from the configuration and pvapconfig will return
++successfully.
++.SH OPTIONS
++.TP 8
++.B -c, --config <configfile>
++Use <configfile> as the AP config file for pvapconfig. If pvapconfig
++is run without this option the default configuration file
++/etc/pvapconfig.yaml is used.
++.TP 8
++.B -h, --help
++Print pvapconfig usage information and exit.
++.TP 8
++.B -n, --dry-run
++Do not bind, unbind or associate APQNs but only process the
++configuration and the available APQNs and secrets and simulate the
++bind, unbind or associate action on the chosen APQN. Use it together
++with the verbose option to see which actions pvapconfig would do if
++unleashed.
++.TP 8
++.B -s, --strict
++All AP config entries need to be satisfied to have pvapconfig
++terminate with success. Without this option one applied AP config
++entry is enough to meet the expectations.
++.TP 8
++.B -v, --verbose
++Print out informational messages about what pvapconfig is actually
++doing.
++.TP 8
++.B -V, --version
++Print version information and exit.
++.SH CONFIGFILE
++The pvapconfig yaml configuration file consists of a list of AP config
++entries. Each entry may hold this information:
++.TP 2
++- mode: AP queue mode information, required, either "EP11" or "Accel".
++.TP 2
++- mkvp: AP queue Master Key Verification Pattern (MKVP), required for
++EP11, hex string optional prepented with 0x. The MKVP hex string value
++may hold either 16 bytes (32 hex characters) or 32 bytes (64 hex
++characters) but only the leftmost 16 bytes hold MKVP information and
++thus the rest is ignored.
++.TP 2
++- serialnr: Crypto Card Serial Number, string, optional for EP11,
++ignored for Accel. As this is a real ASCII string uppercase and
++lowercase character(s) count different.
++.TP 2
++- mingen: Card Minimal Generation, string "CEX4", "CEX5", "CEX6",
++"CEX7" or "CEX8" for Accelerator, string "CEC8" for EP11, optional. If
++given specifies the minimal accepted Crypto card generation.
++.TP 2
++- secretid: Secret id, hex string with optional 0x prepented, required
++for EP11, ignored for Accel. Details see the following text.
++.TP 2
++- name: ASCII string, optional, but see details below.
++.TP 2
++- description: Description of this AP config entry, string, ignored,
++  just for convenience for the reader or editor of the configuration.
++.PP
++The secret id uniquely identifies an association secret. However, it
++is a clumsy hex string of 64 characters which represent the readable
++sha256 value over the secret's name. So pvapconfig can use the name
++instead and calculate the secret id from the name. So the rule is:
++.TP 2
++- If name and secretid is given, the secretid needs to match to the
++sha256 hash over the given name for this AP config entry.
++.TP 2
++- If only name is given then the secretid is calculated with a sha256
++  hash over the given name.
++.TP 2
++- If only the secretid is given, there is nothing more to do but
++verify that the value is a hex string with 64 characters.
++.SH LOCKING
++Pvapconfig needs to have a consistent view of the AP resources
++during lifetime. There must not run multiple instances of pvapconfig
++or any manipulations of the AP resources in parallel. To prevent the
++execution of multiple pvapconfig instances the lock file
++/run/lock/pvapconfig.lock is established. A second instance of
++pvapconfig will detect this lock file and terminated with an error
++message. If for any reason this file still exists as a leftover from a
++previous pvapconfig crash for example, it needs to get removed by
++hand. The lock file contains the process id of the pvapconfig process
++which created this file.
++.SH RETURN VALUE
++.TP 8
++.B 0 - Successful termination.
++At least one AP config entry has been applied or at least one APQN has
++been found in a state matching to one AP config entry. If strict
++option is given, ALL AP config entries have been applied. An AP config
++entry is applied either by configuring the APQN accordingly or an APQN
++has been found which already fulfills the constrains.
++.RE
++.TP 8
++.B 1 - Failure.
++Either some kind of failure happened during processing the
++configuration or the configuration could not get applied
++successful. In all cases pvapconfig prints out a message to standard
++error with details about the failure. Also pvapconfig does NOT reset
++the APQNs to the state found at the startup when failing to apply the
++configuration.
++.SH NOTES
++For more information and details see the IBM documentation about
++Confidential Computing "Introducing IBM Secure Execution for Linux"
++available at https://www.ibm.com/docs/.
++.SH SEE ALSO
++\fBpvsecret\fR(1), \fBlszcrypt\fR(8), \fBchzcrypt\fR(8)
+diff --git a/rust/pvapconfig/src/ap.rs b/rust/pvapconfig/src/ap.rs
+new file mode 100644
+index 0000000..0b88235
+--- /dev/null
++++ b/rust/pvapconfig/src/ap.rs
+@@ -0,0 +1,817 @@
++// SPDX-License-Identifier: MIT
++//
++// Copyright IBM Corp. 2023
++//
++//! AP support functions for pvapconfig
++//
++
++use crate::helper::*;
++use regex::Regex;
++use std::fmt;
++use std::path::Path;
++use std::slice::Iter;
++use std::thread;
++use std::time;
++
++const PATH_SYS_BUS_AP: &str = "/sys/bus/ap";
++const PATH_SYS_BUS_AP_FEATURES: &str = "/sys/bus/ap/features";
++const PATH_SYS_BUS_AP_BINDINGS: &str = "/sys/bus/ap/bindings";
++const PATH_SYS_DEVICES_AP: &str = "/sys/devices/ap";
++
++const RE_CARD_DIR: &str = r"^card([[:xdigit:]]{2})$";
++const RE_QUEUE_DIR: &str = r"^([[:xdigit:]]{2})\.([[:xdigit:]]{4})$";
++const RE_CARD_TYPE: &str = r"^CEX([3-8])([ACP])$";
++const RE_EP11_MKVP: &str = r"WK\s+CUR:\s+(\S+)\s+(\S+)";
++const RE_CCA_AES_MKVP: &str = r"AES\s+CUR:\s+(\S+)\s+(\S+)";
++const RE_CCA_APKA_MKVP: &str = r"APKA\s+CUR:\s+(\S+)\s+(\S+)";
++
++const SYS_BUS_AP_BINDINGS_POLL_MS: u64 = 500;
++
++const SYS_BUS_AP_BIND_POLL_MS: u64 = 500;
++const SYS_BUS_AP_BIND_TIMEOUT_MS: u64 = 10000;
++
++const SYS_BUS_AP_ASSOC_POLL_MS: u64 = 500;
++const SYS_BUS_AP_ASSOC_TIMEOUT_MS: u64 = 10000;
++
++/// Check if AP bus support is available.
++/// Returns Result with Ok(()) or Err(failurestring).
++pub fn check_ap_bus_support() -> Result<(), String> {
++    if !Path::new(PATH_SYS_BUS_AP).is_dir() {
++        return Err(format!(
++            "AP bus support missing (path {PATH_SYS_BUS_AP} is invalid)."
++        ));
++    }
++    Ok(())
++}
++
++/// Check if AP bus supports APSB.
++///
++/// When APSB support is available returns Result
++/// with Ok(()) or otherwise Err(failurestring).
++pub fn ap_bus_has_apsb_support() -> Result<(), String> {
++    if !Path::new(PATH_SYS_BUS_AP_FEATURES).is_file() {
++        return Err(format!(
++            "AP bus features support missing (file {PATH_SYS_BUS_AP_FEATURES} does not exist)."
++        ));
++    }
++    let features = sysfs_read_string(PATH_SYS_BUS_AP_FEATURES).map_err(|err| {
++        format!("Failure reading AP bus features from {PATH_SYS_BUS_AP_FEATURES} ({err:?}).")
++    })?;
++    match features.find("APSB") {
++        Some(_) => Ok(()),
++        None => Err("Missing AP bus feature APSB (SE AP pass-through not enabled ?).".to_string()),
++    }
++}
++
++/// Wait for AP bus set up all it's devices.
++///
++/// This function loops until the AP bus reports that
++/// - all AP queue devices have been constructed
++/// - and all AP device have been bound to a device driver.
++/// This may take some time and even loop forever if there
++/// is something wrong with the kernel modules setup.
++/// Returns true when AP bus bindings are complete,
++/// otherwise false and a message is printed.
++/// When AP bus binding complete is not immediately reached
++/// and this function needs to loop, about every 5 seconds
++/// a message is printed "Waiting for ...".
++pub fn wait_for_ap_bus_bindings_complete() -> bool {
++    let mut counter = 0;
++    loop {
++        match sysfs_read_string(PATH_SYS_BUS_AP_BINDINGS) {
++            Ok(s) => {
++                if s.contains("complete") {
++                    return true;
++                }
++            }
++            Err(err) => {
++                eprintln!(
++                    "Failure reading AP bus bindings from {} ({:?}).",
++                    PATH_SYS_BUS_AP_BINDINGS, err
++                );
++                return false;
++            }
++        }
++        thread::sleep(time::Duration::from_millis(SYS_BUS_AP_BINDINGS_POLL_MS));
++        counter += 1;
++        if counter % 10 == 0 {
++            println!("Waiting for AP bus bindings complete.");
++        }
++    }
++}
++
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub enum ApqnMode {
++    Accel,
++    Ep11,
++    Cca,
++}
++
++#[derive(Debug, Clone)]
++pub struct ApqnInfoAccel {
++    // empty
++}
++
++#[derive(Debug, Clone)]
++pub struct ApqnInfoEp11 {
++    pub serialnr: String,
++    pub mkvp: String, // may be an empty string if no WK set
++}
++
++#[derive(Debug, Clone)]
++pub struct ApqnInfoCca {
++    pub serialnr: String,
++    pub mkvp_aes: String,  // may be an empty string if no MK set
++    pub mkvp_apka: String, // may be an empty string if no MK set
++}
++
++#[derive(Debug, Clone)]
++pub enum ApqnInfo {
++    Accel(ApqnInfoAccel),
++    Ep11(ApqnInfoEp11),
++    Cca(ApqnInfoCca),
++}
++
++impl ApqnInfo {
++    fn accel_info(_carddir: &str, _queuedir: &str) -> Result<ApqnInfo, String> {
++        Ok(ApqnInfo::Accel(ApqnInfoAccel {}))
++    }
++
++    fn cca_info(carddir: &str, queuedir: &str) -> Result<ApqnInfo, String> {
++        let serialnr = match sysfs_read_string(&format!("{carddir}/serialnr")) {
++            Ok(r) => r,
++            Err(err) => {
++                return Err(format!(
++                    "Failure reading serialnr from {carddir}/serialnr: {:?}.",
++                    err
++                ))
++            }
++        };
++        let mkvps = match sysfs_read_string(&format!("{carddir}/{queuedir}/mkvps")) {
++            Ok(r) => r,
++            Err(err) => {
++                return Err(format!(
++                    "Failure reading mkvps from {carddir}/{queuedir}/mkvps: {:?}.",
++                    err
++                ))
++            }
++        };
++        let mut aes_mkvp = String::new();
++        let re_cca_aes_mkvp = Regex::new(RE_CCA_AES_MKVP).unwrap();
++        if !re_cca_aes_mkvp.is_match(&mkvps) {
++            return Err(format!(
++                "APQN {} failure parsing mkvps string '{}'.",
++                queuedir, mkvps
++            ));
++        } else {
++            let caps = re_cca_aes_mkvp.captures(&mkvps).unwrap();
++            let valid = caps.get(1).unwrap().as_str().to_lowercase();
++            if valid != "valid" {
++                eprintln!(
++                    "Warning: APQN {} has no valid AES master key set.",
++                    queuedir
++                );
++            } else {
++                aes_mkvp = caps.get(2).unwrap().as_str().to_lowercase();
++                if aes_mkvp.starts_with("0x") {
++                    aes_mkvp = String::from(&aes_mkvp[2..]);
++                }
++            }
++        }
++        let mut apka_mkvp = String::new();
++        let re_cca_apka_mkvp = Regex::new(RE_CCA_APKA_MKVP).unwrap();
++        if !re_cca_apka_mkvp.is_match(&mkvps) {
++            return Err(format!(
++                "APQN {} failure parsing mkvps string '{}'.",
++                queuedir, mkvps
++            ));
++        } else {
++            let caps = re_cca_apka_mkvp.captures(&mkvps).unwrap();
++            let valid = caps.get(1).unwrap().as_str().to_lowercase();
++            if valid != "valid" {
++                eprintln!(
++                    "Warning: APQN {} has no valid APKA master key set.",
++                    queuedir
++                );
++            } else {
++                apka_mkvp = caps.get(2).unwrap().as_str().to_lowercase();
++                if apka_mkvp.starts_with("0x") {
++                    apka_mkvp = String::from(&apka_mkvp[2..]);
++                }
++            }
++        }
++        Ok(ApqnInfo::Cca(ApqnInfoCca {
++            serialnr,
++            mkvp_aes: aes_mkvp,
++            mkvp_apka: apka_mkvp,
++        }))
++    }
++
++    fn ep11_info(carddir: &str, queuedir: &str) -> Result<ApqnInfo, String> {
++        let serialnr = match sysfs_read_string(&format!("{carddir}/serialnr")) {
++            Ok(r) => r,
++            Err(err) => {
++                return Err(format!(
++                    "Failure reading serialnr from {carddir}/serialnr: {:?}.",
++                    err
++                ))
++            }
++        };
++        let mkvps = match sysfs_read_string(&format!("{carddir}/{queuedir}/mkvps")) {
++            Ok(r) => r,
++            Err(err) => {
++                return Err(format!(
++                    "Failure reading mkvps from {carddir}/{queuedir}/mkvps: {:?}.",
++                    err
++                ))
++            }
++        };
++        let mut mkvp = String::new();
++        let re_ep11_mkvp = Regex::new(RE_EP11_MKVP).unwrap();
++        if !re_ep11_mkvp.is_match(&mkvps) {
++            return Err(format!(
++                "APQN {} failure parsing mkvps string '{}'.",
++                queuedir, mkvps
++            ));
++        } else {
++            let caps = re_ep11_mkvp.captures(&mkvps).unwrap();
++            let valid = caps.get(1).unwrap().as_str().to_lowercase();
++            if valid != "valid" {
++                eprintln!("Warning: APQN {} has no valid wrapping key set.", queuedir);
++            } else {
++                mkvp = caps.get(2).unwrap().as_str().to_lowercase();
++                if mkvp.starts_with("0x") {
++                    mkvp = String::from(&mkvp[2..]);
++                }
++                if mkvp.len() > 32 {
++                    mkvp = String::from(&mkvp[..32])
++                }
++            }
++        }
++        Ok(ApqnInfo::Ep11(ApqnInfoEp11 { serialnr, mkvp }))
++    }
++
++    fn info(mode: &ApqnMode, carddir: &str, queuedir: &str) -> Result<ApqnInfo, String> {
++        match mode {
++            ApqnMode::Accel => ApqnInfo::accel_info(carddir, queuedir),
++            ApqnMode::Cca => ApqnInfo::cca_info(carddir, queuedir),
++            ApqnMode::Ep11 => ApqnInfo::ep11_info(carddir, queuedir),
++        }
++    }
++}
++
++#[derive(Debug, Clone)]
++pub struct Apqn {
++    pub name: String,
++    pub card: u32,
++    pub domain: u32,
++    pub gen: u32,
++    pub mode: ApqnMode,
++    pub info: Option<ApqnInfo>,
++}
++
++impl fmt::Display for Apqn {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        write!(f, "({},{})", self.card, self.domain)
++    }
++}
++
++impl Apqn {
++    pub fn bind_state(&self) -> Result<BindState, String> {
++        get_apqn_bind_state(self.card, self.domain)
++    }
++
++    pub fn set_bind_state(&self, state: BindState) -> Result<(), String> {
++        set_apqn_bind_state(self.card, self.domain, state)
++    }
++
++    pub fn associate_state(&self) -> Result<AssocState, String> {
++        get_apqn_associate_state(self.card, self.domain)
++    }
++
++    pub fn set_associate_state(&self, state: AssocState) -> Result<(), String> {
++        set_apqn_associate_state(self.card, self.domain, state)
++    }
++}
++
++/// Wrapper object around Vector of Apqns
++pub struct ApqnList(Vec<Apqn>);
++
++impl ApqnList {
++    #[cfg(test)] // only used in test code
++    pub fn from_apqn_vec(apqns: Vec<Apqn>) -> ApqnList {
++        ApqnList(apqns)
++    }
++
++    #[cfg(test)] // only used in test code
++    pub fn to_apqn_vec(&self) -> Vec<Apqn> {
++        self.0.clone()
++    }
++
++    pub fn iter(&self) -> Iter<'_, Apqn> {
++        self.0.iter()
++    }
++
++    pub fn len(&self) -> usize {
++        self.0.len()
++    }
++
++    pub fn is_empty(&self) -> bool {
++        self.0.is_empty()
++    }
++
++    /// Scan AP bus devices in sysfs and construct the Apqnlist.
++    ///
++    /// The list is a vector of struct Apqn for each APQN found in sysfs
++    /// which is online and the card type matches to the regular expression
++    /// RE_CARD_TYPE.
++    /// On success a vector of struct Apqn is returned. This list may be
++    /// empty if there are no APQNs available or do not match to the conditions.
++    /// On failure None is returned.
++    /// Fatal errors which should never happened like unable to compile a
++    /// static regular expression will result in calling panic.
++    /// # Panics
++    /// Panics if the compilation of a static regular expression fails.
++    pub fn gather_apqns() -> Option<ApqnList> {
++        let mut apqns: Vec<Apqn> = Vec::new();
++        let re_card_type = Regex::new(RE_CARD_TYPE).unwrap();
++        let re_queue_dir = Regex::new(RE_QUEUE_DIR).unwrap();
++        let card_dirs =
++            match sysfs_get_list_of_subdirs_matching_regex(PATH_SYS_DEVICES_AP, RE_CARD_DIR) {
++                Ok(r) => r,
++                Err(err) => {
++                    eprintln!(
++                        "Failure reading AP devices {} ({:?}).",
++                        PATH_SYS_DEVICES_AP, err
++                    );
++                    return None;
++                }
++            };
++        for dir in card_dirs {
++            let path = format!("{PATH_SYS_DEVICES_AP}/{dir}");
++            let card_type = match sysfs_read_string(&format!("{path}/type")) {
++                Ok(r) => r,
++                Err(err) => {
++                    eprintln!("Failure reading card type from {} ({:?}).", path, err);
++                    return None;
++                }
++            };
++            if !re_card_type.is_match(&card_type) {
++                eprintln!("Failure parsing card type string '{}'.", card_type);
++                return None;
++            }
++            let caps = re_card_type.captures(&card_type).unwrap();
++            let gen = caps.get(1).unwrap().as_str().parse::<u32>().unwrap();
++            let mode = match caps.get(2).unwrap().as_str().parse::<char>().unwrap() {
++                'A' => ApqnMode::Accel,
++                'C' => ApqnMode::Cca,
++                'P' => ApqnMode::Ep11,
++                _ => panic!("Code inconsistence between regex RE_CARD_TYPE and evaluation code."),
++            };
++            if pv::misc::pv_guest_bit_set() {
++                // the UV blocks requests to CCA cards within SE guest with
++                // AP pass-through support. However, filter out CCA cards as these
++                // cards cause hangs during information gathering.
++                if mode == ApqnMode::Cca {
++                    continue;
++                }
++            }
++            let queue_dirs = match sysfs_get_list_of_subdirs_matching_regex(&path, RE_QUEUE_DIR) {
++                Ok(r) => r,
++                Err(err) => {
++                    eprintln!(
++                        "Failure reading AP queue directories in {} ({:?}).",
++                        path, err
++                    );
++                    return None;
++                }
++            };
++            for queue_dir in queue_dirs {
++                let _online = match sysfs_read_i32(&format!("{path}/{queue_dir}/online")) {
++                    Ok(1) => true,
++                    _ => continue,
++                };
++                let caps = re_queue_dir.captures(&queue_dir).unwrap();
++                let cardstr = caps.get(1).unwrap().as_str();
++                let card = u32::from_str_radix(cardstr, 16).unwrap();
++                let domstr = caps.get(2).unwrap().as_str();
++                let dom = u32::from_str_radix(domstr, 16).unwrap();
++                // For the mpvk and serialnr to fetch from the APQN within a SE
++                // guest the APQN needs to be bound to the guest. So if the APQN
++                // is not bound, temporarily bind it here until the info has
++                // been retrieved.
++                let mut tempbound = false;
++                if pv::misc::pv_guest_bit_set() {
++                    let cbs = match get_apqn_bind_state(card, dom) {
++                        Ok(bs) => bs,
++                        Err(err) => {
++                            eprintln!(
++                                "Error: Failure reading APQN ({},{}) bind state: {}",
++                                card, dom, err
++                            );
++                            BindState::NotSupported
++                        }
++                    };
++                    if cbs == BindState::Unbound {
++                        let r = set_apqn_bind_state(card, dom, BindState::Bound);
++                        if r.is_err() {
++                            eprintln!(
++                                "Warning: Failure to temp. bind APQN ({},{}): {}",
++                                card,
++                                dom,
++                                r.unwrap_err()
++                            );
++                            continue;
++                        } else {
++                            tempbound = true;
++                        }
++                    };
++                };
++                let info = match ApqnInfo::info(&mode, &path, &queue_dir) {
++                    Err(err) => {
++                        // print the error but continue with info set to None
++                        eprintln!(
++                            "Warning: Failure to gather info for APQN ({},{}): {}",
++                            card, dom, err
++                        );
++                        None
++                    }
++                    Ok(i) => Some(i),
++                };
++                if tempbound {
++                    let r = set_apqn_bind_state(card, dom, BindState::Unbound);
++                    if r.is_err() {
++                        eprintln!(
++                            "Warning: Failure to unbind temp. bound APQN ({},{}): {}",
++                            card,
++                            dom,
++                            r.unwrap_err()
++                        );
++                    }
++                };
++                apqns.push(Apqn {
++                    name: queue_dir.clone(),
++                    card,
++                    domain: dom,
++                    gen,
++                    mode: mode.clone(),
++                    info,
++                });
++            }
++        }
++        Some(ApqnList(apqns))
++    }
++
++    /// Sort this Apqnlist by card generation:
++    /// newest generation first, older generations last.
++    pub fn sort_by_gen(&mut self) {
++        self.0.sort_unstable_by(|a, b| b.gen.cmp(&a.gen));
++    }
++
++    /// Check MK restriction
++    ///
++    /// Within one card there must not exist 2 APQNs with same
++    /// MK setup. This rule only applies to EP11 cards.
++    /// Returns true if this check passed,
++    /// otherwise false and a message is printed.
++    pub fn check_mk_restriction(&self) -> bool {
++        for a1 in self.0.iter() {
++            for a2 in self.0.iter() {
++                if a1.card == a2.card
++                    && a1.domain < a2.domain
++                    && a1.mode == ApqnMode::Ep11
++                    && a1.info.is_some()
++                    && a2.info.is_some()
++                {
++                    let i1 = match a1.info.as_ref().unwrap() {
++                        ApqnInfo::Ep11(i) => i,
++                        _ => continue,
++                    };
++                    let i2 = match a2.info.as_ref().unwrap() {
++                        ApqnInfo::Ep11(i) => i,
++                        _ => continue,
++                    };
++                    if i1.mkvp.is_empty() || i2.mkvp.is_empty() {
++                        continue;
++                    }
++                    if i1.mkvp == i2.mkvp {
++                        eprintln!("APQN {} and APQN {} have same MPVK", a1, a2);
++                        return false;
++                    }
++                }
++            }
++        }
++        true
++    }
++}
++
++#[derive(PartialEq, Eq)]
++pub enum BindState {
++    Bound,
++    Unbound,
++    NotSupported,
++}
++
++/// Query bind state for this APQN.
++///
++/// Returns a BindState enum as defined above or on failure
++/// an error string. Does NOT print any error messages.
++pub fn get_apqn_bind_state(card: u32, dom: u32) -> Result<BindState, String> {
++    let path = format!(
++        "{}/card{:02x}/{:02x}.{:04x}/se_bind",
++        PATH_SYS_DEVICES_AP, card, card, dom
++    );
++    match sysfs_read_string(&path) {
++        Err(err) => Err(format!(
++            "Failure reading se_bind attribute for APQN({},{}): {:?}.",
++            card, dom, err
++        )),
++        Ok(str) => match str.as_str() {
++            "bound" => Ok(BindState::Bound),
++            "unbound" => Ok(BindState::Unbound),
++            "-" => Ok(BindState::NotSupported),
++            _ => Err(format!("Unknown bind state '{str}'.")),
++        },
++    }
++}
++
++/// Bind or unbind an APQN.
++///
++/// The action is determined by the BindState given in.
++/// But of course only Bound and Unbound is supported - otherwise
++/// this function panics!
++/// The function actively loops over the bind state until
++/// the requested bind state is reached or a timeout has
++/// occurred (SYS_BUS_AP_BIND_TIMEOUT_MS).
++/// On success () is returned, on failure an error string
++/// is returned. Does NOT print any error messages.
++/// # Panics
++/// Panics if a desired bind state other than Bund or Unbound is given.
++pub fn set_apqn_bind_state(card: u32, dom: u32, state: BindState) -> Result<(), String> {
++    let path = format!(
++        "{}/card{:02x}/{:02x}.{:04x}/se_bind",
++        PATH_SYS_DEVICES_AP, card, card, dom
++    );
++    let r = match state {
++        BindState::Bound => sysfs_write_i32(&path, 1),
++        BindState::Unbound => sysfs_write_i32(&path, 0),
++        _ => panic!("set_apqn_bind_state called with invalid BindState."),
++    };
++    if r.is_err() {
++        return Err(format!(
++            "Failure writing se_bind attribute for APQN({},{}): {:?}.",
++            card,
++            dom,
++            r.unwrap_err()
++        ));
++    }
++    let mut ms: u64 = 0;
++    loop {
++        thread::sleep(time::Duration::from_millis(SYS_BUS_AP_BIND_POLL_MS));
++        ms += SYS_BUS_AP_BIND_POLL_MS;
++        if ms >= SYS_BUS_AP_BIND_TIMEOUT_MS {
++            break Err(format!(
++                "Timeout setting APQN({},{}) bind state.",
++                card, dom
++            ));
++        }
++        let newstate = match get_apqn_bind_state(card, dom) {
++            Err(err) => return Err(err),
++            Ok(s) => s,
++        };
++        if newstate == state {
++            return Ok(());
++        }
++    }
++}
++
++#[derive(PartialEq, Eq)]
++pub enum AssocState {
++    Associated(u16),
++    AssociationPending,
++    Unassociated,
++    NotSupported,
++}
++
++/// Query association state for this APQN.
++///
++/// Returns an AssocState enum as defined above or on failure
++/// an error string. Does NOT print any error messages.
++pub fn get_apqn_associate_state(card: u32, dom: u32) -> Result<AssocState, String> {
++    let path = format!(
++        "{}/card{:02x}/{:02x}.{:04x}/se_associate",
++        PATH_SYS_DEVICES_AP, card, card, dom
++    );
++    match sysfs_read_string(&path) {
++        Err(err) => Err(format!(
++            "Failure reading se_associate attribute for APQN({},{}: {:?}",
++            card, dom, err
++        )),
++        Ok(str) => {
++            if let Some(prefix) = str.strip_prefix("associated ") {
++                let value = &prefix.parse::<u16>();
++                match value {
++                    Ok(v) => Ok(AssocState::Associated(*v)),
++                    Err(_) => Err(format!("Invalid association index in '{str}'.")),
++                }
++            } else {
++                match str.as_str() {
++                    "association pending" => Ok(AssocState::AssociationPending),
++                    "unassociated" => Ok(AssocState::Unassociated),
++                    "-" => Ok(AssocState::NotSupported),
++                    _ => Err(format!("Unknown association state '{str}'.")),
++                }
++            }
++        }
++    }
++}
++
++fn set_apqn_associate_state_associate(card: u32, dom: u32, idx: u16) -> Result<(), String> {
++    let path = format!(
++        "{}/card{:02x}/{:02x}.{:04x}/se_associate",
++        PATH_SYS_DEVICES_AP, card, card, dom
++    );
++    let r = sysfs_write_i32(&path, idx as i32);
++    if r.is_err() {
++        return Err(format!(
++            "Failure writing se_associate attribute for APQN({},{}): {:?}.",
++            card,
++            dom,
++            r.unwrap_err()
++        ));
++    }
++    let mut ms: u64 = 0;
++    loop {
++        thread::sleep(time::Duration::from_millis(SYS_BUS_AP_ASSOC_POLL_MS));
++        ms += SYS_BUS_AP_ASSOC_POLL_MS;
++        if ms >= SYS_BUS_AP_ASSOC_TIMEOUT_MS {
++            break Err(format!(
++                "Timeout setting APQN({},{}) association idx {} state.",
++                card, dom, idx
++            ));
++        }
++        let newstate = match get_apqn_associate_state(card, dom) {
++            Err(err) => return Err(err),
++            Ok(s) => s,
++        };
++        if let AssocState::Associated(i) = newstate {
++            if idx == i {
++                return Ok(());
++            } else {
++                return Err(format!(
++                    "Failure: APQN({},{}) is associated with {} but it should be {}.",
++                    card, dom, i, idx
++                ));
++            }
++        }
++    }
++}
++
++fn set_apqn_associate_state_unbind(card: u32, dom: u32) -> Result<(), String> {
++    let bindpath = format!(
++        "{}/card{:02x}/{:02x}.{:04x}/se_bind",
++        PATH_SYS_DEVICES_AP, card, card, dom
++    );
++    let r = sysfs_write_i32(&bindpath, 0);
++    if r.is_err() {
++        return Err(format!(
++            "Failure writing se_bind attribute for APQN({},{}): {:?}.",
++            card,
++            dom,
++            r.unwrap_err()
++        ));
++    }
++    let mut ms: u64 = 0;
++    loop {
++        thread::sleep(time::Duration::from_millis(SYS_BUS_AP_ASSOC_POLL_MS));
++        ms += SYS_BUS_AP_ASSOC_POLL_MS;
++        if ms >= SYS_BUS_AP_ASSOC_TIMEOUT_MS {
++            break Err(format!(
++                "Timeout setting APQN({},{}) association unbind state.",
++                card, dom
++            ));
++        }
++        let newstate = match get_apqn_associate_state(card, dom) {
++            Err(err) => return Err(err),
++            Ok(s) => s,
++        };
++        if newstate == AssocState::Unassociated {
++            return Ok(());
++        }
++    }
++}
++
++/// Associate or Unassociate an APQN.
++///
++/// The action is determined by the AssocState given in.
++/// But of course only Associated and Unassociated is supported
++/// otherwise this function panics!
++/// The function actively loops over the association state until
++/// the requested state is reached or a timeout has
++/// occurred (SYS_BUS_AP_ASSOC_TIMEOUT_MS).
++/// The unassociate is in fact a unbind. So the code triggers
++/// an unbind and then loops over the sysfs se_associate until
++/// "unassociated" is reached.
++/// On success () is returned, on failure an error string
++/// is returned. Does NOT print any error messages.
++/// # Panics
++/// Panics if a desired bind state other than Associated or
++/// Unassociated is given.
++pub fn set_apqn_associate_state(card: u32, dom: u32, state: AssocState) -> Result<(), String> {
++    match state {
++        AssocState::Associated(idx) => set_apqn_associate_state_associate(card, dom, idx),
++        AssocState::Unassociated => set_apqn_associate_state_unbind(card, dom),
++        _ => panic!("set_apqn_associate_state called with invalid AssocState."),
++    }
++}
++
++#[cfg(test)]
++mod tests {
++
++    use super::*;
++
++    // These tests assume, there is an AP bus available
++    // Also for each APQN which is online, it is assumed
++    // to have a valid master key set up (for Ep11 and CCA).
++
++    #[test]
++    fn test_check_ap_bus_support() {
++        if Path::new(PATH_SYS_BUS_AP).is_dir() {
++            assert!(check_ap_bus_support().is_ok());
++        } else {
++            assert!(check_ap_bus_support().is_err());
++        }
++    }
++    #[test]
++    fn test_check_ap_bus_apsb_support() {
++        if Path::new(PATH_SYS_BUS_AP).is_dir() {
++            // if we are inside a secure execution guest the
++            // apsb check should succeed. Outside an SE guest
++            // the check should fail.
++            if pv::misc::pv_guest_bit_set() {
++                assert!(ap_bus_has_apsb_support().is_ok());
++            } else {
++                assert!(ap_bus_has_apsb_support().is_err());
++            }
++        } else {
++            assert!(ap_bus_has_apsb_support().is_err());
++        }
++    }
++    #[test]
++    fn test_wait_for_ap_bus_bindings_complete() {
++        let r = wait_for_ap_bus_bindings_complete();
++        if Path::new(PATH_SYS_BUS_AP).is_dir() {
++            assert!(r);
++        } else {
++            assert!(!r);
++        }
++    }
++    #[test]
++    fn test_gather_apqns() {
++        let r = ApqnList::gather_apqns();
++        if Path::new(PATH_SYS_BUS_AP).is_dir() {
++            assert!(r.is_some());
++            // fail if no entries found
++            let l = r.unwrap();
++            let v = l.to_apqn_vec();
++            for a in v {
++                match a.mode {
++                    ApqnMode::Accel => {
++                        // fail if no ApqnInfo is attached
++                        assert!(a.info.is_some());
++                    }
++                    ApqnMode::Ep11 => {
++                        // fail if no ApqnInfo is attached
++                        assert!(a.info.is_some());
++                        let info = a.info.unwrap();
++                        let i = match &info {
++                            ApqnInfo::Ep11(i) => i,
++                            _ => panic!("ApqnInfo attached onto Ep11 APQN is NOT ApqnInfoEp11 ?!?"),
++                        };
++                        // fail if no serialnr
++                        assert!(i.serialnr.len() > 0);
++                        // mkvp is either empty (no WK set) or has exact 32 characters
++                        assert!(i.mkvp.is_empty() || i.mkvp.len() == 32);
++                    }
++                    ApqnMode::Cca => {
++                        // fail if no ApqnInfo is attached
++                        assert!(a.info.is_some());
++                        let info = a.info.unwrap();
++                        let i = match &info {
++                            ApqnInfo::Cca(i) => i,
++                            _ => panic!("ApqnInfo attached onto Cca APQN is NOT ApqnInfoCca ?!?"),
++                        };
++                        // fail if no serialnr
++                        assert!(i.serialnr.len() > 0);
++                        // aes mkvp is either empty (no MK set) or exact 16 characters
++                        assert!(i.mkvp_aes.is_empty() || i.mkvp_aes.len() == 16);
++                        // apka mkvp is either empty (no MK set) or exact 16 characters
++                        assert!(i.mkvp_apka.is_empty() || i.mkvp_apka.len() == 16);
++                    }
++                }
++            }
++        } else {
++            assert!(r.is_none());
++        }
++    }
++}
+diff --git a/rust/pvapconfig/src/cli.rs b/rust/pvapconfig/src/cli.rs
+new file mode 100644
+index 0000000..e7fd283
+--- /dev/null
++++ b/rust/pvapconfig/src/cli.rs
+@@ -0,0 +1,63 @@
++// SPDX-License-Identifier: MIT
++//
++// Copyright IBM Corp. 2023
++//
++//! Command line interface for pvapconfig
++//
++
++use clap::Parser;
++use lazy_static::lazy_static;
++
++/// The default pvapconfig config file
++pub const PATH_DEFAULT_CONFIG_FILE: &str = "/etc/pvapconfig.yaml";
++
++#[derive(Parser, Clone)]
++pub struct Cli {
++    /// Provide a custom config file (overwrites default /etc/pvapconfig.yaml).
++    #[arg(short, long, value_name = "FILE")]
++    pub config: Option<String>,
++
++    /// Dry run: display the actions but don't actually perform them on the APQNs.
++    #[arg(short = 'n', long = "dry-run")]
++    pub dryrun: bool,
++
++    /// Enforce strict match: All config entries need to be fullfilled.
++    ///
++    /// By default it is enough to successfully apply at least one config entry.
++    /// With the strict flag enabled, all config entries within a config file
++    /// need to be applied successful.
++    #[arg(long = "strict")]
++    pub strict: bool,
++
++    /// Provide more detailed output.
++    #[arg(short, long)]
++    pub verbose: bool,
++
++    /// Print version information and exit.
++    #[arg(short = 'V', long)]
++    pub version: bool,
++}
++
++lazy_static! {
++    pub static ref ARGS: Cli = Cli::parse();
++}
++
++impl Cli {
++    /// verbose returns true if the verbose command line option
++    /// was given, otherwise false is returned.
++    pub fn verbose(&self) -> bool {
++        self.verbose
++    }
++
++    /// dryrun returns true if the dry-run command line option
++    /// was given, otherwise false is returned.
++    pub fn dryrun(&self) -> bool {
++        self.dryrun
++    }
++
++    /// strict returns true if the strict flag was given, otherwise
++    /// false is returned.
++    pub fn strict(&self) -> bool {
++        self.strict
++    }
++}
+diff --git a/rust/pvapconfig/src/config.rs b/rust/pvapconfig/src/config.rs
+new file mode 100644
+index 0000000..28d2ac7
+--- /dev/null
++++ b/rust/pvapconfig/src/config.rs
+@@ -0,0 +1,391 @@
++// SPDX-License-Identifier: MIT
++//
++// Copyright IBM Corp. 2023
++//
++//! Functions around handling the pvapconfig configuration file
++//
++
++use openssl::sha::sha256;
++use regex::Regex;
++use serde::{Deserialize, Serialize};
++use serde_yaml::{self};
++use std::fs::File;
++use std::slice::Iter;
++
++pub const STR_MODE_EP11: &str = "ep11";
++pub const STR_MODE_ACCEL: &str = "accel";
++
++const RE_EP11_MKVP_32: &str = r"^(0x)?([[:xdigit:]]{32})$";
++const RE_EP11_MKVP_64: &str = r"^(0x)?([[:xdigit:]]{64})$";
++const RE_SERIALNR: &str = r"^(\S{16})$";
++const RE_EP11_GEN: &str = r"^cex(8)$";
++const RE_ACCEL_GEN: &str = r"^cex([4-8])$";
++const RE_SECRETID: &str = r"^(0x)?([[:xdigit:]]{64})$";
++
++#[derive(Debug, Serialize, Deserialize, Default, Clone)]
++#[serde(default, deny_unknown_fields)]
++pub struct ApConfigEntry {
++    pub name: String,        // name and description are unmodified from the config file
++    pub description: String, // accel after validation     ep11 after validation
++    pub mode: String,        // "accel"                    "ep11"
++    pub mkvp: String,        // empty                      32 hex lowercase characters
++    pub serialnr: String,    // empty                      empty or 16 non-whitespace characters
++    pub mingen: String,      // empty or "cex4"..."cex8"   empty or "cex8"
++    pub secretid: String,    // empty                      64 hex lowercase characters
++}
++
++impl ApConfigEntry {
++    fn validate_secretid(&mut self) -> Result<(), String> {
++        // either secret id or name may be given
++        if self.secretid.is_empty() && self.name.is_empty() {
++            return Err("Neither secretid nor name given.".to_string());
++        }
++        // if name is given, calculate sha256 digest for this name
++        // test for the hash calculated here can be done with openssl:
++        // echo -n "Hello" >in.bin; openssl dgst -sha256 -binary -out out.bin in.bin; hexdump -C out.bin
++        if self.name.is_empty() {
++            return Ok(());
++        }
++        let hash = sha256(self.name.as_bytes());
++        let hashstr = crate::helper::u8_to_hexstring(&hash);
++        // if there is a secretid given, this must match to the hash
++        if !self.secretid.is_empty() {
++            if self.secretid != hashstr {
++                return Err("Mismatch between sha256(name) and secretid.".to_string());
++            }
++        } else {
++            self.secretid = hashstr;
++        }
++        Ok(())
++    }
++
++    /// # Panics
++    /// Panics if the compilation of a static regular expression fails.
++    fn validate_ep11_entry(&mut self) -> Result<(), String> {
++        // mkvp is required
++        let mut mkvp = self.mkvp.trim().to_lowercase();
++        if mkvp.is_empty() {
++            return Err("Mkvp value missing.".to_string());
++        }
++        // either 64 hex or 32 hex
++        if Regex::new(RE_EP11_MKVP_64).unwrap().is_match(&mkvp) {
++            // need to cut away the last 32 hex characters
++            mkvp = String::from(&mkvp[..mkvp.len() - 32])
++        } else if Regex::new(RE_EP11_MKVP_32).unwrap().is_match(&mkvp) {
++            // nothing to do here
++        } else {
++            return Err(format!("Mkvp value '{}' is not valid.", &self.mkvp));
++        }
++        self.mkvp = match mkvp.strip_prefix("0x") {
++            Some(rest) => String::from(rest),
++            None => mkvp,
++        };
++        // serialnr is optional
++        let serialnr = self.serialnr.trim().to_string();
++        if !serialnr.is_empty() && !Regex::new(RE_SERIALNR).unwrap().is_match(&serialnr) {
++            return Err(format!("Serialnr value '{}' is not valid.", &self.serialnr));
++        }
++        self.serialnr = serialnr;
++        // mingen is optional, but if given only CEX8 is valid
++        let mingen = self.mingen.trim().to_lowercase();
++        if !mingen.is_empty() && !Regex::new(RE_EP11_GEN).unwrap().is_match(&mingen) {
++            return Err(format!("Mingen value '{}' is not valid.", &self.mingen));
++        }
++        self.mingen = mingen;
++        // secretid or name is required
++        let secretid = self.secretid.trim().to_lowercase();
++        if !secretid.is_empty() && !Regex::new(RE_SECRETID).unwrap().is_match(&secretid) {
++            return Err(format!("Secretid value '{}' is not valid.", &self.secretid));
++        }
++        self.secretid = match secretid.strip_prefix("0x") {
++            Some(rest) => String::from(rest),
++            None => secretid,
++        };
++        // name is optional, ignored here
++        // description is optional, ignored here
++        // but the secretid needs some more validation
++        self.validate_secretid()
++    }
++
++    /// # Panics
++    /// Panics if the compilation of a static regular expression fails.
++    fn validate_accel_entry(&mut self) -> Result<(), String> {
++        // mkvp is ignored
++        self.mkvp.clear();
++        // serialnr is ignored
++        self.serialnr.clear();
++        // mingen is optional, but if given must match to CEX4..CEX8
++        let mingen = self.mingen.trim().to_lowercase();
++        if !mingen.is_empty() && !Regex::new(RE_ACCEL_GEN).unwrap().is_match(&mingen) {
++            return Err(format!("Mingen value '{}' is not valid.", &self.mingen));
++        }
++        self.mingen = mingen;
++        // secretid is ignored
++        self.secretid.clear();
++        // name is optional, ignored here
++        // description is optional, ignored here
++        Ok(())
++    }
++
++    fn validate(&mut self) -> Result<(), String> {
++        // trim name
++        self.name = self.name.trim().to_string();
++        // mode is always required
++        let mode = self.mode.trim().to_lowercase();
++        match mode.as_str() {
++            STR_MODE_EP11 => {
++                self.mode = mode;
++                self.validate_ep11_entry()?;
++            }
++            STR_MODE_ACCEL => {
++                self.mode = mode;
++                self.validate_accel_entry()?;
++            }
++            _ => return Err(format!("Unknown or invalid mode '{}'.", mode)),
++        }
++        Ok(())
++    }
++}
++
++/// Wrapper object around Vector of ApConfigEntry
++pub struct ApConfigList(Vec<ApConfigEntry>);
++
++impl ApConfigList {
++    #[cfg(test)] // only used in test code
++    pub fn from_apconfigentry_vec(apconfigs: Vec<ApConfigEntry>) -> ApConfigList {
++        ApConfigList(apconfigs)
++    }
++
++    pub fn iter(&self) -> Iter<'_, ApConfigEntry> {
++        self.0.iter()
++    }
++
++    pub fn len(&self) -> usize {
++        self.0.len()
++    }
++
++    pub fn is_empty(&self) -> bool {
++        self.0.is_empty()
++    }
++
++    fn read_yaml_file(fname: &str) -> Result<Vec<ApConfigEntry>, String> {
++        let file = match File::open(fname) {
++            Ok(f) => f,
++            Err(err) => {
++                return Err(format!(
++                    "Failure to open AP config file {}: {:?}",
++                    fname, err
++                ))
++            }
++        };
++        match serde_yaml::from_reader(file) {
++            Ok(cfg) => Ok(cfg),
++            Err(err) => Err(format!(
++                "Failure parsing AP config file {}: {:?}",
++                fname, err
++            )),
++        }
++    }
++
++    fn validate(config: &mut [ApConfigEntry]) -> Result<(), String> {
++        for (i, entry) in config.iter_mut().enumerate() {
++            let ename = if !entry.name.trim().is_empty() {
++                format!("AP config entry {} '{}'", i, entry.name.trim())
++            } else {
++                format!("AP config entry {}", i)
++            };
++            if let Err(err) = &entry.validate() {
++                return Err(format!("{}: {}", ename, err));
++            }
++        }
++        Ok(())
++    }
++
++    /// Read in and validate the yaml configuration from a file.
++    /// Returns a Result with Ok(ApConfigList) on success
++    /// or an Err(errorstring) on failure.
++    pub fn read_and_validate_yaml_file(fname: &str) -> Result<ApConfigList, String> {
++        let mut apconfig = ApConfigList::read_yaml_file(fname)?;
++        ApConfigList::validate(&mut apconfig)?;
++        Ok(ApConfigList(apconfig))
++    }
++}
++
++#[cfg(test)]
++mod tests {
++
++    use super::*;
++    use std::env;
++    use std::fs;
++    use std::io::Write;
++
++    const GOOD_CONFIGS: [&str; 8] = [
++        "# good test 1
++- name: my Accelerator
++  mode: AcCel
++  mingen: Cex7\n",
++        "# good test 2
++- name: my Accelerator 2
++  description: Accelerator entry with description
++  mode: Accel\n",
++        "# good test 3
++- name: my EP11 APQN 1
++  mode: Ep11
++  mkvp:  0xDB3C3B3C3F097DD55EC7EB0E7FDBCB93
++  serialnr: 93AADFK719460083
++  secretid: 0xBC9d46c052BC3574454C5715757274629a283767ed237922cfb8651c0e77320A\n",
++        "# good test 4
++- name: my EP11 APQN 2
++  mode: EP11
++  mkvp: 0xdb3c3b3c3f097dd55ec7eb0e7fdbcb93
++  serialnr: 93aaDHzu42082261
++  secretid: 0x2ca853f959fc5ce5f1888cb48dae39514a27bb66520ac85f6073a7f678d262c0\n",
++        "# good test 5
++- name: my EP11 APQN 3
++  mode: EP11
++  mkvp: 0xdb3c3b3c3f097dd55ec7eb0e7fdbcb93db3c3b3c3f097dd55ec7eb0e7fdbcb93
++  serialnr: 93aaDHzu42082261
++  secretid: 0xd146c9ae77cdff25fa87a5b3487587dc29a4e391b315c98570e8fa2e2ec91454\n",
++        "# no name but secretid given
++- mode: EP11
++  mkvp: 0xdb3c3b3c3f097dd55ec7eb0e7fdbcb93
++  secretid: 0x0767668dd22f23fa675c4641e04bb4e991f443be4df13ce3896b8eeca59fcc10\n",
++        "# no secretid but name given
++- mode: EP11
++  name: My-EP11-AP-config
++  mkvp: 0xdb3c3b3c3f097dd55ec7eb0e7fdbcb93\n",
++        "# secretid and name given
++- mode: EP11
++  name: My-EP11-AP-config
++  mkvp: 0xdb3c3b3c3f097dd55ec7eb0e7fdbcb93
++  secretid: 0x0767668dd22f23fa675c4641e04bb4e991f443be4df13ce3896b8eeca59fcc10\n",
++    ];
++
++    const BAD_CONFIGS: [&str; 12] = [
++        "# mode missing
++- name: bad test 1
++  mkvp: 0xdb3c3b3c3f097dd55ec7eb0e7fdbcb93
++  secretid: 0x0767668dd22f23fa675c4641e04bb4e991f443be4df13ce3896b8eeca59fcc10\n",
++        "# invalid mode
++- name: bad test 2
++  mode: CCA
++  mkvp: 0xdb3c3b3c3f097dd55ec7eb0e7fdbcb93
++  secretid: 0x0767668dd22f23fa675c4641e04bb4e991f443be4df13ce3896b8eeca59fcc10\n",
++        "# Accelerator with wrong CEX3
++- name: bad test 3
++  mode: Accel
++  mingen: Cex3\n",
++        "# Accelerator with wrong CEX9
++- name: bad test 4
++  mode: Accel
++  mingen: CEX9\n",
++        "# EP11 with mkvp missing
++- name: bad test 5
++  mode: EP11
++  serialnr: 93AADHZU42082261\n",
++        "# EP11 with non hex mkvp
++- name: bad test 6
++  mode: EP11
++  mkvp: 0xabcdefghijklmnopqqponmlkjihgfedcba
++  serialnr: 93AADHZU42082261\n",
++        "# EP11 with mkvp too big
++- name: bad test 7
++  mode: EP11
++  mkvp: 0xdb3c3b3c3f097dd55ec7eb0e7fdbcb93aa
++  serialnr: 93AADHZU42082261\n",
++        "# EP11 with mkvp too small
++- name: bad test 8
++  mode: EP11
++  mkvp: 0xdb3c3b3c3f097dd55ec7eb0e7fdbcb
++  serialnr: 93AADHZU42082261\n",
++        "# EP11 with invalid CEXx
++- name: bad test 9
++  mode: EP11
++  mingen: CEX7
++  mkvp: 0x00112233445566778899aabbccddeeff
++  serialnr: 93AADHZU42082261\n",
++        "# EP11 with invalid Serialnr
++- name: bad test 10
++  mode: EP11
++  mkvp: 0x00112233445566778899aabbccddeeff
++  serialnr: 93AADHZU4208226\n",
++        "# EP11 with invalid Serialnr
++- name: bad test 11
++  mode: EP11
++  mkvp: 0x00112233445566778899aabbccddeeff
++  serialnr: 93AAD ZU42082261\n",
++        "# EP11 with sha256(name) != secretid
++- name: bad test 12
++  mode: EP11
++  mkvp: 0x00112233445566778899aabbccddeeff
++  serialnr: AABBCCDDEEFFGGHH
++  secretid: 0x2ca853f959fc5ce5f1888cb48dae39514a27bb66520ac85f6073a7f678d262c0\n",
++    ];
++
++    const BAD_DESERIALIZE: [&str; 2] = [
++        "/*\ntotal nonsense\n */\n",
++        "# wrong/unknown field
++- name: de-serialize failure 1
++  type: EP11\n",
++    ];
++
++    fn write_yaml_config_to_temp_file(content: &str) -> Result<String, String> {
++        let dir = env::temp_dir();
++        let rnd = rand::random::<u32>();
++        let fname = format!("{}/config-test-{}.yaml", dir.to_str().unwrap(), rnd);
++        let mut f = match File::create(&fname) {
++            Ok(f) => f,
++            Err(_) => return Err(format!("Failure creating temp file '{fname}'.")),
++        };
++        match f.write_all(content.as_bytes()) {
++            Ok(_) => Ok(fname),
++            Err(_) => {
++                fs::remove_file(&fname).ok();
++                Err(format!("Failure writing to temp file '{fname}'."))
++            }
++        }
++    }
++
++    #[test]
++    fn test_good_yaml() {
++        for yaml in GOOD_CONFIGS {
++            let f = write_yaml_config_to_temp_file(yaml).unwrap();
++            let config = ApConfigList::read_and_validate_yaml_file(&f).unwrap();
++            assert!(config.len() > 0);
++            fs::remove_file(&f).ok();
++        }
++    }
++    #[test]
++    fn test_bad_yaml() {
++        for yaml in BAD_CONFIGS {
++            let f = write_yaml_config_to_temp_file(yaml).unwrap();
++            let r = ApConfigList::read_and_validate_yaml_file(&f);
++            assert!(r.is_err());
++            fs::remove_file(&f).ok();
++        }
++    }
++    #[test]
++    fn test_invalid_deserizalize() {
++        for yaml in BAD_DESERIALIZE {
++            let f = write_yaml_config_to_temp_file(yaml).unwrap();
++            let r = ApConfigList::read_and_validate_yaml_file(&f);
++            assert!(r.is_err());
++            fs::remove_file(&f).ok();
++        }
++    }
++    #[test]
++    fn test_sha256() {
++        assert!(
++            crate::helper::u8_to_hexstring(&sha256("Hello".as_bytes()))
++                == "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
++        );
++        assert!(
++            crate::helper::u8_to_hexstring(&sha256("SECRET1".as_bytes()))
++                == "03153249db7ce46b0330ffb1a760b59710531af08ec4d7f8424a6870fae49360"
++        );
++        assert!(
++            crate::helper::u8_to_hexstring(&sha256("SECRET2".as_bytes()))
++                == "258499e710e0bd3bb878d6bac7e478b30f3f3e72566989f638c4143d14f6c0b6"
++        );
++    }
++}
+diff --git a/rust/pvapconfig/src/helper.rs b/rust/pvapconfig/src/helper.rs
+new file mode 100644
+index 0000000..c4670ce
+--- /dev/null
++++ b/rust/pvapconfig/src/helper.rs
+@@ -0,0 +1,272 @@
++// SPDX-License-Identifier: MIT
++//
++// Copyright IBM Corp. 2023
++//
++//! Collection of helper functions for pvapconfig
++//
++
++use regex::Regex;
++use std::error::Error;
++use std::fs;
++use std::fs::{File, OpenOptions};
++use std::io::{Read, Write};
++use std::path::PathBuf;
++
++pub const PATH_PVAPCONFIG_LOCK: &str = "/run/lock/pvapconfig.lock";
++
++/// Convert u8 slice to (lowercase) hex string
++pub fn u8_to_hexstring(slice: &[u8]) -> String {
++    let s = String::with_capacity(2 * slice.len());
++    slice.iter().fold(s, |acc, e| acc + &format!("{e:02x}"))
++}
++
++/// Convert hexstring to u8 vector
++/// The hexstring may contain whitespaces which are ignored.
++/// If there are other characters in there or if the number
++/// of hex characters is uneven panic() is called.
++/// # Panics
++/// Panics if the given string contains characters other than
++/// hex digits and whitespace. Panics if the number of hex digits
++/// is not even.
++#[cfg(test)] // currently only used in test code
++pub fn hexstring_to_u8(hex: &str) -> Vec<u8> {
++    let mut s = String::new();
++    for c in hex.chars() {
++        if c.is_ascii_hexdigit() {
++            s.push(c);
++        } else if c.is_whitespace() {
++            // ignore
++        } else {
++            panic!("Invalid character '{c}'");
++        }
++    }
++    if s.len() % 2 == 1 {
++        panic!("Uneven # of hex characters in '{s}'");
++    }
++    let mut hex_bytes = s.as_bytes().iter().map_while(|b| match b {
++        b'0'..=b'9' => Some(b - b'0'),
++        b'a'..=b'f' => Some(b - b'a' + 10),
++        b'A'..=b'F' => Some(b - b'A' + 10),
++        _ => None,
++    });
++    let mut bytes = Vec::with_capacity(s.len());
++    while let (Some(h), Some(l)) = (hex_bytes.next(), hex_bytes.next()) {
++        bytes.push(h << 4 | l)
++    }
++    bytes
++}
++
++/// Read sysfs file into string
++pub fn sysfs_read_string(fname: &str) -> Result<String, Box<dyn Error>> {
++    let mut file = File::open(fname)?;
++    let mut content = String::new();
++    file.read_to_string(&mut content)?;
++    let trimmed_content = String::from(content.trim());
++    Ok(trimmed_content)
++}
++
++/// Write string into sysfs file
++pub fn sysfs_write_string(fname: &str, value: &str) -> Result<(), Box<dyn Error>> {
++    let mut file = OpenOptions::new().write(true).open(fname)?;
++    file.write_all(value.as_bytes())?;
++    Ok(())
++}
++
++/// Read sysfs file content and parse as i32 value
++pub fn sysfs_read_i32(fname: &str) -> Result<i32, Box<dyn Error>> {
++    let content = sysfs_read_string(fname)?;
++    Ok(content.parse::<i32>()?)
++}
++
++/// Write an i32 value into a sysfs file
++pub fn sysfs_write_i32(fname: &str, value: i32) -> Result<(), Box<dyn Error>> {
++    return sysfs_write_string(fname, &value.to_string());
++}
++
++/// For a given (sysfs) directory construct a list of all subdirs
++/// and give it back as a vector of strings. If there is no subdir,
++/// the vector is empty.
++pub fn sysfs_get_list_of_subdirs(dname: &str) -> Result<Vec<String>, Box<dyn Error>> {
++    let mut v: Vec<String> = Vec::new();
++    let entries = fs::read_dir(dname)?;
++    for entry in entries.flatten() {
++        let file_type = match entry.file_type() {
++            Ok(ft) => ft,
++            _ => continue,
++        };
++        if !file_type.is_dir() {
++            continue;
++        }
++        let fname = match entry.file_name().into_string() {
++            Ok(s) => s,
++            _ => continue,
++        };
++        v.push(fname);
++    }
++    Ok(v)
++}
++
++/// For a given (sysfs) directory construct a list of all subdirs which
++/// match to the given regular expression and give the list back as a
++/// vector of strings. If there is no subdir, the vector is empty.
++pub fn sysfs_get_list_of_subdirs_matching_regex(
++    dname: &str,
++    regex: &str,
++) -> Result<Vec<String>, Box<dyn Error>> {
++    let mut v: Vec<String> = Vec::new();
++    let re = Regex::new(regex)?;
++    let entries = sysfs_get_list_of_subdirs(dname)?;
++    for entry in entries {
++        if re.is_match(&entry) {
++            v.push(entry);
++        }
++    }
++    Ok(v)
++}
++
++/// LockFile for inter-process locking
++///
++/// Simple class for process locking for pvapconfig.
++/// The lock concept is simple: The existence of a file is used as the
++/// locking indicator. If the file exists something is locked, if it does
++/// not exist something is not locked. In the lock file the PID of the
++/// process created the file ("owning this file") is written in.
++/// With the ProcessLock object leaving scope the associated lock file
++/// is automatically deleted. It is assumed that the creation of a file
++/// is an atomic operation - that's true for most filesystems but may
++/// cause problems with network based filesystems.
++/// Example:
++/// ```
++/// let lock = LockFile::lock("/var/lock/process.lock");
++/// assert!(lock.is_ok());
++/// let lock2 = LockFile::lock("/var/lock/process.lock");
++/// assert!(lock2.is_err());
++/// drop(lock);
++/// let lock3 = LockFile::lock("/var/lock/process.lock");
++/// assert!(lock3.is_ok());
++/// ```
++#[derive(Debug)]
++pub struct LockFile {
++    lockfile: PathBuf,
++}
++
++impl LockFile {
++    /// Try to establish the lock file.
++    /// Upon success the given file is fresh created and has the pid of this
++    /// process written in. The function returns a new LockFile object
++    /// which has implemented the Drop Trait. So with this object going out
++    /// of scope the lock file is deleted. If establishing the lock file
++    /// fails for any reason (for example the file already exists), the
++    /// function fails with returning an Error string. This function does
++    /// NOT panic if establishing the lock file fails for any reason. If
++    /// the lock file could be esablished but writing in the PID fails, a
++    /// warning is printed but the function continues with returning a
++    /// LockFile object.
++    pub fn try_lock(fname: &str) -> Result<Self, String> {
++        let lockfile = PathBuf::from(fname);
++        let mut file = match OpenOptions::new()
++            .write(true)
++            .create_new(true)
++            .open(&lockfile)
++        {
++            Err(err) => {
++                return Err(format!(
++                    "Failure trying to create lock file {fname}: {err:?}."
++                ))
++            }
++            Ok(f) => f,
++        };
++        let _ = file
++            .write(format!("{}", std::process::id()).as_bytes())
++            .map_err(|err| {
++                println!("Warning: could not write PID into lockfile {fname}: {err:?}.")
++            });
++        Ok(LockFile { lockfile })
++    }
++}
++
++impl Drop for LockFile {
++    fn drop(&mut self) {
++        let _ = fs::remove_file(&self.lockfile).map_err(|err| {
++            println!(
++                "Warning: could not remove lockfile {}: {err:?}.",
++                self.lockfile.display()
++            )
++        });
++    }
++}
++
++#[cfg(test)]
++mod tests {
++
++    use super::*;
++
++    // Only very simple tests
++
++    const TEST_BYTES: [u8; 8] = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef];
++    const TEST_HEXSTR: &str = "0123456789abcdef";
++
++    #[test]
++    fn test_u8_to_hexstring() {
++        let str = u8_to_hexstring(&TEST_BYTES);
++        assert!(str == TEST_HEXSTR);
++    }
++    #[test]
++    fn test_hexstring_to_u8() {
++        let bytes = hexstring_to_u8(TEST_HEXSTR);
++        assert!(bytes.as_slice() == TEST_BYTES);
++    }
++    #[test]
++    fn test_sysfs_read_string() {
++        let r = sysfs_read_string("/proc/cpuinfo");
++        assert!(r.is_ok());
++    }
++    #[test]
++    fn test_sysfs_read_i32() {
++        let r = sysfs_read_i32("/proc/sys/kernel/random/entropy_avail");
++        assert!(r.is_ok());
++    }
++    #[test]
++    fn test_sysfs_get_list_of_subdirs() {
++        let r = sysfs_get_list_of_subdirs("/proc/self");
++        assert!(r.is_ok());
++        let v = r.unwrap();
++        assert!(!v.is_empty());
++    }
++    #[test]
++    fn test_sysfs_get_list_of_subdirs_matching_regex() {
++        let r = sysfs_get_list_of_subdirs_matching_regex("/proc/self", "fd.*");
++        assert!(r.is_ok());
++        let v = r.unwrap();
++        assert!(!v.is_empty());
++        for e in v {
++            assert!(e.strip_prefix("fd").is_some());
++        }
++    }
++    #[test]
++    fn test_sysfs_write_i32() {
++        const TEST_PATH: &str = "/tmp/test_sysfs_write_i32";
++        let mut file = File::create(TEST_PATH).unwrap();
++        let _ = file.write_all(b"XYZ");
++        drop(file);
++        let r = sysfs_read_i32(TEST_PATH);
++        assert!(r.is_err());
++        let r = sysfs_write_i32(TEST_PATH, 999);
++        assert!(r.is_ok());
++        let r = sysfs_read_i32(TEST_PATH);
++        assert!(r.is_ok());
++        let v = r.unwrap();
++        assert!(v == 999);
++        let _ = fs::remove_file(TEST_PATH);
++    }
++    #[test]
++    fn test_lockfile() {
++        let r1 = LockFile::try_lock(PATH_PVAPCONFIG_LOCK);
++        assert!(r1.is_ok());
++        let r2 = LockFile::try_lock(PATH_PVAPCONFIG_LOCK);
++        assert!(r2.is_err());
++        drop(r1);
++        let r3 = LockFile::try_lock(PATH_PVAPCONFIG_LOCK);
++        assert!(r3.is_ok());
++    }
++}
+diff --git a/rust/pvapconfig/src/main.rs b/rust/pvapconfig/src/main.rs
+new file mode 100644
+index 0000000..07899cd
+--- /dev/null
++++ b/rust/pvapconfig/src/main.rs
+@@ -0,0 +1,668 @@
++// SPDX-License-Identifier: MIT
++//
++// Copyright IBM Corp. 2023
++//
++//! pvapconfig - Tool to automatically set up the AP configuration
++//! within an IBM Secure Execution guest.
++//
++
++mod ap;
++mod cli;
++mod config;
++mod helper;
++mod uv;
++
++use ap::{Apqn, ApqnList};
++use cli::ARGS;
++use config::{ApConfigEntry, ApConfigList};
++use helper::{LockFile, PATH_PVAPCONFIG_LOCK};
++use pv::uv::{ListableSecretType, SecretList};
++use std::process::ExitCode;
++use utils::release_string;
++
++/// Simple macro for
++///   if Cli::verbose() {
++///     print!(...);
++///   }
++macro_rules! info {
++    ($($arg:tt)*) => {{
++	if ARGS.verbose() {
++	    print!($($arg)*);
++	}
++    }};
++}
++
++/// Simple macro for the main function only
++/// Does a eprintln of the arguments and then
++/// return with exit failure.
++macro_rules! println_and_exit_failure {
++    ($($arg:tt)*) => {{
++	eprintln!($($arg)*);
++	return ExitCode::FAILURE;
++    }};
++}
++
++/// Simple macro for the main function only
++/// Check if given object has is_err() true and
++/// then eprintln the unwrapped error and
++/// returns with exit failure.
++macro_rules! on_error_print_and_exit {
++    ($r:expr) => {
++        if $r.is_err() {
++            eprintln!("{}", $r.unwrap_err());
++            return ExitCode::FAILURE;
++        }
++    };
++}
++
++fn main() -> ExitCode {
++    // handle version option
++    if cli::ARGS.version {
++        println!(
++            "{} version {}\nCopyright IBM Corp. 2023",
++            env!("CARGO_PKG_NAME"),
++            release_string!()
++        );
++        return ExitCode::SUCCESS;
++    }
++
++    // make sure only one pvapconfig instance is running
++    let r = LockFile::try_lock(PATH_PVAPCONFIG_LOCK);
++    on_error_print_and_exit!(r);
++    let _lockfile = r.unwrap();
++
++    // AP bus check
++    info!("Checking AP bus support and facilities...\n");
++    let r = ap::check_ap_bus_support();
++    on_error_print_and_exit!(r);
++    let r = ap::ap_bus_has_apsb_support();
++    on_error_print_and_exit!(r);
++    info!("AP bus support and facilities are ok.\n");
++
++    // UV check
++    info!("Checking UV support and environment...\n");
++    if !pv::misc::pv_guest_bit_set() {
++        println_and_exit_failure!("Failure: this is not a SE guest.");
++    }
++    let r = uv::has_list_secrets_facility();
++    on_error_print_and_exit!(r);
++    info!("UV support and environment is ok.\n");
++
++    // read configuration
++    let configfile: &str = match &cli::ARGS.config {
++        Some(f) => f,
++        _ => cli::PATH_DEFAULT_CONFIG_FILE,
++    };
++    info!(
++        "Reading AP configuration entries from file '{}'...\n",
++        configfile
++    );
++    let apconfig: ApConfigList = match ApConfigList::read_and_validate_yaml_file(configfile) {
++        Ok(apcfg) => apcfg,
++        Err(err) => println_and_exit_failure!("{}", err),
++    };
++    if apconfig.is_empty() {
++        println!(
++            "No AP configuration entries in config file '{}': Nothing to do.",
++            configfile
++        );
++        return ExitCode::SUCCESS;
++    }
++    info!("Found {} AP configuration entries.\n", apconfig.len());
++
++    // get list of secrets from UV
++    info!("Fetching list of secrets from UV...\n");
++    let secrets: SecretList = match uv::gather_secrets() {
++        Err(e) => println_and_exit_failure!("{}", e),
++        Ok(los) => los,
++    };
++    info!("Fetched {} Secret entries from UV.\n", secrets.len());
++
++    // Warning if no UV secrets given but AP config entries require it
++    let non_accel_apc = apconfig
++        .iter()
++        .filter(|apc| apc.mode != config::STR_MODE_ACCEL)
++        .count();
++    if non_accel_apc > 0 && secrets.is_empty() {
++        println!(
++            "Warning: No UV Secrets given but at least one AP config entry requires a Secret."
++        );
++    }
++
++    info!("Waiting for AP bus bindings complete...\n");
++    if !ap::wait_for_ap_bus_bindings_complete() {
++        return ExitCode::FAILURE;
++    }
++    info!("Fetching list of available APQNs...\n");
++    let mut apqns: ApqnList = match ApqnList::gather_apqns() {
++        Some(l) => l,
++        None => return ExitCode::FAILURE,
++    };
++    if apqns.is_empty() {
++        info!("List of available APQNs is empty: So there's nothing to do.\n");
++        return ExitCode::SUCCESS;
++    }
++    info!("Found {} APQNs.\n", apqns.len());
++    // check MK restriction
++    if !apqns.check_mk_restriction() {
++        return ExitCode::FAILURE;
++    }
++
++    // now the real work
++    info!("Applying AP configuration...\n");
++    let n = match do_ap_config(&mut apqns, &secrets, &apconfig, false) {
++        Err(e) => println_and_exit_failure!("{}", e),
++        Ok(n) => n,
++    };
++
++    if n == 0 {
++        println_and_exit_failure!(
++            "None out of {} AP config entries could be applied.",
++            apconfig.len()
++        );
++    } else if ARGS.strict() && n != apconfig.len() {
++        println_and_exit_failure!(
++            "Strict flag given and only {} out of {} AP config entries have been applied.",
++            n,
++            apconfig.len()
++        );
++    }
++
++    info!(
++        "Successfully applied {} out of {} AP config entries.\n",
++        n,
++        apconfig.len()
++    );
++
++    ExitCode::SUCCESS
++}
++
++/// The real worker function
++///
++/// This is the real algorithm which is trying to apply the
++/// AP configuration read from the config file to the existing
++/// APQNs with the info from the list of secrets from the UV.
++/// Returns the nr of AP config entries which are fullfilled
++/// after the function ended.
++/// apqns needs to be mutable as the function does a resort
++/// but content stays the same.
++fn do_ap_config(
++    apqns: &mut ApqnList,
++    secrets: &SecretList,
++    apconfig: &ApConfigList,
++    fntest: bool,
++) -> Result<usize, String> {
++    let mut resolved_entries = 0;
++    let mut apconfig_done = vec![false; apconfig.len()];
++    let mut apqn_done = vec![false; apqns.len()];
++
++    // Preparation: Sort APQNs by generation.
++    // All the following steps iterate through the list
++    // of APQNs. So by sorting the APQNs starting with
++    // highest card generation down to the older card
++    // generations we prefer newer card generations over
++    // older card generations.
++    apqns.sort_by_gen();
++
++    // Step 1:
++    // Go through all AP config entries and try to find an APQN
++    // which already matches to this entry. If such an APQN is
++    // found mark the AP config entry as done, and mark the APQN
++    // as used so that entry and APQN will get skipped over in
++    // the next steps.
++
++    for (ci, apc) in apconfig.iter().enumerate() {
++        let cistr = if !apc.name.is_empty() {
++            format!("#{} '{}'", ci + 1, apc.name)
++        } else {
++            format!("#{}", ci + 1)
++        };
++        for (ai, apqn) in apqns.iter().enumerate() {
++            if apqn_done[ai] {
++                continue;
++            }
++            if !config_and_apqn_match(apc, apqn) {
++                continue;
++            }
++            if fntest {
++                continue;
++            }
++            match apqn.mode {
++                ap::ApqnMode::Accel => {
++                    // check bind state of this APQN
++                    let bind_state_ok = match apqn.bind_state() {
++                        Err(err) => {
++                            eprintln!("Warning: Failure reading APQN {apqn} bind state: {err}");
++                            false
++                        }
++                        Ok(ap::BindState::Bound) => true,
++                        Ok(_) => false,
++                    };
++                    if !bind_state_ok {
++                        continue;
++                    }
++                    // This APQN matches to the current AP config entry and is already bound.
++                    // So this AP config entry is satisfied: mark this config enty as done
++                    // and mark this APQN as used.
++                    info!("Accelerator APQN {apqn} already satisfies AP config entry {cistr}.\n");
++                    apconfig_done[ci] = true;
++                    apqn_done[ai] = true;
++                    resolved_entries += 1;
++                    break;
++                }
++                ap::ApqnMode::Ep11 => {
++                    // check association state of this APQN
++                    let (assoc_state_ok, assoc_idx) = match apqn.associate_state() {
++                        Err(err) => {
++                            eprintln!(
++                                "Warning: Failure reading APQN {apqn} associate state: {err}"
++                            );
++                            (false, 0)
++                        }
++                        Ok(ap::AssocState::Associated(idx)) => (true, idx),
++                        Ok(_) => (false, 0),
++                    };
++                    if !assoc_state_ok {
++                        continue;
++                    }
++                    // check association index
++                    let r = secrets.iter().find(|&se| {
++                        se.stype() == ListableSecretType::Association
++                            && se.id().len() == uv::AP_ASSOC_SECRET_ID_SIZE
++                            && se.index() == assoc_idx
++                            && helper::u8_to_hexstring(se.id()) == apc.secretid
++                    });
++                    if r.is_none() {
++                        continue;
++                    }
++                    // This APQN matches to the current AP config entry and is already
++                    // associated with the right secret id. So this AP config entry is
++                    // satisfied: mark this config enty as done and mark this APQN as used.
++                    info!("EP11 APQN {apqn} already satisfies AP config entry {cistr}.\n");
++                    apconfig_done[ci] = true;
++                    apqn_done[ai] = true;
++                    resolved_entries += 1;
++                    break;
++                }
++                _ => {
++                    // (currently) unknown/unsupported APQN mode
++                }
++            }
++        }
++    }
++
++    // Step 2:
++    // All APQNs NOT marked as done are now examined for their bind
++    // and association state and maybe reset to "unbound".
++
++    for (ai, apqn) in apqns.iter().enumerate() {
++        if apqn_done[ai] || fntest {
++            continue;
++        }
++        match apqn.bind_state() {
++            Err(err) => eprintln!("Warning: Failure reading APQN {apqn} bind state: {err}"),
++            Ok(ap::BindState::Bound) => {
++                info!("Unbind APQN {apqn} as this bind/associate does not match to any AP config entry.\n");
++                if !ARGS.dryrun() {
++                    if let Err(err) = apqn.set_bind_state(ap::BindState::Unbound) {
++                        return Err(format!("Failure unbinding APQN {apqn}: {err}"));
++                    }
++                }
++            }
++            Ok(_) => {}
++        };
++    }
++
++    // Step 3:
++    // Go through all remaining AP config entries and try to fullfill each
++    // by searching for an APQN which would match to this config entry and
++    // then prepare this APQN (bind, maybe associate).
++    for (ci, apc) in apconfig.iter().enumerate() {
++        let cistr = if !apc.name.is_empty() {
++            format!("#{} '{}'", ci + 1, apc.name)
++        } else {
++            format!("#{}", ci + 1)
++        };
++        if apconfig_done[ci] {
++            continue;
++        }
++        for (ai, apqn) in apqns.iter().enumerate() {
++            if apqn_done[ai] {
++                continue;
++            }
++            if !config_and_apqn_match(apc, apqn) {
++                continue;
++            }
++            match apqn.mode {
++                ap::ApqnMode::Accel => {
++                    // try to bind this accelerator APQN
++                    if ARGS.verbose() || fntest {
++                        println!("Bind APQN {apqn} to match to AP config entry {cistr}.");
++                    }
++                    if !(ARGS.dryrun() || fntest) {
++                        if let Err(err) = apqn.set_bind_state(ap::BindState::Bound) {
++                            // bind failed, unbind/reset this apqn, return with failure
++                            let _ = apqn.set_bind_state(ap::BindState::Unbound);
++                            return Err(format!("Failure binding APQN {apqn}: {err}"));
++                        }
++                    }
++                    apconfig_done[ci] = true;
++                    apqn_done[ai] = true;
++                    resolved_entries += 1;
++                    break;
++                }
++                ap::ApqnMode::Ep11 => {
++                    // EP11 needs bind and associate, but before doing this let's
++                    // check out which secret index to use with the associate
++                    let se = match secrets.iter().find(|&se| {
++                        se.stype() == ListableSecretType::Association
++                            && se.id().len() == uv::AP_ASSOC_SECRET_ID_SIZE
++                            && helper::u8_to_hexstring(se.id()) == apc.secretid
++                    }) {
++                        None => {
++                            eprintln!("Warning: Secret id '{}' from config entry {} not found in UV secrets list.",
++				      apc.secretid, cistr);
++                            break;
++                        }
++                        Some(se) => se,
++                    };
++                    // try to bind
++                    if ARGS.verbose() || fntest {
++                        println!(
++                            "Bind APQN {apqn} to match to AP config entry {cistr} (step 1/2)."
++                        );
++                    }
++                    if !(ARGS.dryrun() || fntest) {
++                        if let Err(err) = apqn.set_bind_state(ap::BindState::Bound) {
++                            // bind failed, unbind/reset this apqn, return with failure
++                            let _ = apqn.set_bind_state(ap::BindState::Unbound);
++                            return Err(format!("Failure binding APQN {}: {}", apqn, err));
++                        }
++                    }
++                    // try to associate
++                    if ARGS.verbose() || fntest {
++                        println!(
++			    "Associate APQN {} with uv secrets index {} to match AP config entry {} (step 2/2).",
++			    apqn, se.index(), cistr
++			);
++                    }
++                    if !(ARGS.dryrun() || fntest) {
++                        let apas = ap::AssocState::Associated(se.index());
++                        apqn.set_associate_state(apas)
++                            .map_err(|err| format!("Failure associating APQN {apqn}: {err}"))?;
++                    }
++                    apconfig_done[ci] = true;
++                    apqn_done[ai] = true;
++                    resolved_entries += 1;
++                    break;
++                }
++                _ => {
++                    // (currently) unknown/unsupported APQN mode
++                }
++            }
++        }
++    }
++
++    Ok(resolved_entries)
++}
++
++/// # Panics
++/// Panics if mingen for an accelerator has not a number as the 4th character.
++/// Panics if mingen for an ep11 has not a number as the 4th character.
++/// Please note this can not happen, as mingen is already checked via RE
++/// during storing the value into mingen.
++fn config_and_apqn_match(apc: &ApConfigEntry, apqn: &Apqn) -> bool {
++    if apc.mode == config::STR_MODE_ACCEL && apqn.mode == ap::ApqnMode::Accel {
++        // config and apqn are accelerators
++        // maybe check mingen
++        if !apc.mingen.is_empty() {
++            let mingen = &apc.mingen[3..].parse::<u32>().unwrap();
++            if mingen < &apqn.gen {
++                return false;
++            }
++        }
++        return true;
++    } else if apc.mode == config::STR_MODE_EP11 && apqn.mode == ap::ApqnMode::Ep11 {
++        // config and apqn are ep11
++        let info = match &apqn.info {
++            Some(ap::ApqnInfo::Ep11(i)) => i,
++            _ => return false,
++        };
++        // maybe check mingen
++        if !apc.mingen.is_empty() {
++            let mingen = &apc.mingen[3..].parse::<u32>().unwrap();
++            if mingen < &apqn.gen {
++                return false;
++            }
++        }
++        // maybe check serialnr
++        if !apc.serialnr.is_empty() && apc.serialnr != info.serialnr {
++            return false;
++        }
++        // check mkvp, currently an ep11 config entry must state an mkvp value
++        // whereas an ep11 info from an APQN may have an empty mkvp value to
++        // indicate that there is no WK set on this APQN.
++        if apc.mkvp != info.mkvp {
++            return false;
++        }
++        return true;
++    }
++    false
++}
++
++#[cfg(test)]
++mod tests {
++
++    use super::*;
++    use helper::hexstring_to_u8;
++    use pv::uv::SecretEntry;
++
++    // This is more or less only a test for the do_ap_config() function
++    // However, this is THE main functionality of the whole application.
++
++    fn make_test_apqns() -> Vec<Apqn> {
++        let mut v = Vec::new();
++        v.push(ap::Apqn {
++            name: String::from("10.0007"),
++            card: 16,
++            domain: 7,
++            gen: 8,
++            mode: ap::ApqnMode::Accel,
++            info: Option::Some(ap::ApqnInfo::Accel(ap::ApqnInfoAccel {})),
++        });
++        v.push(ap::Apqn {
++            name: String::from("11.0008"),
++            card: 17,
++            domain: 8,
++            gen: 8,
++            mode: ap::ApqnMode::Ep11,
++            info: Option::Some(ap::ApqnInfo::Ep11(ap::ApqnInfoEp11 {
++                serialnr: String::from("93AADFK719460083"),
++                mkvp: String::from("db3c3b3c3f097dd55ec7eb0e7fdbcb93"),
++            })),
++        });
++        v.push(ap::Apqn {
++            name: String::from("12.0009"),
++            card: 18,
++            domain: 9,
++            gen: 8,
++            mode: ap::ApqnMode::Ep11,
++            info: Option::Some(ap::ApqnInfo::Ep11(ap::ApqnInfoEp11 {
++                serialnr: String::from("93AADHZU42082261"),
++                mkvp: String::from("4a27bb66520ac85f6073a7f678d262c0"),
++            })),
++        });
++        v.push(ap::Apqn {
++            name: String::from("12.000a"),
++            card: 18,
++            domain: 10,
++            gen: 8,
++            mode: ap::ApqnMode::Ep11,
++            info: Option::Some(ap::ApqnInfo::Ep11(ap::ApqnInfoEp11 {
++                serialnr: String::from("93AADHZU42082261"),
++                mkvp: String::from("383d2a9ab781f35343554c5b3d9337cd"),
++            })),
++        });
++        v.push(ap::Apqn {
++            name: String::from("13.000d"),
++            card: 19,
++            domain: 13,
++            gen: 8,
++            mode: ap::ApqnMode::Ep11,
++            info: Option::Some(ap::ApqnInfo::Ep11(ap::ApqnInfoEp11 {
++                serialnr: String::from("87HU397G150TZGR"),
++                mkvp: String::new(),
++            })),
++        });
++        v.push(ap::Apqn {
++            name: String::from("13.000f"),
++            card: 19,
++            domain: 15,
++            gen: 8,
++            mode: ap::ApqnMode::Ep11,
++            info: Option::None,
++        });
++        return v;
++    }
++
++    fn make_assoc_secretentry(idx: u16, hexidstr: &str) -> SecretEntry {
++        let id = hexstring_to_u8(hexidstr);
++        let idlen: u32 = id.len().try_into().unwrap();
++        let idarray = <&[u8; 32]>::try_from(id.as_slice()).unwrap();
++        SecretEntry::new(idx, ListableSecretType::Association, *idarray, idlen)
++    }
++
++    fn make_test_secrets() -> Vec<SecretEntry> {
++        let mut v: Vec<SecretEntry> = Vec::new();
++        v.push(make_assoc_secretentry(
++            33,
++            "3333333333333333333333333333333333333333333333333333333333333333",
++        ));
++        v.push(make_assoc_secretentry(
++            13,
++            "bc9d46c052bc3574454c5715757274629a283767ed237922cfb8651c0e77320a",
++        ));
++        v.push(make_assoc_secretentry(
++            44,
++            "4444444444444444444444444444444444444444444444444444444444444444",
++        ));
++        v.push(make_assoc_secretentry(
++            15,
++            "06cdbbac76a595b481110d108154bc05ebbf900a0f16e36a24045998934fb1e9",
++        ));
++        v.push(make_assoc_secretentry(
++            17,
++            "6831af07f8c8e7309a3ace9f3b5554d34e3eaa4a27a08fdee469e367c3fa3e9e",
++        ));
++        return v;
++    }
++
++    fn make_test_apconfigs() -> Vec<ApConfigEntry> {
++        let mut v: Vec<ApConfigEntry> = Vec::new();
++        v.push(config::ApConfigEntry {
++            name: String::from("test_1"),
++            description: String::from("test_1"),
++            mode: String::from("accel"),
++            mkvp: String::from(""),
++            serialnr: String::from(""),
++            mingen: String::from("cex8"),
++            secretid: String::from(""),
++        });
++        v.push(config::ApConfigEntry {
++            name: String::from("test_2"),
++            description: String::from("test_2"),
++            mode: String::from("ep11"),
++            mkvp: String::from("db3c3b3c3f097dd55ec7eb0e7fdbcb93"),
++            serialnr: String::from("93AADFK719460083"),
++            mingen: String::from("cex8"),
++            secretid: String::from(
++                "bc9d46c052bc3574454c5715757274629a283767ed237922cfb8651c0e77320a",
++            ),
++        });
++        v.push(config::ApConfigEntry {
++            name: String::from("test_3"),
++            description: String::from("test_3"),
++            mode: String::from("ep11"),
++            mkvp: String::from("4a27bb66520ac85f6073a7f678d262c0"),
++            serialnr: String::from(""),
++            mingen: String::from("cex8"),
++            secretid: String::from(
++                "06cdbbac76a595b481110d108154bc05ebbf900a0f16e36a24045998934fb1e9",
++            ),
++        });
++        v.push(config::ApConfigEntry {
++            name: String::from("test_4"),
++            description: String::from("test_4"),
++            mode: String::from("ep11"),
++            mkvp: String::from("8be1eaf5c44e2fa8b18804551b604b1b"),
++            serialnr: String::from(""),
++            mingen: String::from("cex8"),
++            secretid: String::from(
++                "6831af07f8c8e7309a3ace9f3b5554d34e3eaa4a27a08fdee469e367c3fa3e9e",
++            ),
++        });
++        return v;
++    }
++
++    #[test]
++    fn test_do_ap_config_invocation_1() {
++        let test_apqns = make_test_apqns();
++        let mut apqns: Vec<Apqn> = Vec::new();
++        apqns.push(test_apqns[0].clone());
++        let secrets: Vec<SecretEntry> = Vec::new();
++        let secretlist = SecretList::new(secrets.len() as u16, secrets);
++        let test_apconfigs = make_test_apconfigs();
++        let mut apconfig: Vec<ApConfigEntry> = Vec::new();
++        apconfig.push(test_apconfigs[0].clone());
++        let apcfglist = ApConfigList::from_apconfigentry_vec(apconfig);
++        let mut apqnlist = ApqnList::from_apqn_vec(apqns);
++        let r = do_ap_config(&mut apqnlist, &secretlist, &apcfglist, true);
++        assert!(r.is_ok());
++        let n = r.unwrap();
++        assert!(n == 1);
++    }
++
++    #[test]
++    fn test_do_ap_config_invocation_2() {
++        let test_apqns = make_test_apqns();
++        let mut apqns: Vec<Apqn> = Vec::new();
++        apqns.push(test_apqns[1].clone());
++        let mut secrets = make_test_secrets();
++        while secrets.len() > 2 {
++            secrets.pop();
++        }
++        let secretlist = SecretList::new(secrets.len() as u16, secrets);
++        let test_apconfigs = make_test_apconfigs();
++        let mut apconfig: Vec<ApConfigEntry> = Vec::new();
++        apconfig.push(test_apconfigs[1].clone());
++        let apcfglist = ApConfigList::from_apconfigentry_vec(apconfig);
++        let mut apqnlist = ApqnList::from_apqn_vec(apqns);
++        let r = do_ap_config(&mut apqnlist, &secretlist, &apcfglist, true);
++        assert!(r.is_ok());
++        let n = r.unwrap();
++        assert!(n == 1);
++    }
++
++    #[test]
++    fn test_do_ap_config_invocation_3() {
++        let test_apqns = make_test_apqns();
++        let mut apqns: Vec<Apqn> = Vec::new();
++        for a in test_apqns.iter() {
++            apqns.push(a.clone());
++        }
++        apqns.reverse();
++        let secrets = make_test_secrets();
++        let secretlist = SecretList::new(secrets.len() as u16, secrets);
++        let test_apconfigs = make_test_apconfigs();
++        let mut apconfig: Vec<ApConfigEntry> = Vec::new();
++        for c in test_apconfigs.iter() {
++            apconfig.push(c.clone());
++        }
++        let apcfglist = ApConfigList::from_apconfigentry_vec(apconfig);
++        let mut apqnlist = ApqnList::from_apqn_vec(apqns);
++        let r = do_ap_config(&mut apqnlist, &secretlist, &apcfglist, true);
++        assert!(r.is_ok());
++        let n = r.unwrap();
++        assert!(n == 3, "n = {} != 3", n);
++    }
++}
+diff --git a/rust/pvapconfig/src/uv.rs b/rust/pvapconfig/src/uv.rs
+new file mode 100644
+index 0000000..2f98bd5
+--- /dev/null
++++ b/rust/pvapconfig/src/uv.rs
+@@ -0,0 +1,105 @@
++// SPDX-License-Identifier: MIT
++//
++// Copyright IBM Corp. 2023
++//
++//! UV related functions for pvapconfig
++//
++
++use pv::uv::{ListCmd, SecretList, UvDevice, UvcSuccess};
++use regex::Regex;
++use std::path::Path;
++
++/// The byte size of association secret of type 2 in struct SecretEntry
++pub const AP_ASSOC_SECRET_ID_SIZE: usize = 32;
++
++const PATH_SYS_FW_UV_FACILITIES: &str = "/sys/firmware/uv/query/facilities";
++
++const RE_UV_FACILITIES: &str = r"^(0x)?([[:xdigit:]]+)";
++const RE_UV_FAC_BIT_LIST_SECRETS: u32 = 30;
++
++/// Check UV facilities to offer the 'list secrets' call.
++/// Returns a Result with Ok(()) if the 'list secrets' feature
++/// is available, otherwise an Err(reasonstring) is returned where
++/// the string denotes a hint which can be displayed.
++/// # Panics
++/// Panics if the compilation of a static regular expression fails.
++/// Panics if RE_UV_FACILITIES does not match.
++pub fn has_list_secrets_facility() -> Result<(), String> {
++    if !Path::new(PATH_SYS_FW_UV_FACILITIES).is_file() {
++        return Err(format!(
++            "UV facilities sysfs attribute not found (file {} does not exist).",
++            PATH_SYS_FW_UV_FACILITIES
++        ));
++    }
++    let facstr = match crate::helper::sysfs_read_string(PATH_SYS_FW_UV_FACILITIES) {
++        Ok(s) => s,
++        Err(err) => {
++            return Err(format!(
++                "Failure reading UV facilities from {PATH_SYS_FW_UV_FACILITIES} ({:?}).",
++                err
++            ))
++        }
++    };
++    let re_uv_facilities = Regex::new(RE_UV_FACILITIES).unwrap();
++    if !re_uv_facilities.is_match(&facstr) {
++        Err(format!("Failure parsing UV facilities entry '{facstr}'."))
++    } else {
++        let caps = re_uv_facilities.captures(&facstr).unwrap();
++        let fachex = caps.get(2).unwrap().as_str();
++        let i: usize = RE_UV_FAC_BIT_LIST_SECRETS as usize / 4;
++        if i >= fachex.len() {
++            return Err(format!("Failure parsing UV facilities entry '{fachex}'."));
++        }
++        let nibble = u32::from_str_radix(&fachex[i..i + 1], 16).unwrap();
++        const THEBIT: u32 = 1 << (3 - (RE_UV_FAC_BIT_LIST_SECRETS % 4));
++        if nibble & THEBIT == 0 {
++            return Err("The 'list secret' feature is missing on this UV.".to_string());
++        }
++        Ok(())
++    }
++}
++
++/// Fetch the list of secrets from the UV.
++/// Returns Err(errorstring) on error or
++/// Ok(SecretList) on success.
++/// The list may be empty if the UV doesn't have any secrets stored.
++pub fn gather_secrets() -> Result<SecretList, String> {
++    let uv = match UvDevice::open() {
++        Err(e) => return Err(format!("Failed to open UV device: {:?}.", e)),
++        Ok(u) => u,
++    };
++    let mut cmd = ListCmd::default();
++    match uv.send_cmd(&mut cmd).map_err(|e| format!("{e:?}"))? {
++        UvcSuccess::RC_SUCCESS => (),
++        UvcSuccess::RC_MORE_DATA => println!("Warning: There is more data available than expected"),
++    };
++    cmd.try_into().map_err(|e| format!("{e:?}"))
++}
++
++#[cfg(test)]
++mod tests {
++
++    use super::*;
++
++    // As the name says: check for list secrets feature bit in UV facilities.
++    #[test]
++    fn test_has_list_secrets_facility() {
++        let r = has_list_secrets_facility();
++        if pv::misc::pv_guest_bit_set() {
++            assert!(r.is_ok());
++        } else {
++            assert!(r.is_err());
++        }
++    }
++
++    // Simple invocation of the list_secrets function. Should not fail
++    #[test]
++    fn test_list_secrets() {
++        let r = gather_secrets();
++        if pv::misc::pv_guest_bit_set() {
++            assert!(r.is_ok());
++        } else {
++            assert!(r.is_err());
++        }
++    }
++}
+-- 
+2.43.0
+

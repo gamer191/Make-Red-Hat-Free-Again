@@ -1,0 +1,118 @@
+From 0ce0152d8e29f85325a3a59f94051228540abf6a Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:52:20 -0800
+Subject: [PATCH 092/217] cxl/list: Support multiple memdev device name filter
+ arguments
+
+Similar to 'ndctl list', allow for a syntax like:
+
+    cxl list -m "$(seq -s ' ' 2 5)"
+
+...to filter the output to just those 4 memdevs.
+
+Link: https://lore.kernel.org/r/164298554075.3021641.17678360870961637912.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/cxl-list.txt | 21 ++++++++++++++++++-
+ cxl/filter.c                   | 38 ++++++++++++++++++++++++----------
+ 2 files changed, 47 insertions(+), 12 deletions(-)
+
+diff --git a/Documentation/cxl/cxl-list.txt b/Documentation/cxl/cxl-list.txt
+index c8d10fb..686e0ea 100644
+--- a/Documentation/cxl/cxl-list.txt
++++ b/Documentation/cxl/cxl-list.txt
+@@ -30,7 +30,7 @@ OPTIONS
+ -------
+ -m::
+ --memdev=::
+-	Specify a cxl memory device name to filter the listing. For example:
++	Specify CXL memory device name(s), or device id(s), to filter the listing. For example:
+ ----
+ # cxl list --memdev=mem0
+ {
+@@ -38,6 +38,25 @@ OPTIONS
+   "pmem_size":268435456,
+   "ram_size":0,
+ }
++
++# cxl list -m "0 mem1 2"
++[
++  {
++    "memdev":"mem0",
++    "pmem_size":268435456,
++    "ram_size":0
++  },
++  {
++    "memdev":"mem2",
++    "pmem_size":268435456,
++    "ram_size":268435456
++  },
++  {
++    "memdev":"mem1",
++    "pmem_size":268435456,
++    "ram_size":268435456
++  }
++]
+ ----
+ 
+ -M::
+diff --git a/cxl/filter.c b/cxl/filter.c
+index 21322ed..efafaf5 100644
+--- a/cxl/filter.c
++++ b/cxl/filter.c
+@@ -2,24 +2,40 @@
+ // Copyright (C) 2015-2020 Intel Corporation. All rights reserved.
+ #include <stdio.h>
+ #include <string.h>
++#include <stdlib.h>
+ #include <cxl/libcxl.h>
+ #include "filter.h"
+ 
+ struct cxl_memdev *util_cxl_memdev_filter(struct cxl_memdev *memdev,
+-                                         const char *ident)
++					  const char *__ident)
+ {
+-       int memdev_id;
++	char *ident, *save;
++	const char *name;
++	int memdev_id;
+ 
+-       if (!ident || strcmp(ident, "all") == 0)
+-               return memdev;
++	if (!__ident)
++		return memdev;
+ 
+-       if (strcmp(ident, cxl_memdev_get_devname(memdev)) == 0)
+-               return memdev;
++	ident = strdup(__ident);
++	if (!ident)
++		return NULL;
+ 
+-       if ((sscanf(ident, "%d", &memdev_id) == 1
+-                       || sscanf(ident, "mem%d", &memdev_id) == 1)
+-                       && cxl_memdev_get_id(memdev) == memdev_id)
+-               return memdev;
++	for (name = strtok_r(ident, " ", &save); name;
++	     name = strtok_r(NULL, " ", &save)) {
++		if (strcmp(name, "all") == 0)
++			break;
+ 
+-       return NULL;
++		if ((sscanf(name, "%d", &memdev_id) == 1 ||
++		     sscanf(name, "mem%d", &memdev_id) == 1) &&
++		    cxl_memdev_get_id(memdev) == memdev_id)
++			break;
++
++		if (strcmp(name, cxl_memdev_get_devname(memdev)) == 0)
++			break;
++	}
++
++	free(ident);
++	if (name)
++		return memdev;
++	return NULL;
+ }
+-- 
+2.27.0
+

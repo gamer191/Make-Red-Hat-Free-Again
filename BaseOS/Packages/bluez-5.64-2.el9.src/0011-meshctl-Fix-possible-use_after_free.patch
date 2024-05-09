@@ -1,0 +1,30 @@
+From 56bda20ce9e3e5c4684b37cffd4527264c2b4c1e Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:16 +0530
+Subject: [PATCH BlueZ 11/12] meshctl: Fix possible use_after_free
+
+Reported by coverity tool as follows :
+
+bluez-5.64/tools/meshctl.c:1968: freed_arg: "g_free" frees "mesh_dir".
+
+bluez-5.64/tools/meshctl.c:2018: double_free: Calling "g_free" frees
+pointer "mesh_dir" which has already been freed.
+---
+ tools/meshctl.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/tools/meshctl.c b/tools/meshctl.c
+index 18e20c40d..38ffd35f3 100644
+--- a/tools/meshctl.c
++++ b/tools/meshctl.c
+@@ -2015,7 +2015,6 @@ int main(int argc, char *argv[])
+ 
+ fail:
+ 	bt_shell_cleanup();
+-	g_free(mesh_dir);
+ 
+ 	return EXIT_FAILURE;
+ }
+-- 
+2.26.2
+

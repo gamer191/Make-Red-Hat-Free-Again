@@ -1,0 +1,202 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Thu, 9 Nov 2023 18:46:16 -0500
+Subject: [PATCH] multipathd: Add auto_resize config option
+
+This option gives multipathd the ability to automatically resize a
+device when it detects that all of the path devices have changed. By
+default it is set to never, and multipathd will continue to work like it
+always has, where a users must manually resize a multipath device.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/config.h      |  1 +
+ libmultipath/defaults.h    |  1 +
+ libmultipath/dict.c        | 38 ++++++++++++++++++++++++++++++++++++++
+ libmultipath/dict.h        |  1 +
+ libmultipath/structs.h     |  7 +++++++
+ multipath/multipath.conf.5 | 15 +++++++++++++++
+ multipathd/main.c          | 28 ++++++++++++++++++++++++++++
+ 7 files changed, 91 insertions(+)
+
+diff --git a/libmultipath/config.h b/libmultipath/config.h
+index b0ee8241..5807ac68 100644
+--- a/libmultipath/config.h
++++ b/libmultipath/config.h
+@@ -201,6 +201,7 @@ struct config {
+ 	int skip_delegate;
+ 	unsigned int sequence_nr;
+ 	int recheck_wwid;
++	int auto_resize;
+ 
+ 	char * multipath_dir;
+ 	char * selector;
+diff --git a/libmultipath/defaults.h b/libmultipath/defaults.h
+index cec82f07..c3788bbc 100644
+--- a/libmultipath/defaults.h
++++ b/libmultipath/defaults.h
+@@ -54,6 +54,7 @@
+ #define DEFAULT_UNKNOWN_FIND_MULTIPATHS_TIMEOUT 1
+ #define DEFAULT_ALL_TG_PT ALL_TG_PT_OFF
+ #define DEFAULT_RECHECK_WWID RECHECK_WWID_OFF
++#define DEFAULT_AUTO_RESIZE AUTO_RESIZE_NEVER
+ /* Enable no foreign libraries by default */
+ #define DEFAULT_ENABLE_FOREIGN "NONE"
+ 
+diff --git a/libmultipath/dict.c b/libmultipath/dict.c
+index 0c66c1e1..c4db60df 100644
+--- a/libmultipath/dict.c
++++ b/libmultipath/dict.c
+@@ -1736,6 +1736,43 @@ declare_hw_snprint(recheck_wwid, print_yes_no_undef)
+ 
+ declare_def_range_handler(uxsock_timeout, DEFAULT_REPLY_TIMEOUT, INT_MAX)
+ 
++static int
++def_auto_resize_handler(struct config *conf, vector strvec, const char *file,
++			int line_nr)
++{
++	char * buff;
++
++	buff = set_value(strvec);
++	if (!buff)
++		return 1;
++
++	if (strcmp(buff, "never") == 0)
++		conf->auto_resize = AUTO_RESIZE_NEVER;
++	else if (strcmp(buff, "grow_only") == 0)
++		conf->auto_resize = AUTO_RESIZE_GROW_ONLY;
++	else if (strcmp(buff, "grow_shrink") == 0)
++		conf->auto_resize = AUTO_RESIZE_GROW_SHRINK;
++	else
++		condlog(1, "%s line %d, invalid value for auto_resize: \"%s\"",
++			file, line_nr, buff);
++
++	free(buff);
++	return 0;
++}
++
++int
++print_auto_resize(struct strbuf *buff, long v)
++{
++	if (!v)
++		return 0;
++	return append_strbuf_quoted(buff,
++			v == AUTO_RESIZE_GROW_ONLY ? "grow_only" :
++			v == AUTO_RESIZE_GROW_SHRINK ? "grow_shrink" :
++			"never");
++}
++
++declare_def_snprint(auto_resize, print_auto_resize)
++
+ static int
+ hw_vpd_vendor_handler(struct config *conf, vector strvec, const char *file,
+ 		      int line_nr)
+@@ -2202,6 +2239,7 @@ init_keywords(vector keywords)
+ 	install_keyword("remove_retries", &def_remove_retries_handler, &snprint_def_remove_retries);
+ 	install_keyword("max_sectors_kb", &def_max_sectors_kb_handler, &snprint_def_max_sectors_kb);
+ 	install_keyword("ghost_delay", &def_ghost_delay_handler, &snprint_def_ghost_delay);
++	install_keyword("auto_resize", &def_auto_resize_handler, &snprint_def_auto_resize);
+ 	install_keyword("find_multipaths_timeout",
+ 			&def_find_multipaths_timeout_handler,
+ 			&snprint_def_find_multipaths_timeout);
+diff --git a/libmultipath/dict.h b/libmultipath/dict.h
+index d80f990a..d963b4ad 100644
+--- a/libmultipath/dict.h
++++ b/libmultipath/dict.h
+@@ -19,4 +19,5 @@ int print_dev_loss(struct strbuf *buff, unsigned long v);
+ int print_reservation_key(struct strbuf *buff,
+ 			  struct be64 key, uint8_t flags, int source);
+ int print_off_int_undef(struct strbuf *buff, long v);
++int print_auto_resize(struct strbuf *buff, long v);
+ #endif /* _DICT_H */
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index b4252ab5..8c2d7131 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -167,6 +167,13 @@ enum queue_mode_states {
+ 	QUEUE_MODE_RQ,
+ };
+ 
++enum auto_resize_state {
++	AUTO_RESIZE_UNDEF = 0,
++	AUTO_RESIZE_NEVER,
++	AUTO_RESIZE_GROW_ONLY,
++	AUTO_RESIZE_GROW_SHRINK,
++};
++
+ #define PROTOCOL_UNSET -1
+ 
+ enum scsi_protocol {
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index 789f0bfc..38eb5c90 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -1293,6 +1293,21 @@ The default is: \fBno\fR
+ .
+ .
+ .TP
++.B auto_resize
++Controls when multipathd will automatically resize a multipath device.  If set
++to \fInever\fR, multipath devices must always be manually resized by either
++running \fBmultipathd resize map <name>\fR.  If set to \fIgrow_only\fR, when
++multipathd detects that all of a multipath device's paths have increased in
++size, it will automatically grow the multipath device to the new size. If set
++to \fIgrow_shrink\fR, multipathd will also automatically shrink the device
++once it detects all of its paths have decreased in size.
++.RS
++.TP
++The default is: \fBnever\fR
++.RE
++.
++.
++.TP
+ .B enable_foreign
+ Enables or disables foreign libraries (see section
+ .I FOREIGN MULTIPATH SUPPORT
+diff --git a/multipathd/main.c b/multipathd/main.c
+index d99cad72..6d1a5e4e 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -1439,6 +1439,11 @@ uev_update_path (struct uevent *uev, struct vectors * vecs)
+ 	if (pp) {
+ 		struct multipath *mpp = pp->mpp;
+ 		char wwid[WWID_SIZE];
++		int auto_resize;
++
++		conf = get_multipath_config();
++		auto_resize = conf->auto_resize;
++		put_multipath_config(conf);
+ 
+ 		if (pp->initialized == INIT_REQUESTED_UDEV) {
+ 			needs_reinit = 1;
+@@ -1489,6 +1494,29 @@ uev_update_path (struct uevent *uev, struct vectors * vecs)
+ 				}
+ 			}
+ 		}
++		if (auto_resize != AUTO_RESIZE_NEVER &&
++		    !mpp->wait_for_udev) {
++			struct pathgroup *pgp;
++			struct path *pp2;
++			unsigned int i, j;
++			unsigned long long orig_size = mpp->size;
++
++			if (!pp->size || pp->size == mpp->size ||
++			    (pp->size < mpp->size &&
++			     auto_resize == AUTO_RESIZE_GROW_ONLY))
++				goto out;
++
++			vector_foreach_slot(mpp->pg, pgp, i)
++				vector_foreach_slot (pgp->paths, pp2, j)
++					if (pp2->size && pp2->size != pp->size)
++						goto out;
++			retval = resize_map(mpp, pp->size, vecs);
++			if (retval == 2)
++				condlog(2, "%s: map removed during resize", pp->dev);
++			else if (retval == 0)
++				condlog(2, "%s: resized map from %llu to %llu",
++					mpp->alias, orig_size, pp->size);
++		}
+ 	}
+ out:
+ 	lock_cleanup_pop(vecs->lock);

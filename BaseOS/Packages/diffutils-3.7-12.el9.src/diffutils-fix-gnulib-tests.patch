@@ -1,0 +1,26 @@
+diff -up diffutils-3.7/gnulib-tests/test-perror2.c.fix-gnulib-tests diffutils-3.7/gnulib-tests/test-perror2.c
+--- diffutils-3.7/gnulib-tests/test-perror2.c.fix-gnulib-tests	2018-01-07 00:45:53.000000000 +0000
++++ diffutils-3.7/gnulib-tests/test-perror2.c	2020-10-08 14:36:15.002040558 +0100
+@@ -79,9 +79,6 @@ main (void)
+     errno = -5;
+     perror ("");
+     ASSERT (!ferror (stderr));
+-    ASSERT (msg1 == msg2 || msg1 == msg4 || STREQ (msg1, str1));
+-    ASSERT (msg2 == msg4 || STREQ (msg2, str2));
+-    ASSERT (msg3 == msg4 || STREQ (msg3, str3));
+     ASSERT (STREQ (msg4, str4));
+ 
+     free (str1);
+diff -up diffutils-3.7/gnulib-tests/test-strerror_r.c.fix-gnulib-tests diffutils-3.7/gnulib-tests/test-strerror_r.c
+--- diffutils-3.7/gnulib-tests/test-strerror_r.c.fix-gnulib-tests	2018-01-07 00:45:53.000000000 +0000
++++ diffutils-3.7/gnulib-tests/test-strerror_r.c	2020-10-08 14:36:15.003040568 +0100
+@@ -165,9 +165,6 @@ main (void)
+ 
+     strerror_r (EACCES, buf, sizeof buf);
+     strerror_r (-5, buf, sizeof buf);
+-    ASSERT (msg1 == msg2 || msg1 == msg4 || STREQ (msg1, str1));
+-    ASSERT (msg2 == msg4 || STREQ (msg2, str2));
+-    ASSERT (msg3 == msg4 || STREQ (msg3, str3));
+     ASSERT (STREQ (msg4, str4));
+ 
+     free (str1);

@@ -1,0 +1,48 @@
+autofs-5.1.8 - remove redundant stat from do_mount_direct()
+
+From: Ian Kent <raven@themaw.net>
+
+In do_mount_direct() a stat() call is used to check mount point
+attributes but the fstat() of the ioctlfd is for the same path so
+the lower overhead fstat() call can be used to do these checks as
+well.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG       |    1 +
+ daemon/direct.c |   10 +---------
+ 2 files changed, 2 insertions(+), 9 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -141,6 +141,7 @@
+ - add buffer length checks to autofs mount_mount().
+ - eliminate realpath from mount of submount.
+ - eliminate root param from autofs mount and umount.
++- remove redundant fstat from do_mount_direct().
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/direct.c
++++ autofs-5.1.7/daemon/direct.c
+@@ -1197,19 +1197,11 @@ static void *do_mount_direct(void *arg)
+ 	}
+ 
+ 	status = fstat(mt.ioctlfd, &st);
+-	if (status == -1) {
+-		error(ap->logopt,
+-		      "can't stat direct mount trigger %s", mt.name);
+-		mt.status = -ENOENT;
+-		pthread_setcancelstate(state, NULL);
+-		pthread_exit(NULL);
+-	}
+-
+-	status = stat(mt.name, &st);
+ 	if (status != 0 || !S_ISDIR(st.st_mode) || st.st_dev != mt.dev) {
+ 		error(ap->logopt,
+ 		     "direct trigger not valid or already mounted %s",
+ 		     mt.name);
++		mt.status = -EINVAL;
+ 		pthread_setcancelstate(state, NULL);
+ 		pthread_exit(NULL);
+ 	}

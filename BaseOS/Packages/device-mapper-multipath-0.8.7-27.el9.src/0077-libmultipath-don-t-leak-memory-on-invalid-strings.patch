@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 14 Dec 2022 15:38:19 -0600
+Subject: [PATCH] libmultipath: don't leak memory on invalid strings
+
+If set_path() or set_str_noslash() are called with a bad value, they
+ignore it and continue to use the old value. But they weren't freeing
+the bad value, causing a memory leak.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/dict.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/libmultipath/dict.c b/libmultipath/dict.c
+index 46b9f225..861d1d17 100644
+--- a/libmultipath/dict.c
++++ b/libmultipath/dict.c
+@@ -156,6 +156,7 @@ set_path(vector strvec, void *ptr, const char *file, int line_nr)
+ 	if ((*str_ptr)[0] != '/'){
+ 		condlog(1, "%s line %d, %s is not an absolute path. Ignoring",
+ 			file, line_nr, *str_ptr);
++		free(*str_ptr);
+ 		*str_ptr = old_str;
+ 	} else
+ 		free(old_str);
+@@ -176,6 +177,7 @@ set_str_noslash(vector strvec, void *ptr, const char *file, int line_nr)
+ 	if (strchr(*str_ptr, '/')) {
+ 		condlog(1, "%s line %d, %s cannot contain a slash. Ignoring",
+ 			file, line_nr, *str_ptr);
++		free(*str_ptr);
+ 		*str_ptr = old_str;
+ 	} else
+ 		free(old_str);

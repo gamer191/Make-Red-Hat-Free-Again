@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 9 Aug 2022 16:46:28 -0500
+Subject: [PATCH] multipathd: Handle losing all path in update_map
+
+Its possible that when a multipath device is being updated, it will end
+up that all the paths for it are gone. This can happen if paths are
+added and then removed again before multipathd processes the uevent for
+the newly created multipath device. In this case multipathd wasn't
+taking the proper action for the case where all the paths had been
+removed. If flush_on_last_del was set, multipathd wasn't disabling
+flushing and if deferred_remove was set, it wasn't doing a deferred
+remove. Multipathd should call flush_map_nopaths(), just like
+ev_remove_path() does when the last path is removed.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ multipathd/main.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 68ee067b..d2c48d3b 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -529,6 +529,10 @@ retry:
+ 		goto fail;
+ 	}
+ 	verify_paths(mpp);
++	if (VECTOR_SIZE(mpp->paths) == 0 &&
++	    flush_map_nopaths(mpp, vecs))
++		return 1;
++
+ 	mpp->action = ACT_RELOAD;
+ 
+ 	if (mpp->prflag) {

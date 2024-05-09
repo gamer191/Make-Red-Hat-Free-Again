@@ -1,0 +1,45 @@
+autofs-5.1.8 - fix memory leak in sasl_do_kinit()
+
+From: Ian Kent <raven@themaw.net>
+
+In sasl_do_kinit() there is a failure case that omits freeing the local
+variable tgs_princ, fix it.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG            |    1 +
+ modules/cyrus-sasl.c |    5 +++--
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -131,6 +131,7 @@
+ - get rid of unused field submnt_count.
+ - fix mount tree startup reconnect.
+ - fix unterminated read in handle_cmd_pipe_fifo_message().
++- fix memory leak in sasl_do_kinit()
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/modules/cyrus-sasl.c
++++ autofs-5.1.7/modules/cyrus-sasl.c
+@@ -503,7 +503,7 @@ sasl_do_kinit(unsigned logopt, struct lo
+ 	if (ret) {
+ 		error(logopt, "krb5_unparse_name failed with error %d",
+ 		      ret);
+-		goto out_cleanup_client_princ;
++		goto out_cleanup_tgs_princ;
+ 	}
+ 
+ 	debug(logopt, "Using tgs name %s", tgs_name);
+@@ -565,8 +565,9 @@ out_cleanup_creds:
+ 	krb5cc_in_use--;
+ 	krb5_free_cred_contents(ctxt->krb5ctxt, &my_creds);
+ out_cleanup_unparse:
+-	krb5_free_principal(ctxt->krb5ctxt, tgs_princ);
+ 	krb5_free_unparsed_name(ctxt->krb5ctxt, tgs_name);
++out_cleanup_tgs_princ:
++	krb5_free_principal(ctxt->krb5ctxt, tgs_princ);
+ out_cleanup_client_princ:
+ 	krb5_free_principal(ctxt->krb5ctxt, krb5_client_princ);
+ out_cleanup_cc:

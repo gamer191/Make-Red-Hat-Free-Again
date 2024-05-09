@@ -1,0 +1,73 @@
+From 11357d68b77392e4360ae2824e75bf8397a84885 Mon Sep 17 00:00:00 2001
+From: Redhairer Li <redhairer.li@intel.com>
+Date: Sat, 9 Jan 2021 23:36:33 +0800
+Subject: [PATCH 007/217] msft: Add xlat_firmware_status for JEDEC Byte
+ Addressable Energy Backed DSM
+
+Translate the status codes of the result of JEDEC Byte Addressable Energy Backed
+DSM to generic errno style error codes.
+
+Signed-off-by: Li Redhairer <redhairer.li@intel.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+Link: https://lore.kernel.org/r/20210109153633.8493-1-redhairer.li@intel.com
+---
+ ndctl/lib/msft.c | 22 ++++++++++++++++++++++
+ ndctl/lib/msft.h |  6 ++++++
+ 2 files changed, 28 insertions(+)
+
+diff --git a/ndctl/lib/msft.c b/ndctl/lib/msft.c
+index 145872c..3112799 100644
+--- a/ndctl/lib/msft.c
++++ b/ndctl/lib/msft.c
+@@ -149,10 +149,32 @@ static unsigned int msft_cmd_smart_get_life_used(struct ndctl_cmd *cmd)
+ 	return 100 - CMD_MSFT_SMART(cmd)->nvm_lifetime;
+ }
+ 
++static int msft_cmd_xlat_firmware_status(struct ndctl_cmd *cmd)
++{
++	unsigned int status;
++
++	status = cmd->get_firmware_status(cmd) & NDN_MSFT_STATUS_MASK;
++
++	/* Common statuses */
++	switch (status) {
++	case NDN_MSFT_STATUS_SUCCESS:
++		return 0;
++	case NDN_MSFT_STATUS_NOTSUPP:
++		return -EOPNOTSUPP;
++	case NDN_MSFT_STATUS_INVALPARM:
++		return -EINVAL;
++	case NDN_MSFT_STATUS_I2CERR:
++		return -EIO;
++	}
++
++	return -ENOMSG;
++}
++
+ struct ndctl_dimm_ops * const msft_dimm_ops = &(struct ndctl_dimm_ops) {
+ 	.new_smart = msft_dimm_cmd_new_smart,
+ 	.smart_get_flags = msft_cmd_smart_get_flags,
+ 	.smart_get_health = msft_cmd_smart_get_health,
+ 	.smart_get_media_temperature = msft_cmd_smart_get_media_temperature,
+ 	.smart_get_life_used = msft_cmd_smart_get_life_used,
++	.xlat_firmware_status = msft_cmd_xlat_firmware_status,
+ };
+diff --git a/ndctl/lib/msft.h b/ndctl/lib/msft.h
+index 7cfd26f..978cc11 100644
+--- a/ndctl/lib/msft.h
++++ b/ndctl/lib/msft.h
+@@ -50,4 +50,10 @@ struct ndn_pkg_msft {
+ 	union ndn_msft_cmd	u;
+ } __attribute__((packed));
+ 
++#define NDN_MSFT_STATUS_MASK		0xffff
++#define NDN_MSFT_STATUS_SUCCESS	0
++#define NDN_MSFT_STATUS_NOTSUPP	1
++#define NDN_MSFT_STATUS_INVALPARM	2
++#define NDN_MSFT_STATUS_I2CERR		3
++
+ #endif /* __NDCTL_MSFT_H__ */
+-- 
+2.27.0
+

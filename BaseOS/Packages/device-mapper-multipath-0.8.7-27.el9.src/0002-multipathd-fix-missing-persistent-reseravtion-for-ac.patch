@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: lixiaokeng <lixiaokeng@huawei.com>
+Date: Mon, 13 Sep 2021 10:43:14 +0800
+Subject: [PATCH] multipathd: fix missing persistent reseravtion for active
+ path
+
+There are two paths(sucu as sda and adb) for one LUN. The two
+paths log in, but before the two uevents have been processed
+(for example there are many uevent), users use multipathd add
+path /dev/sda to cause mpatha and use mpathpersist -o -I to
+register prkey for mpatha. The add map uevent is after add path
+uevent, the the uevent(add sdb) will delay and missing persistent
+reseravtion check.
+
+Here, we add persistent reseravtion check in update_map() which
+is called ev_add_map().
+
+Signed-off-by: Lixiaokeng <lixiaokeng@huawei.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipathd/main.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 3aff241d..1defeaf1 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -490,6 +490,8 @@ update_map (struct multipath *mpp, struct vectors *vecs, int new_map)
+ {
+ 	int retries = 3;
+ 	char *params __attribute__((cleanup(cleanup_charp))) = NULL;
++	struct path *pp;
++	int i;
+ 
+ retry:
+ 	condlog(4, "%s: updating new map", mpp->alias);
+@@ -502,6 +504,15 @@ retry:
+ 	verify_paths(mpp);
+ 	mpp->action = ACT_RELOAD;
+ 
++	if (mpp->prflag) {
++		vector_foreach_slot(mpp->paths, pp, i) {
++			if ((pp->state == PATH_UP)  || (pp->state == PATH_GHOST)) {
++				/* persistent reseravtion check*/
++				mpath_pr_event_handle(pp);
++			}
++		}
++	}
++
+ 	if (setup_map(mpp, &params, vecs)) {
+ 		condlog(0, "%s: failed to setup new map in update", mpp->alias);
+ 		retries = -1;

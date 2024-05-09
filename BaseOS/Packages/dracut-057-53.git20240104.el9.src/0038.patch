@@ -1,0 +1,41 @@
+From abc03e87ef3dff517c1da05643e8a5ec92b1bf14 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Mon, 14 Aug 2023 10:24:14 +0200
+Subject: [PATCH] feat(spec): include modules for IMA
+
+Resolves: #2158155
+---
+ pkgbuild/dracut.spec | 9 ---------
+ 1 file changed, 9 deletions(-)
+
+diff --git a/pkgbuild/dracut.spec b/pkgbuild/dracut.spec
+index e148bbf7..b2d75951 100644
+--- a/pkgbuild/dracut.spec
++++ b/pkgbuild/dracut.spec
+@@ -214,13 +214,6 @@ rm -fr -- $RPM_BUILD_ROOT/%{dracutlibdir}/modules.d/00dash
+ # we do not support mksh in the initramfs
+ rm -fr -- $RPM_BUILD_ROOT/%{dracutlibdir}/modules.d/00mksh
+ 
+-%if %{defined _unitdir}
+-# with systemd IMA and selinux modules do not make sense
+-rm -fr -- $RPM_BUILD_ROOT/%{dracutlibdir}/modules.d/96securityfs
+-rm -fr -- $RPM_BUILD_ROOT/%{dracutlibdir}/modules.d/97masterkey
+-rm -fr -- $RPM_BUILD_ROOT/%{dracutlibdir}/modules.d/98integrity
+-%endif
+-
+ %ifnarch s390 s390x
+ # remove architecture specific modules
+ rm -fr -- $RPM_BUILD_ROOT/%{dracutlibdir}/modules.d/80cms
+@@ -394,11 +387,9 @@ echo 'dracut_rescue_image="yes"' > $RPM_BUILD_ROOT%{dracutlibdir}/dracut.conf.d/
+ %{dracutlibdir}/modules.d/95zfcp
+ %{dracutlibdir}/modules.d/95zfcp_rules
+ %endif
+-%if %{undefined _unitdir}
+ %{dracutlibdir}/modules.d/96securityfs
+ %{dracutlibdir}/modules.d/97masterkey
+ %{dracutlibdir}/modules.d/98integrity
+-%endif
+ %{dracutlibdir}/modules.d/97biosdevname
+ %{dracutlibdir}/modules.d/98dracut-systemd
+ %{dracutlibdir}/modules.d/98ecryptfs
+

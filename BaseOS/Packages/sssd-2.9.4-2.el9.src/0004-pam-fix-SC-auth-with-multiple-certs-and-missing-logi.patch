@@ -1,0 +1,233 @@
+From 50077c3255177fe1b01837fbe31a7f8fd47dee74 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 18 Jan 2024 13:08:17 +0100
+Subject: [PATCH] pam: fix SC auth with multiple certs and missing login name
+
+While introducing the local_auth_policy option a quite specific use-case
+was not covered correctly. If there are multiple matching certificates
+on the Smartcard, 'local_auth_policy = only' is set and GDM's Smartcard
+mode was used for login, i.e. there is no user name given and the user
+has to be derived from the certificate used for login, authentication
+failed. The main reason for the failure is that in this case the
+Smartcard interaction and the user mapping has to be done first to
+determine the user before local_auth_policy is evaluated. As a result
+when checking if the authentication can be finished the request was in
+an unexpected state because the indicator for local Smartcard
+authentication was not enabled.
+
+Resolves: https://github.com/SSSD/sssd/issues/7109
+
+Reviewed-by: Justin Stephenson <jstephen@redhat.com>
+Reviewed-by: Scott Poore <spoore@redhat.com>
+(cherry picked from commit 44ec3e4638b0c6f7f45a3390a28c2e8745d52bc3)
+---
+ src/responder/pam/pamsrv.h           | 10 ++++
+ src/responder/pam/pamsrv_cmd.c       | 17 +++++--
+ src/tests/intg/Makefile.am           |  2 +
+ src/tests/intg/test_pam_responder.py | 74 +++++++++++++++++++++++++++-
+ 4 files changed, 96 insertions(+), 7 deletions(-)
+
+diff --git a/src/responder/pam/pamsrv.h b/src/responder/pam/pamsrv.h
+index 7013a8edd..618836189 100644
+--- a/src/responder/pam/pamsrv.h
++++ b/src/responder/pam/pamsrv.h
+@@ -93,7 +93,17 @@ struct pam_auth_req {
+     struct ldb_message *user_obj;
+     struct cert_auth_info *cert_list;
+     struct cert_auth_info *current_cert;
++    /* Switched to 'true' if the backend indicates that it cannot handle
++     * Smartcard authentication, but Smartcard authentication is
++     * possible and local Smartcard authentication is allowed. */
+     bool cert_auth_local;
++    /* Switched to 'true' if authentication (not pre-authentication) was
++     * started without a login name and the name had to be lookup up with the
++     * certificate used for authentication. Since reading the certificate from
++     * the Smartcard already involves the PIN validation in this case there
++     * would be no need for an additional Smartcard interaction if only local
++     * Smartcard authentication is possible. */
++    bool initial_cert_auth_successful;
+ 
+     bool passkey_data_exists;
+     uint32_t client_id_num;
+diff --git a/src/responder/pam/pamsrv_cmd.c b/src/responder/pam/pamsrv_cmd.c
+index c23ea7ba4..a7c181733 100644
+--- a/src/responder/pam/pamsrv_cmd.c
++++ b/src/responder/pam/pamsrv_cmd.c
+@@ -2200,8 +2200,8 @@ static void pam_forwarder_lookup_by_cert_done(struct tevent_req *req)
+                 ret = ENOENT;
+                 goto done;
+             }
+-
+-            if (cert_count > 1) {
++            /* Multiple certificates are only expected during pre-auth */
++            if (cert_count > 1 && preq->pd->cmd == SSS_PAM_PREAUTH) {
+                 for (preq->current_cert = preq->cert_list;
+                      preq->current_cert != NULL;
+                      preq->current_cert = sss_cai_get_next(preq->current_cert)) {
+@@ -2285,7 +2285,9 @@ static void pam_forwarder_lookup_by_cert_done(struct tevent_req *req)
+             }
+ 
+             /* If logon_name was not given during authentication add a
+-             * SSS_PAM_CERT_INFO message to send the name to the caller. */
++             * SSS_PAM_CERT_INFO message to send the name to the caller.
++             * Additionally initial_cert_auth_successful is set to
++             * indicate that the user is already authenticated. */
+             if (preq->pd->cmd == SSS_PAM_AUTHENTICATE
+                     && preq->pd->logon_name == NULL) {
+                 ret = add_pam_cert_response(preq->pd,
+@@ -2297,6 +2299,8 @@ static void pam_forwarder_lookup_by_cert_done(struct tevent_req *req)
+                     preq->pd->pam_status = PAM_AUTHINFO_UNAVAIL;
+                     goto done;
+                 }
++
++                preq->initial_cert_auth_successful = true;
+             }
+ 
+             /* cert_user will be returned to the PAM client as user name, so
+@@ -2851,12 +2855,15 @@ static void pam_dom_forwarder(struct pam_auth_req *preq)
+         if (found) {
+             if (local_policy != NULL && strcasecmp(local_policy, "only") == 0) {
+                 talloc_free(tmp_ctx);
+-                DEBUG(SSSDBG_IMPORTANT_INFO, "Local auth only set, skipping online auth\n");
++                DEBUG(SSSDBG_IMPORTANT_INFO,
++                      "Local auth only set and matching certificate was found, "
++                      "skipping online auth\n");
+                 if (preq->pd->cmd == SSS_PAM_PREAUTH) {
+                     preq->pd->pam_status = PAM_SUCCESS;
+                 } else if (preq->pd->cmd == SSS_PAM_AUTHENTICATE
+                                 && IS_SC_AUTHTOK(preq->pd->authtok)
+-                                && preq->cert_auth_local) {
++                                && (preq->cert_auth_local
++                                        || preq->initial_cert_auth_successful)) {
+                     preq->pd->pam_status = PAM_SUCCESS;
+                     preq->callback = pam_reply;
+                 }
+diff --git a/src/tests/intg/Makefile.am b/src/tests/intg/Makefile.am
+index 3866d3ca6..0cfd268dc 100644
+--- a/src/tests/intg/Makefile.am
++++ b/src/tests/intg/Makefile.am
+@@ -199,6 +199,7 @@ clean-local:
+ 
+ PAM_CERT_DB_PATH="$(abs_builddir)/../test_CA/SSSD_test_CA.pem"
+ SOFTHSM2_CONF="$(abs_builddir)/../test_CA/softhsm2_one.conf"
++SOFTHSM2_TWO_CONF="$(abs_builddir)/../test_CA/softhsm2_two.conf"
+ 
+ intgcheck-installed: config.py passwd group pam_sss_service pam_sss_alt_service pam_sss_sc_required pam_sss_try_sc pam_sss_allow_missing_name pam_sss_domains sss_netgroup_thread_test
+ 	pipepath="$(DESTDIR)$(pipepath)"; \
+@@ -233,6 +234,7 @@ intgcheck-installed: config.py passwd group pam_sss_service pam_sss_alt_service
+ 	PAM_CERT_DB_PATH=$(PAM_CERT_DB_PATH) \
+ 	ABS_SRCDIR=$(abs_srcdir) \
+ 	SOFTHSM2_CONF=$(SOFTHSM2_CONF) \
++	SOFTHSM2_TWO_CONF=$(SOFTHSM2_TWO_CONF) \
+ 	KCM_RENEW=$(KCM_RENEW) \
+ 	FILES_PROVIDER=$(FILES_PROVIDER) \
+ 	DBUS_SOCK_DIR="$(DESTDIR)$(runstatedir)/dbus/" \
+diff --git a/src/tests/intg/test_pam_responder.py b/src/tests/intg/test_pam_responder.py
+index 1fc3937e6..0fbf8065e 100644
+--- a/src/tests/intg/test_pam_responder.py
++++ b/src/tests/intg/test_pam_responder.py
+@@ -168,7 +168,7 @@ def format_pam_cert_auth_conf(config, provider):
+         {provider.p}
+ 
+         [certmap/auth_only/user1]
+-        matchrule = <SUBJECT>.*CN=SSSD test cert 0001.*
++        matchrule = <SUBJECT>.*CN=SSSD test cert 000[12].*
+     """).format(**locals())
+ 
+ 
+@@ -201,7 +201,7 @@ def format_pam_cert_auth_conf_name_format(config, provider):
+         {provider.p}
+ 
+         [certmap/auth_only/user1]
+-        matchrule = <SUBJECT>.*CN=SSSD test cert 0001.*
++        matchrule = <SUBJECT>.*CN=SSSD test cert 000[12].*
+     """).format(**locals())
+ 
+ 
+@@ -380,6 +380,28 @@ def simple_pam_cert_auth_no_cert(request, passwd_ops_setup):
+     return None
+ 
+ 
++@pytest.fixture
++def simple_pam_cert_auth_two_certs(request, passwd_ops_setup):
++    """Setup SSSD with pam_cert_auth=True"""
++    config.PAM_CERT_DB_PATH = os.environ['PAM_CERT_DB_PATH']
++
++    old_softhsm2_conf = os.environ['SOFTHSM2_CONF']
++    softhsm2_two_conf = os.environ['SOFTHSM2_TWO_CONF']
++    os.environ['SOFTHSM2_CONF'] = softhsm2_two_conf
++
++    conf = format_pam_cert_auth_conf(config, provider_switch(request.param))
++    create_conf_fixture(request, conf)
++    create_sssd_fixture(request)
++
++    os.environ['SOFTHSM2_CONF'] = old_softhsm2_conf
++
++    passwd_ops_setup.useradd(**USER1)
++    passwd_ops_setup.useradd(**USER2)
++    sync_files_provider(USER2['name'])
++
++    return None
++
++
+ @pytest.fixture
+ def simple_pam_cert_auth_name_format(request, passwd_ops_setup):
+     """Setup SSSD with pam_cert_auth=True and full_name_format"""
+@@ -522,6 +544,54 @@ def test_sc_auth(simple_pam_cert_auth, env_for_sssctl):
+     assert err.find("pam_authenticate for user [user1]: Success") != -1
+ 
+ 
++@pytest.mark.parametrize('simple_pam_cert_auth_two_certs', provider_list(), indirect=True)
++def test_sc_auth_two(simple_pam_cert_auth_two_certs, env_for_sssctl):
++
++    sssctl = subprocess.Popen(["sssctl", "user-checks", "user1",
++                               "--action=auth", "--service=pam_sss_service"],
++                              universal_newlines=True,
++                              env=env_for_sssctl, stdin=subprocess.PIPE,
++                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++
++    try:
++        out, err = sssctl.communicate(input="2\n123456")
++    except Exception:
++        sssctl.kill()
++        out, err = sssctl.communicate()
++
++    sssctl.stdin.close()
++    sssctl.stdout.close()
++
++    if sssctl.wait() != 0:
++        raise Exception("sssctl failed")
++
++    assert err.find("pam_authenticate for user [user1]: Success") != -1
++
++
++@pytest.mark.parametrize('simple_pam_cert_auth_two_certs', provider_list(), indirect=True)
++def test_sc_auth_two_missing_name(simple_pam_cert_auth_two_certs, env_for_sssctl):
++
++    sssctl = subprocess.Popen(["sssctl", "user-checks", "",
++                               "--action=auth", "--service=pam_sss_allow_missing_name"],
++                              universal_newlines=True,
++                              env=env_for_sssctl, stdin=subprocess.PIPE,
++                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++
++    try:
++        out, err = sssctl.communicate(input="2\n123456")
++    except Exception:
++        sssctl.kill()
++        out, err = sssctl.communicate()
++
++    sssctl.stdin.close()
++    sssctl.stdout.close()
++
++    if sssctl.wait() != 0:
++        raise Exception("sssctl failed")
++
++    assert err.find("pam_authenticate for user [user1]: Success") != -1
++
++
+ @pytest.mark.parametrize('simple_pam_cert_auth', ['proxy_password'], indirect=True)
+ def test_sc_proxy_password_fallback(simple_pam_cert_auth, env_for_sssctl):
+     """
+-- 
+2.41.0
+

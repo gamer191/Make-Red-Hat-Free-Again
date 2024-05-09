@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 8 Feb 2023 19:31:02 -0600
+Subject: [PATCH] libmultipath: limit paths that can get wwid from environment
+
+Currently, whenever getting the uid_attribute from udev database fails,
+multipath will try to get it from the environment variables. This
+normally isn't a problem, since either multipath -u is getting called
+from a uevent, and the environment will have the correct value in that
+variable, or that variable won't be set. However, when find_multipaths
+is configured to "smart", this causes problems. For maybe devices,
+multipath needs to get the WWIDs of all the other block devices, to see
+if they match the maybe device wwid.  If one of those devices doesn't
+have uid_attribute set in its udev database, multipath will check the
+environment for it, and it will find that variable set to the WWID
+of the maybe device that this uevent is for.  This means that all
+devices with no WWID will end up appearing to have the same WWID as
+the maybe device, causing multipath to incorrectly claim it.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/discovery.c | 2 +-
+ libmultipath/structs.h   | 1 +
+ multipath/main.c         | 2 ++
+ 3 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/libmultipath/discovery.c b/libmultipath/discovery.c
+index f593a7bf..a592a54e 100644
+--- a/libmultipath/discovery.c
++++ b/libmultipath/discovery.c
+@@ -2032,7 +2032,7 @@ get_udev_uid(struct path * pp, char *uid_attribute, struct udev_device *udev)
+ 	const char *value;
+ 
+ 	value = udev_device_get_property_value(udev, uid_attribute);
+-	if (!value || strlen(value) == 0)
++	if ((!value || strlen(value) == 0) && pp->can_use_env_uid)
+ 		value = getenv(uid_attribute);
+ 	if (value && strlen(value)) {
+ 		len = strlcpy(pp->wwid, value, WWID_SIZE);
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index 0867b91d..4b308561 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -360,6 +360,7 @@ struct path {
+ 	int fast_io_fail;
+ 	unsigned int dev_loss;
+ 	int eh_deadline;
++	bool can_use_env_uid;
+ 	/* configlet pointers */
+ 	vector hwe;
+ 	struct gen_path generic_path;
+diff --git a/multipath/main.c b/multipath/main.c
+index 41d01c7e..e056c51c 100644
+--- a/multipath/main.c
++++ b/multipath/main.c
+@@ -653,6 +653,8 @@ check_path_valid(const char *name, struct config *conf, bool is_uevent)
+ 	pp = alloc_path();
+ 	if (!pp)
+ 		return RTVL_FAIL;
++	if (is_uevent)
++		pp->can_use_env_uid = true;
+ 
+ 	r = is_path_valid(name, conf, pp, is_uevent);
+ 	if (r <= PATH_IS_ERROR || r >= PATH_MAX_VALID_RESULT)

@@ -1,0 +1,34 @@
+From ed56d6053c532f43a8bbd109a87e754a43def845 Mon Sep 17 00:00:00 2001
+From: Miguel Bernal Marin <miguel.bernal.marin@linux.intel.com>
+Date: Thu, 11 Aug 2022 19:36:53 -0500
+Subject: [PATCH 207/217] meson: fix modprobedatadir default value
+
+The modprobedatadir is now set as a meson option, but without a
+default value.
+
+Set the default value if modprobedatadir is not set.
+
+Link: https://lore.kernel.org/r/20220812003653.53992-1-miguel.bernal.marin@linux.intel.com
+Fixes: 524ad09d5eda ("meson: make modprobedatadir an option")
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Miguel Bernal Marin <miguel.bernal.marin@linux.intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ contrib/meson.build | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/contrib/meson.build b/contrib/meson.build
+index ad63a50..48aa7c0 100644
+--- a/contrib/meson.build
++++ b/contrib/meson.build
+@@ -26,6 +26,6 @@ endif
+ 
+ modprobedatadir = get_option('modprobedatadir')
+ if modprobedatadir == ''
+-  modprobedatadir = get_option('modprobedatadir')
++  modprobedatadir = sysconfdir + '/modprobe.d/'
+ endif
+ install_data('nvdimm-security.conf', install_dir : modprobedatadir)
+-- 
+2.27.0
+

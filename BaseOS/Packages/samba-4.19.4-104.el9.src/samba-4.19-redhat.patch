@@ -1,0 +1,1400 @@
+From 3c29fc78029e1274f931e171c9e04c19ad0182c1 Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Thu, 17 Aug 2023 01:05:54 +0300
+Subject: [PATCH 01/21] gp: Support more global trust directories
+
+In addition to the SUSE global trust directory, add support for RHEL and
+Debian-based distributions (including Ubuntu).
+
+To determine the correct directory to use, we iterate over the variants
+and stop at the first which is a directory.
+
+In case none is found, fallback to the first option which will produce a
+warning as it did previously.
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: David Mulder <dmulder@samba.org>
+(cherry picked from commit a1b285e485c0b5a8747499bdbbb9f3f4fc025b2f)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index 312c8ddf467..1b90ab46e90 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -45,10 +45,12 @@ cert_wrap = b"""
+ -----BEGIN CERTIFICATE-----
+ %s
+ -----END CERTIFICATE-----"""
+-global_trust_dir = '/etc/pki/trust/anchors'
+ endpoint_re = '(https|HTTPS)://(?P<server>[a-zA-Z0-9.-]+)/ADPolicyProvider' + \
+               '_CEP_(?P<auth>[a-zA-Z]+)/service.svc/CEP'
+ 
++global_trust_dirs = ['/etc/pki/trust/anchors',           # SUSE
++                     '/etc/pki/ca-trust/source/anchors', # RHEL/Fedora
++                     '/usr/local/share/ca-certificates'] # Debian/Ubuntu
+ 
+ def octet_string_to_objectGUID(data):
+     """Convert an octet string to an objectGUID."""
+@@ -249,12 +251,20 @@ def getca(ca, url, trust_dir):
+     return root_certs
+ 
+ 
++def find_global_trust_dir():
++    """Return the global trust dir using known paths from various Linux distros."""
++    for trust_dir in global_trust_dirs:
++        if os.path.isdir(trust_dir):
++            return trust_dir
++    return global_trust_dirs[0]
++
+ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+     """Install the root certificate chain."""
+     data = dict({'files': [], 'templates': []}, **ca)
+     url = 'http://%s/CertSrv/mscep/mscep.dll/pkiclient.exe?' % ca['hostname']
+     root_certs = getca(ca, url, trust_dir)
+     data['files'].extend(root_certs)
++    global_trust_dir = find_global_trust_dir()
+     for src in root_certs:
+         # Symlink the certs to global trust dir
+         dst = os.path.join(global_trust_dir, os.path.basename(src))
+-- 
+2.43.0
+
+
+From 063606e8ec83a58972df47eb561ab267f8937ba4 Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Thu, 17 Aug 2023 01:09:28 +0300
+Subject: [PATCH 02/21] gp: Support update-ca-trust helper
+
+This is used on RHEL/Fedora instead of update-ca-certificates. They
+behave similarly so it's enough to change the command name.
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: David Mulder <dmulder@samba.org>
+(cherry picked from commit fa80d1d86439749c44e60cf9075e84dc9ed3c268)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index 1b90ab46e90..cefdafa21b2 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -258,6 +258,10 @@ def find_global_trust_dir():
+             return trust_dir
+     return global_trust_dirs[0]
+ 
++def update_ca_command():
++    """Return the command to update the CA trust store."""
++    return which('update-ca-certificates') or which('update-ca-trust')
++
+ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+     """Install the root certificate chain."""
+     data = dict({'files': [], 'templates': []}, **ca)
+@@ -283,7 +287,7 @@ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+             # already exists. Ignore the FileExistsError. Preserve the
+             # existing symlink in the unapply data.
+             data['files'].append(dst)
+-    update = which('update-ca-certificates')
++    update = update_ca_command()
+     if update is not None:
+         Popen([update]).wait()
+     # Setup Certificate Auto Enrollment
+-- 
+2.43.0
+
+
+From 3b548bf280ca59ef12a7af10a9131813067a850a Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Fri, 11 Aug 2023 18:46:42 +0300
+Subject: [PATCH 03/21] gp: Change root cert extension suffix
+
+On Ubuntu, certificates must end in '.crt' in order to be considered by
+the `update-ca-certificates` helper.
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: David Mulder <dmulder@samba.org>
+(cherry picked from commit bce3a89204545dcab5fb39a712590f6e166f997b)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index cefdafa21b2..c562722906b 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -241,7 +241,8 @@ def getca(ca, url, trust_dir):
+         certs = load_der_pkcs7_certificates(r.content)
+         for i in range(0, len(certs)):
+             cert = certs[i].public_bytes(Encoding.PEM)
+-            dest = '%s.%d' % (root_cert, i)
++            filename, extension = root_cert.rsplit('.', 1)
++            dest = '%s.%d.%s' % (filename, i, extension)
+             with open(dest, 'wb') as w:
+                 w.write(cert)
+             root_certs.append(dest)
+-- 
+2.43.0
+
+
+From 7592ed5032836dc43f657f66607a0a4661edcdb4 Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Fri, 18 Aug 2023 17:06:43 +0300
+Subject: [PATCH 04/21] gp: Test with binary content for certificate data
+
+This fails all GPO-related tests that call `gpupdate --rsop`.
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: David Mulder <dmulder@samba.org>
+(cherry picked from commit 1ef722cf66f9ec99f52939f1cfca031c5fe1ad70)
+---
+ python/samba/tests/gpo.py |  8 ++++----
+ selftest/knownfail.d/gpo  | 13 +++++++++++++
+ 2 files changed, 17 insertions(+), 4 deletions(-)
+ create mode 100644 selftest/knownfail.d/gpo
+
+diff --git a/python/samba/tests/gpo.py b/python/samba/tests/gpo.py
+index e4b75cc62a4..963f873f755 100644
+--- a/python/samba/tests/gpo.py
++++ b/python/samba/tests/gpo.py
+@@ -6783,14 +6783,14 @@ class GPOTests(tests.TestCase):
+         ldb.add({'dn': certa_dn,
+                  'objectClass': 'certificationAuthority',
+                  'authorityRevocationList': ['XXX'],
+-                 'cACertificate': 'XXX',
++                 'cACertificate': b'0\x82\x03u0\x82\x02]\xa0\x03\x02\x01\x02\x02\x10I',
+                  'certificateRevocationList': ['XXX'],
+                 })
+         # Write the dummy pKIEnrollmentService
+         enroll_dn = 'CN=%s,CN=Enrollment Services,%s' % (ca_cn, confdn)
+         ldb.add({'dn': enroll_dn,
+                  'objectClass': 'pKIEnrollmentService',
+-                 'cACertificate': 'XXXX',
++                 'cACertificate': b'0\x82\x03u0\x82\x02]\xa0\x03\x02\x01\x02\x02\x10I',
+                  'certificateTemplates': ['Machine'],
+                  'dNSHostName': hostname,
+                 })
+@@ -7201,14 +7201,14 @@ class GPOTests(tests.TestCase):
+         ldb.add({'dn': certa_dn,
+                  'objectClass': 'certificationAuthority',
+                  'authorityRevocationList': ['XXX'],
+-                 'cACertificate': 'XXX',
++                 'cACertificate': b'0\x82\x03u0\x82\x02]\xa0\x03\x02\x01\x02\x02\x10I',
+                  'certificateRevocationList': ['XXX'],
+                 })
+         # Write the dummy pKIEnrollmentService
+         enroll_dn = 'CN=%s,CN=Enrollment Services,%s' % (ca_cn, confdn)
+         ldb.add({'dn': enroll_dn,
+                  'objectClass': 'pKIEnrollmentService',
+-                 'cACertificate': 'XXXX',
++                 'cACertificate': b'0\x82\x03u0\x82\x02]\xa0\x03\x02\x01\x02\x02\x10I',
+                  'certificateTemplates': ['Machine'],
+                  'dNSHostName': hostname,
+                 })
+diff --git a/selftest/knownfail.d/gpo b/selftest/knownfail.d/gpo
+new file mode 100644
+index 00000000000..0aad59607c2
+--- /dev/null
++++ b/selftest/knownfail.d/gpo
+@@ -0,0 +1,13 @@
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_user_centrify_crontab_ext
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_user_scripts_ext
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_rsop
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_access
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_files
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_issue
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_motd
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_openssh
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_startup_scripts
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_sudoers
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_symlink
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_advanced_gp_cert_auto_enroll_ext
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_cert_auto_enroll_ext
+-- 
+2.43.0
+
+
+From 7f7b235bda9e85c5ea330e52e734d1113a884571 Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Wed, 16 Aug 2023 12:20:11 +0300
+Subject: [PATCH 05/21] gp: Convert CA certificates to base64
+
+I don't know whether this applies universally, but in our case the
+contents of `es['cACertificate'][0]` are binary, so cleanly converting
+to a string fails with the following:
+
+'utf-8' codec can't decode byte 0x82 in position 1: invalid start byte
+
+We found a fix to be encoding the certificate to base64 when
+constructing the CA list.
+
+Section 4.4.5.2 of MS-CAESO also suggests that the content of
+`cACertificate` is binary (OCTET string).
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: David Mulder <dmulder@samba.org>
+(cherry picked from commit 157335ee93eb866f9b6a47486a5668d6e76aced5)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py |  5 ++---
+ selftest/knownfail.d/gpo                   | 13 -------------
+ 2 files changed, 2 insertions(+), 16 deletions(-)
+ delete mode 100644 selftest/knownfail.d/gpo
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index c562722906b..c8b5368c16a 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -158,7 +158,7 @@ def fetch_certification_authorities(ldb):
+     for es in res:
+         data = { 'name': get_string(es['cn'][0]),
+                  'hostname': get_string(es['dNSHostName'][0]),
+-                 'cACertificate': get_string(es['cACertificate'][0])
++                 'cACertificate': get_string(base64.b64encode(es['cACertificate'][0]))
+                }
+         result.append(data)
+     return result
+@@ -176,8 +176,7 @@ def fetch_template_attrs(ldb, name, attrs=None):
+         return {'msPKI-Minimal-Key-Size': ['2048']}
+ 
+ def format_root_cert(cert):
+-    cert = base64.b64encode(cert.encode())
+-    return cert_wrap % re.sub(b"(.{64})", b"\\1\n", cert, 0, re.DOTALL)
++    return cert_wrap % re.sub(b"(.{64})", b"\\1\n", cert.encode(), 0, re.DOTALL)
+ 
+ def find_cepces_submit():
+     certmonger_dirs = [os.environ.get("PATH"), '/usr/lib/certmonger',
+diff --git a/selftest/knownfail.d/gpo b/selftest/knownfail.d/gpo
+deleted file mode 100644
+index 0aad59607c2..00000000000
+--- a/selftest/knownfail.d/gpo
++++ /dev/null
+@@ -1,13 +0,0 @@
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_user_centrify_crontab_ext
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_user_scripts_ext
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_rsop
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_access
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_files
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_issue
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_motd
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_openssh
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_startup_scripts
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_sudoers
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_vgp_symlink
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_advanced_gp_cert_auto_enroll_ext
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_cert_auto_enroll_ext
+-- 
+2.43.0
+
+
+From 49cc74015a603e80048a38fe635cd1ac28938ee4 Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Fri, 18 Aug 2023 17:16:23 +0300
+Subject: [PATCH 06/21] gp: Test adding new cert templates enforces changes
+
+Ensure that cepces-submit reporting additional templates and re-applying
+will enforce the updated policy.
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: David Mulder <dmulder@samba.org>
+(cherry picked from commit 2d6943a864405f324c467e8c3464c31ac08457b0)
+---
+ python/samba/tests/bin/cepces-submit |  3 +-
+ python/samba/tests/gpo.py            | 48 ++++++++++++++++++++++++++++
+ selftest/knownfail.d/gpo             |  2 ++
+ 3 files changed, 52 insertions(+), 1 deletion(-)
+ create mode 100644 selftest/knownfail.d/gpo
+
+diff --git a/python/samba/tests/bin/cepces-submit b/python/samba/tests/bin/cepces-submit
+index 668682a9f58..de63164692b 100755
+--- a/python/samba/tests/bin/cepces-submit
++++ b/python/samba/tests/bin/cepces-submit
+@@ -14,4 +14,5 @@ if __name__ == "__main__":
+     assert opts.auth == 'Kerberos'
+     if 'CERTMONGER_OPERATION' in os.environ and \
+        os.environ['CERTMONGER_OPERATION'] == 'GET-SUPPORTED-TEMPLATES':
+-        print('Machine') # Report a Machine template
++        templates = os.environ.get('CEPCES_SUBMIT_SUPPORTED_TEMPLATES', 'Machine').split(',')
++        print('\n'.join(templates)) # Report the requested templates
+diff --git a/python/samba/tests/gpo.py b/python/samba/tests/gpo.py
+index 963f873f755..e75c411bde7 100644
+--- a/python/samba/tests/gpo.py
++++ b/python/samba/tests/gpo.py
+@@ -6812,6 +6812,23 @@ class GPOTests(tests.TestCase):
+             self.assertTrue(os.path.exists(machine_crt),
+                             'Machine key was not generated')
+ 
++            # Subsequent apply should react to new certificate templates
++            os.environ['CEPCES_SUBMIT_SUPPORTED_TEMPLATES'] = 'Machine,Workstation'
++            self.addCleanup(os.environ.pop, 'CEPCES_SUBMIT_SUPPORTED_TEMPLATES')
++            ext.process_group_policy([], gpos, dname, dname)
++            self.assertTrue(os.path.exists(ca_crt),
++                            'Root CA certificate was not requested')
++            self.assertTrue(os.path.exists(machine_crt),
++                            'Machine certificate was not requested')
++            self.assertTrue(os.path.exists(machine_crt),
++                            'Machine key was not generated')
++            workstation_crt = os.path.join(dname, '%s.Workstation.crt' % ca_cn)
++            self.assertTrue(os.path.exists(workstation_crt),
++                            'Workstation certificate was not requested')
++            workstation_key = os.path.join(dname, '%s.Workstation.key' % ca_cn)
++            self.assertTrue(os.path.exists(workstation_crt),
++                            'Workstation key was not generated')
++
+             # Verify RSOP does not fail
+             ext.rsop([g for g in gpos if g.name == guid][0])
+ 
+@@ -6829,11 +6846,17 @@ class GPOTests(tests.TestCase):
+                             'Machine certificate was not removed')
+             self.assertFalse(os.path.exists(machine_crt),
+                             'Machine key was not removed')
++            self.assertFalse(os.path.exists(workstation_crt),
++                            'Workstation certificate was not removed')
++            self.assertFalse(os.path.exists(workstation_crt),
++                            'Workstation key was not removed')
+             out, _ = Popen(['getcert', 'list-cas'], stdout=PIPE).communicate()
+             self.assertNotIn(get_bytes(ca_cn), out, 'CA was not removed')
+             out, _ = Popen(['getcert', 'list'], stdout=PIPE).communicate()
+             self.assertNotIn(b'Machine', out,
+                              'Machine certificate not removed')
++            self.assertNotIn(b'Workstation', out,
++                             'Workstation certificate not removed')
+ 
+         # Remove the dummy CA, pKIEnrollmentService, and pKICertificateTemplate
+         ldb.delete(certa_dn)
+@@ -7233,6 +7256,25 @@ class GPOTests(tests.TestCase):
+                 self.assertTrue(os.path.exists(machine_crt),
+                                 'Machine key was not generated')
+ 
++            # Subsequent apply should react to new certificate templates
++            os.environ['CEPCES_SUBMIT_SUPPORTED_TEMPLATES'] = 'Machine,Workstation'
++            self.addCleanup(os.environ.pop, 'CEPCES_SUBMIT_SUPPORTED_TEMPLATES')
++            ext.process_group_policy([], gpos, dname, dname)
++            for ca in ca_list:
++                self.assertTrue(os.path.exists(ca_crt),
++                                'Root CA certificate was not requested')
++                self.assertTrue(os.path.exists(machine_crt),
++                                'Machine certificate was not requested')
++                self.assertTrue(os.path.exists(machine_crt),
++                                'Machine key was not generated')
++
++                workstation_crt = os.path.join(dname, '%s.Workstation.crt' % ca)
++                self.assertTrue(os.path.exists(workstation_crt),
++                                'Workstation certificate was not requested')
++                workstation_key = os.path.join(dname, '%s.Workstation.key' % ca)
++                self.assertTrue(os.path.exists(workstation_crt),
++                                'Workstation key was not generated')
++
+             # Verify RSOP does not fail
+             ext.rsop([g for g in gpos if g.name == guid][0])
+ 
+@@ -7250,12 +7292,18 @@ class GPOTests(tests.TestCase):
+                             'Machine certificate was not removed')
+             self.assertFalse(os.path.exists(machine_crt),
+                             'Machine key was not removed')
++            self.assertFalse(os.path.exists(workstation_crt),
++                            'Workstation certificate was not removed')
++            self.assertFalse(os.path.exists(workstation_crt),
++                            'Workstation key was not removed')
+             out, _ = Popen(['getcert', 'list-cas'], stdout=PIPE).communicate()
+             for ca in ca_list:
+                 self.assertNotIn(get_bytes(ca), out, 'CA was not removed')
+             out, _ = Popen(['getcert', 'list'], stdout=PIPE).communicate()
+             self.assertNotIn(b'Machine', out,
+                              'Machine certificate not removed')
++            self.assertNotIn(b'Workstation', out,
++                             'Workstation certificate not removed')
+ 
+         # Remove the dummy CA, pKIEnrollmentService, and pKICertificateTemplate
+         ldb.delete(certa_dn)
+diff --git a/selftest/knownfail.d/gpo b/selftest/knownfail.d/gpo
+new file mode 100644
+index 00000000000..4edc1dce730
+--- /dev/null
++++ b/selftest/knownfail.d/gpo
+@@ -0,0 +1,2 @@
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_advanced_gp_cert_auto_enroll_ext
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_cert_auto_enroll_ext
+-- 
+2.43.0
+
+
+From 4c0906bd79f030e591701234bc54bc749a42d686 Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Wed, 16 Aug 2023 12:37:17 +0300
+Subject: [PATCH 07/21] gp: Template changes should invalidate cache
+
+If certificate templates are added or removed, the autoenroll extension
+should react to this and reapply the policy. Previously this wasn't
+taken into account.
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: David Mulder <dmulder@samba.org>
+(cherry picked from commit 2a6ae997f2464b12b72b5314fa80d9784fb0f6c1)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 15 ++++++++++-----
+ selftest/knownfail.d/gpo                   |  2 --
+ 2 files changed, 10 insertions(+), 7 deletions(-)
+ delete mode 100644 selftest/knownfail.d/gpo
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index c8b5368c16a..8233713e8ad 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -262,6 +262,11 @@ def update_ca_command():
+     """Return the command to update the CA trust store."""
+     return which('update-ca-certificates') or which('update-ca-trust')
+ 
++def changed(new_data, old_data):
++    """Return True if any key present in both dicts has changed."""
++    return any((new_data[k] != old_data[k] if k in old_data else False) \
++            for k in new_data.keys())
++
+ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+     """Install the root certificate chain."""
+     data = dict({'files': [], 'templates': []}, **ca)
+@@ -351,12 +356,12 @@ class gp_cert_auto_enroll_ext(gp_pol_ext, gp_applier):
+         # If the policy has changed, unapply, then apply new policy
+         old_val = self.cache_get_attribute_value(guid, attribute)
+         old_data = json.loads(old_val) if old_val is not None else {}
+-        if all([(ca[k] == old_data[k] if k in old_data else False) \
+-                    for k in ca.keys()]) or \
+-                self.cache_get_apply_state() == GPOSTATE.ENFORCE:
++        templates = ['%s.%s' % (ca['name'], t.decode()) for t in get_supported_templates(ca['hostname'])]
++        new_data = { 'templates': templates, **ca }
++        if changed(new_data, old_data) or self.cache_get_apply_state() == GPOSTATE.ENFORCE:
+             self.unapply(guid, attribute, old_val)
+-        # If policy is already applied, skip application
+-        if old_val is not None and \
++        # If policy is already applied and unchanged, skip application
++        if old_val is not None and not changed(new_data, old_data) and \
+                 self.cache_get_apply_state() != GPOSTATE.ENFORCE:
+             return
+ 
+diff --git a/selftest/knownfail.d/gpo b/selftest/knownfail.d/gpo
+deleted file mode 100644
+index 4edc1dce730..00000000000
+--- a/selftest/knownfail.d/gpo
++++ /dev/null
+@@ -1,2 +0,0 @@
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_advanced_gp_cert_auto_enroll_ext
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_cert_auto_enroll_ext
+-- 
+2.43.0
+
+
+From e61f30dc2518d5a1c239f090baea4a309307f3f8 Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Fri, 18 Aug 2023 17:26:59 +0300
+Subject: [PATCH 08/21] gp: Test disabled enrollment unapplies policy
+
+For this we need to stage a Registry.pol file with certificate
+autoenrollment enabled, but with checkboxes unticked.
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: David Mulder <dmulder@samba.org>
+(cherry picked from commit ee814f7707a8ddef2657212cd6d31799501b7bb3)
+---
+ python/samba/tests/gpo.py | 54 +++++++++++++++++++++++++++++++++++++++
+ selftest/knownfail.d/gpo  |  1 +
+ 2 files changed, 55 insertions(+)
+ create mode 100644 selftest/knownfail.d/gpo
+
+diff --git a/python/samba/tests/gpo.py b/python/samba/tests/gpo.py
+index e75c411bde7..580f3568de8 100644
+--- a/python/samba/tests/gpo.py
++++ b/python/samba/tests/gpo.py
+@@ -281,6 +281,28 @@ b"""
+ </PolFile>
+ """
+ 
++auto_enroll_unchecked_reg_pol = \
++b"""
++<?xml version="1.0" encoding="utf-8"?>
++<PolFile num_entries="3" signature="PReg" version="1">
++        <Entry type="4" type_name="REG_DWORD">
++                <Key>Software\Policies\Microsoft\Cryptography\AutoEnrollment</Key>
++                <ValueName>AEPolicy</ValueName>
++                <Value>0</Value>
++        </Entry>
++        <Entry type="4" type_name="REG_DWORD">
++                <Key>Software\Policies\Microsoft\Cryptography\AutoEnrollment</Key>
++                <ValueName>OfflineExpirationPercent</ValueName>
++                <Value>10</Value>
++        </Entry>
++        <Entry type="1" type_name="REG_SZ">
++                <Key>Software\Policies\Microsoft\Cryptography\AutoEnrollment</Key>
++                <ValueName>OfflineExpirationStoreNames</ValueName>
++                <Value>MY</Value>
++        </Entry>
++</PolFile>
++"""
++
+ advanced_enroll_reg_pol = \
+ b"""
+ <?xml version="1.0" encoding="utf-8"?>
+@@ -6836,6 +6858,38 @@ class GPOTests(tests.TestCase):
+             ret = rsop(self.lp)
+             self.assertEqual(ret, 0, 'gpupdate --rsop failed!')
+ 
++            # Remove policy by staging pol file with auto-enroll unchecked
++            parser.load_xml(etree.fromstring(auto_enroll_unchecked_reg_pol.strip()))
++            ret = stage_file(reg_pol, ndr_pack(parser.pol_file))
++            self.assertTrue(ret, 'Could not create the target %s' % reg_pol)
++            ext.process_group_policy([], gpos, dname, dname)
++            self.assertFalse(os.path.exists(ca_crt),
++                            'Root CA certificate was not removed')
++            self.assertFalse(os.path.exists(machine_crt),
++                            'Machine certificate was not removed')
++            self.assertFalse(os.path.exists(machine_crt),
++                            'Machine key was not removed')
++            self.assertFalse(os.path.exists(workstation_crt),
++                            'Workstation certificate was not removed')
++            self.assertFalse(os.path.exists(workstation_crt),
++                            'Workstation key was not removed')
++
++            # Reapply policy by staging the enabled pol file
++            parser.load_xml(etree.fromstring(auto_enroll_reg_pol.strip()))
++            ret = stage_file(reg_pol, ndr_pack(parser.pol_file))
++            self.assertTrue(ret, 'Could not create the target %s' % reg_pol)
++            ext.process_group_policy([], gpos, dname, dname)
++            self.assertTrue(os.path.exists(ca_crt),
++                            'Root CA certificate was not requested')
++            self.assertTrue(os.path.exists(machine_crt),
++                            'Machine certificate was not requested')
++            self.assertTrue(os.path.exists(machine_crt),
++                            'Machine key was not generated')
++            self.assertTrue(os.path.exists(workstation_crt),
++                            'Workstation certificate was not requested')
++            self.assertTrue(os.path.exists(workstation_crt),
++                            'Workstation key was not generated')
++
+             # Remove policy
+             gp_db = store.get_gplog(machine_creds.get_username())
+             del_gpos = get_deleted_gpos_list(gp_db, [])
+diff --git a/selftest/knownfail.d/gpo b/selftest/knownfail.d/gpo
+new file mode 100644
+index 00000000000..83bc9f0ac1f
+--- /dev/null
++++ b/selftest/knownfail.d/gpo
+@@ -0,0 +1 @@
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_cert_auto_enroll_ext
+-- 
+2.43.0
+
+
+From 7757b9b48546d71e19798d1260da97780caa99c3 Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Wed, 16 Aug 2023 12:33:59 +0300
+Subject: [PATCH 09/21] gp: Send list of keys instead of dict to remove
+
+`cache_get_all_attribute_values` returns a dict whereas we need to pass
+a list of keys to `remove`. These will be interpolated in the gpdb search.
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: David Mulder <dmulder@samba.org>
+
+Autobuild-User(master): Andrew Bartlett <abartlet@samba.org>
+Autobuild-Date(master): Mon Aug 28 03:01:22 UTC 2023 on atb-devel-224
+
+(cherry picked from commit 7dc181757c76b881ceaf1915ebb0bfbcf5aca83a)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 2 +-
+ selftest/knownfail.d/gpo                   | 1 -
+ 2 files changed, 1 insertion(+), 2 deletions(-)
+ delete mode 100644 selftest/knownfail.d/gpo
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index 8233713e8ad..64c35782ae8 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -415,7 +415,7 @@ class gp_cert_auto_enroll_ext(gp_pol_ext, gp_applier):
+                             # remove any existing policy
+                             ca_attrs = \
+                                 self.cache_get_all_attribute_values(gpo.name)
+-                            self.clean(gpo.name, remove=ca_attrs)
++                            self.clean(gpo.name, remove=list(ca_attrs.keys()))
+ 
+     def __read_cep_data(self, guid, ldb, end_point_information,
+                         trust_dir, private_dir):
+diff --git a/selftest/knownfail.d/gpo b/selftest/knownfail.d/gpo
+deleted file mode 100644
+index 83bc9f0ac1f..00000000000
+--- a/selftest/knownfail.d/gpo
++++ /dev/null
+@@ -1 +0,0 @@
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_cert_auto_enroll_ext
+-- 
+2.43.0
+
+
+From 4e9b2e6409c5764ec0e66cc6c90b08e70f702e7c Mon Sep 17 00:00:00 2001
+From: Andreas Schneider <asn@samba.org>
+Date: Tue, 9 Jan 2024 08:50:01 +0100
+Subject: [PATCH 10/21] python:gp: Print a nice message if cepces-submit can't
+ be found
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15552
+
+Signed-off-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: David Mulder <dmulder@samba.org>
+(cherry picked from commit 8eb42425a8eb1b30ca0e94dfc01d8175ae5cde4b)
+
+Autobuild-User(v4-19-test): Jule Anger <janger@samba.org>
+Autobuild-Date(v4-19-test): Mon Jan 15 11:11:31 UTC 2024 on atb-devel-224
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 24 ++++++++++++----------
+ 1 file changed, 13 insertions(+), 11 deletions(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index 64c35782ae8..08d1a7348cd 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -185,17 +185,19 @@ def find_cepces_submit():
+ 
+ def get_supported_templates(server):
+     cepces_submit = find_cepces_submit()
+-    if os.path.exists(cepces_submit):
+-        env = os.environ
+-        env['CERTMONGER_OPERATION'] = 'GET-SUPPORTED-TEMPLATES'
+-        p = Popen([cepces_submit, '--server=%s' % server, '--auth=Kerberos'],
+-                       env=env, stdout=PIPE, stderr=PIPE)
+-        out, err = p.communicate()
+-        if p.returncode != 0:
+-            data = { 'Error': err.decode() }
+-            log.error('Failed to fetch the list of supported templates.', data)
+-        return out.strip().split()
+-    return []
++    if not cepces_submit or not os.path.exists(cepces_submit):
++        log.error('Failed to find cepces-submit')
++        return []
++
++    env = os.environ
++    env['CERTMONGER_OPERATION'] = 'GET-SUPPORTED-TEMPLATES'
++    p = Popen([cepces_submit, '--server=%s' % server, '--auth=Kerberos'],
++              env=env, stdout=PIPE, stderr=PIPE)
++    out, err = p.communicate()
++    if p.returncode != 0:
++        data = {'Error': err.decode()}
++        log.error('Failed to fetch the list of supported templates.', data)
++    return out.strip().split()
+ 
+ 
+ def getca(ca, url, trust_dir):
+-- 
+2.43.0
+
+
+From fb3aefff51c02cf8ba3f8dfeb7d3f971e8d4902a Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Mon, 8 Jan 2024 18:05:08 +0200
+Subject: [PATCH 11/21] gpo: Test certificate policy without NDES
+
+As of 8231eaf856b, the NDES feature is no longer required on Windows, as
+cert auto-enroll can use the certificate from the LDAP request.
+
+However, 157335ee93e changed the implementation to convert the LDAP
+certificate to base64 due to it failing to cleanly convert to a string.
+
+Because of insufficient test coverage I missed handling the part where
+NDES is disabled or not reachable and the LDAP certificate was imported.
+The call to load_der_x509_certificate now fails with an error because it
+expects binary data, yet it receives a base64 encoded string.
+
+This adds a test to confirm the issue.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15557
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+(cherry picked from commit 0d1ff69936f18ea729fc11fbbb1569a833302572)
+---
+ python/samba/tests/gpo.py | 126 ++++++++++++++++++++++++++++++++++++--
+ selftest/knownfail.d/gpo  |   1 +
+ 2 files changed, 121 insertions(+), 6 deletions(-)
+ create mode 100644 selftest/knownfail.d/gpo
+
+diff --git a/python/samba/tests/gpo.py b/python/samba/tests/gpo.py
+index 580f3568de8..a78af17dba4 100644
+--- a/python/samba/tests/gpo.py
++++ b/python/samba/tests/gpo.py
+@@ -102,17 +102,21 @@ def dummy_certificate():
+ 
+ # Dummy requests structure for Certificate Auto Enrollment
+ class dummy_requests(object):
+-    @staticmethod
+-    def get(url=None, params=None):
++    class exceptions(object):
++        ConnectionError = Exception
++
++    def __init__(self, want_exception=False):
++        self.want_exception = want_exception
++
++    def get(self, url=None, params=None):
++        if self.want_exception:
++            raise self.exceptions.ConnectionError
++
+         dummy = requests.Response()
+         dummy._content = dummy_certificate()
+         dummy.headers = {'Content-Type': 'application/x-x509-ca-cert'}
+         return dummy
+ 
+-    class exceptions(object):
+-        ConnectionError = Exception
+-cae.requests = dummy_requests
+-
+ realm = os.environ.get('REALM')
+ policies = realm + '/POLICIES'
+ realm = realm.lower()
+@@ -6764,6 +6768,114 @@ class GPOTests(tests.TestCase):
+         # Unstage the Registry.pol file
+         unstage_file(reg_pol)
+ 
++    def test_gp_cert_auto_enroll_ext_without_ndes(self):
++        local_path = self.lp.cache_path('gpo_cache')
++        guid = '{31B2F340-016D-11D2-945F-00C04FB984F9}'
++        reg_pol = os.path.join(local_path, policies, guid,
++                               'MACHINE/REGISTRY.POL')
++        cache_dir = self.lp.get('cache directory')
++        store = GPOStorage(os.path.join(cache_dir, 'gpo.tdb'))
++
++        machine_creds = Credentials()
++        machine_creds.guess(self.lp)
++        machine_creds.set_machine_account()
++
++        # Initialize the group policy extension
++        cae.requests = dummy_requests(want_exception=True)
++        ext = cae.gp_cert_auto_enroll_ext(self.lp, machine_creds,
++                                          machine_creds.get_username(), store)
++
++        gpos = get_gpo_list(self.server, machine_creds, self.lp,
++                            machine_creds.get_username())
++
++        # Stage the Registry.pol file with test data
++        parser = GPPolParser()
++        parser.load_xml(etree.fromstring(auto_enroll_reg_pol.strip()))
++        ret = stage_file(reg_pol, ndr_pack(parser.pol_file))
++        self.assertTrue(ret, 'Could not create the target %s' % reg_pol)
++
++        # Write the dummy CA entry, Enrollment Services, and Templates Entries
++        admin_creds = Credentials()
++        admin_creds.set_username(os.environ.get('DC_USERNAME'))
++        admin_creds.set_password(os.environ.get('DC_PASSWORD'))
++        admin_creds.set_realm(os.environ.get('REALM'))
++        hostname = get_dc_hostname(machine_creds, self.lp)
++        url = 'ldap://%s' % hostname
++        ldb = Ldb(url=url, session_info=system_session(),
++                  lp=self.lp, credentials=admin_creds)
++        # Write the dummy CA
++        confdn = 'CN=Public Key Services,CN=Services,CN=Configuration,%s' % base_dn
++        ca_cn = '%s-CA' % hostname.replace('.', '-')
++        certa_dn = 'CN=%s,CN=Certification Authorities,%s' % (ca_cn, confdn)
++        ldb.add({'dn': certa_dn,
++                 'objectClass': 'certificationAuthority',
++                 'authorityRevocationList': ['XXX'],
++                 'cACertificate': dummy_certificate(),
++                 'certificateRevocationList': ['XXX'],
++                })
++        # Write the dummy pKIEnrollmentService
++        enroll_dn = 'CN=%s,CN=Enrollment Services,%s' % (ca_cn, confdn)
++        ldb.add({'dn': enroll_dn,
++                 'objectClass': 'pKIEnrollmentService',
++                 'cACertificate': dummy_certificate(),
++                 'certificateTemplates': ['Machine'],
++                 'dNSHostName': hostname,
++                })
++        # Write the dummy pKICertificateTemplate
++        template_dn = 'CN=Machine,CN=Certificate Templates,%s' % confdn
++        ldb.add({'dn': template_dn,
++                 'objectClass': 'pKICertificateTemplate',
++                })
++
++        with TemporaryDirectory() as dname:
++            try:
++                ext.process_group_policy([], gpos, dname, dname)
++            except Exception as e:
++                self.fail(str(e))
++
++            ca_crt = os.path.join(dname, '%s.crt' % ca_cn)
++            self.assertTrue(os.path.exists(ca_crt),
++                            'Root CA certificate was not requested')
++            machine_crt = os.path.join(dname, '%s.Machine.crt' % ca_cn)
++            self.assertTrue(os.path.exists(machine_crt),
++                            'Machine certificate was not requested')
++            machine_key = os.path.join(dname, '%s.Machine.key' % ca_cn)
++            self.assertTrue(os.path.exists(machine_key),
++                            'Machine key was not generated')
++
++            # Verify RSOP does not fail
++            ext.rsop([g for g in gpos if g.name == guid][0])
++
++            # Check that a call to gpupdate --rsop also succeeds
++            ret = rsop(self.lp)
++            self.assertEqual(ret, 0, 'gpupdate --rsop failed!')
++
++            # Remove policy
++            gp_db = store.get_gplog(machine_creds.get_username())
++            del_gpos = get_deleted_gpos_list(gp_db, [])
++            ext.process_group_policy(del_gpos, [], dname)
++            self.assertFalse(os.path.exists(ca_crt),
++                            'Root CA certificate was not removed')
++            self.assertFalse(os.path.exists(machine_crt),
++                            'Machine certificate was not removed')
++            self.assertFalse(os.path.exists(machine_key),
++                            'Machine key was not removed')
++            out, _ = Popen(['getcert', 'list-cas'], stdout=PIPE).communicate()
++            self.assertNotIn(get_bytes(ca_cn), out, 'CA was not removed')
++            out, _ = Popen(['getcert', 'list'], stdout=PIPE).communicate()
++            self.assertNotIn(b'Machine', out,
++                             'Machine certificate not removed')
++            self.assertNotIn(b'Workstation', out,
++                             'Workstation certificate not removed')
++
++        # Remove the dummy CA, pKIEnrollmentService, and pKICertificateTemplate
++        ldb.delete(certa_dn)
++        ldb.delete(enroll_dn)
++        ldb.delete(template_dn)
++
++        # Unstage the Registry.pol file
++        unstage_file(reg_pol)
++
+     def test_gp_cert_auto_enroll_ext(self):
+         local_path = self.lp.cache_path('gpo_cache')
+         guid = '{31B2F340-016D-11D2-945F-00C04FB984F9}'
+@@ -6777,6 +6889,7 @@ class GPOTests(tests.TestCase):
+         machine_creds.set_machine_account()
+ 
+         # Initialize the group policy extension
++        cae.requests = dummy_requests()
+         ext = cae.gp_cert_auto_enroll_ext(self.lp, machine_creds,
+                                           machine_creds.get_username(), store)
+ 
+@@ -7241,6 +7354,7 @@ class GPOTests(tests.TestCase):
+         machine_creds.set_machine_account()
+ 
+         # Initialize the group policy extension
++        cae.requests = dummy_requests()
+         ext = cae.gp_cert_auto_enroll_ext(self.lp, machine_creds,
+                                           machine_creds.get_username(), store)
+ 
+diff --git a/selftest/knownfail.d/gpo b/selftest/knownfail.d/gpo
+new file mode 100644
+index 00000000000..f1e590bc7d8
+--- /dev/null
++++ b/selftest/knownfail.d/gpo
+@@ -0,0 +1 @@
++^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_cert_auto_enroll_ext_without_ndes
+-- 
+2.43.0
+
+
+From 1a9af36177c7491687c75df151474bb10285f00e Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Thu, 18 Jan 2024 20:23:24 +0200
+Subject: [PATCH 12/21] gpo: Decode base64 root cert before importing
+
+The reasoning behind this is described in the previous commit message,
+but essentially this should either be wrapped in certificate blocks and
+imported as PEM, or converted back to binary and imported as DER.
+
+I've opted for the latter since it's how it used to work before it
+regressed in 157335ee93e.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15557
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+(cherry picked from commit 3f3ddfa699a33c2c8a59f7fb9ee044bb2a6e0e06)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 5 +++--
+ selftest/knownfail.d/gpo                   | 1 -
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+ delete mode 100644 selftest/knownfail.d/gpo
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index 08d1a7348cd..cd5e54f1110 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -217,10 +217,11 @@ def getca(ca, url, trust_dir):
+                  ' installed or not configured.')
+         if 'cACertificate' in ca:
+             log.warn('Installing the server certificate only.')
++            der_certificate = base64.b64decode(ca['cACertificate'])
+             try:
+-                cert = load_der_x509_certificate(ca['cACertificate'])
++                cert = load_der_x509_certificate(der_certificate)
+             except TypeError:
+-                cert = load_der_x509_certificate(ca['cACertificate'],
++                cert = load_der_x509_certificate(der_certificate,
+                                                  default_backend())
+             cert_data = cert.public_bytes(Encoding.PEM)
+             with open(root_cert, 'wb') as w:
+diff --git a/selftest/knownfail.d/gpo b/selftest/knownfail.d/gpo
+deleted file mode 100644
+index f1e590bc7d8..00000000000
+--- a/selftest/knownfail.d/gpo
++++ /dev/null
+@@ -1 +0,0 @@
+-^samba.tests.gpo.samba.tests.gpo.GPOTests.test_gp_cert_auto_enroll_ext_without_ndes
+-- 
+2.43.0
+
+
+From f5fc88f9ae255f4dc135580f0fa4a02f5addc390 Mon Sep 17 00:00:00 2001
+From: Gabriel Nagy <gabriel.nagy@canonical.com>
+Date: Fri, 19 Jan 2024 11:36:19 +0200
+Subject: [PATCH 13/21] gpo: Do not get templates list on first run
+
+This is a visual fix and has no impact on functionality apart from
+cleaner log messages.
+
+The point of this is to get the list of supported templates in order to
+compute a diff between the current applied templates and the updated
+list, so we are able to unapply and reapply the policy in case there are
+differences.
+
+However this code path is executed on first applies as well, at which
+point the root CA is not yet set up. This causes the
+`get_supported_templates` call to fail, which is not a hard failure but
+still pollutes the logs. In this case it's safe to avoid executing the
+command as the policy will be applied regardless.
+
+Signed-off-by: Gabriel Nagy <gabriel.nagy@canonical.com>
+Reviewed-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+
+Autobuild-User(master): Andreas Schneider <asn@cryptomilk.org>
+Autobuild-Date(master): Mon Jan 22 16:48:57 UTC 2024 on atb-devel-224
+
+(cherry picked from commit 8579340fc540633c13c017d896034904a8dbd55c)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index cd5e54f1110..559c903e1a2 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -359,7 +359,8 @@ class gp_cert_auto_enroll_ext(gp_pol_ext, gp_applier):
+         # If the policy has changed, unapply, then apply new policy
+         old_val = self.cache_get_attribute_value(guid, attribute)
+         old_data = json.loads(old_val) if old_val is not None else {}
+-        templates = ['%s.%s' % (ca['name'], t.decode()) for t in get_supported_templates(ca['hostname'])]
++        templates = ['%s.%s' % (ca['name'], t.decode()) for t in get_supported_templates(ca['hostname'])] \
++            if old_val is not None else []
+         new_data = { 'templates': templates, **ca }
+         if changed(new_data, old_data) or self.cache_get_apply_state() == GPOSTATE.ENFORCE:
+             self.unapply(guid, attribute, old_val)
+-- 
+2.43.0
+
+
+From e8a6219181f2af87813b53fd09684650c1aa6f90 Mon Sep 17 00:00:00 2001
+From: David Mulder <dmulder@samba.org>
+Date: Fri, 5 Jan 2024 08:47:07 -0700
+Subject: [PATCH 14/21] gp: Skip site GP list if no site is found
+
+[MS-GPOL] 3.2.5.1.4 Site Search says if the site
+search returns ERROR_NO_SITENAME, the GP site
+search should be skipped.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15548
+
+Signed-off-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+
+Autobuild-User(master): Andreas Schneider <asn@cryptomilk.org>
+Autobuild-Date(master): Tue Jan 23 11:20:35 UTC 2024 on atb-devel-224
+
+(cherry picked from commit f05b61b4991e7f51bd184d76a79f8b50114a0ff3)
+---
+ python/samba/gp/gpclass.py | 30 ++++++++++++++++++------------
+ 1 file changed, 18 insertions(+), 12 deletions(-)
+
+diff --git a/python/samba/gp/gpclass.py b/python/samba/gp/gpclass.py
+index 617ef79350c..babd8f90748 100644
+--- a/python/samba/gp/gpclass.py
++++ b/python/samba/gp/gpclass.py
+@@ -866,19 +866,25 @@ def get_gpo_list(dc_hostname, creds, lp, username):
+ 
+     # (S)ite
+     if gpo_list_machine:
+-        site_dn = site_dn_for_machine(samdb, dc_hostname, lp, creds, username)
+-
+         try:
+-            log.debug("get_gpo_list: query SITE: [%s] for GPOs" % site_dn)
+-            gp_link = get_gpo_link(samdb, site_dn)
+-        except ldb.LdbError as e:
+-            (enum, estr) = e.args
+-            log.debug(estr)
+-        else:
+-            add_gplink_to_gpo_list(samdb, gpo_list, forced_gpo_list,
+-                                   site_dn, gp_link,
+-                                   gpo.GP_LINK_SITE,
+-                                   add_only_forced_gpos, token)
++            site_dn = site_dn_for_machine(samdb, dc_hostname, lp, creds, username)
++
++            try:
++                log.debug("get_gpo_list: query SITE: [%s] for GPOs" % site_dn)
++                gp_link = get_gpo_link(samdb, site_dn)
++            except ldb.LdbError as e:
++                (enum, estr) = e.args
++                log.debug(estr)
++            else:
++                add_gplink_to_gpo_list(samdb, gpo_list, forced_gpo_list,
++                                       site_dn, gp_link,
++                                       gpo.GP_LINK_SITE,
++                                       add_only_forced_gpos, token)
++        except ldb.LdbError:
++            # [MS-GPOL] 3.2.5.1.4 Site Search: If the method returns
++            # ERROR_NO_SITENAME, the remainder of this message MUST be skipped
++            # and the protocol sequence MUST continue at GPO Search
++            pass
+ 
+     # (L)ocal
+     gpo_list.insert(0, gpo.GROUP_POLICY_OBJECT("Local Policy",
+-- 
+2.43.0
+
+
+From d0d1a890d6f2466691fa4ee663232ee0bd1c3776 Mon Sep 17 00:00:00 2001
+From: Andreas Schneider <asn@samba.org>
+Date: Mon, 22 Jan 2024 14:14:30 +0100
+Subject: [PATCH 15/21] python:gp: Avoid path check for cepces-submit
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+find_cepces_submit() uses which(), which returns None if not found.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15559
+
+Signed-off-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Pavel Filipenský <pfilipensky@samba.org>
+(cherry picked from commit 6a9630eff624643fd725219775784e68d967d04c)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index 559c903e1a2..7325d5132cf 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -185,7 +185,7 @@ def find_cepces_submit():
+ 
+ def get_supported_templates(server):
+     cepces_submit = find_cepces_submit()
+-    if not cepces_submit or not os.path.exists(cepces_submit):
++    if not cepces_submit:
+         log.error('Failed to find cepces-submit')
+         return []
+ 
+@@ -301,7 +301,7 @@ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+     # Setup Certificate Auto Enrollment
+     getcert = which('getcert')
+     cepces_submit = find_cepces_submit()
+-    if getcert is not None and os.path.exists(cepces_submit):
++    if getcert is not None and cepces_submit is not None:
+         p = Popen([getcert, 'add-ca', '-c', ca['name'], '-e',
+                   '%s --server=%s --auth=%s' % (cepces_submit,
+                   ca['hostname'], auth)],
+-- 
+2.43.0
+
+
+From 7f6c9a4945635c6eb8ada2255bd0febbf0f4e540 Mon Sep 17 00:00:00 2001
+From: Andreas Schneider <asn@samba.org>
+Date: Mon, 22 Jan 2024 14:07:47 +0100
+Subject: [PATCH 16/21] python:gp: Improve logging for certificate enrollment
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15559
+
+Signed-off-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Pavel Filipenský <pfilipensky@samba.org>
+(cherry picked from commit 6d5507e05050690cd4c56f3f97f5fb7de0338b87)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index 7325d5132cf..a25a9678587 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -274,6 +274,9 @@ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+     """Install the root certificate chain."""
+     data = dict({'files': [], 'templates': []}, **ca)
+     url = 'http://%s/CertSrv/mscep/mscep.dll/pkiclient.exe?' % ca['hostname']
++
++    log.info("Try to get root or server certificates")
++
+     root_certs = getca(ca, url, trust_dir)
+     data['files'].extend(root_certs)
+     global_trust_dir = find_global_trust_dir()
+@@ -283,6 +286,7 @@ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+         try:
+             os.symlink(src, dst)
+             data['files'].append(dst)
++            log.info("Created symlink: %s -> %s" % (src, dst))
+         except PermissionError:
+             log.warn('Failed to symlink root certificate to the'
+                      ' admin trust anchors')
+@@ -295,9 +299,14 @@ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+             # already exists. Ignore the FileExistsError. Preserve the
+             # existing symlink in the unapply data.
+             data['files'].append(dst)
++
+     update = update_ca_command()
++    log.info("Running %s" % (update))
+     if update is not None:
+-        Popen([update]).wait()
++        ret = Popen([update]).wait()
++        if ret != 0:
++            log.error('Failed to run %s' % (update))
++
+     # Setup Certificate Auto Enrollment
+     getcert = which('getcert')
+     cepces_submit = find_cepces_submit()
+-- 
+2.43.0
+
+
+From 5321d5b5bd24d7659743576f2e12a7dc0a93a828 Mon Sep 17 00:00:00 2001
+From: Andreas Schneider <asn@samba.org>
+Date: Mon, 22 Jan 2024 15:04:36 +0100
+Subject: [PATCH 17/21] python:gp: Do not print an error, if CA already exists
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We will get an exit status for duplicate in future:
+https://www.pagure.io/certmonger/issue/269
+We can't really fix that right now, as older version of certmonger
+don't support the `-v` option.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15559
+
+Signed-off-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Pavel Filipenský <pfilipensky@samba.org>
+(cherry picked from commit 728757cd1ff0465967fcbda100254c9312e87c93)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index a25a9678587..0b23cd688db 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -318,8 +318,12 @@ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+         out, err = p.communicate()
+         log.debug(out.decode())
+         if p.returncode != 0:
+-            data = { 'Error': err.decode(), 'CA': ca['name'] }
+-            log.error('Failed to add Certificate Authority', data)
++            if p.returncode == 2:
++                log.info('The CA [%s] already exists' % ca['name'])
++            else:
++                data = {'Error': err.decode(), 'CA': ca['name']}
++                log.error('Failed to add Certificate Authority', data)
++
+         supported_templates = get_supported_templates(ca['hostname'])
+         for template in supported_templates:
+             attrs = fetch_template_attrs(ldb, template)
+-- 
+2.43.0
+
+
+From 6a7a8a4090b8cdb8e71f4ad590260ceeda253ce2 Mon Sep 17 00:00:00 2001
+From: Andreas Schneider <asn@samba.org>
+Date: Mon, 22 Jan 2024 15:05:02 +0100
+Subject: [PATCH 18/21] python:gp: Do not print an error if template already
+ exists
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We will get an exit status for duplicate in future:
+https://www.pagure.io/certmonger/issue/269
+We can't really fix that right now, as older version of certmonger
+don't support the `-v` option.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15559
+
+Signed-off-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Pavel Filipenský <pfilipensky@samba.org>
+(cherry picked from commit 98dc44286ea102ef7701ccdea26bbde32b523a7e)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index 0b23cd688db..db681cb6f69 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -338,8 +338,12 @@ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+             out, err = p.communicate()
+             log.debug(out.decode())
+             if p.returncode != 0:
+-                data = { 'Error': err.decode(), 'Certificate': nickname }
+-                log.error('Failed to request certificate', data)
++                if p.returncode == 2:
++                    log.info('The template [%s] already exists' % (nickname))
++                else:
++                    data = {'Error': err.decode(), 'Certificate': nickname}
++                    log.error('Failed to request certificate', data)
++
+             data['files'].extend([keyfile, certfile])
+             data['templates'].append(nickname)
+         if update is not None:
+-- 
+2.43.0
+
+
+From 43dc3d5d833bc1db885eb45402decd3225a7c946 Mon Sep 17 00:00:00 2001
+From: Andreas Schneider <asn@samba.org>
+Date: Mon, 22 Jan 2024 15:05:24 +0100
+Subject: [PATCH 19/21] python:gp: Log an error if update fails
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15559
+
+Signed-off-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Pavel Filipenský <pfilipensky@samba.org>
+(cherry picked from commit 367756b85a9ac8daaac2326392bcd1373feed3b7)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index db681cb6f69..c8ad2039dc6 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -347,7 +347,9 @@ def cert_enroll(ca, ldb, trust_dir, private_dir, auth='Kerberos'):
+             data['files'].extend([keyfile, certfile])
+             data['templates'].append(nickname)
+         if update is not None:
+-            Popen([update]).wait()
++            ret = Popen([update]).wait()
++            if ret != 0:
++                log.error('Failed to run %s' % (update))
+     else:
+         log.warn('certmonger and cepces must be installed for ' +
+                  'certificate auto enrollment to work')
+-- 
+2.43.0
+
+
+From d8276d6a098d10f405b8f24c4dfb82af4496607c Mon Sep 17 00:00:00 2001
+From: Andreas Schneider <asn@samba.org>
+Date: Mon, 22 Jan 2024 15:46:24 +0100
+Subject: [PATCH 20/21] python:gp: Improve working of log messages to avoid
+ confusion
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We should not use the word "Failed". We are totally fine if we can't
+connect to NDES in the meantime. This logs:
+
+Try to get root or server certificates.
+Unable to install root certificates (requires NDES).
+Installing the server certificate only.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15559
+
+Signed-off-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: David Mulder <dmulder@samba.org>
+Reviewed-by: Pavel Filipenský <pfilipensky@samba.org>
+
+Autobuild-User(master): Andreas Schneider <asn@cryptomilk.org>
+Autobuild-Date(master): Mon Jan 29 10:37:29 UTC 2024 on atb-devel-224
+
+(cherry picked from commit 1f823424418e814d9dc0785658e2a7d92643dab2)
+---
+ python/samba/gp/gp_cert_auto_enroll_ext.py | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/python/samba/gp/gp_cert_auto_enroll_ext.py b/python/samba/gp/gp_cert_auto_enroll_ext.py
+index c8ad2039dc6..2b7f7d22c2b 100644
+--- a/python/samba/gp/gp_cert_auto_enroll_ext.py
++++ b/python/samba/gp/gp_cert_auto_enroll_ext.py
+@@ -209,12 +209,10 @@ def getca(ca, url, trust_dir):
+         r = requests.get(url=url, params={'operation': 'GetCACert',
+                                           'message': 'CAIdentifier'})
+     except requests.exceptions.ConnectionError:
+-        log.warn('Failed to establish a new connection')
++        log.warn('Could not connect to Network Device Enrollment Service.')
+         r = None
+     if r is None or r.content == b'' or r.headers['Content-Type'] == 'text/html':
+-        log.warn('Failed to fetch the root certificate chain.')
+-        log.warn('The Network Device Enrollment Service is either not' +
+-                 ' installed or not configured.')
++        log.warn('Unable to fetch root certificates (requires NDES).')
+         if 'cACertificate' in ca:
+             log.warn('Installing the server certificate only.')
+             der_certificate = base64.b64decode(ca['cACertificate'])
+-- 
+2.43.0
+
+
+From 585357bf0d8889747a2769c2451ee34766087d95 Mon Sep 17 00:00:00 2001
+From: Andreas Schneider <asn@samba.org>
+Date: Mon, 29 Jan 2024 17:46:30 +0100
+Subject: [PATCH 21/21] python:gp: Fix logging with gp
+
+This allows enable INFO level logging with: `samba-gpupdate -d3`
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=15558
+
+Signed-off-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Joseph Sutton <josephsutton@catalyst.net.nz>
+Reviewed-by: Andrew Bartlett <abartlet@samba.org>
+
+Autobuild-User(master): Andreas Schneider <asn@cryptomilk.org>
+Autobuild-Date(master): Tue Jan 30 07:18:05 UTC 2024 on atb-devel-224
+
+(cherry picked from commit 145194071b10c4c1857f28fe79c57fd63ffab889)
+---
+ python/samba/gp/util/logging.py | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/python/samba/gp/util/logging.py b/python/samba/gp/util/logging.py
+index a74a8707d50..c3de32825db 100644
+--- a/python/samba/gp/util/logging.py
++++ b/python/samba/gp/util/logging.py
+@@ -24,9 +24,10 @@ import gettext
+ import random
+ import sys
+ 
+-logger = logging.getLogger()
++logger = logging.getLogger("gp")
++
++
+ def logger_init(name, log_level):
+-    logger = logging.getLogger(name)
+     logger.addHandler(logging.StreamHandler(sys.stdout))
+     logger.setLevel(logging.CRITICAL)
+     if log_level == 1:
+-- 
+2.43.0
+

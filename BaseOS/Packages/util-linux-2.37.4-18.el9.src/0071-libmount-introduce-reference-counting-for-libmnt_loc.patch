@@ -1,0 +1,174 @@
+From 2ae4cd64f0bd535973fa3824c42e66c7e80dc09c Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Fri, 19 Jan 2024 12:15:48 +0100
+Subject: libmount: introduce reference counting for libmnt_lock
+
+Addresses: https://issues.redhat.com/browse/RHEL-14612
+Upstream: http://github.com/util-linux/util-linux/commit/87938635348a788ffd10cdbfb9055eddc2ed7a9f
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libmount/docs/libmount-sections.txt |  2 ++
+ libmount/src/context.c              |  3 +-
+ libmount/src/libmount.h.in          |  2 ++
+ libmount/src/libmount.sym           |  8 +++++
+ libmount/src/lock.c                 | 49 ++++++++++++++++++++++++++---
+ 5 files changed, 58 insertions(+), 6 deletions(-)
+
+diff --git a/libmount/docs/libmount-sections.txt b/libmount/docs/libmount-sections.txt
+index 89b2b1e8b..d9263b8ad 100644
+--- a/libmount/docs/libmount-sections.txt
++++ b/libmount/docs/libmount-sections.txt
+@@ -297,6 +297,8 @@ libmnt_lock
+ mnt_free_lock
+ mnt_lock_file
+ mnt_new_lock
++mnt_ref_lock
++mnt_unref_lock
+ mnt_unlock_file
+ mnt_lock_block_signals
+ </SECTION>
+diff --git a/libmount/src/context.c b/libmount/src/context.c
+index c03b0ea64..ca7ea70d0 100644
+--- a/libmount/src/context.c
++++ b/libmount/src/context.c
+@@ -101,9 +101,8 @@ void mnt_free_context(struct libmnt_context *cxt)
+ 	mnt_unref_cache(cxt->cache);
+ 	mnt_unref_fs(cxt->fs);
+ 	mnt_unref_fs(cxt->fs_template);
+-
+ 	mnt_context_clear_loopdev(cxt);
+-	mnt_free_lock(cxt->lock);
++	mnt_unref_lock(cxt->lock);
+ 	mnt_free_update(cxt->update);
+ 
+ 	mnt_context_set_target_ns(cxt, NULL);
+diff --git a/libmount/src/libmount.h.in b/libmount/src/libmount.h.in
+index 2d4d044e9..a51ac1ea5 100644
+--- a/libmount/src/libmount.h.in
++++ b/libmount/src/libmount.h.in
+@@ -417,6 +417,8 @@ extern const struct libmnt_optmap *mnt_get_builtin_optmap(int id);
+ /* lock.c */
+ extern struct libmnt_lock *mnt_new_lock(const char *datafile, pid_t id)
+ 			__ul_attribute__((warn_unused_result));
++extern void mnt_ref_lock(struct libmnt_lock *ml);
++extern void mnt_unref_lock(struct libmnt_lock *ml);
+ extern void mnt_free_lock(struct libmnt_lock *ml);
+ 
+ extern void mnt_unlock_file(struct libmnt_lock *ml);
+diff --git a/libmount/src/libmount.sym b/libmount/src/libmount.sym
+index 85e89ad02..88bce5c4b 100644
+--- a/libmount/src/libmount.sym
++++ b/libmount/src/libmount.sym
+@@ -361,3 +361,11 @@ MOUNT_2_37 {
+ 	mnt_fs_get_vfs_options_all;
+ 	mnt_table_over_fs;
+ } MOUNT_2_35;
++
++/*
++ * Backport from v2.40 to RHEL 
++ */
++MOUNT_2_40 {
++	mnt_ref_lock;
++	mnt_unref_lock;
++} MOUNT_2_37;
+diff --git a/libmount/src/lock.c b/libmount/src/lock.c
+index fac64b63b..62353e215 100644
+--- a/libmount/src/lock.c
++++ b/libmount/src/lock.c
+@@ -36,6 +36,7 @@
+  * lock handler
+  */
+ struct libmnt_lock {
++	int	refcount;	/* reference counter */
+ 	char	*lockfile;	/* path to lock file (e.g. /etc/mtab~) */
+ 	char	*linkfile;	/* path to link file (e.g. /etc/mtab~.<id>) */
+ 	int	lockfile_fd;	/* lock file descriptor */
+@@ -82,6 +83,7 @@ struct libmnt_lock *mnt_new_lock(const char *datafile, pid_t id)
+ 	if (!ml)
+ 		goto err;
+ 
++	ml->refcount = 1;
+ 	ml->lockfile_fd = -1;
+ 	ml->linkfile = ln;
+ 	ml->lockfile = lo;
+@@ -100,18 +102,57 @@ err:
+  * mnt_free_lock:
+  * @ml: struct libmnt_lock handler
+  *
+- * Deallocates mnt_lock.
++ * Deallocates libmnt_lock. This function does not care about reference count. Don't
++ * use this function directly -- it's better to use mnt_unref_lock().
++ *
++ * The reference counting is supported since util-linux v2.40.
+  */
+ void mnt_free_lock(struct libmnt_lock *ml)
+ {
+ 	if (!ml)
+ 		return;
+-	DBG(LOCKS, ul_debugobj(ml, "free%s", ml->locked ? " !!! LOCKED !!!" : ""));
++
++	DBG(LOCKS, ul_debugobj(ml, "free%s [refcount=%d]",
++					ml->locked ? " !!! LOCKED !!!" : "",
++					ml->refcount));
+ 	free(ml->lockfile);
+ 	free(ml->linkfile);
+ 	free(ml);
+ }
+ 
++/**
++ * mnt_ref_lock:
++ * @ml: lock pointer
++ *
++ * Increments reference counter.
++ *
++ * Since: 2.40
++ */
++void mnt_ref_lock(struct libmnt_lock *ml)
++{
++	if (ml) {
++		ml->refcount++;
++		/*DBG(FS, ul_debugobj(fs, "ref=%d", ml->refcount));*/
++	}
++}
++
++/**
++ * mnt_unref_lock:
++ * @ml: lock pointer
++ *
++ * De-increments reference counter, on zero the @ml is automatically
++ * deallocated by mnt_free_lock).
++ */
++void mnt_unref_lock(struct libmnt_lock *ml)
++{
++	if (ml) {
++		ml->refcount--;
++		/*DBG(FS, ul_debugobj(fs, "unref=%d", ml->refcount));*/
++		if (ml->refcount <= 0)
++			mnt_free_lock(ml);
++	}
++}
++
+ /**
+  * mnt_lock_block_signals:
+  * @ml: struct libmnt_lock handler
+@@ -620,7 +661,7 @@ static void clean_lock(void)
+ 	if (!lock)
+ 		return;
+ 	mnt_unlock_file(lock);
+-	mnt_free_lock(lock);
++	mnt_unref_lock(lock);
+ }
+ 
+ static void __attribute__((__noreturn__)) sig_handler(int sig)
+@@ -700,7 +741,7 @@ static int test_lock(struct libmnt_test *ts, int argc, char *argv[])
+ 		increment_data(datafile, verbose, l);
+ 
+ 		mnt_unlock_file(lock);
+-		mnt_free_lock(lock);
++		mnt_unref_lock(lock);
+ 		lock = NULL;
+ 
+ 		/* The mount command usually finishes after a mtab update. We
+-- 
+2.43.0
+

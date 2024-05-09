@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 24 Sep 2021 13:13:31 -0500
+Subject: [PATCH] libmultipath: print the correct file when parsing fails
+
+Don't assume that parsing failed on multipath.conf
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/parser.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/libmultipath/parser.c b/libmultipath/parser.c
+index ebe1cbd9..d5595fb0 100644
+--- a/libmultipath/parser.c
++++ b/libmultipath/parser.c
+@@ -561,8 +561,8 @@ process_stream(struct config *conf, FILE *stream, vector keywords,
+ 				    t = keyword->handler(conf, strvec);
+ 					r += t;
+ 					if (t)
+-						condlog(1, "multipath.conf +%d, parsing failed: %s",
+-							line_nr, buf);
++						condlog(1, "%s line %d, parsing failed: %s",
++							file, line_nr, buf);
+ 				}
+ 
+ 				if (keyword->sub) {

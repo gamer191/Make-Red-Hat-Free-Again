@@ -1,0 +1,1711 @@
+From 75e92678bfb687d23594c3ecef299cddca657c3e Mon Sep 17 00:00:00 2001
+From: Jan Kolarik <jkolarik@redhat.com>
+Date: Thu, 22 Sep 2022 16:02:55 +0000
+Subject: [PATCH 1/4] Move system-upgrade plugin to core (RhBug:2054235)
+
+= changelog =
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2054235
+---
+ CMakeLists.txt                                |  15 +
+ dnf-plugins-core.spec                         |  38 +-
+ doc/CMakeLists.txt                            |   1 +
+ doc/conf.py                                   |   1 +
+ doc/index.rst                                 |   1 +
+ doc/system-upgrade.rst                        | 207 ++++++
+ etc/CMakeLists.txt                            |   1 +
+ etc/systemd/CMakeLists.txt                    |   1 +
+ .../dnf-system-upgrade-cleanup.service        |  11 +
+ etc/systemd/dnf-system-upgrade.service        |  20 +
+ plugins/CMakeLists.txt                        |   1 +
+ plugins/system_upgrade.py                     | 699 ++++++++++++++++++
+ tests/test_system_upgrade.py                  | 502 +++++++++++++
+ 13 files changed, 1494 insertions(+), 4 deletions(-)
+ create mode 100644 doc/system-upgrade.rst
+ create mode 100644 etc/systemd/CMakeLists.txt
+ create mode 100644 etc/systemd/dnf-system-upgrade-cleanup.service
+ create mode 100644 etc/systemd/dnf-system-upgrade.service
+ create mode 100644 plugins/system_upgrade.py
+ create mode 100644 tests/test_system_upgrade.py
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 59c4f2a..a1eea7b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -23,6 +23,21 @@ MESSAGE(STATUS "Python install dir is ${PYTHON_INSTALL_DIR}")
+ 
+ SET (SYSCONFDIR /etc)
+ 
++find_package (PkgConfig)
++
++if (PKG_CONFIG_FOUND)
++  pkg_search_module (SYSTEMD systemd)
++  if (SYSTEMD_FOUND)
++    execute_process (COMMAND ${PKG_CONFIG_EXECUTABLE} --variable=systemdsystemunitdir systemd
++                     OUTPUT_VARIABLE SYSTEMD_DIR
++                     OUTPUT_STRIP_TRAILING_WHITESPACE)
++  endif ()
++endif()
++
++if (NOT SYSTEMD_DIR)
++  set (SYSTEMD_DIR /usr/lib/systemd/system)
++endif ()
++
+ ADD_SUBDIRECTORY (libexec)
+ ADD_SUBDIRECTORY (doc)
+ ADD_SUBDIRECTORY (etc)
+diff --git a/dnf-plugins-core.spec b/dnf-plugins-core.spec
+index c37dda8..4df6e44 100644
+--- a/dnf-plugins-core.spec
++++ b/dnf-plugins-core.spec
+@@ -64,6 +64,9 @@ Provides:       dnf-command(repograph)
+ Provides:       dnf-command(repomanage)
+ Provides:       dnf-command(reposync)
+ Provides:       dnf-command(repodiff)
++Provides:       dnf-command(system-upgrade)
++Provides:       dnf-command(offline-upgrade)
++Provides:       dnf-command(offline-distrosync)
+ Provides:       dnf-plugins-extras-debug = %{version}-%{release}
+ Provides:       dnf-plugins-extras-repoclosure = %{version}-%{release}
+ Provides:       dnf-plugins-extras-repograph = %{version}-%{release}
+@@ -80,6 +83,7 @@ Provides:       dnf-plugin-repodiff = %{version}-%{release}
+ Provides:       dnf-plugin-repograph = %{version}-%{release}
+ Provides:       dnf-plugin-repomanage = %{version}-%{release}
+ Provides:       dnf-plugin-reposync = %{version}-%{release}
++Provides:       dnf-plugin-system-upgrade = %{version}-%{release}
+ %if %{with yumcompatibility}
+ Provides:       yum-plugin-copr = %{version}-%{release}
+ Provides:       yum-plugin-changelog = %{version}-%{release}
+@@ -133,8 +137,8 @@ Conflicts:      python-%{name} < %{version}-%{release}
+ %description -n python2-%{name}
+ Core Plugins for DNF, Python 2 interface. This package enhances DNF with builddep,
+ config-manager, copr, degug, debuginfo-install, download, needs-restarting,
+-groups-manager, repoclosure, repograph, repomanage, reposync, changelog
+-and repodiff commands.
++groups-manager, repoclosure, repograph, repomanage, reposync, changelog,
++repodiff, system-upgrade, offline-upgrade and offline-distrosync commands.
+ Additionally provides generate_completion_cache passive plugin.
+ %endif
+ 
+@@ -145,6 +149,10 @@ Summary:    Core Plugins for DNF
+ BuildRequires:  python3-dbus
+ BuildRequires:  python3-devel
+ BuildRequires:  python3-dnf >= %{dnf_lowest_compatible}
++BuildRequires:  python3-systemd
++BuildRequires:  pkgconfig(systemd)
++BuildRequires:  systemd
++%{?systemd_ordering}
+ %if 0%{?fedora}
+ Requires:       python3-distro
+ %endif
+@@ -152,14 +160,17 @@ Requires:       python3-dbus
+ Requires:       python3-dnf >= %{dnf_lowest_compatible}
+ Requires:       python3-hawkey >= %{hawkey_version}
+ Requires:       python3-dateutil
++Requires:       python3-systemd
+ Provides:       python3-dnf-plugins-extras-debug = %{version}-%{release}
+ Provides:       python3-dnf-plugins-extras-repoclosure = %{version}-%{release}
+ Provides:       python3-dnf-plugins-extras-repograph = %{version}-%{release}
+ Provides:       python3-dnf-plugins-extras-repomanage = %{version}-%{release}
++Provides:       python3-dnf-plugin-system-upgrade = %{version}-%{release}
+ Obsoletes:      python3-dnf-plugins-extras-debug < %{dnf_plugins_extra}
+ Obsoletes:      python3-dnf-plugins-extras-repoclosure < %{dnf_plugins_extra}
+ Obsoletes:      python3-dnf-plugins-extras-repograph < %{dnf_plugins_extra}
+ Obsoletes:      python3-dnf-plugins-extras-repomanage < %{dnf_plugins_extra}
++Obsoletes:      python3-dnf-plugin-system-upgrade < %{version}-%{release}
+ 
+ Conflicts:      %{name} <= 0.1.5
+ # let the both python plugin versions be updated simultaneously
+@@ -169,8 +180,8 @@ Conflicts:      python-%{name} < %{version}-%{release}
+ %description -n python3-%{name}
+ Core Plugins for DNF, Python 3 interface. This package enhances DNF with builddep,
+ config-manager, copr, debug, debuginfo-install, download, needs-restarting,
+-groups-manager, repoclosure, repograph, repomanage, reposync, changelog
+-and repodiff commands.
++groups-manager, repoclosure, repograph, repomanage, reposync, changelog,
++repodiff, system-upgrade, offline-upgrade and offline-distrosync commands.
+ Additionally provides generate_completion_cache passive plugin.
+ %endif
+ 
+@@ -451,6 +462,17 @@ pushd build-py3
+   %make_install
+ popd
+ %endif
++
++%if %{with python3}
++mkdir -p %{buildroot}%{_unitdir}/system-update.target.wants/
++pushd %{buildroot}%{_unitdir}/system-update.target.wants/
++  ln -sr ../dnf-system-upgrade.service
++popd
++
++ln -sf %{_mandir}/man8/dnf-system-upgrade.8.gz %{buildroot}%{_mandir}/man8/dnf-offline-upgrade.8.gz
++ln -sf %{_mandir}/man8/dnf-system-upgrade.8.gz %{buildroot}%{_mandir}/man8/dnf-offline-distrosync.8.gz
++%endif
++
+ %find_lang %{name}
+ %if %{with yumutils}
+   %if %{with python3}
+@@ -515,6 +537,9 @@ ln -sf %{_mandir}/man1/%{yum_utils_subpackage_name}.1.gz %{buildroot}%{_mandir}/
+ %{_mandir}/man8/dnf-repograph.*
+ %{_mandir}/man8/dnf-repomanage.*
+ %{_mandir}/man8/dnf-reposync.*
++%{_mandir}/man8/dnf-system-upgrade.*
++%{_mandir}/man8/dnf-offline-upgrade.*
++%{_mandir}/man8/dnf-offline-distrosync.*
+ %if %{with yumcompatibility}
+ %{_mandir}/man1/yum-changelog.*
+ %{_mandir}/man8/yum-copr.*
+@@ -572,6 +597,7 @@ ln -sf %{_mandir}/man1/%{yum_utils_subpackage_name}.1.gz %{buildroot}%{_mandir}/
+ %{python3_sitelib}/dnf-plugins/repograph.py
+ %{python3_sitelib}/dnf-plugins/repomanage.py
+ %{python3_sitelib}/dnf-plugins/reposync.py
++%{python3_sitelib}/dnf-plugins/system_upgrade.py
+ %{python3_sitelib}/dnf-plugins/__pycache__/builddep.*
+ %{python3_sitelib}/dnf-plugins/__pycache__/changelog.*
+ %{python3_sitelib}/dnf-plugins/__pycache__/config_manager.*
+@@ -587,7 +613,11 @@ ln -sf %{_mandir}/man1/%{yum_utils_subpackage_name}.1.gz %{buildroot}%{_mandir}/
+ %{python3_sitelib}/dnf-plugins/__pycache__/repograph.*
+ %{python3_sitelib}/dnf-plugins/__pycache__/repomanage.*
+ %{python3_sitelib}/dnf-plugins/__pycache__/reposync.*
++%{python3_sitelib}/dnf-plugins/__pycache__/system_upgrade.*
+ %{python3_sitelib}/dnfpluginscore/
++%{_unitdir}/dnf-system-upgrade.service
++%{_unitdir}/dnf-system-upgrade-cleanup.service
++%{_unitdir}/system-update.target.wants/dnf-system-upgrade.service
+ %endif
+ 
+ %if %{with yumutils}
+diff --git a/doc/CMakeLists.txt b/doc/CMakeLists.txt
+index ff84cf8..79472a5 100644
+--- a/doc/CMakeLists.txt
++++ b/doc/CMakeLists.txt
+@@ -37,6 +37,7 @@ INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/dnf-builddep.8
+     ${CMAKE_CURRENT_BINARY_DIR}/dnf-reposync.8
+     ${CMAKE_CURRENT_BINARY_DIR}/dnf-post-transaction-actions.8
+     ${CMAKE_CURRENT_BINARY_DIR}/dnf-show-leaves.8
++    ${CMAKE_CURRENT_BINARY_DIR}/dnf-system-upgrade.8
+     ${CMAKE_CURRENT_BINARY_DIR}/dnf-versionlock.8
+     ${CMAKE_CURRENT_BINARY_DIR}/yum-copr.8
+     ${CMAKE_CURRENT_BINARY_DIR}/yum-versionlock.8
+diff --git a/doc/conf.py b/doc/conf.py
+index 41d6936..327ac07 100644
+--- a/doc/conf.py
++++ b/doc/conf.py
+@@ -264,6 +264,7 @@ man_pages = [
+     ('post-transaction-actions', 'dnf-post-transaction-actions',
+      u'DNF post transaction actions Plugin', AUTHORS, 8),
+     ('show-leaves', 'dnf-show-leaves', u'DNF show-leaves Plugin', AUTHORS, 8),
++    ('system-upgrade', 'dnf-system-upgrade', u'DNF system-upgrade Plugin', AUTHORS, 8),
+     ('versionlock', 'dnf-versionlock', u'DNF versionlock Plugin', AUTHORS, 8),
+ 
+     # yum3 compatible layer for manpages
+diff --git a/doc/index.rst b/doc/index.rst
+index 07f6052..251a24e 100644
+--- a/doc/index.rst
++++ b/doc/index.rst
+@@ -46,6 +46,7 @@ This documents core plugins of DNF:
+    repomanage
+    reposync
+    show-leaves
++   system-upgrade
+    versionlock
+ 
+ 
+diff --git a/doc/system-upgrade.rst b/doc/system-upgrade.rst
+new file mode 100644
+index 0000000..3110460
+--- /dev/null
++++ b/doc/system-upgrade.rst
+@@ -0,0 +1,207 @@
++..
++  Copyright (C) 2014-2016 Red Hat, Inc.
++
++  This copyrighted material is made available to anyone wishing to use,
++  modify, copy, or redistribute it subject to the terms and conditions of
++  the GNU General Public License v.2, or (at your option) any later version.
++  This program is distributed in the hope that it will be useful, but WITHOUT
++  ANY WARRANTY expressed or implied, including the implied warranties of
++  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
++  Public License for more details.  You should have received a copy of the
++  GNU General Public License along with this program; if not, write to the
++  Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
++  02110-1301, USA.  Any Red Hat trademarks that are incorporated in the
++  source code or documentation are not subject to the GNU General Public
++  License and may only be used or replicated with the express permission of
++  Red Hat, Inc.
++
++=========================
++DNF system-upgrade Plugin
++=========================
++
++-----------
++Description
++-----------
++
++DNF system-upgrades plugin provides three commands: ``system-upgrade``, ``offline-upgrade``, and
++``offline-distrosync``. Only ``system-upgrade`` command requires increase of distribution major
++version (``--releasever``) compared to installed version.
++
++``dnf system-upgrade`` can be used to upgrade a Fedora system to a new major
++release. It replaces fedup (the old Fedora Upgrade tool). Before you proceed ensure that your system
++is fully upgraded (``dnf --refresh upgrade``).
++
++The ``system-upgrade`` command also performes additional actions necessary for the upgrade of the
++system, for example an upgrade of groups and environments.
++
++--------
++Synopsis
++--------
++
++``dnf system-upgrade download --releasever VERSION [OPTIONS]``
++
++``dnf system-upgrade reboot``
++
++``dnf system-upgrade clean``
++
++``dnf system-upgrade log``
++
++``dnf system-upgrade log --number=<number>``
++
++``dnf offline-upgrade download [OPTIONS]``
++
++``dnf offline-upgrade reboot``
++
++``dnf offline-upgrade clean``
++
++``dnf offline-upgrade log``
++
++``dnf offline-upgrade log --number=<number>``
++
++``dnf offline-distrosync download [OPTIONS]``
++
++``dnf offline-distrosync reboot``
++
++``dnf offline-distrosync clean``
++
++``dnf offline-distrosync log``
++
++``dnf offline-distrosync log --number=<number>``
++
++-----------
++Subcommands
++-----------
++
++``download``
++    Downloads everything needed to upgrade to a new major release.
++
++``reboot``
++    Prepares the system to perform the upgrade, and reboots to start the upgrade.
++    This can only be used after the ``download`` command completes successfully.
++
++``clean``
++    Remove previously-downloaded data. This happens automatically at the end of
++    a successful upgrade.
++
++``log``
++    Used to see a list of boots during which an upgrade was attempted, or show
++    the logs from an upgrade attempt. The logs for one of the boots can be shown
++    by specifying one of the numbers in the first column. Negative numbers can
++    be used to number the boots from last to first. For example, ``log --number=-1`` can
++    be used to see the logs for the last upgrade attempt.
++
++-------
++Options
++-------
++
++``--releasever=VERSION``
++    REQUIRED. The version to upgrade to. Sets ``$releasever`` in all enabled
++    repos. Usually a number, or ``rawhide``.
++
++``--downloaddir=<path>``
++    Redirect download of packages to provided ``<path>``. By default, packages
++    are downloaded into (per repository created) subdirectories of
++    /var/lib/dnf/system-upgrade.
++
++``--distro-sync``
++    Behave like ``dnf distro-sync``: always install packages from the new
++    release, even if they are older than the currently-installed version. This
++    is the default behavior.
++
++``--no-downgrade``
++    Behave like ``dnf update``: do not install packages from the new release
++    if they are older than what is currently installed. This is the opposite of
++    ``--distro-sync``. If both are specified, the last option will be used. The option cannot be
++    used with the ``offline-distrosync`` command.
++
++``--number``
++    Applied with ``log`` subcommand will show the log specified by the number.
++
++-----
++Notes
++-----
++
++``dnf system-upgrade reboot`` does not create a "System Upgrade" boot item. The
++upgrade will start regardless of which boot item is chosen.
++
++The ``DNF_SYSTEM_UPGRADE_NO_REBOOT`` environment variable can be set to a
++non-empty value to disable the actual reboot performed by ``system-upgrade``
++(e.g. for testing purposes).
++
++Since this is a DNF plugin, options accepted by ``dnf`` are also valid here,
++such as ``--allowerasing``.
++See :manpage:`dnf(8)` for more information.
++
++The ``fedup`` command is not provided, not even as an alias for
++``dnf system-upgrade``.
++
++----
++Bugs
++----
++
++Upgrading from install media (e.g. a DVD or .iso file) currently requires the
++user to manually set up a DNF repo and fstab entry for the media.
++
++--------
++Examples
++--------
++
++Typical upgrade usage
++---------------------
++
++``dnf --refresh upgrade``
++
++``dnf system-upgrade download --releasever 26``
++
++``dnf system-upgrade reboot``
++
++Show logs from last upgrade attempt
++-----------------------------------
++
++``dnf system-upgrade log --number=-1``
++
++--------------
++Reporting Bugs
++--------------
++
++Bugs should be filed here:
++
++  https://bugzilla.redhat.com/
++
++For more info on filing bugs, see the Fedora Project wiki:
++
++  https://fedoraproject.org/wiki/How_to_file_a_bug_report
++
++  https://fedoraproject.org/wiki/Bugs_and_feature_requests
++
++Please include ``/var/log/dnf.log`` and the output of
++``dnf system-upgrade log --number=-1`` (if applicable) in your bug reports.
++
++Problems with dependency solving during download are best reported to the
++maintainers of the package(s) with the dependency problems.
++
++Similarly, problems encountered on your system after the upgrade completes
++should be reported to the maintainers of the affected components. In other
++words: if (for example) KDE stops working, it's best if you report that to
++the KDE maintainers.
++
++--------
++See Also
++--------
++
++:manpage:`dnf(8)`,
++:manpage:`dnf.conf(5)`,
++:manpage:`journalctl(1)`.
++
++Project homepage
++----------------
++
++https://github.com/rpm-software-management/dnf-plugins-core
++
++-------
++Authors
++-------
++
++Will Woods <wwoods@redhat.com>
++
++Štěpán Smetana <ssmetana@redhat.com>
+diff --git a/etc/CMakeLists.txt b/etc/CMakeLists.txt
+index 2e9cccd..a892f8a 100644
+--- a/etc/CMakeLists.txt
++++ b/etc/CMakeLists.txt
+@@ -1 +1,2 @@
+ ADD_SUBDIRECTORY (dnf)
++ADD_SUBDIRECTORY (systemd)
+diff --git a/etc/systemd/CMakeLists.txt b/etc/systemd/CMakeLists.txt
+new file mode 100644
+index 0000000..8a29403
+--- /dev/null
++++ b/etc/systemd/CMakeLists.txt
+@@ -0,0 +1 @@
++INSTALL (FILES "dnf-system-upgrade.service" "dnf-system-upgrade-cleanup.service" DESTINATION ${SYSTEMD_DIR})
+diff --git a/etc/systemd/dnf-system-upgrade-cleanup.service b/etc/systemd/dnf-system-upgrade-cleanup.service
+new file mode 100644
+index 0000000..49f771c
+--- /dev/null
++++ b/etc/systemd/dnf-system-upgrade-cleanup.service
+@@ -0,0 +1,11 @@
++[Unit]
++Description=System Upgrade using DNF failed
++DefaultDependencies=no
++
++[Service]
++Type=oneshot
++# Remove the symlink if it's still there, to protect against reboot loops.
++ExecStart=/usr/bin/rm -fv /system-update
++# If anything goes wrong, reboot back to the normal system.
++ExecStart=/usr/bin/systemctl --no-block reboot
++
+diff --git a/etc/systemd/dnf-system-upgrade.service b/etc/systemd/dnf-system-upgrade.service
+new file mode 100644
+index 0000000..2d23cfe
+--- /dev/null
++++ b/etc/systemd/dnf-system-upgrade.service
+@@ -0,0 +1,20 @@
++[Unit]
++Description=System Upgrade using DNF
++ConditionPathExists=/system-update
++Documentation=http://www.freedesktop.org/wiki/Software/systemd/SystemUpdates
++
++DefaultDependencies=no
++Requires=sysinit.target
++After=sysinit.target systemd-journald.socket system-update-pre.target
++Before=shutdown.target system-update.target
++OnFailure=dnf-system-upgrade-cleanup.service
++
++[Service]
++# We are done when the script exits, not before
++Type=oneshot
++# Upgrade output goes to journal and on-screen.
++StandardOutput=journal+console
++ExecStart=/usr/bin/dnf system-upgrade upgrade
++
++[Install]
++WantedBy=system-update.target
+diff --git a/plugins/CMakeLists.txt b/plugins/CMakeLists.txt
+index 59f148f..d004e5e 100644
+--- a/plugins/CMakeLists.txt
++++ b/plugins/CMakeLists.txt
+@@ -22,6 +22,7 @@ INSTALL (FILES repograph.py DESTINATION ${PYTHON_INSTALL_DIR}/dnf-plugins)
+ INSTALL (FILES repomanage.py DESTINATION ${PYTHON_INSTALL_DIR}/dnf-plugins)
+ INSTALL (FILES reposync.py DESTINATION ${PYTHON_INSTALL_DIR}/dnf-plugins)
+ INSTALL (FILES show_leaves.py DESTINATION ${PYTHON_INSTALL_DIR}/dnf-plugins)
++INSTALL (FILES system_upgrade.py DESTINATION ${PYTHON_INSTALL_DIR}/dnf-plugins)
+ INSTALL (FILES modulesync.py DESTINATION ${PYTHON_INSTALL_DIR}/dnf-plugins)
+ INSTALL (FILES versionlock.py DESTINATION ${PYTHON_INSTALL_DIR}/dnf-plugins)
+ 
+diff --git a/plugins/system_upgrade.py b/plugins/system_upgrade.py
+new file mode 100644
+index 0000000..fee6762
+--- /dev/null
++++ b/plugins/system_upgrade.py
+@@ -0,0 +1,699 @@
++# -*- coding: utf-8 -*-
++#
++# Copyright (c) 2015-2020 Red Hat, Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License along
++# with this program.  If not, see <http://www.gnu.org/licenses/>.
++#
++# Author(s): Will Woods <wwoods@redhat.com>
++
++"""system_upgrade.py - DNF plugin to handle major-version system upgrades."""
++
++from subprocess import call, Popen, check_output, CalledProcessError
++import json
++import os
++import os.path
++import re
++import sys
++import uuid
++
++from systemd import journal
++
++from dnfpluginscore import _, logger
++
++import dnf
++import dnf.cli
++from dnf.cli import CliError
++from dnf.i18n import ucd
++import dnf.transaction
++from dnf.transaction_sr import serialize_transaction, TransactionReplay
++
++import libdnf.conf
++
++
++# Translators: This string is only used in unit tests.
++_("the color of the sky")
++
++DOWNLOAD_FINISHED_ID = uuid.UUID('9348174c5cc74001a71ef26bd79d302e')
++REBOOT_REQUESTED_ID = uuid.UUID('fef1cc509d5047268b83a3a553f54b43')
++UPGRADE_STARTED_ID = uuid.UUID('3e0a5636d16b4ca4bbe5321d06c6aa62')
++UPGRADE_FINISHED_ID = uuid.UUID('8cec00a1566f4d3594f116450395f06c')
++
++ID_TO_IDENTIFY_BOOTS = UPGRADE_STARTED_ID
++
++PLYMOUTH = '/usr/bin/plymouth'
++
++RELEASEVER_MSG = _(
++    "Need a --releasever greater than the current system version.")
++DOWNLOAD_FINISHED_MSG = _(  # Translators: do not change "reboot" here
++    "Download complete! Use 'dnf {command} reboot' to start the upgrade.\n"
++    "To remove cached metadata and transaction use 'dnf {command} clean'")
++CANT_RESET_RELEASEVER = _(
++    "Sorry, you need to use 'download --releasever' instead of '--network'")
++
++STATE_VERSION = 2
++
++# --- Miscellaneous helper functions ------------------------------------------
++
++
++def reboot():
++    if os.getenv("DNF_SYSTEM_UPGRADE_NO_REBOOT", default=False):
++        logger.info(_("Reboot turned off, not rebooting."))
++    else:
++        Popen(["systemctl", "reboot"])
++
++
++def get_url_from_os_release():
++    key = "UPGRADE_GUIDE_URL="
++    for path in ["/etc/os-release", "/usr/lib/os-release"]:
++        try:
++            with open(path) as release_file:
++                for line in release_file:
++                    line = line.strip()
++                    if line.startswith(key):
++                        return line[len(key):].strip('"')
++        except IOError:
++            continue
++    return None
++
++
++# DNF-FIXME: dnf.util.clear_dir() doesn't delete regular files :/
++def clear_dir(path, ignore=[]):
++    if not os.path.isdir(path):
++        return
++
++    for entry in os.listdir(path):
++        fullpath = os.path.join(path, entry)
++        if fullpath in ignore:
++            continue
++        try:
++            if os.path.isdir(fullpath):
++                dnf.util.rm_rf(fullpath)
++            else:
++                os.unlink(fullpath)
++        except OSError:
++            pass
++
++
++def check_release_ver(conf, target=None):
++    if dnf.rpm.detect_releasever(conf.installroot) == conf.releasever:
++        raise CliError(RELEASEVER_MSG)
++    if target and target != conf.releasever:
++        # it's too late to set releasever here, so this can't work.
++        # (see https://bugzilla.redhat.com/show_bug.cgi?id=1212341)
++        raise CliError(CANT_RESET_RELEASEVER)
++
++
++def disable_blanking():
++    try:
++        tty = open('/dev/tty0', 'wb')
++        tty.write(b'\33[9;0]')
++    except Exception as e:
++        print(_("Screen blanking can't be disabled: %s") % e)
++
++# --- State object - for tracking upgrade state between runs ------------------
++
++
++# DNF-INTEGRATION-NOTE: basically the same thing as dnf.persistor.JSONDB
++class State(object):
++    def __init__(self, statefile):
++        self.statefile = statefile
++        self._data = {}
++        self._read()
++
++    def _read(self):
++        try:
++            with open(self.statefile) as fp:
++                self._data = json.load(fp)
++        except IOError:
++            self._data = {}
++        except ValueError:
++            self._data = {}
++            logger.warning(_("Failed loading state file: %s, continuing with "
++                             "empty state."), self.statefile)
++
++    def write(self):
++        dnf.util.ensure_dir(os.path.dirname(self.statefile))
++        with open(self.statefile, 'w') as outf:
++            json.dump(self._data, outf, indent=4, sort_keys=True)
++
++    def clear(self):
++        if os.path.exists(self.statefile):
++            os.unlink(self.statefile)
++        self._read()
++
++    def __enter__(self):
++        return self
++
++    def __exit__(self, exc_type, exc_value, traceback):
++        if exc_type is None:
++            self.write()
++
++    # helper function for creating properties. pylint: disable=protected-access
++    def _prop(option):  # pylint: disable=no-self-argument
++        def setprop(self, value):
++            self._data[option] = value
++
++        def getprop(self):
++            return self._data.get(option)
++        return property(getprop, setprop)
++
++    #  !!! Increase STATE_VERSION for any changes in data structure like a new property or a new
++    #  data structure !!!
++    state_version = _prop("state_version")
++    download_status = _prop("download_status")
++    destdir = _prop("destdir")
++    target_releasever = _prop("target_releasever")
++    system_releasever = _prop("system_releasever")
++    gpgcheck = _prop("gpgcheck")
++    # list of repos with gpgcheck=True
++    gpgcheck_repos = _prop("gpgcheck_repos")
++    # list of repos with repo_gpgcheck=True
++    repo_gpgcheck_repos = _prop("repo_gpgcheck_repos")
++    upgrade_status = _prop("upgrade_status")
++    upgrade_command = _prop("upgrade_command")
++    distro_sync = _prop("distro_sync")
++    enable_disable_repos = _prop("enable_disable_repos")
++    module_platform_id = _prop("module_platform_id")
++
++# --- Plymouth output helpers -------------------------------------------------
++
++
++class PlymouthOutput(object):
++    """A plymouth output helper class.
++
++    Filters duplicate calls, and stops calling the plymouth binary if we
++    fail to contact it.
++    """
++
++    def __init__(self):
++        self.alive = True
++        self._last_args = dict()
++        self._last_msg = None
++
++    def _plymouth(self, cmd, *args):
++        dupe_cmd = (args == self._last_args.get(cmd))
++        if (self.alive and not dupe_cmd) or cmd == '--ping':
++            try:
++                self.alive = (call((PLYMOUTH, cmd) + args) == 0)
++            except OSError:
++                self.alive = False
++            self._last_args[cmd] = args
++        return self.alive
++
++    def ping(self):
++        return self._plymouth("--ping")
++
++    def message(self, msg):
++        if self._last_msg and self._last_msg != msg:
++            self._plymouth("hide-message", "--text", self._last_msg)
++        self._last_msg = msg
++        return self._plymouth("display-message", "--text", msg)
++
++    def set_mode(self):
++        mode = 'updates'
++        try:
++            s = check_output([PLYMOUTH, '--help'])
++            if re.search('--system-upgrade', ucd(s)):
++                mode = 'system-upgrade'
++        except (CalledProcessError, OSError):
++            pass
++        return self._plymouth("change-mode", "--" + mode)
++
++    def progress(self, percent):
++        return self._plymouth("system-update", "--progress", str(percent))
++
++
++# A single PlymouthOutput instance for us to use within this module
++Plymouth = PlymouthOutput()
++
++
++# A TransactionProgress class that updates plymouth for us.
++class PlymouthTransactionProgress(dnf.callback.TransactionProgress):
++
++    # pylint: disable=too-many-arguments
++    def progress(self, package, action, ti_done, ti_total, ts_done, ts_total):
++        self._update_plymouth(package, action, ts_done, ts_total)
++
++    def _update_plymouth(self, package, action, current, total):
++        # Prevents quick jumps of progressbar when pretrans scriptlets
++        # and TRANS_PREPARATION are reported as 1/1
++        if total == 1:
++            return
++        # Verification goes through all the packages again,
++        # which resets the "current" param value, this prevents
++        # resetting of the progress bar as well. (Rhbug:1809096)
++        if action != dnf.callback.PKG_VERIFY:
++            Plymouth.progress(int(90.0 * current / total))
++        else:
++            Plymouth.progress(90 + int(10.0 * current / total))
++
++        Plymouth.message(self._fmt_event(package, action, current, total))
++
++    def _fmt_event(self, package, action, current, total):
++        action = dnf.transaction.ACTIONS.get(action, action)
++        return "[%d/%d] %s %s..." % (current, total, action, package)
++
++# --- journal helpers -------------------------------------------------
++
++
++def find_boots(message_id):
++    """Find all boots with this message id.
++
++    Returns the entries of all found boots.
++    """
++    j = journal.Reader()
++    j.add_match(MESSAGE_ID=message_id.hex,  # identify the message
++                _UID=0)                     # prevent spoofing of logs
++
++    oldboot = None
++    for entry in j:
++        boot = entry['_BOOT_ID']
++        if boot == oldboot:
++            continue
++        oldboot = boot
++        yield entry
++
++
++def list_logs():
++    print(_('The following boots appear to contain upgrade logs:'))
++    n = -1
++    for n, entry in enumerate(find_boots(ID_TO_IDENTIFY_BOOTS)):
++        print('{} / {.hex}: {:%Y-%m-%d %H:%M:%S} {}→{}'.format(
++            n + 1,
++            entry['_BOOT_ID'],
++            entry['__REALTIME_TIMESTAMP'],
++            entry.get('SYSTEM_RELEASEVER', '??'),
++            entry.get('TARGET_RELEASEVER', '??')))
++    if n == -1:
++        print(_('-- no logs were found --'))
++
++
++def pick_boot(message_id, n):
++    boots = list(find_boots(message_id))
++    # Positive indices index all found boots starting with 1 and going forward,
++    # zero is the current boot, and -1, -2, -3 are previous going backwards.
++    # This is the same as journalctl.
++    try:
++        if n == 0:
++            raise IndexError
++        if n > 0:
++            n -= 1
++        return boots[n]['_BOOT_ID']
++    except IndexError:
++        raise CliError(_("Cannot find logs with this index."))
++
++
++def show_log(n):
++    boot_id = pick_boot(ID_TO_IDENTIFY_BOOTS, n)
++    process = Popen(['journalctl', '--boot', boot_id.hex])
++    process.wait()
++    rc = process.returncode
++    if rc == 1:
++        raise dnf.exceptions.Error(_("Unable to match systemd journal entry"))
++
++
++CMDS = ['download', 'clean', 'reboot', 'upgrade', 'log']
++
++# --- The actual Plugin and Command objects! ----------------------------------
++
++
++class SystemUpgradePlugin(dnf.Plugin):
++    name = 'system-upgrade'
++
++    def __init__(self, base, cli):
++        super(SystemUpgradePlugin, self).__init__(base, cli)
++        if cli:
++            cli.register_command(SystemUpgradeCommand)
++            cli.register_command(OfflineUpgradeCommand)
++            cli.register_command(OfflineDistrosyncCommand)
++
++
++class SystemUpgradeCommand(dnf.cli.Command):
++    aliases = ('system-upgrade', 'fedup',)
++    summary = _("Prepare system for upgrade to a new release")
++
++    DATADIR = 'var/lib/dnf/system-upgrade'
++
++    def __init__(self, cli):
++        super(SystemUpgradeCommand, self).__init__(cli)
++        self.datadir = os.path.join(cli.base.conf.installroot, self.DATADIR)
++        self.transaction_file = os.path.join(self.datadir, 'system-upgrade-transaction.json')
++        self.magic_symlink = os.path.join(cli.base.conf.installroot, 'system-update')
++
++        self.state = State(os.path.join(self.datadir, 'system-upgrade-state.json'))
++
++    @staticmethod
++    def set_argparser(parser):
++        parser.add_argument("--no-downgrade", dest='distro_sync',
++                            action='store_false',
++                            help=_("keep installed packages if the new "
++                                   "release's version is older"))
++        parser.add_argument('tid', nargs=1, choices=CMDS,
++                            metavar="[%s]" % "|".join(CMDS))
++        parser.add_argument('--number', type=int, help=_('which logs to show'))
++
++    def log_status(self, message, message_id):
++        """Log directly to the journal."""
++        journal.send(message,
++                     MESSAGE_ID=message_id,
++                     PRIORITY=journal.LOG_NOTICE,
++                     SYSTEM_RELEASEVER=self.state.system_releasever,
++                     TARGET_RELEASEVER=self.state.target_releasever,
++                     DNF_VERSION=dnf.const.VERSION)
++
++    def pre_configure(self):
++        self._call_sub("check")
++        self._call_sub("pre_configure")
++
++    def configure(self):
++        self._call_sub("configure")
++
++    def run(self):
++        self._call_sub("run")
++
++    def run_transaction(self):
++        self._call_sub("transaction")
++
++    def run_resolved(self):
++        self._call_sub("resolved")
++
++    def _call_sub(self, name):
++        subfunc = getattr(self, name + '_' + self.opts.tid[0], None)
++        if callable(subfunc):
++            subfunc()
++
++    def _check_state_version(self, command):
++        if self.state.state_version != STATE_VERSION:
++            msg = _("Incompatible version of data. Rerun 'dnf {command} download [OPTIONS]'"
++                    "").format(command=command)
++            raise CliError(msg)
++
++    def _set_cachedir(self):
++        # set download directories from json state file
++        self.base.conf.cachedir = self.datadir
++        self.base.conf.destdir = self.state.destdir if self.state.destdir else None
++
++    def _get_forward_reverse_pkg_reason_pairs(self):
++        """
++        forward = {repoid:{pkg_nevra: {tsi.action: tsi.reason}}
++        reverse = {pkg_nevra: {tsi.action: tsi.reason}}
++        :return: forward, reverse
++        """
++        backward_action = set(dnf.transaction.BACKWARD_ACTIONS + [libdnf.transaction.TransactionItemAction_REINSTALLED])
++        forward_actions = set(dnf.transaction.FORWARD_ACTIONS)
++
++        forward = {}
++        reverse = {}
++        for tsi in self.cli.base.transaction:
++            if tsi.action in forward_actions:
++                pkg = tsi.pkg
++                forward.setdefault(pkg.repo.id, {}).setdefault(
++                    str(pkg), {})[tsi.action] = tsi.reason
++            elif tsi.action in backward_action:
++                reverse.setdefault(str(tsi.pkg), {})[tsi.action] = tsi.reason
++        return forward, reverse
++
++    # == pre_configure_*: set up action-specific demands ==========================
++    def pre_configure_download(self):
++        # only download subcommand accepts --destdir command line option
++        self.base.conf.cachedir = self.datadir
++        self.base.conf.destdir = self.opts.destdir if self.opts.destdir else None
++        if 'offline-distrosync' == self.opts.command and not self.opts.distro_sync:
++            raise CliError(
++                _("Command 'offline-distrosync' cannot be used with --no-downgrade option"))
++        elif 'offline-upgrade' == self.opts.command:
++            self.opts.distro_sync = False
++
++    def pre_configure_reboot(self):
++        self._set_cachedir()
++
++    def pre_configure_upgrade(self):
++        self._set_cachedir()
++        if self.state.enable_disable_repos:
++            self.opts.repos_ed = self.state.enable_disable_repos
++        self.base.conf.releasever = self.state.target_releasever
++
++    def pre_configure_clean(self):
++        self._set_cachedir()
++
++    # == configure_*: set up action-specific demands ==========================
++
++    def configure_download(self):
++        if 'system-upgrade' == self.opts.command or 'fedup' == self.opts.command:
++            help_url = get_url_from_os_release()
++            if help_url:
++                msg = _('Additional information for System Upgrade: {}')
++                logger.info(msg.format(ucd(help_url)))
++            if self.base._promptWanted():
++                msg = _('Before you continue ensure that your system is fully upgraded by running '
++                        '"dnf --refresh upgrade". Do you want to continue')
++                if self.base.conf.assumeno or not self.base.output.userconfirm(
++                        msg='{} [y/N]: '.format(msg), defaultyes_msg='{} [Y/n]: '.format(msg)):
++                    logger.error(_("Operation aborted."))
++                    sys.exit(1)
++            check_release_ver(self.base.conf, target=self.opts.releasever)
++        self.cli.demands.root_user = True
++        self.cli.demands.resolving = True
++        self.cli.demands.available_repos = True
++        self.cli.demands.sack_activation = True
++        self.cli.demands.freshest_metadata = True
++        # We want to do the depsolve / download / transaction-test, but *not*
++        # run the actual RPM transaction to install the downloaded packages.
++        # Setting the "test" flag makes the RPM transaction a test transaction,
++        # so nothing actually gets installed.
++        # (It also means that we run two test transactions in a row, which is
++        # kind of silly, but that's something for DNF to fix...)
++        self.base.conf.tsflags += ["test"]
++
++    def configure_reboot(self):
++        # FUTURE: add a --debug-shell option to enable debug shell:
++        # systemctl add-wants system-update.target debug-shell.service
++        self.cli.demands.root_user = True
++
++    def configure_upgrade(self):
++        # same as the download, but offline and non-interactive. so...
++        self.cli.demands.root_user = True
++        self.cli.demands.resolving = True
++        self.cli.demands.available_repos = True
++        self.cli.demands.sack_activation = True
++        # use the saved value for --allowerasing, etc.
++        self.opts.distro_sync = self.state.distro_sync
++        if self.state.gpgcheck is not None:
++            self.base.conf.gpgcheck = self.state.gpgcheck
++        if self.state.gpgcheck_repos is not None:
++            for repo in self.base.repos.values():
++                repo.gpgcheck = repo.id in self.state.gpgcheck_repos
++        if self.state.repo_gpgcheck_repos is not None:
++            for repo in self.base.repos.values():
++                repo.repo_gpgcheck = repo.id in self.state.repo_gpgcheck_repos
++        self.base.conf.module_platform_id = self.state.module_platform_id
++        # don't try to get new metadata, 'cuz we're offline
++        self.cli.demands.cacheonly = True
++        # and don't ask any questions (we confirmed all this beforehand)
++        self.base.conf.assumeyes = True
++        self.cli.demands.transaction_display = PlymouthTransactionProgress()
++        # upgrade operation already removes all element that must be removed. Additional removal
++        # could trigger unwanted changes in transaction.
++        self.base.conf.clean_requirements_on_remove = False
++        self.base.conf.install_weak_deps = False
++
++    def configure_clean(self):
++        self.cli.demands.root_user = True
++
++    def configure_log(self):
++        pass
++
++    # == check_*: do any action-specific checks ===============================
++
++    def check_reboot(self):
++        if not self.state.download_status == 'complete':
++            raise CliError(_("system is not ready for upgrade"))
++        self._check_state_version(self.opts.command)
++        if self.state.upgrade_command != self.opts.command:
++            msg = _("the transaction was not prepared for '{command}'. "
++                    "Rerun 'dnf {command} download [OPTIONS]'").format(command=self.opts.command)
++            raise CliError(msg)
++        if os.path.lexists(self.magic_symlink):
++            raise CliError(_("upgrade is already scheduled"))
++        dnf.util.ensure_dir(self.datadir)
++        # FUTURE: checkRPMDBStatus(self.state.download_transaction_id)
++
++    def check_upgrade(self):
++        if not os.path.lexists(self.magic_symlink):
++            logger.info(_("trigger file does not exist. exiting quietly."))
++            raise SystemExit(0)
++        if os.readlink(self.magic_symlink) != self.datadir:
++            logger.info(_("another upgrade tool is running. exiting quietly."))
++            raise SystemExit(0)
++        # Delete symlink ASAP to avoid reboot loops
++        dnf.yum.misc.unlink_f(self.magic_symlink)
++        command = self.state.upgrade_command
++        if not command:
++            command = self.opts.command
++        self._check_state_version(command)
++        if not self.state.upgrade_status == 'ready':
++            msg = _("use 'dnf {command} reboot' to begin the upgrade").format(command=command)
++            raise CliError(msg)
++
++    # == run_*: run the action/prep the transaction ===========================
++
++    def run_prepare(self):
++        # make the magic symlink
++        os.symlink(self.datadir, self.magic_symlink)
++        # set upgrade_status so that the upgrade can run
++        with self.state as state:
++            state.upgrade_status = 'ready'
++
++    def run_reboot(self):
++        self.run_prepare()
++
++        if not self.opts.tid[0] == "reboot":
++            return
++
++        self.log_status(_("Rebooting to perform upgrade."),
++                        REBOOT_REQUESTED_ID)
++        reboot()
++
++    def run_download(self):
++        # Mark everything in the world for upgrade/sync
++        if self.opts.distro_sync:
++            self.base.distro_sync()
++        else:
++            self.base.upgrade_all()
++
++        if self.opts.command not in ['offline-upgrade', 'offline-distrosync']:
++            # Mark all installed groups and environments for upgrade
++            self.base.read_comps()
++            installed_groups = [g.id for g in self.base.comps.groups if self.base.history.group.get(g.id)]
++            if installed_groups:
++                self.base.env_group_upgrade(installed_groups)
++            installed_environments = [g.id for g in self.base.comps.environments if self.base.history.env.get(g.id)]
++            if installed_environments:
++                self.base.env_group_upgrade(installed_environments)
++
++        with self.state as state:
++            state.download_status = 'downloading'
++            state.target_releasever = self.base.conf.releasever
++            state.destdir = self.base.conf.destdir
++
++    def run_upgrade(self):
++        # change the upgrade status (so we can detect crashed upgrades later)
++        command = ''
++        with self.state as state:
++            state.upgrade_status = 'incomplete'
++            command = state.upgrade_command
++        if command == 'offline-upgrade':
++            msg = _("Starting offline upgrade. This will take a while.")
++        elif command == 'offline-distrosync':
++            msg = _("Starting offline distrosync. This will take a while.")
++        else:
++            msg = _("Starting system upgrade. This will take a while.")
++
++        self.log_status(msg, UPGRADE_STARTED_ID)
++
++        # reset the splash mode and let the user know we're running
++        Plymouth.set_mode()
++        Plymouth.progress(0)
++        Plymouth.message(msg)
++
++        # disable screen blanking
++        disable_blanking()
++
++        self.replay = TransactionReplay(self.base, self.transaction_file)
++        self.replay.run()
++
++    def run_clean(self):
++        logger.info(_("Cleaning up downloaded data..."))
++        # Don't delete persistor, it contains paths for downloaded packages
++        # that are used by dnf during finalizing base to clean them up
++        clear_dir(self.base.conf.cachedir,
++                  [dnf.persistor.TempfilePersistor(self.base.conf.cachedir).db_path])
++        with self.state as state:
++            state.download_status = None
++            state.state_version = None
++            state.upgrade_status = None
++            state.upgrade_command = None
++            state.destdir = None
++
++    def run_log(self):
++        if self.opts.number:
++            show_log(self.opts.number)
++        else:
++            list_logs()
++
++    # == resolved_*: do staff after succesful resolvement =====================
++
++    def resolved_upgrade(self):
++        """Adjust transaction reasons according to stored values"""
++        self.replay.post_transaction()
++
++    # == transaction_*: do stuff after a successful transaction ===============
++
++    def transaction_download(self):
++        transaction = self.base.history.get_current()
++
++        if not transaction.packages():
++            logger.info(_("The system-upgrade transaction is empty, your system is already up-to-date."))
++            return
++
++        data = serialize_transaction(transaction)
++        try:
++            with open(self.transaction_file, "w") as f:
++                json.dump(data, f, indent=4, sort_keys=True)
++                f.write("\n")
++
++            print(_("Transaction saved to {}.").format(self.transaction_file))
++
++        except OSError as e:
++            raise dnf.cli.CliError(_('Error storing transaction: {}').format(str(e)))
++
++        # Okay! Write out the state so the upgrade can use it.
++        system_ver = dnf.rpm.detect_releasever(self.base.conf.installroot)
++        with self.state as state:
++            state.download_status = 'complete'
++            state.state_version = STATE_VERSION
++            state.distro_sync = self.opts.distro_sync
++            state.gpgcheck = self.base.conf.gpgcheck
++            state.gpgcheck_repos = [
++                repo.id for repo in self.base.repos.values() if repo.gpgcheck]
++            state.repo_gpgcheck_repos = [
++                repo.id for repo in self.base.repos.values() if repo.repo_gpgcheck]
++            state.system_releasever = system_ver
++            state.target_releasever = self.base.conf.releasever
++            state.module_platform_id = self.base.conf.module_platform_id
++            state.enable_disable_repos = self.opts.repos_ed
++            state.destdir = self.base.conf.destdir
++            state.upgrade_command = self.opts.command
++
++        msg = DOWNLOAD_FINISHED_MSG.format(command=self.opts.command)
++        logger.info(msg)
++        self.log_status(_("Download finished."), DOWNLOAD_FINISHED_ID)
++
++    def transaction_upgrade(self):
++        Plymouth.message(_("Upgrade complete! Cleaning up and rebooting..."))
++        self.log_status(_("Upgrade complete! Cleaning up and rebooting..."),
++                        UPGRADE_FINISHED_ID)
++        self.run_clean()
++        if self.opts.tid[0] == "upgrade":
++            reboot()
++
++
++class OfflineUpgradeCommand(SystemUpgradeCommand):
++    aliases = ('offline-upgrade',)
++    summary = _("Prepare offline upgrade of the system")
++
++
++class OfflineDistrosyncCommand(SystemUpgradeCommand):
++    aliases = ('offline-distrosync',)
++    summary = _("Prepare offline distrosync of the system")
+diff --git a/tests/test_system_upgrade.py b/tests/test_system_upgrade.py
+new file mode 100644
+index 0000000..6ef4c21
+--- /dev/null
++++ b/tests/test_system_upgrade.py
+@@ -0,0 +1,502 @@
++# test_system_upgrade.py - unit tests for system-upgrade plugin
++
++import system_upgrade
++
++from system_upgrade import PLYMOUTH, CliError
++
++import os
++import tempfile
++import shutil
++import gettext
++
++from dnf.callback import (PKG_CLEANUP, PKG_DOWNGRADE, PKG_INSTALL,
++                          PKG_OBSOLETE, PKG_REINSTALL, PKG_REMOVE, PKG_UPGRADE,
++                          PKG_VERIFY, TRANS_POST)
++
++import unittest
++
++from tests.support import mock
++patch = mock.patch
++
++
++@patch('system_upgrade.call', return_value=0)
++class PlymouthTestCase(unittest.TestCase):
++    def setUp(self):
++        self.ply = system_upgrade.PlymouthOutput()
++        self.msg = "Hello, plymouth."
++        self.msg_args = (PLYMOUTH, "display-message", "--text", self.msg)
++
++    def test_ping(self, call):
++        self.ply.ping()
++        call.assert_called_once_with((PLYMOUTH, "--ping"))
++        self.assertTrue(self.ply.alive)
++
++    def test_ping_when_dead(self, call):
++        call.return_value = 1
++        self.ply.ping()
++        self.assertFalse(self.ply.alive)
++        call.return_value = 0
++        self.ply.ping()
++        self.assertEqual(call.call_count, 2)
++        self.assertTrue(self.ply.alive)
++
++    def test_message(self, call):
++        self.ply.message(self.msg)
++        call.assert_called_once_with(self.msg_args)
++
++    def test_hide_message(self, call):
++        messages = ("first", "middle", "BONUS", "last")
++        for m in messages:
++            self.ply.message(m)
++
++        def hidem(m):
++            return mock.call((PLYMOUTH, "hide-message", "--text", m))
++
++        def dispm(m):
++            return mock.call((PLYMOUTH, "display-message", "--text", m))
++        m1, m2, m3, m4 = messages
++        call.assert_has_calls([
++            dispm(m1),
++            hidem(m1), dispm(m2),
++            hidem(m2), dispm(m3),
++            hidem(m3), dispm(m4),
++        ])
++
++    def test_message_dupe(self, call):
++        self.ply.message(self.msg)
++        self.ply.message(self.msg)
++        call.assert_called_once_with(self.msg_args)
++
++    def test_message_dead(self, call):
++        call.return_value = 1
++        self.ply.message(self.msg)
++        self.assertFalse(self.ply.alive)
++        self.ply.message("not even gonna bother")
++        call.assert_called_once_with(self.msg_args)
++
++    def test_progress(self, call):
++        self.ply.progress(27)
++        call.assert_called_once_with(
++            (PLYMOUTH, "system-update", "--progress", str(27)))
++
++    @patch('system_upgrade.check_output',
++           return_value="this plymouth does support --system-upgrade mode")
++    def test_mode(self, check_output, call):
++        self.ply.set_mode()
++        call.assert_called_once_with((PLYMOUTH, "change-mode", "--system-upgrade"))
++
++    @patch('system_upgrade.check_output',
++           return_value="this plymouth doesn't support system-upgrade mode")
++    def test_mode_no_system_upgrade_plymouth(self, check_output, call):
++        self.ply.set_mode()
++        call.assert_called_once_with((PLYMOUTH, "change-mode", "--updates"))
++
++    def test_mode_no_plymouth(self, call):
++        call.side_effect = OSError(2, 'No such file or directory')
++        self.ply.set_mode()
++        self.assertFalse(self.ply.alive)
++
++
++@patch('system_upgrade.call', return_value=0)
++class PlymouthTransactionProgressTestCase(unittest.TestCase):
++    actions = (PKG_CLEANUP, PKG_DOWNGRADE, PKG_INSTALL, PKG_OBSOLETE,
++               PKG_REINSTALL, PKG_REMOVE, PKG_UPGRADE, PKG_VERIFY,
++               TRANS_POST)
++
++    # pylint: disable=protected-access
++    def setUp(self):
++        system_upgrade.Plymouth = system_upgrade.PlymouthOutput()
++        self.display = system_upgrade.PlymouthTransactionProgress()
++        self.pkg = "testpackage"
++
++    def test_display(self, call):
++        for action in self.actions:
++            self.display.progress(self.pkg, action, 0, 100, 1, 1000)
++            msg = self.display._fmt_event(self.pkg, action, 1, 1000)
++            # updating plymouth display means two plymouth calls
++            call.assert_has_calls([
++                mock.call((PLYMOUTH, "system-update", "--progress", "0")),
++                mock.call((PLYMOUTH, "display-message", "--text", msg))
++            ], any_order=True)
++
++    def test_filter_calls(self, call):
++        action = PKG_INSTALL
++        # first display update -> set percentage and text
++        self.display.progress(self.pkg, action, 0, 100, 1, 1000)
++        msg1 = self.display._fmt_event(self.pkg, action, 1, 1000)
++        call.assert_has_calls([
++            mock.call((PLYMOUTH, "system-update", "--progress", "0")),
++            mock.call((PLYMOUTH, "display-message", "--text", msg1)),
++        ])
++
++        # event progress on the same transaction item.
++        # no new calls to plymouth because the percentage and text don't change
++        for te_cur in range(1, 100):
++            self.display.progress(self.pkg, action, te_cur, 100, 1, 1000)
++        call.assert_has_calls([
++            mock.call((PLYMOUTH, "system-update", "--progress", "0")),
++            mock.call((PLYMOUTH, "display-message", "--text", msg1)),
++        ])
++
++        # new item: new message ("[2/1000] ..."), but percentage still 0..
++        self.display.progress(self.pkg, action, 0, 100, 2, 1000)
++        # old message hidden, new message displayed. no new percentage.
++        msg2 = self.display._fmt_event(self.pkg, action, 2, 1000)
++        call.assert_has_calls([
++            mock.call((PLYMOUTH, "system-update", "--progress", "0")),
++            mock.call((PLYMOUTH, "display-message", "--text", msg1)),
++            mock.call((PLYMOUTH, "hide-message", "--text", msg1)),
++            mock.call((PLYMOUTH, "display-message", "--text", msg2)),
++        ])
++
++
++TESTLANG = "zh_CN"
++TESTLANG_MO = "po/%s.mo" % TESTLANG
++
++
++@unittest.skipUnless(os.path.exists(TESTLANG_MO), "make %s first" %
++                     TESTLANG_MO)
++# @unittest.skip("There is no translation yet to system-upgrade")
++class I18NTestCaseBase(unittest.TestCase):
++    @classmethod
++    @unittest.skip("There is no translation yet to system-upgrade")
++    def setUpClass(cls):
++        cls.localedir = tempfile.mkdtemp(prefix='system_upgrade_test_i18n-')
++        cls.msgdir = os.path.join(cls.localedir, TESTLANG + "/LC_MESSAGES")
++        cls.msgfile = "dnf-plugins-extras" + ".mo"
++        os.makedirs(cls.msgdir)
++        shutil.copy2(TESTLANG_MO, os.path.join(cls.msgdir, cls.msgfile))
++
++    @classmethod
++    def tearDownClass(cls):
++        shutil.rmtree(cls.localedir)
++
++    def setUp(self):
++        self.t = gettext.translation("dnf-plugins-extras", self.localedir,
++                                     languages=[TESTLANG], fallback=True)
++        self.gettext = self.t.gettext
++
++
++class I18NTestCase(I18NTestCaseBase):
++    @unittest.skip("There is no translation yet to system-upgrade")
++    def test_selftest(self):
++        self.assertIn(self.msgfile, os.listdir(self.msgdir))
++        self.assertIn(TESTLANG, os.listdir(self.localedir))
++        t = gettext.translation("dnf-plugins-extras", self.localedir,
++                                languages=[TESTLANG], fallback=False)
++        info = t.info()
++        self.assertIn("language", info)
++        self.assertEqual(info["language"], TESTLANG.replace("_", "-"))
++
++    @unittest.skip("There is no translation yet to system-upgrade")
++    def test_fallback(self):
++        msg = "THIS STRING DOES NOT EXIST"
++        trans_msg = self.gettext(msg)
++        self.assertEqual(msg, trans_msg)
++
++    @unittest.skip("There is no translation yet to system-upgrade")
++    def test_translation(self):
++        msg = "the color of the sky"
++        trans_msg = self.gettext(msg)
++        self.assertNotEqual(msg, trans_msg)
++
++
++class StateTestCase(unittest.TestCase):
++    @classmethod
++    def setUpClass(cls):
++        cls.statedir = tempfile.mkdtemp(prefix="system_upgrade_test_state-")
++        cls.StateClass = system_upgrade.State
++
++    def setUp(self):
++        self.state = self.StateClass(os.path.join(self.statedir, "state"))
++
++    def test_bool_value(self):
++        with self.state:
++            self.state.distro_sync = True
++        del self.state
++        self.state = self.StateClass(os.path.join(self.statedir, "state"))
++        self.assertIs(self.state.distro_sync, True)
++
++    @classmethod
++    def tearDownClass(cls):
++        shutil.rmtree(cls.statedir)
++
++
++class UtilTestCase(unittest.TestCase):
++    def setUp(self):
++        self.tmpdir = tempfile.mkdtemp(prefix='system_upgrade_test_util-')
++        self.dirs = ["dir1", "dir2"]
++        self.files = ["file1", "dir2/file2"]
++        for d in self.dirs:
++            os.makedirs(os.path.join(self.tmpdir, d))
++        for f in self.files:
++            with open(os.path.join(self.tmpdir, f), 'wt') as fobj:
++                fobj.write("hi there\n")
++
++    def test_self_test(self):
++        for d in self.dirs:
++            self.assertTrue(os.path.isdir(os.path.join(self.tmpdir, d)))
++        for f in self.files:
++            self.assertTrue(os.path.exists(os.path.join(self.tmpdir, f)))
++
++    def test_clear_dir(self):
++        self.assertTrue(os.path.isdir(self.tmpdir))
++        system_upgrade.clear_dir(self.tmpdir)
++        self.assertTrue(os.path.isdir(self.tmpdir))
++        self.assertEqual(os.listdir(self.tmpdir), [])
++
++    def tearDown(self):
++        shutil.rmtree(self.tmpdir)
++
++
++class CommandTestCaseBase(unittest.TestCase):
++    def setUp(self):
++        self.datadir = tempfile.mkdtemp(prefix="system_upgrade_test_datadir-")
++        self.installroot = tempfile.TemporaryDirectory(prefix="system_upgrade_test_installroot-")
++        system_upgrade.SystemUpgradeCommand.DATADIR = self.datadir
++        self.cli = mock.MagicMock()
++        # the installroot is not strictly necessary for the test, but
++        # releasever detection is accessing host system files without it, and
++        # this fails on permissions in COPR srpm builds (e.g. from rpm-gitoverlay)
++        self.cli.base.conf.installroot = self.installroot.name
++        self.command = system_upgrade.SystemUpgradeCommand(cli=self.cli)
++        self.command.base.conf.cachedir = os.path.join(self.datadir, "cache")
++        self.command.base.conf.destdir = None
++
++    def tearDown(self):
++        shutil.rmtree(self.datadir)
++        self.installroot.cleanup()
++
++
++class CommandTestCase(CommandTestCaseBase):
++    # self-tests for the command test cases
++    def test_state(self):
++        # initial state: no status
++        self.assertIsNone(self.command.state.download_status)
++        self.assertIsNone(self.command.state.upgrade_status)
++
++
++class CleanCommandTestCase(CommandTestCaseBase):
++    def test_pre_configure_clean(self):
++        with self.command.state as state:
++            state.destdir = "/grape/wine"
++        self.command.pre_configure_clean()
++        self.assertEqual(self.command.base.conf.destdir, "/grape/wine")
++
++    def test_configure_clean(self):
++        self.cli.demands.root_user = None
++        self.command.configure_clean()
++        self.assertTrue(self.cli.demands.root_user)
++
++    def test_run_clean(self):
++        with self.command.state as state:
++            state.download_status = "complete"
++            state.upgrade_status = "ready"
++        # make sure the datadir and state info is set up OK
++        self.assertEqual(self.command.state.download_status, "complete")
++        self.assertEqual(self.command.state.upgrade_status, "ready")
++        # run cleanup
++        self.command.run_clean()
++        # state is cleared
++        self.assertIsNone(self.command.state.download_status)
++        self.assertIsNone(self.command.state.upgrade_status)
++
++
++class RebootCheckCommandTestCase(CommandTestCaseBase):
++    def setUp(self):
++        super(RebootCheckCommandTestCase, self).setUp()
++        self.magic_symlink = self.datadir + '/symlink'
++        self.command.magic_symlink = self.magic_symlink
++
++    def test_pre_configure_reboot(self):
++        with self.command.state as state:
++            state.destdir = "/grape/wine"
++        self.command.pre_configure_reboot()
++        self.assertEqual(self.command.base.conf.destdir, "/grape/wine")
++
++    def test_configure_reboot(self):
++        self.cli.demands.root_user = None
++        self.command.configure_reboot()
++        self.assertTrue(self.cli.demands.root_user)
++
++    def check_reboot(self, status='complete', lexists=False, command='system-upgrade',
++                     state_command='system-upgrade'):
++        with patch('system_upgrade.os.path.lexists') as lexists_func:
++            self.command.state.state_version = 2
++            self.command.state.download_status = status
++            self.command.opts = mock.MagicMock()
++            self.command.opts.command = command
++            self.command.state.upgrade_command = state_command
++            lexists_func.return_value = lexists
++            self.command.check_reboot()
++
++    def test_check_reboot_ok(self):
++        self.check_reboot(status='complete', lexists=False)
++
++    def test_check_reboot_different_command(self):
++        with self.assertRaises(CliError):
++            self.check_reboot(status='complete', lexists=False, command='system-upgrade',
++                              state_command='offline-upgrade')
++
++    def test_check_reboot_no_download(self):
++        with self.assertRaises(CliError):
++            self.check_reboot(status=None, lexists=False)
++
++    def test_check_reboot_link_exists(self):
++        with self.assertRaises(CliError):
++            self.check_reboot(status='complete', lexists=True)
++
++    def test_run_prepare(self):
++        self.command.run_prepare()
++        self.assertEqual(os.readlink(self.magic_symlink), self.datadir)
++        self.assertEqual(self.command.state.upgrade_status, 'ready')
++
++    @patch('system_upgrade.SystemUpgradeCommand.run_prepare')
++    @patch('system_upgrade.SystemUpgradeCommand.log_status')
++    @patch('system_upgrade.reboot')
++    def test_run_reboot(self, reboot, log_status, run_prepare):
++        self.command.opts = mock.MagicMock()
++        self.command.opts.tid = ["reboot"]
++        self.command.run_reboot()
++        run_prepare.assert_called_once_with()
++        self.assertEqual(system_upgrade.REBOOT_REQUESTED_ID,
++                         log_status.call_args[0][1])
++        self.assertTrue(reboot.called)
++
++    @patch('system_upgrade.SystemUpgradeCommand.run_prepare')
++    @patch('system_upgrade.SystemUpgradeCommand.log_status')
++    @patch('system_upgrade.reboot')
++    def test_reboot_prepare_only(self, reboot, log_status, run_prepare):
++        self.command.opts = mock.MagicMock()
++        self.command.opts.tid = [None]
++        self.command.run_reboot()
++        run_prepare.assert_called_once_with()
++        self.assertFalse(log_status.called)
++        self.assertFalse(reboot.called)
++
++
++class DownloadCommandTestCase(CommandTestCase):
++    def test_pre_configure_download_default(self):
++        self.command.opts = mock.MagicMock()
++        self.command.opts.destdir = None
++        self.command.base.conf.destdir = None
++        self.command.pre_configure_download()
++        self.assertEqual(self.command.base.conf.cachedir, self.datadir)
++
++    def test_pre_configure_download_destdir(self):
++        self.command.opts = mock.MagicMock()
++        self.command.opts.destdir = self.datadir
++        self.command.pre_configure_download()
++        self.assertEqual(self.command.base.conf.destdir, self.datadir)
++
++    def test_configure_download(self):
++        self.command.opts = mock.MagicMock()
++        self.command.opts.tid = "download"
++        self.command.configure()
++        self.assertTrue(self.cli.demands.root_user)
++        self.assertTrue(self.cli.demands.resolving)
++        self.assertTrue(self.cli.demands.sack_activation)
++        self.assertTrue(self.cli.demands.available_repos)
++
++    def test_transaction_download(self):
++        pkg = mock.MagicMock()
++        repo = mock.MagicMock()
++        repo.id = 'test'
++        pkg.name = "kernel"
++        pkg.repo = repo
++        self.cli.base.transaction.install_set = [pkg]
++        self.command.opts = mock.MagicMock()
++        self.command.opts.distro_sync = True
++        self.command.opts.command = "system_upgrade"
++        self.command.opts.repos_ed = []
++        self.cli.demands.allow_erasing = "allow_erasing"
++        self.command.base.conf.best = True
++        self.command.base.conf.releasever = "35"
++        self.command.base.conf.gpgcheck = True
++        self.command.opts.destdir = self.datadir
++        self.command.base.conf.install_weak_deps = True
++        self.command.base.conf.module_platform_id = ''
++        self.command.pre_configure_download()
++        self.command.transaction_download()
++        with system_upgrade.State(self.command.state.statefile) as state:
++            self.assertEqual(state.state_version, system_upgrade.STATE_VERSION)
++            self.assertEqual(state.download_status, "complete")
++            self.assertEqual(state.distro_sync, True)
++            self.assertEqual(state.destdir, self.datadir)
++            self.assertEqual(state.upgrade_command, "system_upgrade")
++
++    def test_transaction_download_offline_upgrade(self):
++        pkg = mock.MagicMock()
++        repo = mock.MagicMock()
++        repo.id = 'test'
++        pkg.name = "kernel"
++        pkg.repo = repo
++        self.cli.base.transaction.install_set = [pkg]
++        self.command.opts = mock.MagicMock()
++        self.command.opts.distro_sync = True
++        self.command.opts.command = "offline-upgrade"
++        self.command.opts.repos_ed = []
++        self.cli.demands.allow_erasing = "allow_erasing"
++        self.command.base.conf.best = True
++        self.command.base.conf.releasever = "35"
++        self.command.base.conf.gpgcheck = True
++        self.command.opts.destdir = self.datadir
++        self.command.base.conf.install_weak_deps = True
++        self.command.base.conf.module_platform_id = ''
++        self.command.pre_configure_download()
++        self.command.transaction_download()
++        with system_upgrade.State(self.command.state.statefile) as state:
++            self.assertEqual(state.download_status, "complete")
++            self.assertEqual(state.distro_sync, False)
++            self.assertEqual(state.destdir, self.datadir)
++            self.assertEqual(state.upgrade_command, "offline-upgrade")
++
++
++class UpgradeCommandTestCase(CommandTestCase):
++    def test_pre_configure_upgrade(self):
++        with self.command.state as state:
++            state.destdir = "/grape/wine"
++            state.target_releasever = "35"
++        self.command.pre_configure_upgrade()
++        self.assertEqual(self.command.base.conf.destdir, "/grape/wine")
++        self.assertEqual(self.command.base.conf.releasever, "35")
++
++    def test_configure_upgrade(self):
++        # write state like download would have
++        with self.command.state as state:
++            state.download_status = "complete"
++            state.distro_sync = True
++            state.allow_erasing = True
++            state.best = True
++        # okay, now configure upgrade
++        self.command.opts = mock.MagicMock()
++        self.command.opts.tid = "upgrade"
++        self.command.configure()
++        # did we reset the depsolving flags?
++        self.assertTrue(self.command.opts.distro_sync)
++        self.assertTrue(self.cli.demands.allow_erasing)
++        self.assertTrue(self.command.base.conf.best)
++        # are we on autopilot?
++        self.assertTrue(self.command.base.conf.assumeyes)
++        self.assertTrue(self.cli.demands.cacheonly)
++
++
++class LogCommandTestCase(CommandTestCase):
++    def test_configure_log(self):
++        self.command.opts = mock.MagicMock()
++        self.command.opts.tid = "log"
++        self.command.configure()
++
++    def test_run_log_list(self):
++        self.command.opts = mock.MagicMock()
++        self.command.opts.number = None
++        with patch('system_upgrade.list_logs') as list_logs:
++            self.command.run_log()
++        list_logs.assert_called_once_with()
++
++    def test_run_log_prev(self):
++        with patch('system_upgrade.show_log') as show_log:
++            self.command.opts = mock.MagicMock()
++            self.command.opts.number = -2
++            self.command.run_log()
++        show_log.assert_called_once_with(-2)
+-- 
+2.38.1
+

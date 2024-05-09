@@ -1,0 +1,31 @@
+From efec4c69157d17024c4d9194a63eb834efcd79b9 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Dirk=20M=C3=BCller?= <dirk@dmllr.de>
+Date: Fri, 11 Nov 2022 10:38:19 +0100
+Subject: [PATCH 02/13] allow AF_NETLINK in the systemd service restrictions
+
+AF_NETLINK is needed for communicating with the thermald daemon,
+without that the start up logs a warning
+
+  thermal: socket bind failed, thermald may not be running.
+
+because systemd prevents access to NETLINK.
+---
+ misc/irqbalance.service | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/misc/irqbalance.service b/misc/irqbalance.service
+index 0f79c3e..8544f66 100644
+--- a/misc/irqbalance.service
++++ b/misc/irqbalance.service
+@@ -11,7 +11,7 @@ EnvironmentFile=-/path/to/irqbalance.env
+ ExecStart=/usr/sbin/irqbalance --foreground $IRQBALANCE_ARGS
+ ReadOnlyPaths=/
+ ReadWritePaths=/proc/irq
+-RestrictAddressFamilies=AF_UNIX
++RestrictAddressFamilies=AF_UNIX AF_NETLINK
+ RuntimeDirectory=irqbalance/
+ 
+ [Install]
+-- 
+2.33.1
+

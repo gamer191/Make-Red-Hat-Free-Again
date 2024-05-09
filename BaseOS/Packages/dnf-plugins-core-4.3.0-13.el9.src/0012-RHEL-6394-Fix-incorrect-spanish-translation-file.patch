@@ -1,0 +1,26 @@
+From 824aee8b6ace0df2fedc2cbee1dff4a0c0bc51b1 Mon Sep 17 00:00:00 2001
+From: Marek Blaha <mblaha@redhat.com>
+Date: Fri, 22 Sep 2023 08:36:59 +0200
+Subject: [PATCH] RHEL-6394: Fix incorrect spanish translation file
+
+Resolves: https://issues.redhat.com/browse/RHEL-6394
+---
+ po/es.po | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/po/es.po b/po/es.po
+index c0268e5..ae4ad0a 100644
+--- a/po/es.po
++++ b/po/es.po
+@@ -150,7 +150,7 @@ msgstr "Registros de cambios para {}"
+ #: plugins/config_manager.py:38
+ #, python-brace-format
+ msgid "manage {prog} configuration options and repositories"
+-msgstr "Dirige {*prog} opciones de configuración y repositorios"
++msgstr "Dirige {prog} opciones de configuración y repositorios"
+ 
+ #: plugins/config_manager.py:45
+ msgid "repo to modify"
+--
+libgit2 1.6.4
+

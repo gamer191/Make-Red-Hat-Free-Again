@@ -1,0 +1,53 @@
+From 3297995248081d31d282fc9a339894989ff94e23 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Wed, 5 Jan 2022 13:32:37 -0800
+Subject: [PATCH 079/217] build: Drop unnecessary $tool/config.h includes
+
+In preparation for support for meson as the build infrastructure remove
+some explicit config.h includes that will be replaced by a unified config.h
+at the top of the project.
+
+Link: https://lore.kernel.org/r/164141835727.3990253.12971738434561351928.stgit@dwillia2-desk3.amr.corp.intel.com
+Tested-by: Alison Schofield <alison.schofield@intel.com>
+Tested-by: Vaibhav Jain <vaibhav@linux.ibm.com>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ daxctl/migrate.c | 1 -
+ ndctl/keys.c     | 1 -
+ ndctl/monitor.c  | 1 -
+ 3 files changed, 3 deletions(-)
+
+diff -up ndctl-71.1/daxctl/migrate.c.orig ndctl-71.1/daxctl/migrate.c
+--- ndctl-71.1/daxctl/migrate.c.orig	2020-12-22 16:44:57.000000000 -0500
++++ ndctl-71.1/daxctl/migrate.c	2022-10-07 16:01:20.316634385 -0400
+@@ -5,7 +5,6 @@
+ #include <stdio.h>
+ #include <errno.h>
+ #include <fcntl.h>
+-#include <daxctl/config.h>
+ #include <daxctl/libdaxctl.h>
+ #include <util/parse-options.h>
+ #include <ccan/array_size/array_size.h>
+diff -up ndctl-71.1/ndctl/keys.c.orig ndctl-71.1/ndctl/keys.c
+--- ndctl-71.1/ndctl/keys.c.orig	2022-10-07 16:01:03.161575978 -0400
++++ ndctl-71.1/ndctl/keys.c	2022-10-07 16:01:20.317634389 -0400
+@@ -13,7 +13,6 @@
+ #include <keyutils.h>
+ #include <syslog.h>
+ 
+-#include <ndctl/config.h>
+ #include <ndctl/ndctl.h>
+ #include <ndctl/libndctl.h>
+ 
+diff -up ndctl-71.1/ndctl/monitor.c.orig ndctl-71.1/ndctl/monitor.c
+--- ndctl-71.1/ndctl/monitor.c.orig	2022-10-07 16:01:03.164575988 -0400
++++ ndctl-71.1/ndctl/monitor.c	2022-10-07 16:01:20.318634392 -0400
+@@ -10,7 +10,6 @@
+ #include <util/util.h>
+ #include <util/parse-options.h>
+ #include <util/strbuf.h>
+-#include <ndctl/config.h>
+ #include <ndctl/ndctl.h>
+ #include <ndctl/libndctl.h>
+ #include <sys/epoll.h>

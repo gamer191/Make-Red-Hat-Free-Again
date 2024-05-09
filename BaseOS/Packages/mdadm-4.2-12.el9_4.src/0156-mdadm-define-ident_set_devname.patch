@@ -1,0 +1,249 @@
+From ae5f13a971bc309e0e25087421119b86daf2e510 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Thu, 1 Jun 2023 09:27:49 +0200
+Subject: [PATCH 156/165] mdadm: define ident_set_devname()
+
+Use dedicated set method for ident->devname. Now, devname validation
+is done early for modes where device is created (Build, Create and
+Assemble). The rules, used for devname validation are derived from
+config file.
+
+It could cause regression with execeptional cases where existing device
+has name which doesn't match criteria for Manage and Grow modes. It is
+low risk and those modes are not omitted from early devname validation.
+Use can used main numbered devnode to avoid this problem.
+Messages exposed to user are changed so it might cause a regression
+in negative scenarios. Error codes are not changed.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ config.c                       | 102 +++++++++++++++++++++++++--------
+ mdadm.c                        |  10 +---
+ mdadm.h                        |   3 +-
+ tests/00createnames            |   3 +
+ tests/templates/names_template |   7 +++
+ 5 files changed, 92 insertions(+), 33 deletions(-)
+
+diff --git a/config.c b/config.c
+index a9a0b4f7..a0424845 100644
+--- a/config.c
++++ b/config.c
+@@ -122,7 +122,7 @@ int match_keyword(char *word)
+ /**
+  * is_devname_ignore() - check if &devname is a special "<ignore>" keyword.
+  */
+-bool is_devname_ignore(char *devname)
++bool is_devname_ignore(const char *devname)
+ {
+ 	static const char keyword[] = "<ignore>";
+ 
+@@ -187,6 +187,74 @@ inline void ident_init(struct mddev_ident *ident)
+ 	ident->uuid_set = 0;
+ }
+ 
++/**
++ * _ident_set_devname()- verify devname and set it in &mddev_ident.
++ * @ident: pointer to &mddev_ident.
++ * @devname: devname to be set.
++ * @cmdline: context dependent actions. If set, ignore keyword is not allowed.
++ *
++ * @devname can have following forms:
++ *	'<ignore>' keyword (if allowed)
++ *	/dev/md{number}
++ *	/dev/md_d{number} (legacy)
++ *	/dev/md_{name}
++ *	/dev/md/{name}
++ *	{name} - anything that doesn't start from '/' or '<'.
++ *
++ * {name} must follow name's criteria.
++ * If criteria passed, duplicate memory and set devname in @ident.
++ *
++ * Return: %MDADM_STATUS_SUCCESS or %MDADM_STATUS_ERROR.
++ */
++mdadm_status_t _ident_set_devname(struct mddev_ident *ident, const char *devname,
++				  const bool cmdline)
++{
++	assert(ident);
++	assert(devname);
++
++	static const char named_dev_pref[] = DEV_NUM_PREF "_";
++	static const int named_dev_pref_size = sizeof(named_dev_pref) - 1;
++	const char *prop_name = "devname";
++	const char *name;
++
++	if (ident->devname) {
++		ident_log(prop_name, devname, "Already defined", cmdline);
++		return MDADM_STATUS_ERROR;
++	}
++
++	if (is_devname_ignore(devname) == true) {
++		if (!cmdline)
++			goto pass;
++
++		ident_log(prop_name, devname, "Special keyword is invalid in this context",
++			  cmdline);
++		return MDADM_STATUS_ERROR;
++	}
++
++	if (is_devname_md_numbered(devname) == true || is_devname_md_d_numbered(devname) == true)
++		goto pass;
++
++	if (strncmp(devname, DEV_MD_DIR, DEV_MD_DIR_LEN) == 0)
++		name = devname + DEV_MD_DIR_LEN;
++	else if (strncmp(devname, named_dev_pref, named_dev_pref_size) == 0)
++		name = devname + named_dev_pref_size;
++	else
++		name = devname;
++
++	if (*name == '/' || *name == '<') {
++		ident_log(prop_name, devname, "Cannot be started from \'/\' or \'<\'", cmdline);
++		return MDADM_STATUS_ERROR;
++	}
++
++	if (is_string_lq(name, MD_NAME_MAX + 1) == false) {
++		ident_log(prop_name, devname, "Invalid length", cmdline);
++		return MDADM_STATUS_ERROR;
++	}
++pass:
++	ident->devname = xstrdup(devname);
++	return MDADM_STATUS_SUCCESS;
++}
++
+ /**
+  * _ident_set_name()- set name in &mddev_ident.
+  * @ident: pointer to &mddev_ident.
+@@ -219,6 +287,14 @@ static mdadm_status_t _ident_set_name(struct mddev_ident *ident, const char *nam
+ 	return MDADM_STATUS_SUCCESS;
+ }
+ 
++/**
++ * ident_set_devname()- exported, for cmdline.
++ */
++mdadm_status_t ident_set_devname(struct mddev_ident *ident, const char *name)
++{
++	return _ident_set_devname(ident, name, true);
++}
++
+ /**
+  * ident_set_name()- exported, for cmdline.
+  */
+@@ -464,29 +540,7 @@ void arrayline(char *line)
+ 
+ 	for (w = dl_next(line); w != line; w = dl_next(w)) {
+ 		if (w[0] == '/' || strchr(w, '=') == NULL) {
+-			/* This names the device, or is '<ignore>'.
+-			 * The rules match those in create_mddev.
+-			 * 'w' must be:
+-			 *  /dev/md/{anything}
+-			 *  /dev/mdNN
+-			 *  /dev/md_dNN
+-			 *  <ignore>
+-			 *  or anything that doesn't start '/' or '<'
+-			 */
+-			if (is_devname_ignore(w) == true ||
+-			    strncmp(w, DEV_MD_DIR, DEV_MD_DIR_LEN) == 0 ||
+-			    (w[0] != '/' && w[0] != '<') ||
+-			    is_devname_md_numbered(w) == true ||
+-			    is_devname_md_d_numbered(w) == true) {
+-				/* This is acceptable */;
+-				if (mis.devname)
+-					pr_err("only give one device per ARRAY line: %s and %s\n",
+-						mis.devname, w);
+-				else
+-					mis.devname = w;
+-			}else {
+-				pr_err("%s is an invalid name for an md device - ignored.\n", w);
+-			}
++			_ident_set_devname(&mis, w, false);
+ 		} else if (strncasecmp(w, "uuid=", 5) == 0) {
+ 			if (mis.uuid_set)
+ 				pr_err("only specify uuid once, %s ignored.\n",
+diff --git a/mdadm.c b/mdadm.c
+index 8bc9304e..62f981df 100644
+--- a/mdadm.c
++++ b/mdadm.c
+@@ -1284,7 +1284,8 @@ int main(int argc, char *argv[])
+ 			pr_err("an md device must be given in this mode\n");
+ 			exit(2);
+ 		}
+-		ident.devname = devlist->devname;
++		if (ident_set_devname(&ident, devlist->devname) != MDADM_STATUS_SUCCESS)
++			exit(1);
+ 
+ 		if ((int)ident.super_minor == -2 && c.autof) {
+ 			pr_err("--super-minor=dev is incompatible with --auto\n");
+@@ -1301,13 +1302,6 @@ int main(int argc, char *argv[])
+ 				exit(1);
+ 			}
+ 		} else {
+-			char *bname = basename(ident.devname);
+-
+-			if (strlen(bname) > MD_NAME_MAX) {
+-				pr_err("Name %s is too long.\n", ident.devname);
+-				exit(1);
+-			}
+-
+ 			ret = stat(ident.devname, &stb);
+ 			if (ident.super_minor == -2 && ret != 0) {
+ 				pr_err("--super-minor=dev given, and listed device %s doesn't exist.\n",
+diff --git a/mdadm.h b/mdadm.h
+index bbf386d6..49422e24 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -1638,6 +1638,7 @@ extern void manage_fork_fds(int close_all);
+ extern int continue_via_systemd(char *devnm, char *service_name, char *prefix);
+ 
+ extern void ident_init(struct mddev_ident *ident);
++extern mdadm_status_t ident_set_devname(struct mddev_ident *ident, const char *devname);
+ extern mdadm_status_t ident_set_name(struct mddev_ident *ident, const char *name);
+ 
+ extern int parse_auto(char *str, char *msg, int config);
+@@ -1660,7 +1661,7 @@ extern void print_escape(char *str);
+ extern int use_udev(void);
+ extern unsigned long GCD(unsigned long a, unsigned long b);
+ extern int conf_name_is_free(char *name);
+-extern bool is_devname_ignore(char *devname);
++extern bool is_devname_ignore(const char *devname);
+ extern bool is_devname_md_numbered(const char *devname);
+ extern bool is_devname_md_d_numbered(const char *devname);
+ extern int conf_verify_devnames(struct mddev_ident *array_list);
+diff --git a/tests/00createnames b/tests/00createnames
+index 064eeef2..a95e7d2b 100644
+--- a/tests/00createnames
++++ b/tests/00createnames
+@@ -39,3 +39,6 @@ mdadm -S "/dev/md0"
+ names_create "/dev/md0" "name"
+ names_verify "/dev/md0" "empty" "name"
+ mdadm -S "/dev/md0"
++
++# Devnode is a special ignore keyword. Should be rejected.
++names_create "<ignore>" "name", "true"
+diff --git a/tests/templates/names_template b/tests/templates/names_template
+index 8d2b5c81..6181bfaa 100644
+--- a/tests/templates/names_template
++++ b/tests/templates/names_template
+@@ -2,6 +2,7 @@
+ function names_create() {
+ 	local DEVNAME=$1
+ 	local NAME=$2
++	local NEG_TEST=$3
+ 
+ 	if [[ -z "$NAME" ]]; then
+ 		mdadm -CR "$DEVNAME" -l0 -n 1 $dev0 --force
+@@ -9,6 +10,12 @@ function names_create() {
+ 		mdadm -CR "$DEVNAME" --name="$NAME" --metadata=1.2 -l0 -n 1 $dev0 --force
+ 	fi
+ 
++	if [[ "$NEG_TEST" == "true" ]]; then
++		[[ "$?" == "0" ]] && return 0
++		echo "Negative verification failed"
++		exit 1
++	fi
++
+ 	if [[ "$?" != "0" ]]; then
+ 		echo "Cannot create device."
+ 		exit 1
+-- 
+2.40.1
+

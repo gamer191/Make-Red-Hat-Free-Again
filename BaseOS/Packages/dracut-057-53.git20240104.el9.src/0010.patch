@@ -1,0 +1,29 @@
+From 733d47fb873c2b821a430a614d83b60475df2d13 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Mon, 15 Aug 2022 16:25:53 +0200
+Subject: [PATCH] fix(kernel-modules): always include nvmem driver on
+ nvmem_on_arm
+
+These drivers are needed to boot on some SoCs like NXP i.MX
+We should include them so installation images will work.
+
+(cherry picked from commit bc965cd8890013a6362733d217c18756134bbcdf)
+
+Resolves: #2109498
+---
+ modules.d/90kernel-modules/module-setup.sh | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/modules.d/90kernel-modules/module-setup.sh b/modules.d/90kernel-modules/module-setup.sh
+index e2073a04..191af041 100755
+--- a/modules.d/90kernel-modules/module-setup.sh
++++ b/modules.d/90kernel-modules/module-setup.sh
+@@ -85,6 +85,7 @@ installkernel() {
+                 "=drivers/mfd" \
+                 "=drivers/mmc/core" \
+                 "=drivers/mmc/host" \
++                "=drivers/nvmem" \
+                 "=drivers/phy" \
+                 "=drivers/power" \
+                 "=drivers/regulator" \
+

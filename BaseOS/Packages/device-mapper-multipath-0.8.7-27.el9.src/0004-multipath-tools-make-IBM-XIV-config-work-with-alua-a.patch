@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Date: Sat, 25 Sep 2021 00:27:36 +0200
+Subject: [PATCH] multipath-tools: make IBM/XIV config work with alua and
+ multibus
+
+And add recommended pgfailback value.
+
+ALUA is supported since XIV_Gen2 and microcode 10.2.1
+(All ports across all controllers in single Target Port Group)
+
+https://www.ibm.com/support/pages/ibm-flashsystem%C2%AE-a9000-and-a9000r-hyperswap-solution-deployment-linux%C2%AE-ibm-z-systems%C2%AE
+https://www.google.com/search?q=%222810XIV%22+%22path_grouping_policy%22+site%3Aibm.com
+
+Cc: Martin Wilck <mwilck@suse.com>
+Cc: Benjamin Marzinski <bmarzins@redhat.com>
+Cc: Christophe Varoqui <christophe.varoqui@opensvc.com>
+Cc: DM-DEVEL ML <dm-devel@redhat.com>
+Signed-off-by: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index 0caac0da..72f81c60 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -712,7 +712,8 @@ static struct hwentry default_hw[] = {
+ 		.vendor        = "(XIV|IBM)",
+ 		.product       = "(NEXTRA|2810XIV)",
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+-		.pgpolicy      = MULTIBUS,
++		.pgpolicy      = GROUP_BY_PRIO,
++		.pgfailback    = 15,
+ 	},
+ 	{
+ 		/* TMS RamSan / FlashSystem 710/720/810/820/840/900 */

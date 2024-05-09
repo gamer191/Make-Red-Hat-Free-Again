@@ -1,0 +1,30 @@
+From 4efc1923f8fd161d131d2b8e8930bf5c9ed66668 Mon Sep 17 00:00:00 2001
+From: Neil Horman <neil.horman@secedge.com>
+Date: Sun, 9 Jul 2023 10:09:17 -0400
+Subject: [PATCH 2/7] Revert "activate_mapping: fflush the buffered data to
+ smp_affinity"
+
+This reverts commit 8bbc0aeca0187ad3f5f942408198bc0fc055b0f8.
+
+Was causing a segfault:
+https://github.com/Irqbalance/irqbalance/issues/267
+---
+ activate.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/activate.c b/activate.c
+index 6d0b096..62cfd08 100644
+--- a/activate.c
++++ b/activate.c
+@@ -76,7 +76,7 @@ static void activate_mapping(struct irq_info *info, void *data __attribute__((un
+ 
+ 	cpumask_scnprintf(buf, PATH_MAX, applied_mask);
+ 	ret = fprintf(file, "%s", buf);
+-	if (ret < 0 || fflush(file)) {
++	if (ret < 0) {
+ 		log(TO_ALL, LOG_WARNING, "cannot change irq %i's affinity, add it to banned list", info->irq);
+ 		add_banned_irq(info->irq);
+ 		remove_one_irq_from_db(info->irq);
+-- 
+2.40.1
+

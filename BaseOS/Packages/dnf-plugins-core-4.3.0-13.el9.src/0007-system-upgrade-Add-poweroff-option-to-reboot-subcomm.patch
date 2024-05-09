@@ -1,0 +1,241 @@
+From d5f5883623ada37b4cec5909a1032c4bc3123a9a Mon Sep 17 00:00:00 2001
+From: Cameron Rodriguez <rod.cam2014+dev@gmail.com>
+Date: Tue, 1 Nov 2022 02:25:52 -0400
+Subject: [PATCH] [system-upgrade] Add --poweroff option to reboot subcommand
+
+= changelog =
+msg: Add --poweroff option to system-upgrade reboot
+type: enhancement
+---
+ doc/system-upgrade.rst       | 10 ++++++++++
+ plugins/system_upgrade.py    | 28 ++++++++++++++++++++++------
+ tests/test_system_upgrade.py | 18 +++++++++++++++++-
+ 3 files changed, 49 insertions(+), 7 deletions(-)
+
+diff --git a/doc/system-upgrade.rst b/doc/system-upgrade.rst
+index 87b7319..6a7785b 100644
+--- a/doc/system-upgrade.rst
++++ b/doc/system-upgrade.rst
+@@ -44,6 +44,8 @@ Synopsis
+ 
+ ``dnf system-upgrade reboot``
+ 
++``dnf system-upgrade reboot --poweroff``
++
+ ``dnf system-upgrade clean``
+ 
+ ``dnf system-upgrade log``
+@@ -54,6 +56,8 @@ Synopsis
+ 
+ ``dnf offline-upgrade reboot``
+ 
++``dnf offline-upgrade reboot --poweroff``
++
+ ``dnf offline-upgrade clean``
+ 
+ ``dnf offline-upgrade log``
+@@ -64,6 +68,8 @@ Synopsis
+ 
+ ``dnf offline-distrosync reboot``
+ 
++``dnf offline-distrosync reboot --poweroff``
++
+ ``dnf offline-distrosync clean``
+ 
+ ``dnf offline-distrosync log``
+@@ -116,6 +122,10 @@ Options
+     ``--distro-sync``. If both are specified, the last option will be used. The option cannot be
+     used with the ``offline-distrosync`` command.
+ 
++``--poweroff``
++    When applied with the ``reboot`` subcommand, the system will power off after
++    upgrades are completed, instead of restarting.
++
+ ``--number``
+     Applied with ``log`` subcommand will show the log specified by the number.
+ 
+diff --git a/plugins/system_upgrade.py b/plugins/system_upgrade.py
+index 4f7620f..b99dd8a 100644
+--- a/plugins/system_upgrade.py
++++ b/plugins/system_upgrade.py
+@@ -61,16 +61,19 @@ DOWNLOAD_FINISHED_MSG = _(  # Translators: do not change "reboot" here
+ CANT_RESET_RELEASEVER = _(
+     "Sorry, you need to use 'download --releasever' instead of '--network'")
+ 
+-STATE_VERSION = 2
++STATE_VERSION = 3
+ 
+ # --- Miscellaneous helper functions ------------------------------------------
+ 
+ 
+-def reboot():
++def reboot(poweroff = False):
+     if os.getenv("DNF_SYSTEM_UPGRADE_NO_REBOOT", default=False):
+         logger.info(_("Reboot turned off, not rebooting."))
+     else:
+-        Popen(["systemctl", "reboot"])
++        if poweroff:
++            Popen(["systemctl", "poweroff"])
++        else:
++            Popen(["systemctl", "reboot"])
+ 
+ 
+ def get_url_from_os_release():
+@@ -183,6 +186,7 @@ class State(object):
+     upgrade_status = _prop("upgrade_status")
+     upgrade_command = _prop("upgrade_command")
+     distro_sync = _prop("distro_sync")
++    poweroff_after = _prop("poweroff_after")
+     enable_disable_repos = _prop("enable_disable_repos")
+     module_platform_id = _prop("module_platform_id")
+ 
+@@ -359,6 +363,10 @@ class SystemUpgradeCommand(dnf.cli.Command):
+                             action='store_false',
+                             help=_("keep installed packages if the new "
+                                    "release's version is older"))
++        parser.add_argument('--poweroff', dest='poweroff_after',
++                            action='store_true',
++                            help=_("power off system after the operation "
++                                   "is completed"))
+         parser.add_argument('tid', nargs=1, choices=CMDS,
+                             metavar="[%s]" % "|".join(CMDS))
+         parser.add_argument('--number', type=int, help=_('which logs to show'))
+@@ -566,8 +574,13 @@ class SystemUpgradeCommand(dnf.cli.Command):
+         if not self.opts.tid[0] == "reboot":
+             return
+ 
++        self.state.poweroff_after = self.opts.poweroff_after
++
+         self.log_status(_("Rebooting to perform upgrade."),
+                         REBOOT_REQUESTED_ID)
++
++        # Explicit write since __exit__ doesn't seem to get called when rebooting
++        self.state.write()
+         reboot()
+ 
+     def run_download(self):
+@@ -686,12 +699,15 @@ class SystemUpgradeCommand(dnf.cli.Command):
+         self.log_status(_("Download finished."), DOWNLOAD_FINISHED_ID)
+ 
+     def transaction_upgrade(self):
+-        Plymouth.message(_("Upgrade complete! Cleaning up and rebooting..."))
+-        self.log_status(_("Upgrade complete! Cleaning up and rebooting..."),
++        power_op = "powering off" if self.state.poweroff_after else "rebooting"
++
++        Plymouth.message(_("Upgrade complete! Cleaning up and " + power_op + "..."))
++        self.log_status(_("Upgrade complete! Cleaning up and " + power_op + "..."),
+                         UPGRADE_FINISHED_ID)
++
+         self.run_clean()
+         if self.opts.tid[0] == "upgrade":
+-            reboot()
++            reboot(self.state.poweroff_after)
+ 
+ 
+ class OfflineUpgradeCommand(SystemUpgradeCommand):
+diff --git a/tests/test_system_upgrade.py b/tests/test_system_upgrade.py
+index 6ef4c21..769720d 100644
+--- a/tests/test_system_upgrade.py
++++ b/tests/test_system_upgrade.py
+@@ -322,7 +322,7 @@ class RebootCheckCommandTestCase(CommandTestCaseBase):
+     def check_reboot(self, status='complete', lexists=False, command='system-upgrade',
+                      state_command='system-upgrade'):
+         with patch('system_upgrade.os.path.lexists') as lexists_func:
+-            self.command.state.state_version = 2
++            self.command.state.state_version = 3
+             self.command.state.download_status = status
+             self.command.opts = mock.MagicMock()
+             self.command.opts.command = command
+@@ -356,6 +356,7 @@ class RebootCheckCommandTestCase(CommandTestCaseBase):
+     @patch('system_upgrade.reboot')
+     def test_run_reboot(self, reboot, log_status, run_prepare):
+         self.command.opts = mock.MagicMock()
++        self.command.opts.poweroff_after = False
+         self.command.opts.tid = ["reboot"]
+         self.command.run_reboot()
+         run_prepare.assert_called_once_with()
+@@ -363,6 +364,21 @@ class RebootCheckCommandTestCase(CommandTestCaseBase):
+                          log_status.call_args[0][1])
+         self.assertTrue(reboot.called)
+ 
++    @patch('system_upgrade.SystemUpgradeCommand.run_prepare')
++    @patch('system_upgrade.SystemUpgradeCommand.log_status')
++    @patch('system_upgrade.reboot')
++    def test_reboot_poweroff_after(self, reboot, log_status, run_prepare):
++        self.command.opts = mock.MagicMock()
++        self.command.opts.tid = ["reboot"]
++        self.command.opts.poweroff_after = True
++        self.command.run_reboot()
++        run_prepare.assert_called_with()
++        self.assertEqual(system_upgrade.REBOOT_REQUESTED_ID,
++                         log_status.call_args[0][1])
++        self.assertTrue(self.command.state.poweroff_after)
++        self.assertTrue(reboot.called)
++
++
+     @patch('system_upgrade.SystemUpgradeCommand.run_prepare')
+     @patch('system_upgrade.SystemUpgradeCommand.log_status')
+     @patch('system_upgrade.reboot')
+-- 
+2.40.1
+
+
+From 52aec32ef129874dc28fc93947e5d32c78baff0c Mon Sep 17 00:00:00 2001
+From: Cameron Rodriguez <rod.cam2014+dev@gmail.com>
+Date: Tue, 1 Nov 2022 02:29:29 -0400
+Subject: [PATCH] Add Cameron Rodriguez to AUTHORS file
+
+---
+ AUTHORS | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/AUTHORS b/AUTHORS
+index f098cb6..a6102ec 100644
+--- a/AUTHORS
++++ b/AUTHORS
+@@ -20,6 +20,7 @@ DNF-PLUGINS-CORE CONTRIBUTORS
+     Adam Salih <salih.max@gmail.com>
+     Alexander Todorov <atodorov@otb.bg>
+     Anders Blomdell <anders.blomdell@gmail.com>
++    Cameron Rodriguez <rod.cam2014+dev@gmail.com>
+     Cyril Jouve <jv.cyril@gmail.com>
+     David Michael <fedora.dm0@gmail.com>
+     François Rigault <francois.rigault@amadeus.com>
+-- 
+2.40.1
+
+
+From dd081ebd4c46a79688f81ef639628189f8b78db3 Mon Sep 17 00:00:00 2001
+From: Cameron Rodriguez <rod.cam2014+dev@gmail.com>
+Date: Sun, 4 Dec 2022 10:06:08 -0500
+Subject: [PATCH] [offline-upgrade] Fix strings for l10n
+
+---
+ plugins/system_upgrade.py | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/plugins/system_upgrade.py b/plugins/system_upgrade.py
+index b99dd8a..64195fd 100644
+--- a/plugins/system_upgrade.py
++++ b/plugins/system_upgrade.py
+@@ -699,11 +699,13 @@ class SystemUpgradeCommand(dnf.cli.Command):
+         self.log_status(_("Download finished."), DOWNLOAD_FINISHED_ID)
+ 
+     def transaction_upgrade(self):
+-        power_op = "powering off" if self.state.poweroff_after else "rebooting"
++        if self.state.poweroff_after:
++            upgrade_complete_msg = _("Upgrade complete! Cleaning up and powering off...")
++        else:
++            upgrade_complete_msg = _("Upgrade complete! Cleaning up and rebooting...")
+ 
+-        Plymouth.message(_("Upgrade complete! Cleaning up and " + power_op + "..."))
+-        self.log_status(_("Upgrade complete! Cleaning up and " + power_op + "..."),
+-                        UPGRADE_FINISHED_ID)
++        Plymouth.message(upgrade_complete_msg)
++        self.log_status(upgrade_complete_msg, UPGRADE_FINISHED_ID)
+ 
+         self.run_clean()
+         if self.opts.tid[0] == "upgrade":
+-- 
+2.40.1
+

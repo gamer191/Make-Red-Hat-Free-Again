@@ -1,0 +1,89 @@
+From 101966ed3e4a73a6e0e1c269306e976040e068a9 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Thu, 7 Oct 2021 02:21:32 -0600
+Subject: [PATCH 039/217] libcxl: add label_size to cxl_memdev, and an API to
+ retrieve it
+
+Size of the Label Storage Area (LSA) is available as a sysfs attribute
+called 'label_storage_size'. Add that to libcxl's memdev so that it is available
+for label related commands.
+
+Cc: Dan Williams <dan.j.williams@intel.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c   | 12 ++++++++++++
+ cxl/lib/libcxl.sym |  1 +
+ cxl/lib/private.h  |  1 +
+ cxl/libcxl.h       |  1 +
+ 4 files changed, 15 insertions(+)
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 76913a2..def3a97 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -247,6 +247,13 @@ static void *add_cxl_memdev(void *parent, int id, const char *cxlmem_base)
+ 	if (memdev->payload_max < 0)
+ 		goto err_read;
+ 
++	sprintf(path, "%s/label_storage_size", cxlmem_base);
++	if (sysfs_read_attr(ctx, path, buf) < 0)
++		goto err_read;
++	memdev->lsa_size = strtoull(buf, NULL, 0);
++	if (memdev->lsa_size == ULLONG_MAX)
++		goto err_read;
++
+ 	memdev->dev_path = strdup(cxlmem_base);
+ 	if (!memdev->dev_path)
+ 		goto err_read;
+@@ -350,6 +357,11 @@ CXL_EXPORT const char *cxl_memdev_get_firmware_verison(struct cxl_memdev *memdev
+ 	return memdev->firmware_version;
+ }
+ 
++CXL_EXPORT size_t cxl_memdev_get_label_size(struct cxl_memdev *memdev)
++{
++	return memdev->lsa_size;
++}
++
+ CXL_EXPORT void cxl_cmd_unref(struct cxl_cmd *cmd)
+ {
+ 	if (!cmd)
+diff --git a/cxl/lib/libcxl.sym b/cxl/lib/libcxl.sym
+index 629322c..858e953 100644
+--- a/cxl/lib/libcxl.sym
++++ b/cxl/lib/libcxl.sym
+@@ -64,6 +64,7 @@ global:
+ 	cxl_cmd_health_info_get_pmem_errors;
+ 	cxl_cmd_new_read_label;
+ 	cxl_cmd_read_label_get_payload;
++	cxl_memdev_get_label_size;
+ local:
+         *;
+ };
+diff --git a/cxl/lib/private.h b/cxl/lib/private.h
+index bf3a897..c4ed741 100644
+--- a/cxl/lib/private.h
++++ b/cxl/lib/private.h
+@@ -21,6 +21,7 @@ struct cxl_memdev {
+ 	unsigned long long pmem_size;
+ 	unsigned long long ram_size;
+ 	int payload_max;
++	size_t lsa_size;
+ 	struct kmod_module *module;
+ };
+ 
+diff --git a/cxl/libcxl.h b/cxl/libcxl.h
+index 7408745..d3b97a1 100644
+--- a/cxl/libcxl.h
++++ b/cxl/libcxl.h
+@@ -42,6 +42,7 @@ struct cxl_ctx *cxl_memdev_get_ctx(struct cxl_memdev *memdev);
+ unsigned long long cxl_memdev_get_pmem_size(struct cxl_memdev *memdev);
+ unsigned long long cxl_memdev_get_ram_size(struct cxl_memdev *memdev);
+ const char *cxl_memdev_get_firmware_verison(struct cxl_memdev *memdev);
++size_t cxl_memdev_get_label_size(struct cxl_memdev *memdev);
+ 
+ #define cxl_memdev_foreach(ctx, memdev) \
+         for (memdev = cxl_memdev_get_first(ctx); \
+-- 
+2.27.0
+

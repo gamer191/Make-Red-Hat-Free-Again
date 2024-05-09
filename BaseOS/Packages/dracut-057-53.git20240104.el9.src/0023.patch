@@ -1,0 +1,97 @@
+From 11e1ffb0cf614fb6ec9b740cb6eb8c07c2a081ac Mon Sep 17 00:00:00 2001
+From: keentux <valentin.lefebvre@suse.com>
+Date: Wed, 22 Mar 2023 10:40:39 +0000
+Subject: [PATCH] fix(dracut.sh): handle imagebase for uefi
+
+* UEFI creation didn't handle the ImageBase data for the PE file
+  generation. Create an UKI thanks a stub file with a non zero BaseImage
+  logs some warning ans generate a bad file offset management. The efi
+  becomes unloadable.
+* This commit parse the PE file header, get the data and apply the
+  ImageBase on the objcopy command.
+
+Fixes dracutdevs#2284
+
+Signed-off-by: Valentin Lefebvre <valentin.lefebvre@suse.com>
+
+(Cherry-picked commit: 6178a9d83ffad67fa371cef2ff3f5bbb337bc8b7)
+
+Related: #2180787
+---
+ dracut-functions.sh | 26 ++++++++++++++++++++++----
+ dracut.sh           |  9 ++++++++-
+ 2 files changed, 30 insertions(+), 5 deletions(-)
+
+diff --git a/dracut-functions.sh b/dracut-functions.sh
+index a95755b2..7f05da6e 100755
+--- a/dracut-functions.sh
++++ b/dracut-functions.sh
+@@ -1009,12 +1009,30 @@ pe_file_format() {
+     return 1
+ }
+ 
+-# Get the sectionAlignment data from the PE header
++# Get specific data from the PE header
++pe_get_header_data() {
++    local data_header
++    [[ $# -ne "2" ]] && return 1
++    [[ $(pe_file_format "$1") -eq 1 ]] && return 1
++    data_header=$(objdump -p "$1" \
++        | awk -v data="$2" '{if ($1 == data){print $2}}')
++    echo "$data_header"
++}
++
++# Get the SectionAlignment data from the PE header
+ pe_get_section_align() {
+     local align_hex
+     [[ $# -ne "1" ]] && return 1
+-    [[ $(pe_file_format "$1") -eq 1 ]] && return 1
+-    align_hex=$(objdump -p "$1" \
+-        | awk '{if ($1 == "SectionAlignment"){print $2}}')
++    align_hex=$(pe_get_header_data "$1" "SectionAlignment")
++    [[ $? -eq 1 ]] && return 1
+     echo "$((16#$align_hex))"
+ }
++
++# Get the ImageBase data from the PE header
++pe_get_image_base() {
++    local base_image
++    [[ $# -ne "1" ]] && return 1
++    base_image=$(pe_get_header_data "$1" "ImageBase")
++    [[ $? -eq 1 ]] && return 1
++    echo "$((16#$base_image))"
++}
+diff --git a/dracut.sh b/dracut.sh
+index 0c963431..a6a27dcf 100755
+--- a/dracut.sh
++++ b/dracut.sh
+@@ -2601,7 +2601,7 @@ if [[ $uefi == yes ]]; then
+     fi
+     align=$(pe_get_section_align "$uefi_stub")
+     if [[ $? -eq 1 ]]; then
+-        dfatal "Failed to get the sectionAlignment of the stub PE header to create the UEFI image file"
++        dfatal "Failed to get the SectionAlignment of the stub PE header to create the UEFI image file"
+         exit 1
+     fi
+     offs=$((offs + "$align" - offs % "$align"))
+@@ -2638,12 +2638,19 @@ if [[ $uefi == yes ]]; then
+     offs=$((offs + "$align" - offs % "$align"))
+     uefi_initrd_offs="${offs}"
+ 
++    base_image=$(pe_get_image_base "$uefi_stub")
++    if [[ $? -eq 1 ]]; then
++        dfatal "Failed to get ImageBase data of $uefi_stub to create UEFI image file"
++        exit 1
++    fi
++
+     if objcopy \
+         ${uefi_osrelease:+--add-section .osrel="$uefi_osrelease" --change-section-vma .osrel=$(printf 0x%x "$uefi_osrelease_offs")} \
+         ${uefi_cmdline:+--add-section .cmdline="$uefi_cmdline" --change-section-vma .cmdline=$(printf 0x%x "$uefi_cmdline_offs")} \
+         ${uefi_splash_image:+--add-section .splash="$uefi_splash_image" --change-section-vma .splash=$(printf 0x%x "$uefi_splash_offs")} \
+         --add-section .linux="$kernel_image" --change-section-vma .linux="$(printf 0x%x "$uefi_linux_offs")" \
+         --add-section .initrd="${DRACUT_TMPDIR}/initramfs.img" --change-section-vma .initrd="$(printf 0x%x "$uefi_initrd_offs")" \
++        --image-base="$(printf 0x%x "$base_image")" \
+         "$uefi_stub" "${uefi_outdir}/linux.efi"; then
+         if [[ -n ${uefi_secureboot_key} && -n ${uefi_secureboot_cert} ]]; then
+             if sbsign \
+

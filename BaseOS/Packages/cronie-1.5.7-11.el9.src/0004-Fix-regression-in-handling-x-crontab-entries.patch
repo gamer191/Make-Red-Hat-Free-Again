@@ -1,0 +1,28 @@
+From 991a5f2a44c68f576b6c6da3a7ac8fbc8f97a3b0 Mon Sep 17 00:00:00 2001
+From: Tomas Mraz <tmraz@fedoraproject.org>
+Date: Tue, 22 Mar 2022 14:35:48 +0100
+Subject: [PATCH 4/5] Fix regression in handling */x crontab entries
+
+Fixes #102
+---
+ src/entry.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/entry.c b/src/entry.c
+index 15ce9b5..e9e258b 100644
+--- a/src/entry.c
++++ b/src/entry.c
+@@ -563,7 +563,9 @@ get_range(bitstr_t * bits, int low, int high, const char *names[],
+ 				return (EOF);
+ 
+ 			case R_STEP:
+-				if (get_number(&num3, 0, PPC_NULL, file) != EOF) {
++				unget_char(ch, file);
++				if (get_number(&num3, 0, PPC_NULL, file) != EOF
++				    && num3 != 0) {
+ 					state = R_TERMS;
+ 					break;
+ 				}
+-- 
+2.36.1
+

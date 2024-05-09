@@ -1,0 +1,61 @@
+From 5d20a4d2cca923e63cb1604da51788c0fd078ce1 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:52:52 -0800
+Subject: [PATCH 098/217] cxl/list: Cleanup options definitions
+
+Clarify which options take lists by adding a "(s)" to the object name, and
+move the option block out of cmd_list() to reduce the column-80 collisions.
+
+Link: https://lore.kernel.org/r/164298557263.3021641.8121105326167408001.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/list.c | 30 ++++++++++++++++--------------
+ 1 file changed, 16 insertions(+), 14 deletions(-)
+
+diff --git a/cxl/list.c b/cxl/list.c
+index 6bc48df..7e2744d 100644
+--- a/cxl/list.c
++++ b/cxl/list.c
+@@ -19,22 +19,24 @@ static int num_list_flags(void)
+ 	return param.memdevs;
+ }
+ 
++static const struct option options[] = {
++	OPT_STRING('m', "memdev", &param.memdev_filter, "memory device name(s)",
++		   "filter by CXL memory device name(s)"),
++	OPT_STRING('s', "serial", &param.serial_filter,
++		   "memory device serial(s)",
++		   "filter by CXL memory device serial number(s)"),
++	OPT_BOOLEAN('M', "memdevs", &param.memdevs,
++		    "include CXL memory device info"),
++	OPT_BOOLEAN('i', "idle", &param.idle, "include disabled devices"),
++	OPT_BOOLEAN('u', "human", &param.human,
++		    "use human friendly number formats "),
++	OPT_BOOLEAN('H', "health", &param.health,
++		    "include memory device health information "),
++	OPT_END(),
++};
++
+ int cmd_list(int argc, const char **argv, struct cxl_ctx *ctx)
+ {
+-	const struct option options[] = {
+-		OPT_STRING('m', "memdev", &param.memdev_filter, "memory device name",
+-			   "filter by CXL memory device name"),
+-		OPT_STRING('s', "serial", &param.serial_filter, "memory device serial",
+-			   "filter by CXL memory device serial number"),
+-		OPT_BOOLEAN('M', "memdevs", &param.memdevs,
+-			    "include CXL memory device info"),
+-		OPT_BOOLEAN('i', "idle", &param.idle, "include disabled devices"),
+-		OPT_BOOLEAN('u', "human", &param.human,
+-				"use human friendly number formats "),
+-		OPT_BOOLEAN('H', "health", &param.health,
+-				"include memory device health information "),
+-		OPT_END(),
+-	};
+ 	const char * const u[] = {
+ 		"cxl list [<options>]",
+ 		NULL
+-- 
+2.27.0
+

@@ -1,0 +1,28 @@
+From 185e200e9969f717faa5014d87be579ce452d2fe Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.de>
+Date: Thu, 12 Jan 2023 11:06:35 +0100
+Subject: [PATCH] fix(nvmf): install 8021q module unconditionally
+
+In NBFT setups, VLAN can be configured in the firmware.
+Add the 8021q module in hostonly mode even if VLAN is currently
+not used to be prepared for such configuration change.
+
+Resolves: #1933787
+---
+ modules.d/95nvmf/module-setup.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules.d/95nvmf/module-setup.sh b/modules.d/95nvmf/module-setup.sh
+index ce5ccde2..f7fd62a0 100755
+--- a/modules.d/95nvmf/module-setup.sh
++++ b/modules.d/95nvmf/module-setup.sh
+@@ -50,7 +50,7 @@ depends() {
+ # called by dracut
+ installkernel() {
+     instmods nvme_fc lpfc qla2xxx
+-    hostonly="" instmods nvme_tcp nvme_fabrics
++    hostonly="" instmods nvme_tcp nvme_fabrics 8021q
+ }
+ 
+ # called by dracut
+

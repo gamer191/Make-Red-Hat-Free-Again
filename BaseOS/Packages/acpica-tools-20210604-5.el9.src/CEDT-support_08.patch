@@ -1,0 +1,184 @@
+commit 19b11f91660b1a38a8e9655b0b1a4ad51ec4db1e
+Author: Lawrence Hileman <larry.hileman@xconn-tech.com>
+Date:   Fri Jan 7 16:33:40 2022 -0800
+
+    Add the subtable CFMWS to the CEDT table
+
+diff --git a/source/common/dmtbdump1.c b/source/common/dmtbdump1.c
+index 105a88e..6abe8bc 100644
+--- a/source/common/dmtbdump1.c
++++ b/source/common/dmtbdump1.c
+@@ -244,7 +244,6 @@ AcpiDmDumpCedt (
+     ACPI_CEDT_HEADER        *Subtable;
+     UINT32                  Length = Table->Length;
+     UINT32                  Offset = sizeof (ACPI_TABLE_CEDT);
+-    ACPI_DMTABLE_INFO       *InfoTable;
+ 
+ 
+     /* There is no main table (other than the standard ACPI header) */
+@@ -265,35 +264,50 @@ AcpiDmDumpCedt (
+         switch (Subtable->Type)
+         {
+         case ACPI_CEDT_TYPE_CHBS:
++            Status = AcpiDmDumpTable (Length, Offset, Subtable,
++                Subtable->Length, AcpiDmTableInfoCedt0);
++            if (ACPI_FAILURE (Status)) {
++                return;
++            }
++            break;
++
++        case ACPI_CEDT_TYPE_CFMWS: {
++            ACPI_CEDT_CFMWS *ptr = (ACPI_CEDT_CFMWS *) Subtable;
++            unsigned int i, max = 0x01 << (ptr->InterleaveWays);
++
++            // print out table with first "Interleave target"
++            Status = AcpiDmDumpTable (Length, Offset, Subtable,
++                Subtable->Length, AcpiDmTableInfoCedt1);
++            if (ACPI_FAILURE (Status)) {
++                return;
++            }
+ 
+-            InfoTable = AcpiDmTableInfoCedt0;
++            // Now, print out any interleave targets beyond the first.
++            for (i = 1; i < max; i++) {
++                unsigned int loc_offset = Offset + (i * 4) + ACPI_OFFSET(ACPI_CEDT_CFMWS, InterleaveTargets);
++                unsigned int *trg = &(ptr->InterleaveTargets[i]);
++                Status = AcpiDmDumpTable (Length, loc_offset, trg,
++                        Subtable->Length, AcpiDmTableInfoCedt1_te);
++                if (ACPI_FAILURE (Status)) {
++                    return;
++                }
++            }
+             break;
++        }
+ 
+         default:
+-
+             AcpiOsPrintf ("\n**** Unknown CEDT subtable type 0x%X\n\n",
+                 Subtable->Type);
+ 
+             /* Attempt to continue */
+-
+             if (!Subtable->Length)
+             {
+                 AcpiOsPrintf ("Invalid zero length subtable\n");
+                 return;
+             }
+-            goto NextSubtable;
+-        }
+-
+-        Status = AcpiDmDumpTable (Length, Offset, Subtable,
+-            Subtable->Length, InfoTable);
+-        if (ACPI_FAILURE (Status))
+-        {
+-            return;
+         }
+ 
+-NextSubtable:
+         /* Point to next subtable */
+-
+         Offset += Subtable->Length;
+         Subtable = ACPI_ADD_PTR (ACPI_CEDT_HEADER, Subtable,
+             Subtable->Length);
+diff --git a/source/common/dmtbinfo1.c b/source/common/dmtbinfo1.c
+index 5b8ffe6..ac8e79e 100644
+--- a/source/common/dmtbinfo1.c
++++ b/source/common/dmtbinfo1.c
+@@ -275,6 +275,28 @@ ACPI_DMTABLE_INFO           AcpiDmTableInfoCedt0[] =
+     ACPI_DMT_TERMINATOR
+ };
+ 
++/* 1: CXL Fixed Memory Window Structure */
++
++ACPI_DMTABLE_INFO           AcpiDmTableInfoCedt1[] =
++{
++    {ACPI_DMT_UINT32,   ACPI_CEDT1_OFFSET (Reserved1),            "Reserved", 0},
++    {ACPI_DMT_UINT64,   ACPI_CEDT1_OFFSET (BaseHpa),              "Window base address", 0},
++    {ACPI_DMT_UINT64,   ACPI_CEDT1_OFFSET (WindowSize),           "Window size", 0},
++    {ACPI_DMT_UINT8,    ACPI_CEDT1_OFFSET (InterleaveWays),       "Interleave Members (2^n)", 0},
++    {ACPI_DMT_UINT8,    ACPI_CEDT1_OFFSET (InterleaveArithmetic), "Interleave Arithmetic", 0},
++    {ACPI_DMT_UINT16,   ACPI_CEDT1_OFFSET (Reserved2),            "Reserved", 0},
++    {ACPI_DMT_UINT32,   ACPI_CEDT1_OFFSET (Granularity),          "Granularity", 0},
++    {ACPI_DMT_UINT16,   ACPI_CEDT1_OFFSET (Restrictions),         "Restrictions", 0},
++    {ACPI_DMT_UINT16,   ACPI_CEDT1_OFFSET (QtgId),                "QtgId", 0},
++    {ACPI_DMT_UINT32,   ACPI_CEDT1_OFFSET (InterleaveTargets),    "First Target", 0},
++    ACPI_DMT_TERMINATOR
++};
++
++ACPI_DMTABLE_INFO           AcpiDmTableInfoCedt1_te[] =
++{
++    {ACPI_DMT_UINT32,   ACPI_CEDT1_TE_OFFSET (InterleaveTarget),  "Next Target", 0},
++    ACPI_DMT_TERMINATOR
++};
+ 
+ /*******************************************************************************
+  *
+diff --git a/source/compiler/dttable1.c b/source/compiler/dttable1.c
+index c56f61c..972be5f 100644
+--- a/source/compiler/dttable1.c
++++ b/source/compiler/dttable1.c
+@@ -282,18 +282,18 @@ DtCompileCedt (
+         switch (CedtHeader->Type)
+         {
+         case ACPI_CEDT_TYPE_CHBS:
+-
++            Status = DtCompileTable (PFieldList, AcpiDmTableInfoCedt0, &Subtable);
++            break;
++        case ACPI_CEDT_TYPE_CFMWS:
++            Status = DtCompileTable (PFieldList, AcpiDmTableInfoCedt1, &Subtable);
+             break;
+ 
+         default:
+-
+             DtFatal (ASL_MSG_UNKNOWN_SUBTABLE, SubtableStart, "CEDT");
+             return (AE_ERROR);
+         }
+ 
+         /* CEDT Subtable */
+-
+-        Status = DtCompileTable (PFieldList, AcpiDmTableInfoCedt0, &Subtable);
+         if (ACPI_FAILURE (Status))
+         {
+             return (Status);
+diff --git a/source/include/acdisasm.h b/source/include/acdisasm.h
+index 4e7c02f..c165ba0 100644
+--- a/source/include/acdisasm.h
++++ b/source/include/acdisasm.h
+@@ -267,6 +267,8 @@ extern ACPI_DMTABLE_INFO        AcpiDmTableInfoBert[];
+ extern ACPI_DMTABLE_INFO        AcpiDmTableInfoBgrt[];
+ extern ACPI_DMTABLE_INFO        AcpiDmTableInfoCedtHdr[];
+ extern ACPI_DMTABLE_INFO        AcpiDmTableInfoCedt0[];
++extern ACPI_DMTABLE_INFO        AcpiDmTableInfoCedt1[];
++extern ACPI_DMTABLE_INFO        AcpiDmTableInfoCedt1_te[];
+ extern ACPI_DMTABLE_INFO        AcpiDmTableInfoCpep[];
+ extern ACPI_DMTABLE_INFO        AcpiDmTableInfoCpep0[];
+ extern ACPI_DMTABLE_INFO        AcpiDmTableInfoCsrt0[];
+diff --git a/source/include/actbinfo.h b/source/include/actbinfo.h
+index 80bd806..6b9f5c1 100644
+--- a/source/include/actbinfo.h
++++ b/source/include/actbinfo.h
+@@ -112,6 +112,8 @@
+ #define ACPI_ASF4_OFFSET(f)             (UINT16) ACPI_OFFSET (ACPI_ASF_ADDRESS,f)
+ #define ACPI_CEDT_OFFSET(f)             (UINT16) ACPI_OFFSET (ACPI_CEDT_HEADER, f)
+ #define ACPI_CEDT0_OFFSET(f)            (UINT16) ACPI_OFFSET (ACPI_CEDT_CHBS, f)
++#define ACPI_CEDT1_OFFSET(f)            (UINT16) ACPI_OFFSET (ACPI_CEDT_CFMWS, f)
++#define ACPI_CEDT1_TE_OFFSET(f)         (UINT16) ACPI_OFFSET (ACPI_CEDT_CFMWS_TARGET_ELEMENT, f)
+ #define ACPI_CPEP0_OFFSET(f)            (UINT16) ACPI_OFFSET (ACPI_CPEP_POLLING,f)
+ #define ACPI_CSRT0_OFFSET(f)            (UINT16) ACPI_OFFSET (ACPI_CSRT_GROUP,f)
+ #define ACPI_CSRT1_OFFSET(f)            (UINT16) ACPI_OFFSET (ACPI_CSRT_SHARED_INFO,f)
+diff --git a/source/include/actbl1.h b/source/include/actbl1.h
+index 420189e..359861f 100644
+--- a/source/include/actbl1.h
++++ b/source/include/actbl1.h
+@@ -465,6 +465,11 @@ typedef struct acpi_cedt_cfmws
+ 
+ } ACPI_CEDT_CFMWS;
+ 
++typedef struct acpi_cedt_cfmws_target_element
++{
++    UINT32                  InterleaveTarget;
++} ACPI_CEDT_CFMWS_TARGET_ELEMENT;
++
+ /* Values for Interleave Arithmetic field above */
+ 
+ #define ACPI_CEDT_CFMWS_ARITHMETIC_MODULO	(0)

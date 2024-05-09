@@ -1,0 +1,24 @@
+From 47d2223dd090b365246709f9c20ce8684259590e Mon Sep 17 00:00:00 2001
+From: Josh Boyer <jwboyer@redhat.com>
+Date: Fri, 7 Apr 2023 12:36:06 -0400
+Subject: [PATCH 05/12] Free s even if there is no expanded format
+
+---
+ menu.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/menu.c b/menu.c
+index 48c9ed2f..137c8c8d 100644
+--- a/menu.c
++++ b/menu.c
+@@ -78,6 +78,7 @@ menu_add_item(struct menu *menu, const struct menu_item *item,
+ 		s = format_single(qitem, item->name, c, NULL, NULL, NULL);
+ 	if (*s == '\0') { /* no item if empty after format expanded */
+ 		menu->count--;
++		free(s);
+ 		return;
+ 	}
+ 	if (*s != '-' && item->key != KEYC_UNKNOWN && item->key != KEYC_NONE) {
+-- 
+2.31.1
+

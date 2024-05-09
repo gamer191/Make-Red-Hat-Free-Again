@@ -1,0 +1,49 @@
+From cbe337d6a0ee7d4f0ff9a5c19d14fb5e250df220 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Wed, 9 Mar 2022 15:36:52 -0800
+Subject: [PATCH 150/217] build: Fix '-Wall' and '-O2' warnings
+
+Stop specifying '-Wall and '-O2' in cc_flags, and rely on the buildtype
+and warning_level options. Fixup the '-D_FORTIFY_SOURCE=2' option to
+optionally be enabled for optimizated builds rather then forcing -O2.
+
+Link: https://github.com/pmem/ndctl/issues/195
+Link: https://lore.kernel.org/r/164686901240.2874657.8473455139820858036.stgit@dwillia2-desk3.amr.corp.intel.com
+Fixes: 4e5faa1726d2 ("build: Add meson build infrastructure")
+Reported-by: Steve Scargall <steve.scargall@intel.com>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ meson.build | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index 17ca65a..4dbb80d 100644
+--- a/meson.build
++++ b/meson.build
+@@ -57,7 +57,6 @@ sed -e s,@VERSION@,@0@,g
+ '''.format(meson.project_version(), prefixdir, libdir, includedir).split()
+ 
+ cc_flags = [
+-  '-Wall',
+   '-Wchar-subscripts',
+   '-Wformat-security',
+   '-Wmissing-declarations',
+@@ -70,9 +69,12 @@ cc_flags = [
+   '-Wmaybe-uninitialized',
+   '-Wdeclaration-after-statement',
+   '-Wunused-result',
+-  '-D_FORTIFY_SOURCE=2',
+-  '-O2',
+ ]
++
++if get_option('optimization') != '0'
++  cc_flags += [ '-D_FORTIFY_SOURCE=2' ]
++endif
++
+ cc = meson.get_compiler('c')
+ add_project_arguments(cc.get_supported_arguments(cc_flags), language : 'c')
+ 
+-- 
+2.27.0
+

@@ -1,0 +1,152 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 20 Dec 2022 17:41:12 -0600
+Subject: [PATCH] multipathd: handle no active paths in update_map_pr
+
+When a multipath device is first created, if it has a reservation key
+configured, update_map_pr() will check for a matching key on the active
+paths. If there were no active paths to check with, multipathd was
+leaving mpp->prflag in PRFLAG_UNSET, as if there were no matching keys.
+It's possible that when update_map_pr() is called, all the paths will be
+in the PATH_PENDING state because the checkers haven't completed yet. In
+this case, multipathd was treating the device as having no registered
+keys without ever checking.
+
+To solve this, multipath devices now start with prflag = PRFLAG_UNKNOWN.
+It will remain in this state until multipathd actually tries to get the
+registered keys down a path. If the map is in this state, it will check
+newly active paths, and if it finds a matching key, it will register
+the key down all active paths.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmpathpersist/mpath_persist.c |  8 ++++++++
+ libmultipath/structs.h          |  1 +
+ multipathd/cli_handlers.c       |  1 +
+ multipathd/main.c               | 19 ++++++++++++++-----
+ 4 files changed, 24 insertions(+), 5 deletions(-)
+
+diff --git a/libmpathpersist/mpath_persist.c b/libmpathpersist/mpath_persist.c
+index 01e8ca25..3fc60da2 100644
+--- a/libmpathpersist/mpath_persist.c
++++ b/libmpathpersist/mpath_persist.c
+@@ -879,6 +879,7 @@ int update_map_pr(struct multipath *mpp)
+ 	if (!get_be64(mpp->reservation_key))
+ 	{
+ 		/* Nothing to do. Assuming pr mgmt feature is disabled*/
++		mpp->prflag = PRFLAG_UNSET;
+ 		condlog(4, "%s: reservation_key not set in multipath.conf",
+ 			mpp->alias);
+ 		return MPATH_PR_SUCCESS;
+@@ -890,6 +891,13 @@ int update_map_pr(struct multipath *mpp)
+ 		condlog(0,"%s : failed to alloc resp in update_map_pr", mpp->alias);
+ 		return MPATH_PR_OTHER;
+ 	}
++	if (count_active_paths(mpp) == 0)
++	{
++		condlog(0,"%s: No available paths to check pr status",
++			mpp->alias);
++		return MPATH_PR_OTHER;
++	}
++	mpp->prflag = PRFLAG_UNSET;
+ 	ret = mpath_prin_activepath(mpp, MPATH_PRIN_RKEY_SA, resp, noisy);
+ 
+ 	if (ret != MPATH_PR_SUCCESS )
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index 5ec591bc..c1e93e6e 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -370,6 +370,7 @@ typedef int (pgpolicyfn) (struct multipath *, vector);
+ 
+ 
+ enum prflag_value {
++	PRFLAG_UNKNOWN,
+ 	PRFLAG_UNSET,
+ 	PRFLAG_SET,
+ };
+diff --git a/multipathd/cli_handlers.c b/multipathd/cli_handlers.c
+index 90d2c388..f322f10f 100644
+--- a/multipathd/cli_handlers.c
++++ b/multipathd/cli_handlers.c
+@@ -1305,6 +1305,7 @@ int
+ cli_getprstatus (void * v, char ** reply, int * len, void * data)
+ {
+ 	static const char * const prflag_str[] = {
++		[PRFLAG_UNKNOWN] = "unknown\n",
+ 		[PRFLAG_UNSET] = "unset\n",
+ 		[PRFLAG_SET] = "set\n",
+ 	};
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 532ca15b..075e7b13 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -573,7 +573,7 @@ fail:
+ 
+ 	sync_map_state(mpp);
+ 
+-	if (mpp->prflag == PRFLAG_UNSET)
++	if (mpp->prflag != PRFLAG_SET)
+ 		update_map_pr(mpp);
+ 	if (mpp->prflag == PRFLAG_SET)
+ 		pr_register_active_paths(mpp);
+@@ -1212,7 +1212,7 @@ rescan:
+ 	if (retries >= 0) {
+ 		if (start_waiter)
+ 			update_map_pr(mpp);
+-		if (mpp->prflag == PRFLAG_SET && prflag == PRFLAG_UNSET)
++		if (mpp->prflag == PRFLAG_SET && prflag != PRFLAG_SET)
+ 				pr_register_active_paths(mpp);
+ 		condlog(2, "%s [%s]: path added to devmap %s",
+ 			pp->dev, pp->dev_t, mpp->alias);
+@@ -2414,13 +2414,17 @@ check_path (struct vectors * vecs, struct path * pp, unsigned int ticks)
+ 		}
+ 
+ 		if (newstate == PATH_UP || newstate == PATH_GHOST) {
+-			if (pp->mpp->prflag == PRFLAG_SET) {
++			if (pp->mpp->prflag != PRFLAG_UNSET) {
++				int prflag = pp->mpp->prflag;
+ 				/*
+ 				 * Check Persistent Reservation.
+ 				 */
+ 				condlog(2, "%s: checking persistent "
+ 					"reservation registration", pp->dev);
+ 				mpath_pr_event_handle(pp);
++				if (pp->mpp->prflag == PRFLAG_SET &&
++				    prflag != PRFLAG_SET)
++					pr_register_active_paths(pp->mpp);
+ 			}
+ 		}
+ 
+@@ -3616,6 +3620,7 @@ void *  mpath_pr_event_handler_fn (void * pathp )
+ 		goto out;
+ 	}
+ 
++	mpp->prflag = PRFLAG_UNSET;
+ 	ret = prin_do_scsi_ioctl(pp->dev, MPATH_PRIN_RKEY_SA, resp, 0);
+ 	if (ret != MPATH_PR_SUCCESS )
+ 	{
+@@ -3686,12 +3691,12 @@ int mpath_pr_event_handle(struct path *pp)
+ 	struct multipath * mpp;
+ 
+ 	if (pp->bus != SYSFS_BUS_SCSI)
+-		return 0;
++		goto no_pr;
+ 
+ 	mpp = pp->mpp;
+ 
+ 	if (!get_be64(mpp->reservation_key))
+-		return -1;
++		goto no_pr;
+ 
+ 	pthread_attr_init(&attr);
+ 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+@@ -3704,4 +3709,8 @@ int mpath_pr_event_handle(struct path *pp)
+ 	pthread_attr_destroy(&attr);
+ 	rc = pthread_join(thread, NULL);
+ 	return 0;
++
++no_pr:
++	pp->mpp->prflag = PRFLAG_UNSET;
++	return 0;
+ }

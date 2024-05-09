@@ -1,0 +1,106 @@
+From a2a2e7129a418693bfe63bf35fc5d4ea38210f58 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Thu, 8 Feb 2024 10:36:08 +0100
+Subject: lscpu: update tests, follow max freq for scaling
+
+Addresses: https://issues.redhat.com/browse/RHEL-12783
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ sys-utils/lscpu-topology.c                   | 3 +++
+ tests/expected/lscpu/lscpu-armv7             | 1 +
+ tests/expected/lscpu/lscpu-vbox-win          | 1 +
+ tests/expected/lscpu/lscpu-vmware_fpe        | 1 +
+ tests/expected/lscpu/lscpu-x86_64-64cpu      | 1 +
+ tests/expected/lscpu/lscpu-x86_64-dell_e4310 | 1 +
+ tests/expected/lscpu/lscpu-x86_64-epyc_7451  | 1 +
+ 7 files changed, 9 insertions(+)
+
+diff --git a/sys-utils/lscpu-topology.c b/sys-utils/lscpu-topology.c
+index fe4da7cd5..23021df72 100644
+--- a/sys-utils/lscpu-topology.c
++++ b/sys-utils/lscpu-topology.c
+@@ -561,6 +561,9 @@ static int read_mhz(struct lscpu_cxt *cxt, struct lscpu_cpu *cpu)
+ 	if (ul_path_readf_s32(sys, &mhz, "cpu%d/cpufreq/scaling_cur_freq", num) == 0)
+ 		cpu->mhz_cur_freq = (float) mhz / 1000;
+ 
++	if (cpu->mhz_cur_freq > cpu->mhz_max_freq)
++		cpu->mhz_cur_freq = cpu->mhz_max_freq;
++
+ 	if (cpu->type && (cpu->mhz_min_freq || cpu->mhz_max_freq))
+ 		cpu->type->has_freq = 1;
+ 
+diff --git a/tests/expected/lscpu/lscpu-armv7 b/tests/expected/lscpu/lscpu-armv7
+index 7f1c726c1..27deb8099 100644
+--- a/tests/expected/lscpu/lscpu-armv7
++++ b/tests/expected/lscpu/lscpu-armv7
+@@ -7,6 +7,7 @@ Thread(s) per core:  1
+ Core(s) per socket:  2
+ Socket(s):           1
+ Stepping:            r0p4
++CPU(s) scaling MHz:  12%
+ CPU max MHz:         1700.0000
+ CPU min MHz:         200.0000
+ BogoMIPS:            1694.10
+diff --git a/tests/expected/lscpu/lscpu-vbox-win b/tests/expected/lscpu/lscpu-vbox-win
+index ab8a25c2c..bc0ed4cb6 100644
+--- a/tests/expected/lscpu/lscpu-vbox-win
++++ b/tests/expected/lscpu/lscpu-vbox-win
+@@ -10,6 +10,7 @@ Thread(s) per core:  1
+ Core(s) per socket:  2
+ Socket(s):           1
+ Stepping:            9
++CPU(s) scaling MHz:  42%
+ CPU max MHz:         3800.0000
+ CPU min MHz:         1600.0000
+ BogoMIPS:            3355.62
+diff --git a/tests/expected/lscpu/lscpu-vmware_fpe b/tests/expected/lscpu/lscpu-vmware_fpe
+index 363bdd931..80a51b1ae 100644
+--- a/tests/expected/lscpu/lscpu-vmware_fpe
++++ b/tests/expected/lscpu/lscpu-vmware_fpe
+@@ -11,6 +11,7 @@ Core(s) per socket:              4
+ Socket(s):                       2
+ Stepping:                        0
+ Frequency boost:                 enabled
++CPU(s) scaling MHz:              52%
+ CPU max MHz:                     3200.0000
+ CPU min MHz:                     1400.0000
+ BogoMIPS:                        6399.69
+diff --git a/tests/expected/lscpu/lscpu-x86_64-64cpu b/tests/expected/lscpu/lscpu-x86_64-64cpu
+index cd84ad46a..b5b6c85c3 100644
+--- a/tests/expected/lscpu/lscpu-x86_64-64cpu
++++ b/tests/expected/lscpu/lscpu-x86_64-64cpu
+@@ -10,6 +10,7 @@ Thread(s) per core:  2
+ Core(s) per socket:  8
+ Socket(s):           4
+ Stepping:            6
++CPU(s) scaling MHz:  54%
+ CPU max MHz:         1996.0000
+ CPU min MHz:         1064.0000
+ BogoMIPS:            3990.31
+diff --git a/tests/expected/lscpu/lscpu-x86_64-dell_e4310 b/tests/expected/lscpu/lscpu-x86_64-dell_e4310
+index a0a9962c7..f7f0291c9 100644
+--- a/tests/expected/lscpu/lscpu-x86_64-dell_e4310
++++ b/tests/expected/lscpu/lscpu-x86_64-dell_e4310
+@@ -10,6 +10,7 @@ Thread(s) per core:  2
+ Core(s) per socket:  2
+ Socket(s):           1
+ Stepping:            5
++CPU(s) scaling MHz:  59%
+ CPU max MHz:         2667.0000
+ CPU min MHz:         1199.0000
+ BogoMIPS:            5319.92
+diff --git a/tests/expected/lscpu/lscpu-x86_64-epyc_7451 b/tests/expected/lscpu/lscpu-x86_64-epyc_7451
+index 6e5085e84..335f391b5 100644
+--- a/tests/expected/lscpu/lscpu-x86_64-epyc_7451
++++ b/tests/expected/lscpu/lscpu-x86_64-epyc_7451
+@@ -11,6 +11,7 @@ Core(s) per socket:              24
+ Socket(s):                       2
+ Stepping:                        2
+ Frequency boost:                 enabled
++CPU(s) scaling MHz:              100%
+ CPU max MHz:                     2300.0000
+ CPU min MHz:                     1200.0000
+ BogoMIPS:                        4590.83
+-- 
+2.43.0
+

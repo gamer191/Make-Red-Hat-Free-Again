@@ -1,0 +1,70 @@
+From 5338636cd9ae7f53ed73f1a7909db03189ea2ff3 Mon Sep 17 00:00:00 2001
+From: Eugene Syromyatnikov <evgsyr@gmail.com>
+Date: Mon, 4 Jul 2022 12:29:22 +0200
+Subject: [PATCH] tests/bpf: fix sloppy low FD number usage
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+FD 42 can already be opened, so close it.  Otherwise, it may lead
+to the following test failure:
+
+    -bpf(BPF_LINK_CREATE, {link_create={prog_fd=0</dev/full>, target_fd=0</dev/full>, attach_type=BPF_TRACE_ITER, flags=0, iter_info=[{map={map_fd=0</dev/full>}}, {map={map_fd=42}}, {map={map_fd=314159265}}, {map={map_fd=-1159983635}}, {map={map_fd=-1}}], iter_info_len=5}}, 28) = 841540765612359407 (INJECTED)
+    +bpf(BPF_LINK_CREATE, {link_create={prog_fd=0</dev/full>, target_fd=0</dev/full>, attach_type=BPF_TRACE_ITER, flags=0, iter_info=[{map={map_fd=0</dev/full>}}, {map={map_fd=42</var/tmp/restraintd/logs/146893626/task.log>}}, {map={map_fd=314159265}}, {map={map_fd=-1159983635}}, {map={map_fd=-1}}], iter_info_len=5}}, 28) = 841540765612359407 (INJECTED)
+     bpf(BPF_LINK_CREATE, 0x3ff95574fe5, 28) = 841540765612359407 (INJECTED)
+    -bpf(BPF_LINK_CREATE, {link_create={prog_fd=0</dev/full>, target_fd=0</dev/full>, attach_type=BPF_TRACE_ITER, flags=0, iter_info=[{map={map_fd=0</dev/full>}}, {map={map_fd=42}}, {map={map_fd=314159265}}, {map={map_fd=-1159983635}}, {map={map_fd=-1}}, ... /* 0x3ff9555d000 */], iter_info_len=6}}, 28) = 841540765612359407 (INJECTED)
+    +bpf(BPF_LINK_CREATE, {link_create={prog_fd=0</dev/full>, target_fd=0</dev/full>, attach_type=BPF_TRACE_ITER, flags=0, iter_info=[{map={map_fd=0</dev/full>}}, {map={map_fd=42</var/tmp/restraintd/logs/146893626/task.log>}}, {map={map_fd=314159265}}, {map={map_fd=-1159983635}}, {map={map_fd=-1}}, ... /* 0x3ff9555d000 */], iter_info_len=6}}, 28) = 841540765612359407 (INJECTED)
+    [...]
+    FAIL bpf-success-long-y.test (exit status: 1)
+
+* tests/bpf.c (init_BPF_LINK_CREATE_attr7): Close iter_info_data[1] fd.
+
+Fixes: v5.18~18 "bpf: improve bpf(BPF_LINK_CREATE) decoding"
+Reported-by: Lenka Špačková <lkuprova@redhat.com>
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2103137
+---
+ tests/bpf.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/tests/bpf.c b/tests/bpf.c
+index 82d870e..6c1ffd4 100644
+--- a/tests/bpf.c
++++ b/tests/bpf.c
+@@ -1557,6 +1557,8 @@ init_BPF_LINK_CREATE_attr7(struct bpf_attr_check *check, size_t idx)
+ {
+ 	struct BPF_LINK_CREATE_struct *attr = &check->data.BPF_LINK_CREATE_data;
+ 
++	close(iter_info_data[1]);
++
+ 	if (!iter_info_data_p) {
+ 		iter_info_data_p = tail_memdup(iter_info_data,
+ 					       sizeof(iter_info_data));
+diff --git a/tests-m32/bpf.c b/tests-m32/bpf.c
+index 82d870e..6c1ffd4 100644
+--- a/tests-m32/bpf.c
++++ b/tests-m32/bpf.c
+@@ -1557,6 +1557,8 @@ init_BPF_LINK_CREATE_attr7(struct bpf_attr_check *check, size_t idx)
+ {
+ 	struct BPF_LINK_CREATE_struct *attr = &check->data.BPF_LINK_CREATE_data;
+ 
++	close(iter_info_data[1]);
++
+ 	if (!iter_info_data_p) {
+ 		iter_info_data_p = tail_memdup(iter_info_data,
+ 					       sizeof(iter_info_data));
+diff --git a/tests-mx32/bpf.c b/tests-mx32/bpf.c
+index 82d870e..6c1ffd4 100644
+--- a/tests-mx32/bpf.c
++++ b/tests-mx32/bpf.c
+@@ -1557,6 +1557,8 @@ init_BPF_LINK_CREATE_attr7(struct bpf_attr_check *check, size_t idx)
+ {
+ 	struct BPF_LINK_CREATE_struct *attr = &check->data.BPF_LINK_CREATE_data;
+ 
++	close(iter_info_data[1]);
++
+ 	if (!iter_info_data_p) {
+ 		iter_info_data_p = tail_memdup(iter_info_data,
+ 					       sizeof(iter_info_data));
+-- 
+2.1.4
+

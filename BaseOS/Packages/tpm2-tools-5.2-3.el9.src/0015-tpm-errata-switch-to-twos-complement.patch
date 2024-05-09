@@ -1,0 +1,224 @@
+From 510d570d9c4f34d4768af3453dcfcc4f74006e32 Mon Sep 17 00:00:00 2001
+From: Juergen Repp <juergen_repp@web.de>
+Date: Fri, 7 Apr 2023 14:02:33 +0200
+Subject: [PATCH 15/17] tpm errata: switch to twos-complement.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Errata TCG Trusted Platform Module Library Revision 1.59 Version 1.4,
+Section 2.5 TPM_EO – two’s complement states:
+"The signed arithmetic operations are performed using twos-complement."
+The tests policynv and policycountertimer were adapted to work with the
+complement representation of signed numbers. If the tests return the error 0x126
+the test will be skipped.
+
+Signed-off-by: Juergen Repp <juergen_repp@web.de>
+---
+ .../tests/abrmd_policycountertimer.sh         | 35 +++++++--
+ test/integration/tests/abrmd_policynv.sh      | 75 +++++++++++++------
+ 2 files changed, 78 insertions(+), 32 deletions(-)
+
+diff --git a/test/integration/tests/abrmd_policycountertimer.sh b/test/integration/tests/abrmd_policycountertimer.sh
+index 58fcf1b9..80afc541 100644
+--- a/test/integration/tests/abrmd_policycountertimer.sh
++++ b/test/integration/tests/abrmd_policycountertimer.sh
+@@ -11,6 +11,27 @@ cleanup() {
+   fi
+ }
+ 
++call_policy_countertimer () {
++    trap - ERR
++    output=$(tpm2 policycountertimer $@ 2>&1)
++    result=$?
++
++    if [ $result != 0 ] && echo $output | grep "ErrorCode.*0126" > /dev/null
++    then
++        echo "This test failed due to a TPM bug regarding signed comparison as described"
++        echo "in TCG's Errata for TCG Trusted Platform Module Library Revision 1.59 Version 1.4,"
++        echo "Section 2.5 TPM_EO – two’s complement"
++        tpm2 flushcontext session.ctx
++        skip_test
++    else
++        if [ $result != 0 ]; then
++            tpm2 flushcontext session.ctx
++            exit 1
++        fi
++    fi
++    trap onerror ERR
++}
++
+ trap cleanup EXIT
+ 
+ start_up
+@@ -25,8 +46,7 @@ tpm2 clear
+ #
+ tpm2 startauthsession -S session.ctx
+ 
+-tpm2 policycountertimer -S session.ctx -L policy.countertimer.minute --ult \
+-60000
++call_policy_countertimer -S session.ctx -L policy.countertimer.minute --ult 60000
+ 
+ tpm2 flushcontext session.ctx
+ 
+@@ -42,8 +62,7 @@ tpm2 create -Q -u key.pub -r key.priv -i- -C prim.ctx \
+ #
+ tpm2 startauthsession -S session.ctx --policy-session
+ 
+-tpm2 policycountertimer -S session.ctx -L policy.countertimer.minute --ult \
+-60000
++call_policy_countertimer -S session.ctx -L policy.countertimer.minute --ult 60000
+ 
+ tpm2 unseal -c key.ctx -p session:session.ctx
+ 
+@@ -54,7 +73,7 @@ tpm2 flushcontext session.ctx
+ #
+ tpm2 clear
+ tpm2 startauthsession -S session.ctx --policy-session
+-tpm2 policycountertimer -S session.ctx --ult clock=60000
++call_policy_countertimer -S session.ctx --ult clock=60000
+ tpm2 flushcontext session.ctx
+ 
+ #
+@@ -63,7 +82,7 @@ tpm2 flushcontext session.ctx
+ #
+ tpm2 clear
+ tpm2 startauthsession -S session.ctx --policy-session
+-tpm2 policycountertimer -S session.ctx safe
++call_policy_countertimer -S session.ctx safe
+ tpm2 flushcontext session.ctx
+ 
+ #
+@@ -72,7 +91,7 @@ tpm2 flushcontext session.ctx
+ #
+ tpm2 clear
+ tpm2 startauthsession -S session.ctx --policy-session
+-tpm2 policycountertimer -S session.ctx resets=0
++call_policy_countertimer -S session.ctx resets=0
+ tpm2 flushcontext session.ctx
+ 
+ #
+@@ -81,7 +100,7 @@ tpm2 flushcontext session.ctx
+ #
+ tpm2 clear
+ tpm2 startauthsession -S session.ctx --policy-session
+-tpm2 policycountertimer -S session.ctx restarts=0
++call_policy_countertimer -S session.ctx restarts=0
+ tpm2 flushcontext session.ctx
+ 
+ exit 0
+diff --git a/test/integration/tests/abrmd_policynv.sh b/test/integration/tests/abrmd_policynv.sh
+index b75cabb8..220edec0 100644
+--- a/test/integration/tests/abrmd_policynv.sh
++++ b/test/integration/tests/abrmd_policynv.sh
+@@ -36,10 +36,34 @@ evaluate_failing_test_case() {
+ }
+ 
+ evaluate_passing_test_case() {
+-  tpm2 startauthsession -S session.ctx --policy-session
+-  echo $operandB | xxd -r -p | \
+-  tpm2 policynv -S session.ctx -i- -P nvpass $nv_test_index $1
+-  tpm2 flushcontext session.ctx
++    tpm2 startauthsession -S session.ctx --policy-session
++    if [[ ${1:0:1} == "s" ]]; then
++        echo "Test sign: $1 $operandA $operandB"
++        # check whether sign compare fails with 0x126
++        trap - ERR
++        output=$(echo $operandB | xxd -r -p | \
++                     tpm2 policynv -S session.ctx -i- -P nvpass $nv_test_index $1 2>&1)
++        result=$?
++        if [ $result != 0 ] && echo $output | grep "ErrorCode.*0126" > /dev/null
++        then
++            echo "This test failed due to a TPM bug regarding signed comparison as described"
++            echo "in TCG's Errata for TCG Trusted Platform Module Library Revision 1.59 Version 1.4,"
++            echo "Section 2.5 TPM_EO – two’s complement"
++            tpm2 flushcontext session.ctx
++            skip_test
++        else
++            if [ $result != 0 ]; then
++                tpm2 flushcontext session.ctx
++                exit 1
++            fi
++        fi
++        tpm2 flushcontext session.ctx
++        trap onerror ERR
++    else
++        echo $operandB | xxd -r -p | \
++            tpm2 policynv -S session.ctx -i- -P nvpass $nv_test_index $1
++        tpm2 flushcontext session.ctx
++    fi
+ }
+ 
+ trap cleanup EXIT
+@@ -70,40 +94,20 @@ evaluate_passing_test_case eq
+ operandB=0x80
+ evaluate_passing_test_case neq
+ 
+-# Perform comparison operation "sgt"
+-operandB=0x82
+-evaluate_passing_test_case sgt
+-
+ # Perform comparison operation "ugt"
+ operandB=0x80
+ evaluate_passing_test_case ugt
+ 
+-# Perform comparison operation "slt"
+-operandB=0x80
+-evaluate_passing_test_case slt
+-
+ # Perform comparison operation "ult"
+ operandB=0x82
+ evaluate_passing_test_case ult
+ 
+-# Perform comparison operation "sge"
+-operandB=0x82
+-evaluate_passing_test_case sge
+-operandB=0x81
+-evaluate_passing_test_case sge
+-
+ # Perform comparison operation "uge"
+ operandB=0x80
+ evaluate_passing_test_case uge
+ operandB=0x81
+ evaluate_passing_test_case uge
+ 
+-# Perform comparison operation "sle"
+-operandB=0x80
+-evaluate_passing_test_case sle
+-operandB=0x81
+-evaluate_passing_test_case sle
+-
+ # Perform comparison operation "ule"
+ operandB=0x82
+ evaluate_passing_test_case ule
+@@ -118,4 +122,27 @@ evaluate_passing_test_case bs
+ operandB=0x7E
+ evaluate_passing_test_case bc
+ 
++operandA=0xfe # -1
++echo $operandA | xxd -r -p | tpm2 nvwrite -P nvpass -i- $nv_test_index
++
++# Perform comparison operation "sgt"
++operandB=0xfd # -2
++evaluate_passing_test_case sgt
++
++# Perform comparison operation "slt"
++operandB=0xff # 0
++evaluate_passing_test_case slt
++
++# Perform comparison operation "sle"
++operandB=0xff #0
++evaluate_passing_test_case sle
++operandB=0xfe # -1
++evaluate_passing_test_case sle
++
++# Perform comparison operation "sge"
++operandB=0xfd # -2
++evaluate_passing_test_case sge
++operandB=0xfe # -1
++evaluate_passing_test_case sge
++
+ exit 0
+-- 
+2.40.1
+

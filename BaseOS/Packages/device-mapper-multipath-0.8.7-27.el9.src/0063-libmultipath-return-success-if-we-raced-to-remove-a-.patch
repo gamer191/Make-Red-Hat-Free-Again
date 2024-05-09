@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 9 Aug 2022 16:46:27 -0500
+Subject: [PATCH] libmultipath: return success if we raced to remove a map and
+ lost
+
+_dm_flush_map() was returning failure if it failed to remove a map,
+even if that was because the map had already been removed. Return
+success in this case.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/devmapper.c | 4 ++++
+ multipathd/main.c        | 4 ----
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/libmultipath/devmapper.c b/libmultipath/devmapper.c
+index 1ff75c81..4b2e8a15 100644
+--- a/libmultipath/devmapper.c
++++ b/libmultipath/devmapper.c
+@@ -1104,6 +1104,10 @@ int _dm_flush_map (const char * mapname, int need_sync, int deferred_remove,
+ 			}
+ 			condlog(4, "multipath map %s removed", mapname);
+ 			return 0;
++		} else if (dm_is_mpath(mapname) != 1) {
++			condlog(4, "multipath map %s removed externally",
++				mapname);
++			return 0; /*we raced with someone else removing it */
+ 		} else {
+ 			condlog(2, "failed to remove multipath map %s",
+ 				mapname);
+diff --git a/multipathd/main.c b/multipathd/main.c
+index b00eae3f..68ee067b 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -685,10 +685,6 @@ flush_map(struct multipath * mpp, struct vectors * vecs, int nopaths)
+ 	 * the spurious uevent we may generate with the dm_flush_map call below
+ 	 */
+ 	if (r) {
+-		/*
+-		 * May not really be an error -- if the map was already flushed
+-		 * from the device mapper by dmsetup(8) for instance.
+-		 */
+ 		if (r == 1)
+ 			condlog(0, "%s: can't flush", mpp->alias);
+ 		else {

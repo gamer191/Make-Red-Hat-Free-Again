@@ -1,0 +1,288 @@
+From b66422161d68ed7f7b1cb30e4db900bf42bed146 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Mon, 29 Nov 2021 14:01:39 +0200
+Subject: [PATCH 1/4] Add Python bindings for rpmfilesFSignature()
+
+Only, use more descriptive names than the C-side counterparts.
+Python has nice facilities for dealing with binary data so return it
+as such rather than converting to hex.
+
+Backported for 4.16.1.3 (removed rpmfilesVSignature()).
+---
+ python/rpmfiles-py.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/python/rpmfiles-py.c b/python/rpmfiles-py.c
+index 27666021d..48189a0ac 100644
+--- a/python/rpmfiles-py.c
++++ b/python/rpmfiles-py.c
+@@ -152,6 +152,22 @@ static PyObject *rpmfile_digest(rpmfileObject *s)
+     Py_RETURN_NONE;
+ }
+ 
++static PyObject *bytebuf(const unsigned char *buf, size_t len)
++{
++    if (buf) {
++	PyObject *o = PyBytes_FromStringAndSize((const char *)buf, len);
++	return o;
++    }
++    Py_RETURN_NONE;
++}
++
++static PyObject *rpmfile_imasig(rpmfileObject *s)
++{
++    size_t len = 0;
++    const unsigned char *sig = rpmfilesFSignature(s->files, s->ix, &len);
++    return bytebuf(sig, len);
++}
++
+ static PyObject *rpmfile_class(rpmfileObject *s)
+ {
+     return utf8FromString(rpmfilesFClass(s->files, s->ix));
+@@ -278,6 +294,8 @@ static PyGetSetDef rpmfile_getseters[] = {
+       "language the file provides (typically for doc files)" },
+     { "caps",		(getter) rpmfile_caps,		NULL,
+       "file capabilities" },
++    { "imasig",	(getter) rpmfile_imasig,	NULL,
++      "IMA signature" },
+     { NULL, NULL, NULL, NULL }
+ };
+ 
+-- 
+2.35.1
+
+From 9c4622998d3d0666edbea3ed1ae518502c3ed987 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Mon, 7 Feb 2022 11:52:55 +0200
+Subject: [PATCH 2/4] Add a testcase for --dump query
+
+---
+ tests/rpmquery.at | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/tests/rpmquery.at b/tests/rpmquery.at
+index 9a4f1cb76..9bd391ac5 100644
+--- a/tests/rpmquery.at
++++ b/tests/rpmquery.at
+@@ -83,6 +83,24 @@ hello.spec
+ [ignore])
+ AT_CLEANUP
+ 
++AT_SETUP([rpm -qp --dump])
++AT_KEYWORDS([query])
++AT_CHECK([
++RPMDB_INIT
++runroot rpm \
++  -qp --dump \
++  /data/RPMS/hello-2.0-1.x86_64.rpm
++],
++[0],
++[/usr/bin/hello 7120 1489670606 c89fa87aeb1143969c0b6be9334b21d932f77f74e8f60120b5de316406369cf0 0100751 root root 0 0 0 X
++/usr/share/doc/hello-2.0 4096 1489670606 0000000000000000000000000000000000000000000000000000000000000000 040755 root root 0 0 0 X
++/usr/share/doc/hello-2.0/COPYING 48 908894882 fac3b28492ecdc16da172a6f1a432ceed356ca4d9248157b2a962b395e37b3b0 0100644 root root 0 1 0 X
++/usr/share/doc/hello-2.0/FAQ 36 908895030 678b87e217a415f05e43460e2c7b668245b412e2b4f18a75aa7399d9774ed0b4 0100644 root root 0 1 0 X
++/usr/share/doc/hello-2.0/README 39 908884468 d63fdc6c986106f57230f217d36b2395d83ecf491d2b7187af714dc8db9629e9 0100644 root root 0 1 0 X
++],
++[])
++AT_CLEANUP
++
+ # ------------------------------
+ AT_SETUP([rpmspec -q])
+ AT_KEYWORDS([query])
+-- 
+2.35.1
+
+From 9b2bc10881db7691439005fd74ea53d75b15ac76 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Thu, 10 Feb 2022 11:15:04 +0200
+Subject: [PATCH 3/4] Ensure sane string lengths for file digests from header
+
+---
+ lib/rpmfi.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/lib/rpmfi.c b/lib/rpmfi.c
+index af428468c..2dffab3aa 100644
+--- a/lib/rpmfi.c
++++ b/lib/rpmfi.c
+@@ -1501,6 +1501,10 @@ static uint8_t *hex2bin(Header h, rpmTagVal tag, rpm_count_t num, size_t len)
+ 		t += len;
+ 		continue;
+ 	    }
++	    if (strlen(s) != len * 2) {
++		bin = rfree(bin);
++		break;
++	    }
+ 	    for (int j = 0; j < len; j++, t++, s += 2)
+ 		*t = (rnibble(s[0]) << 4) | rnibble(s[1]);
+ 	}
+-- 
+2.35.1
+
+From ddfed9e1842a1b60a8c40de3a18add6f6d68c515 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Mon, 29 Nov 2021 14:01:39 +0200
+Subject: [PATCH 4/4] Fix IMA signature fubar, take III (#1833, RhBug:2018937)
+
+At least ECDSA and RSA signatures can vary in length, but the IMA code
+assumes constant lengths and thus may either place invalid signatures on
+disk from either truncating or overshooting, and segfault if the stars are
+just so.
+
+As we can't assume static lengths and attempts to use maximum length
+have proven problematic for other reasons, use a data structure that
+can actually handle variable length data properly: store offsets into
+the decoded binary blob and use them to calculate lengths when needed,
+empty data is simply consequtive identical offsets. This avoids a whole
+class of silly overflow issues with multiplying, makes zero-length data
+actually presentable in the data structure and saves memory too.
+
+Add tests to show behavior with variable length signatures and missing
+signatures.
+
+Additionally update the signing code to store the largest IMA signature
+length rather than what happened to be last to be on the safe side.
+We can't rely on this value due to invalid packages being out there,
+but then we need to calculate the lengths on rpmfiles populate so there's
+not a lot to gain anyhow.
+
+Fixes: #1833
+
+Backported for 4.16.1.3.  Note that the test case has been removed due
+to it including a binary file (test package) for which we'd have to use
+-Sgit with %autopatch and thus depend on git-core at build time.
+Nevertheless, we do have this BZ covered in our internal test suite, so
+no need for it anyway.
+---
+ lib/rpmfi.c         | 61 +++++++++++++++++++++++++++++++++++++++------
+ sign/rpmsignfiles.c |  5 +++-
+ 2 files changed, 58 insertions(+), 8 deletions(-)
+
+diff --git a/lib/rpmfi.c b/lib/rpmfi.c
+index 2dffab3aa..77e73442c 100644
+--- a/lib/rpmfi.c
++++ b/lib/rpmfi.c
+@@ -115,7 +115,7 @@ struct rpmfiles_s {
+     struct fingerPrint_s * fps;	/*!< File fingerprint(s). */
+ 
+     int digestalgo;		/*!< File digest algorithm */
+-    int signaturelength;	/*!< File signature length */
++    uint32_t *signatureoffs;	/*!< File signature offsets */
+     unsigned char * digests;	/*!< File digests in binary. */
+     unsigned char * signatures; /*!< File signatures in binary. */
+ 
+@@ -574,10 +574,15 @@ const unsigned char * rpmfilesFSignature(rpmfiles fi, int ix, size_t *len)
+     const unsigned char *signature = NULL;
+ 
+     if (fi != NULL && ix >= 0 && ix < rpmfilesFC(fi)) {
+-	if (fi->signatures != NULL)
+-	    signature = fi->signatures + (fi->signaturelength * ix);
++	size_t slen = 0;
++	if (fi->signatures != NULL && fi->signatureoffs != NULL) {
++	    uint32_t off = fi->signatureoffs[ix];
++	    slen = fi->signatureoffs[ix+1] - off;
++	    if (slen > 0)
++		signature = fi->signatures + off;
++	}
+ 	if (len)
+-	    *len = fi->signaturelength;
++	    *len = slen;
+     }
+     return signature;
+ }
+@@ -1257,6 +1262,7 @@ rpmfiles rpmfilesFree(rpmfiles fi)
+ 	fi->flangs = _free(fi->flangs);
+ 	fi->digests = _free(fi->digests);
+ 	fi->signatures = _free(fi->signatures);
++	fi->signatureoffs = _free(fi->signatureoffs);
+ 	fi->fcaps = _free(fi->fcaps);
+ 
+ 	fi->cdict = _free(fi->cdict);
+@@ -1485,6 +1491,48 @@ err:
+     return;
+ }
+ 
++/*
++ * Convert a tag of variable len hex strings to binary presentation,
++ * accessed via offsets to a contiguous binary blob. Empty values
++ * are represented by identical consequtive offsets. The offsets array
++ * always has one extra element to allow calculating the size of the
++ * last element.
++ */
++static uint8_t *hex2binv(Header h, rpmTagVal tag, rpm_count_t num,
++			uint32_t **offsetp)
++{
++    struct rpmtd_s td;
++    uint8_t *bin = NULL;
++    uint32_t *offs = NULL;
++
++    if (headerGet(h, tag, &td, HEADERGET_MINMEM) && rpmtdCount(&td) == num) {
++	const char *s;
++	int i = 0;
++	uint8_t *t = bin = xmalloc(((rpmtdSize(&td) / 2) + 1));
++	offs = xmalloc((num + 1) * sizeof(*offs));
++
++	while ((s = rpmtdNextString(&td))) {
++	    uint32_t slen = strlen(s);
++	    uint32_t len = slen / 2;
++	    if (slen % 2) {
++		bin = rfree(bin);
++		offs = rfree(offs);
++		goto exit;
++	    }
++	    offs[i] = t - bin;
++	    for (int j = 0; j < len; j++, t++, s += 2)
++		*t = (rnibble(s[0]) << 4) | rnibble(s[1]);
++	    i++;
++	}
++	offs[i] = t - bin;
++	*offsetp = offs;
++    }
++
++exit:
++    rpmtdFreeData(&td);
++    return bin;
++}
++
+ /* Convert a tag of hex strings to binary presentation */
+ static uint8_t *hex2bin(Header h, rpmTagVal tag, rpm_count_t num, size_t len)
+ {
+@@ -1580,9 +1628,8 @@ static int rpmfilesPopulate(rpmfiles fi, Header h, rpmfiFlags flags)
+     fi->signatures = NULL;
+     /* grab hex signatures from header and store in binary format */
+     if (!(flags & RPMFI_NOFILESIGNATURES)) {
+-	fi->signaturelength = headerGetNumber(h, RPMTAG_FILESIGNATURELENGTH);
+-	fi->signatures = hex2bin(h, RPMTAG_FILESIGNATURES,
+-				 totalfc, fi->signaturelength);
++	fi->signatures = hex2binv(h, RPMTAG_FILESIGNATURES,
++				 totalfc, &fi->signatureoffs);
+     }
+ 
+     /* XXX TR_REMOVED doesn;t need fmtimes, frdevs, finodes */
+diff --git a/sign/rpmsignfiles.c b/sign/rpmsignfiles.c
+index b143c5b9b..372ba634c 100644
+--- a/sign/rpmsignfiles.c
++++ b/sign/rpmsignfiles.c
+@@ -98,8 +98,9 @@ rpmRC rpmSignFiles(Header sigh, Header h, const char *key, char *keypass)
+     td.count = 1;
+ 
+     while (rpmfiNext(fi) >= 0) {
++	uint32_t slen = 0;
+ 	digest = rpmfiFDigest(fi, NULL, NULL);
+-	signature = signFile(algoname, digest, diglen, key, keypass, &siglen);
++	signature = signFile(algoname, digest, diglen, key, keypass, &slen);
+ 	if (!signature) {
+ 	    rpmlog(RPMLOG_ERR, _("signFile failed\n"));
+ 	    goto exit;
+@@ -110,6 +111,8 @@ rpmRC rpmSignFiles(Header sigh, Header h, const char *key, char *keypass)
+ 	    goto exit;
+ 	}
+ 	signature = _free(signature);
++	if (slen > siglen)
++	    siglen = slen;
+     }
+ 
+     if (siglen > 0) {
+-- 
+2.35.1
+

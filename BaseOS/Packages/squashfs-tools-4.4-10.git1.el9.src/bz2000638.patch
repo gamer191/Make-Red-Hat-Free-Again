@@ -1,0 +1,231 @@
+diff -Nupr a/squashfs-tools/Makefile b/squashfs-tools/Makefile
+--- a/squashfs-tools/Makefile	2020-10-30 06:13:56.000000000 -0500
++++ b/squashfs-tools/Makefile	2021-10-01 09:21:50.323315827 -0500
+@@ -156,7 +156,8 @@ MKSQUASHFS_OBJS = mksquashfs.o read_fs.o
+ 	caches-queues-lists.o
+ 
+ UNSQUASHFS_OBJS = unsquashfs.o unsquash-1.o unsquash-2.o unsquash-3.o \
+-	unsquash-4.o unsquash-123.o unsquash-34.o swap.o compressor.o unsquashfs_info.o
++	unsquash-4.o unsquash-123.o unsquash-34.o unsquash-1234.o swap.o \
++	compressor.o unsquashfs_info.o
+ 
+ CFLAGS ?= -O2
+ CFLAGS += $(EXTRA_CFLAGS) $(INCLUDEDIR) -D_FILE_OFFSET_BITS=64 \
+@@ -350,6 +351,8 @@ unsquash-123.o: unsquashfs.h unsquash-12
+ 
+ unsquash-34.o: unsquashfs.h unsquash-34.c
+ 
++unsquash-1234.o: unsquash-1234.c
++
+ unsquashfs_xattr.o: unsquashfs_xattr.c unsquashfs.h squashfs_fs.h xattr.h
+ 
+ unsquashfs_info.o: unsquashfs.h squashfs_fs.h
+diff -Nupr a/squashfs-tools/unsquash-1234.c b/squashfs-tools/unsquash-1234.c
+--- a/squashfs-tools/unsquash-1234.c	1969-12-31 18:00:00.000000000 -0600
++++ b/squashfs-tools/unsquash-1234.c	2021-10-01 09:21:50.323315827 -0500
+@@ -0,0 +1,58 @@
++/*
++ * Unsquash a squashfs filesystem.  This is a highly compressed read only
++ * filesystem.
++ *
++ * Copyright (c) 2021
++ * Phillip Lougher <phillip@squashfs.org.uk>
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * as published by the Free Software Foundation; either version 2,
++ * or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
++ *
++ * unsquash-1234.c
++ *
++ * Helper functions used by unsquash-1, unsquash-2, unsquash-3 and
++ * unsquash-4.
++ */
++
++#define TRUE 1
++#define FALSE 0
++/*
++ * Check name for validity, name should not
++ *  - be ".", "./", or
++ *  - be "..", "../" or
++ *  - have a "/" anywhere in the name, or
++ *  - be shorter than the expected size
++ */
++int check_name(char *name, int size)
++{
++	char *start = name;
++
++	if(name[0] == '.') {
++		if(name[1] == '.')
++			name++;
++		if(name[1] == '/' || name[1] == '\0')
++			return FALSE;
++	}
++
++	while(name[0] != '/' && name[0] != '\0')
++		name ++;
++
++	if(name[0] == '/')
++		return FALSE;
++
++	if((name - start) != size)
++		return FALSE;
++
++	return TRUE;
++}
+diff -Nupr a/squashfs-tools/unsquash-1.c b/squashfs-tools/unsquash-1.c
+--- a/squashfs-tools/unsquash-1.c	2020-10-30 06:13:56.000000000 -0500
++++ b/squashfs-tools/unsquash-1.c	2021-10-01 09:21:50.323315827 -0500
+@@ -2,7 +2,7 @@
+  * Unsquash a squashfs filesystem.  This is a highly compressed read only
+  * filesystem.
+  *
+- * Copyright (c) 2009, 2010, 2011, 2012, 2019
++ * Copyright (c) 2009, 2010, 2011, 2012, 2019, 2021
+  * Phillip Lougher <phillip@squashfs.org.uk>
+  *
+  * This program is free software; you can redistribute it and/or
+@@ -285,6 +285,13 @@ static struct dir *squashfs_opendir(unsi
+ 			memcpy(dire->name, directory_table + bytes,
+ 				dire->size + 1);
+ 			dire->name[dire->size + 1] = '\0';
++
++			/* check name for invalid characters (i.e /, ., ..) */
++			if(check_name(dire->name, dire->size + 1) == FALSE) {
++				ERROR("File system corrupted: invalid characters in name\n");
++				goto corrupted;
++			}
++
+ 			TRACE("squashfs_opendir: directory entry %s, inode "
+ 				"%d:%d, type %d\n", dire->name,
+ 				dirh.start_block, dire->offset, dire->type);
+diff -Nupr a/squashfs-tools/unsquash-2.c b/squashfs-tools/unsquash-2.c
+--- a/squashfs-tools/unsquash-2.c	2020-10-30 06:13:56.000000000 -0500
++++ b/squashfs-tools/unsquash-2.c	2021-10-01 09:21:50.323315827 -0500
+@@ -2,7 +2,7 @@
+  * Unsquash a squashfs filesystem.  This is a highly compressed read only
+  * filesystem.
+  *
+- * Copyright (c) 2009, 2010, 2013, 2019
++ * Copyright (c) 2009, 2010, 2013, 2019, 2021
+  * Phillip Lougher <phillip@squashfs.org.uk>
+  *
+  * This program is free software; you can redistribute it and/or
+@@ -386,6 +386,13 @@ static struct dir *squashfs_opendir(unsi
+ 			memcpy(dire->name, directory_table + bytes,
+ 				dire->size + 1);
+ 			dire->name[dire->size + 1] = '\0';
++
++			/* check name for invalid characters (i.e /, ., ..) */
++			if(check_name(dire->name, dire->size + 1) == FALSE) {
++				ERROR("File system corrupted: invalid characters in name\n");
++				goto corrupted;
++			}
++
+ 			TRACE("squashfs_opendir: directory entry %s, inode "
+ 				"%d:%d, type %d\n", dire->name,
+ 				dirh.start_block, dire->offset, dire->type);
+diff -Nupr a/squashfs-tools/unsquash-3.c b/squashfs-tools/unsquash-3.c
+--- a/squashfs-tools/unsquash-3.c	2020-10-30 06:13:56.000000000 -0500
++++ b/squashfs-tools/unsquash-3.c	2021-10-01 09:21:50.324315841 -0500
+@@ -2,7 +2,7 @@
+  * Unsquash a squashfs filesystem.  This is a highly compressed read only
+  * filesystem.
+  *
+- * Copyright (c) 2009, 2010, 2011, 2012, 2013, 2019
++ * Copyright (c) 2009, 2010, 2011, 2012, 2013, 2019, 2021
+  * Phillip Lougher <phillip@squashfs.org.uk>
+  *
+  * This program is free software; you can redistribute it and/or
+@@ -413,6 +413,13 @@ static struct dir *squashfs_opendir(unsi
+ 			memcpy(dire->name, directory_table + bytes,
+ 				dire->size + 1);
+ 			dire->name[dire->size + 1] = '\0';
++
++			/* check name for invalid characters (i.e /, ., ..) */
++			if(check_name(dire->name, dire->size + 1) == FALSE) {
++				ERROR("File system corrupted: invalid characters in name\n");
++				goto corrupted;
++			}
++
+ 			TRACE("squashfs_opendir: directory entry %s, inode "
+ 				"%d:%d, type %d\n", dire->name,
+ 				dirh.start_block, dire->offset, dire->type);
+diff -Nupr a/squashfs-tools/unsquash-4.c b/squashfs-tools/unsquash-4.c
+--- a/squashfs-tools/unsquash-4.c	2020-10-30 06:13:56.000000000 -0500
++++ b/squashfs-tools/unsquash-4.c	2021-10-01 09:21:50.324315841 -0500
+@@ -2,7 +2,7 @@
+  * Unsquash a squashfs filesystem.  This is a highly compressed read only
+  * filesystem.
+  *
+- * Copyright (c) 2009, 2010, 2011, 2012, 2013, 2019
++ * Copyright (c) 2009, 2010, 2011, 2012, 2013, 2019, 2021
+  * Phillip Lougher <phillip@squashfs.org.uk>
+  *
+  * This program is free software; you can redistribute it and/or
+@@ -349,6 +349,13 @@ static struct dir *squashfs_opendir(unsi
+ 			memcpy(dire->name, directory_table + bytes,
+ 				dire->size + 1);
+ 			dire->name[dire->size + 1] = '\0';
++
++			/* check name for invalid characters (i.e /, ., ..) */
++			if(check_name(dire->name, dire->size + 1) == FALSE) {
++				ERROR("File system corrupted: invalid characters in name\n");
++				goto corrupted;
++			}
++
+ 			TRACE("squashfs_opendir: directory entry %s, inode "
+ 				"%d:%d, type %d\n", dire->name,
+ 				dirh.start_block, dire->offset, dire->type);
+diff -Nupr a/squashfs-tools/unsquashfs.c b/squashfs-tools/unsquashfs.c
+--- a/squashfs-tools/unsquashfs.c	2020-10-30 06:13:56.000000000 -0500
++++ b/squashfs-tools/unsquashfs.c	2021-10-01 09:23:29.009735964 -0500
+@@ -3,7 +3,7 @@
+  * filesystem.
+  *
+  * Copyright (c) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
+- * 2012, 2013, 2014, 2017, 2019
++ * 2012, 2013, 2014, 2017, 2019, 2021
+  * Phillip Lougher <phillip@squashfs.org.uk>
+  *
+  * This program is free software; you can redistribute it and/or
+@@ -2620,8 +2620,8 @@ int parse_number(char *start, int *res)
+ 
+ 
+ #define VERSION() \
+-	printf("unsquashfs version 4.4-git.1 (2020/10/30)\n");\
+-	printf("copyright (C) 2020 Phillip Lougher "\
++	printf("unsquashfs version 4.4-git.1 (2021/1/17)\n");\
++	printf("copyright (C) 2021 Phillip Lougher "\
+ 		"<phillip@squashfs.org.uk>\n\n");\
+     	printf("This program is free software; you can redistribute it and/or"\
+ 		"\n");\
+diff -Nupr a/squashfs-tools/unsquashfs.h b/squashfs-tools/unsquashfs.h
+--- a/squashfs-tools/unsquashfs.h	2020-10-30 06:13:56.000000000 -0500
++++ b/squashfs-tools/unsquashfs.h	2021-10-01 09:21:50.325315855 -0500
+@@ -4,7 +4,7 @@
+  * Unsquash a squashfs filesystem.  This is a highly compressed read only
+  * filesystem.
+  *
+- * Copyright (c) 2009, 2010, 2013, 2014, 2019
++ * Copyright (c) 2009, 2010, 2013, 2014, 2019, 2021
+  * Phillip Lougher <phillip@squashfs.org.uk>
+  *
+  * This program is free software; you can redistribute it and/or
+@@ -261,4 +261,7 @@ extern int read_ids(int, long long, long
+ 
+ /* unsquash-34.c */
+ extern long long *alloc_index_table(int);
++
++/* unsquash-1234.c */
++extern int check_name(char *, int);
+ #endif

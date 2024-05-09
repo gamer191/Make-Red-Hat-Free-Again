@@ -1,0 +1,38 @@
+From 561af4f919b3f1b3d1a213137f1d024420996d56 Mon Sep 17 00:00:00 2001
+From: Santosh Sivaraj <santosh@fossix.org>
+Date: Sun, 28 Mar 2021 05:43:51 +0530
+Subject: [PATCH 022/217] libndctl: Remove redundant checks and assignments
+
+check_udev already checks for udev allocation failure, remove the redundant
+check.
+
+Link: https://lore.kernel.org/r/20210328001351.2245032-1-santosh@fossix.org
+Signed-off-by: Santosh Sivaraj <santosh@fossix.org>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ ndctl/lib/libndctl.c | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/ndctl/lib/libndctl.c b/ndctl/lib/libndctl.c
+index bf0968c..3a496ed 100644
+--- a/ndctl/lib/libndctl.c
++++ b/ndctl/lib/libndctl.c
+@@ -323,12 +323,9 @@ NDCTL_EXPORT int ndctl_new(struct ndctl_ctx **ctx)
+ 		dbg(c, "timeout = %ld\n", tmo);
+ 	}
+ 
+-	if (udev) {
+-		c->udev = udev;
+-		c->udev_queue = udev_queue_new(udev);
+-		if (!c->udev_queue)
+-			err(c, "failed to retrieve udev queue\n");
+-	}
++	c->udev_queue = udev_queue_new(udev);
++	if (!c->udev_queue)
++		err(c, "failed to retrieve udev queue\n");
+ 
+ 	c->kmod_ctx = kmod_ctx;
+ 	c->daxctl_ctx = daxctl_ctx;
+-- 
+2.27.0
+

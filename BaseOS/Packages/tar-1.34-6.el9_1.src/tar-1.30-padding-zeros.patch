@@ -1,0 +1,175 @@
+From 910d9ff829bbdfaf1455cdb2b1813507bcb855ec Mon Sep 17 00:00:00 2001
+From: Ondrej Dubaj <odubaj@redhat.com>
+Date: Tue, 13 Apr 2021 11:47:32 +0200
+Subject: [PATCH] add padding message, when read error occurs and tar is
+ padding with zeros
+
+---
+ lib/paxerror.c | 44 ++++++++++++++++++++++++++++++--------------
+ lib/paxlib.h   |  4 ++--
+ src/common.h   |  2 +-
+ src/create.c   |  2 +-
+ src/misc.c     |  6 +++---
+ src/sparse.c   |  6 +++---
+ 6 files changed, 40 insertions(+), 24 deletions(-)
+
+diff --git a/lib/paxerror.c b/lib/paxerror.c
+index 134cef3..929a741 100644
+--- a/lib/paxerror.c
++++ b/lib/paxerror.c
+@@ -173,29 +173,45 @@ read_error (char const *name)
+ }
+ 
+ void
+-read_error_details (char const *name, off_t offset, size_t size)
++read_error_details (char const *name, off_t offset, size_t size, bool padding)
+ {
+   char buf[UINTMAX_STRSIZE_BOUND];
+   int e = errno;
+-  ERROR ((0, e,
+-	  ngettext ("%s: Read error at byte %s, while reading %lu byte",
+-		    "%s: Read error at byte %s, while reading %lu bytes",
+-		    size),
+-	  quotearg_colon (name), STRINGIFY_BIGINT (offset, buf),
+-	  (unsigned long) size));
++  if (padding)
++    ERROR ((0, e,
++      ngettext ("%s: Read error at byte %s, while reading %lu byte; padding with zeros",
++          "%s: Read error at byte %s, while reading %lu bytes; padding with zeros",
++          size),
++      quotearg_colon (name), STRINGIFY_BIGINT (offset, buf),
++      (unsigned long) size));
++  else
++    ERROR ((0, e,
++      ngettext ("%s: Read error at byte %s, while reading %lu byte",
++          "%s: Read error at byte %s, while reading %lu bytes",
++          size),
++      quotearg_colon (name), STRINGIFY_BIGINT (offset, buf),
++      (unsigned long) size));
+ }
+ 
+ void
+-read_warn_details (char const *name, off_t offset, size_t size)
++read_warn_details (char const *name, off_t offset, size_t size, bool padding)
+ {
+   char buf[UINTMAX_STRSIZE_BOUND];
+   int e = errno;
+-  WARN ((0, e,
+-	 ngettext ("%s: Warning: Read error at byte %s, while reading %lu byte",
+-		   "%s: Warning: Read error at byte %s, while reading %lu bytes",
+-		   size),
+-	 quotearg_colon (name), STRINGIFY_BIGINT (offset, buf),
+-	 (unsigned long) size));
++  if (padding)
++    WARN ((0, e,
++      ngettext ("%s: Warning: Read error at byte %s, while reading %lu byte; padding with zeros",
++          "%s: Warning: Read error at byte %s, while reading %lu bytes; padding with zeros",
++          size),
++      quotearg_colon (name), STRINGIFY_BIGINT (offset, buf),
++      (unsigned long) size));
++  else
++    WARN ((0, e,
++      ngettext ("%s: Warning: Read error at byte %s, while reading %lu byte",
++          "%s: Warning: Read error at byte %s, while reading %lu bytes",
++          size),
++      quotearg_colon (name), STRINGIFY_BIGINT (offset, buf),
++      (unsigned long) size));
+ }
+ 
+ void
+diff --git a/lib/paxlib.h b/lib/paxlib.h
+index d4251d1..ccf826b 100644
+--- a/lib/paxlib.h
++++ b/lib/paxlib.h
+@@ -94,10 +94,10 @@ void open_error (char const *);
+ void open_fatal (char const *) __attribute__ ((noreturn));
+ void open_warn (char const *);
+ void read_error (char const *);
+-void read_error_details (char const *, off_t, size_t);
++void read_error_details (char const *, off_t, size_t, bool);
+ void read_fatal (char const *) __attribute__ ((noreturn));
+ void read_fatal_details (char const *, off_t, size_t) __attribute__ ((noreturn));
+-void read_warn_details (char const *, off_t, size_t);
++void read_warn_details (char const *, off_t, size_t, bool);
+ void readlink_error (char const *);
+ void readlink_warn (char const *);
+ void rmdir_error (char const *);
+diff --git a/src/common.h b/src/common.h
+index bbe167e..34a30ec 100644
+--- a/src/common.h
++++ b/src/common.h
+@@ -713,7 +713,7 @@ int chdir_count (void);
+ 
+ void close_diag (char const *name);
+ void open_diag (char const *name);
+-void read_diag_details (char const *name, off_t offset, size_t size);
++void read_diag_details (char const *name, off_t offset, size_t size, bool padding);
+ void readlink_diag (char const *name);
+ void savedir_diag (char const *name);
+ void seek_diag_details (char const *name, off_t offset);
+diff --git a/src/create.c b/src/create.c
+index 712ee18..181f7d9 100644
+--- a/src/create.c
++++ b/src/create.c
+@@ -1090,7 +1090,7 @@ dump_regular_file (int fd, struct tar_stat_info *st)
+       if (count == SAFE_READ_ERROR)
+ 	{
+ 	  read_diag_details (st->orig_file_name,
+-	                     st->stat.st_size - size_left, bufsize);
++	                     st->stat.st_size - size_left, bufsize, true);
+ 	  pad_archive (size_left);
+ 	  return dump_status_short;
+ 	}
+diff --git a/src/misc.c b/src/misc.c
+index eccf6f9..28c6f44 100644
+--- a/src/misc.c
++++ b/src/misc.c
+@@ -1069,15 +1069,15 @@ open_diag (char const *name)
+ }
+ 
+ void
+-read_diag_details (char const *name, off_t offset, size_t size)
++read_diag_details (char const *name, off_t offset, size_t size, bool padding)
+ {
+   if (ignore_failed_read_option)
+     {
+       if (WARNING_ENABLED(WARN_FAILED_READ))
+-	read_warn_details (name, offset, size);
++	read_warn_details (name, offset, size, padding);
+     }
+   else
+-    read_error_details (name, offset, size);
++    read_error_details (name, offset, size, padding);
+ }
+ 
+ void
+diff -rup tar-1.34/src/sparse.c.old tar-1.34/src/sparse.c
+--- tar-1.34/src/sparse.c.old	2022-06-27 09:15:48.580574517 +0000
++++ tar-1.34/src/sparse.c	2022-06-27 09:18:28.500574517 +0000
+@@ -424,7 +424,7 @@ sparse_dump_region (struct tar_sparse_fi
+ 	                     (file->stat_info->sparse_map[i].offset
+ 			      + file->stat_info->sparse_map[i].numbytes
+ 			      - bytes_left),
+-			     bufsize);
++			     bufsize, false);
+ 	  return false;
+ 	}
+       else if (bytes_read == 0)
+@@ -619,7 +619,7 @@ check_sparse_region (struct tar_sparse_f
+ 	{
+           read_diag_details (file->stat_info->orig_file_name,
+ 	                     beg,
+-			     rdsize);
++			     rdsize, false);
+ 	  return false;
+ 	}
+       else if (bytes_read == 0)
+@@ -674,7 +674,7 @@ check_data_region (struct tar_sparse_fil
+ 			     (file->stat_info->sparse_map[i].offset
+ 			      + file->stat_info->sparse_map[i].numbytes
+ 			      - size_left),
+-			     rdsize);
++			     rdsize, false);
+ 	  return false;
+ 	}
+       else if (bytes_read == 0)

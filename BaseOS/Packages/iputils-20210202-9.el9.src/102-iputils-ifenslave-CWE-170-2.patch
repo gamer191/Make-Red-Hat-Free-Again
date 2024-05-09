@@ -1,0 +1,154 @@
+From bea19fd9a86dd2c601681ff2ef4a9c1afab1e34d Mon Sep 17 00:00:00 2001
+From: Jan Macku <jamacku@redhat.com>
+Date: Tue, 8 Jun 2021 15:41:58 +0200
+Subject: [PATCH] ifenslave: fix CWE-170: Improper Null Termination
+
+Resolves: #1938746
+---
+ ifenslave.c | 43 +++++++++++++++++++++++++++----------------
+ 1 file changed, 27 insertions(+), 16 deletions(-)
+
+diff --git a/ifenslave.c b/ifenslave.c
+index 1efe4f1..59bce4c 100644
+--- a/ifenslave.c
++++ b/ifenslave.c
+@@ -619,7 +619,7 @@ static int get_drv_info(char *master_ifname)
+ 	char *endptr;
+ 
+ 	memset(&ifr, 0, sizeof(ifr));
+-	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ);
++	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ - 1);
+ 	ifr.ifr_data = (caddr_t)&info;
+ 
+ 	info.cmd = ETHTOOL_GDRVINFO;
+@@ -664,8 +664,9 @@ static int change_active(char *master_ifname, char *slave_ifname)
+ 		return 1;
+ 	}
+ 
+-	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ);
+-	strncpy(ifr.ifr_slave, slave_ifname, IFNAMSIZ);
++	memset(&ifr, 0, sizeof(ifr));
++	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ - 1);
++	strncpy(ifr.ifr_slave, slave_ifname, IFNAMSIZ - 1);
+ 	if ((ioctl(skfd, SIOCBONDCHANGEACTIVE, &ifr) < 0) &&
+ 	    (ioctl(skfd, BOND_CHANGE_ACTIVE_OLD, &ifr) < 0)) {
+ 		saved_errno = errno;
+@@ -806,8 +807,9 @@ static int enslave(char *master_ifname, char *slave_ifname)
+ 	}
+ 
+ 	/* Do the real thing */
+-	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ);
+-	strncpy(ifr.ifr_slave, slave_ifname, IFNAMSIZ);
++	memset(&ifr, 0, sizeof(ifr));
++	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ - 1);
++	strncpy(ifr.ifr_slave, slave_ifname, IFNAMSIZ - 1);
+ 	if ((ioctl(skfd, SIOCBONDENSLAVE, &ifr) < 0) &&
+ 	    (ioctl(skfd, BOND_ENSLAVE_OLD, &ifr) < 0)) {
+ 		saved_errno = errno;
+@@ -847,8 +849,9 @@ static int release(char *master_ifname, char *slave_ifname)
+ 		return 1;
+ 	}
+ 
+-	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ);
+-	strncpy(ifr.ifr_slave, slave_ifname, IFNAMSIZ);
++	memset(&ifr, 0, sizeof(ifr));
++	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ - 1);
++	strncpy(ifr.ifr_slave, slave_ifname, IFNAMSIZ - 1);
+ 	if ((ioctl(skfd, SIOCBONDRELEASE, &ifr) < 0) &&
+ 	    (ioctl(skfd, BOND_RELEASE_OLD, &ifr) < 0)) {
+ 		saved_errno = errno;
+@@ -880,7 +883,8 @@ static int get_if_settings(char *ifname, struct dev_ifr ifra[])
+ 	int res = 0;
+ 
+ 	for (i = 0; ifra[i].req_ifr; i++) {
+-		strncpy(ifra[i].req_ifr->ifr_name, ifname, IFNAMSIZ);
++		strncpy(ifra[i].req_ifr->ifr_name, ifname, IFNAMSIZ - 1);
++		ifra[i].req_ifr->ifr_name[IFNAMSIZ - 1] = '\0';
+ 		res = ioctl(skfd, ifra[i].req_type, ifra[i].req_ifr);
+ 		if (res < 0) {
+ 			saved_errno = errno;
+@@ -899,7 +903,8 @@ static int get_slave_flags(char *slave_ifname)
+ {
+ 	int res = 0;
+ 
+-	strncpy(slave_flags.ifr_name, slave_ifname, IFNAMSIZ);
++	strncpy(slave_flags.ifr_name, slave_ifname, IFNAMSIZ - 1);
++	slave_flags.ifr_name[IFNAMSIZ - 1] = '\0';
+ 	res = ioctl(skfd, SIOCGIFFLAGS, &slave_flags);
+ 	if (res < 0) {
+ 		saved_errno = errno;
+@@ -919,7 +924,8 @@ static int set_master_hwaddr(char *master_ifname, struct sockaddr *hwaddr)
+ 	struct ifreq ifr;
+ 	int res = 0;
+ 
+-	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ);
++	memset(&ifr, 0, sizeof(ifr));
++	strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ - 1);
+ 	memcpy(&(ifr.ifr_hwaddr), hwaddr, sizeof(struct sockaddr));
+ 	res = ioctl(skfd, SIOCSIFHWADDR, &ifr);
+ 	if (res < 0) {
+@@ -943,7 +949,8 @@ static int set_slave_hwaddr(char *slave_ifname, struct sockaddr *hwaddr)
+ 	struct ifreq ifr;
+ 	int res = 0;
+ 
+-	strncpy(ifr.ifr_name, slave_ifname, IFNAMSIZ);
++	memset(&ifr, 0, sizeof(ifr));
++	strncpy(ifr.ifr_name, slave_ifname, IFNAMSIZ - 1);
+ 	memcpy(&(ifr.ifr_hwaddr), hwaddr, sizeof(struct sockaddr));
+ 	res = ioctl(skfd, SIOCSIFHWADDR, &ifr);
+ 	if (res < 0) {
+@@ -980,8 +987,9 @@ static int set_slave_mtu(char *slave_ifname, int mtu)
+ 	struct ifreq ifr;
+ 	int res = 0;
+ 
++	memset(&ifr, 0, sizeof(ifr));
+ 	ifr.ifr_mtu = mtu;
+-	strncpy(ifr.ifr_name, slave_ifname, IFNAMSIZ);
++	strncpy(ifr.ifr_name, slave_ifname, IFNAMSIZ - 1);
+ 
+ 	res = ioctl(skfd, SIOCSIFMTU, &ifr);
+ 	if (res < 0) {
+@@ -1000,8 +1008,9 @@ static int set_if_flags(char *ifname, short flags)
+ 	struct ifreq ifr;
+ 	int res = 0;
+ 
++	memset(&ifr, 0, sizeof(ifr));
+ 	ifr.ifr_flags = flags;
+-	strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
++	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+ 
+ 	res = ioctl(skfd, SIOCSIFFLAGS, &ifr);
+ 	if (res < 0) {
+@@ -1030,7 +1039,8 @@ static int clear_if_addr(char *ifname)
+ 	struct ifreq ifr;
+ 	int res = 0;
+ 
+-	strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
++	memset(&ifr, 0, sizeof(ifr));
++	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+ 	ifr.ifr_addr.sa_family = AF_INET;
+ 	memset(ifr.ifr_addr.sa_data, 0, sizeof(ifr.ifr_addr.sa_data));
+ 
+@@ -1065,8 +1075,9 @@ static int set_if_addr(char *master_ifname, char *slave_ifname)
+ 		{NULL, NULL, 0, 0},
+ 	};
+ 
++	memset(&ifr, 0, sizeof(ifr));
+ 	for (i = 0; ifra[i].req_name; i++) {
+-		strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ);
++		strncpy(ifr.ifr_name, master_ifname, IFNAMSIZ - 1);
+ 		res = ioctl(skfd, ifra[i].g_ioctl, &ifr);
+ 		if (res < 0) {
+ 			int saved_errno = errno;
+@@ -1080,7 +1091,7 @@ static int set_if_addr(char *master_ifname, char *slave_ifname)
+ 			       sizeof(ifr.ifr_addr.sa_data));
+ 		}
+ 
+-		strncpy(ifr.ifr_name, slave_ifname, IFNAMSIZ);
++		strncpy(ifr.ifr_name, slave_ifname, IFNAMSIZ - 1);
+ 		res = ioctl(skfd, ifra[i].s_ioctl, &ifr);
+ 		if (res < 0) {
+ 			int saved_errno = errno;
+-- 
+2.31.1
+

@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bastian Germann <bage@debian.org>
+Date: Thu, 14 Oct 2021 00:34:33 +0200
+Subject: [PATCH] multipathd: Add missing ctype include
+
+In uxclnt.c, there are isspace calls. Add an explicit include.
+
+Signed-off-by: Bastian Germann <bage@debian.org>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipathd/uxclnt.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/multipathd/uxclnt.c b/multipathd/uxclnt.c
+index a76f8e29..f16a7309 100644
+--- a/multipathd/uxclnt.c
++++ b/multipathd/uxclnt.c
+@@ -8,6 +8,7 @@
+ #include <stdlib.h>
+ #include <unistd.h>
+ #include <stdarg.h>
++#include <ctype.h>
+ #include <fcntl.h>
+ #include <errno.h>
+ #include <sys/ioctl.h>

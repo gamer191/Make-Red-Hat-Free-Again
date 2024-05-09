@@ -1,0 +1,855 @@
+From 4d6787bd98c2fac8dcc58f34125d299d82e622aa Mon Sep 17 00:00:00 2001
+From: Michael R Sweet <michael.r.sweet@gmail.com>
+Date: Mon, 2 May 2022 15:35:20 -0400
+Subject: [PATCH] Update man pages for -h option (Issue #357)
+
+---
+ doc/help/man-cancel.html    |  7 ++++---
+ doc/help/man-cupsctl.html   |  7 ++++---
+ doc/help/man-ipptool.html   |  6 ++++++
+ doc/help/man-lp.html        |  9 +++++----
+ doc/help/man-lpinfo.html    |  9 +++++----
+ doc/help/man-lpmove.html    |  9 +++++----
+ doc/help/man-lpoptions.html | 17 +++++++++--------
+ doc/help/man-lpq.html       |  5 +++--
+ doc/help/man-lpr.html       |  5 +++--
+ doc/help/man-lprm.html      |  6 +++---
+ doc/help/man-lpstat.html    |  5 +++--
+ man/cancel.1                |  9 +++++----
+ man/cupsctl.8               |  9 +++++----
+ man/lp.1                    | 11 ++++++-----
+ man/lpinfo.8                | 11 ++++++-----
+ man/lpmove.8                | 11 ++++++-----
+ man/lpoptions.1             | 19 ++++++++++---------
+ man/lpq.1                   |  7 ++++---
+ man/lpr.1                   |  7 ++++---
+ man/lprm.1                  |  8 ++++----
+ man/lpstat.1                | 11 ++++++-----
+ 22 files changed, 107 insertions(+), 82 deletions(-)
+
+diff --git a/doc/help/man-cancel.html b/doc/help/man-cancel.html
+index d51bb2b91..a0b52369c 100644
+--- a/doc/help/man-cancel.html
++++ b/doc/help/man-cancel.html
+@@ -12,6 +12,9 @@ cancel - cancel jobs
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>cancel</b>
+ [
++<b>-h</b>
++<i>hostname[:port]</i>
++] [
+ <b>-E</b>
+ ] [
+ <b>-U</b>
+@@ -19,9 +22,6 @@ cancel - cancel jobs
+ ] [
+ <b>-a</b>
+ ] [
+-<b>-h</b>
+-<i>hostname[:port]</i>
+-] [
+ <b>-u</b>
+ <i>username</i>
+ ] [
+@@ -46,6 +46,7 @@ destinations if none is provided.
+ <dd style="margin-left: 5.0em">Forces encryption when connecting to the server.
+ <dt><b>-h </b><i>hostname</i>[<i>:port</i>]
+ <dd style="margin-left: 5.0em">Specifies an alternate server.
++Note: This option must occur before all others.
+ <dt><b>-U </b><i>username</i>
+ <dd style="margin-left: 5.0em">Specifies the username to use when connecting to the server.
+ <dt><b>-u </b><i>username</i>
+diff --git a/doc/help/man-cupsctl.html b/doc/help/man-cupsctl.html
+index b3f892ef9..e5c98dccb 100644
+--- a/doc/help/man-cupsctl.html
++++ b/doc/help/man-cupsctl.html
+@@ -12,14 +12,14 @@ cupsctl - configure cupsd.conf options
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>cupsctl</b>
+ [
++<b>-h</b>
++<i>server</i>[<b>:</b><i>port</i>]
++] [
+ <b>-E</b>
+ ] [
+ <b>-U</b>
+ <i>username</i>
+ ] [
+-<b>-h</b>
+-<i>server</i>[<b>:</b><i>port</i>]
+-] [
+ <b>--</b>[<b>no-</b>]<b>debug-logging</b>
+ ] [
+ <b>--</b>[<b>no-</b>]<b>remote-admin</b>
+@@ -45,6 +45,7 @@ The following options are recognized:
+ <dd style="margin-left: 5.0em">Specifies an alternate username to use when authenticating with the scheduler.
+ <dt><b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ <dd style="margin-left: 5.0em">Specifies the server address.
++Note: This option must occur before all others.
+ <dt><b>--</b>[<b>no-</b>]<b>debug-logging</b>
+ <dd style="margin-left: 5.0em">Enables (disables) debug logging to the <i>error_log</i> file.
+ <dt><b>--</b>[<b>no-</b>]<b>remote-admin</b>
+diff --git a/doc/help/man-ipptool.html b/doc/help/man-ipptool.html
+index 81f67d77f..688454c69 100644
+--- a/doc/help/man-ipptool.html
++++ b/doc/help/man-ipptool.html
+@@ -59,6 +59,8 @@ ipptool - perform internet printing protocol requests
+ <b>-i</b>
+ <i>seconds</i>
+ ] [
++<b>-j</b>
++] [
+ <b>-n</b>
+ <i>repeat-count</i>
+ ] [
+@@ -150,6 +152,10 @@ This option is incompatible with the <b>-i</b> (interval) and <b>-n</b> (repeat-
+ <i>testfile</i>
+ should be repeated at the specified interval.
+ This option is incompatible with the <b>-X</b> (XML plist output) option.
++<dt><b>-j</b>
++<dd style="margin-left: 5.0em">Specifies that
++<b>ipptool</b>
++will produce JSON output.
+ <dt><b>-l</b>
+ <dd style="margin-left: 5.0em">Specifies that plain text output is desired.
+ <dt><b>-n</b><i> repeat-count</i>
+diff --git a/doc/help/man-lp.html b/doc/help/man-lp.html
+index f70c088d3..6442e900d 100644
+--- a/doc/help/man-lp.html
++++ b/doc/help/man-lp.html
+@@ -12,6 +12,8 @@ lp - print files
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>lp</b>
+ [
++<b>-h </b><i>hostname</i>[<b>:</b><i>port</i>]
++] [
+ <b>-E</b>
+ ] [
+ <b>-U</b>
+@@ -21,8 +23,6 @@ lp - print files
+ ] [
+ <b>-d </b><i>destination</i>[<b>/</b><i>instance</i>]
+ ] [
+-<b>-h </b><i>hostname</i>[<b>:</b><i>port</i>]
+-] [
+ <b>-m</b>
+ ] [
+ <b>-n</b>
+@@ -51,6 +51,8 @@ lp - print files
+ <br>
+ <b>lp</b>
+ [
++<b>-h </b><i>hostname</i>[<b>:</b><i>port</i>]
++] [
+ <b>-E</b>
+ ] [
+ <b>-U</b>
+@@ -58,8 +60,6 @@ lp - print files
+ ] [
+ <b>-c</b>
+ ] [
+-<b>-h </b><i>hostname</i>[<b>:</b><i>port</i>]
+-] [
+ <b>-i</b>
+ <i>job-id</i>
+ ] [
+@@ -106,6 +106,7 @@ In CUPS, print files are always sent to the scheduler via IPP which has the same
+ <dd style="margin-left: 5.0em">Prints files to the named printer.
+ <dt><b>-h </b><i>hostname</i>[<b>:</b><i>port</i>]
+ <dd style="margin-left: 5.0em">Chooses an alternate server.
++Note: This option must occur before all others.
+ <dt><b>-i </b><i>job-id</i>
+ <dd style="margin-left: 5.0em">Specifies an existing job to modify.
+ <dt><b>-m</b>
+diff --git a/doc/help/man-lpinfo.html b/doc/help/man-lpinfo.html
+index a1aed9421..30df7691c 100644
+--- a/doc/help/man-lpinfo.html
++++ b/doc/help/man-lpinfo.html
+@@ -12,10 +12,10 @@ lpinfo - show available devices or drivers (deprecated)
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>lpinfo</b>
+ [
+-<b>-E</b>
+-] [
+ <b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ ] [
++<b>-E</b>
++] [
+ <b>-l</b>
+ ] [
+ <b>--device-id</b>
+@@ -40,10 +40,10 @@ lpinfo - show available devices or drivers (deprecated)
+ <br>
+ <b>lpinfo</b>
+ [
+-<b>-E</b>
+-] [
+ <b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ ] [
++<b>-E</b>
++] [
+ <b>-l</b>
+ ] [
+ <b>--exclude-schemes</b>
+@@ -66,6 +66,7 @@ The first form (<i>-m</i>) lists the available drivers, while the second form (<
+ <dd style="margin-left: 5.0em">Forces encryption when connecting to the server.
+ <dt><b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ <dd style="margin-left: 5.0em">Selects an alternate server.
++Note: This option must occur before all others.
+ <dt><b>-l</b>
+ <dd style="margin-left: 5.0em">Shows a "long" listing of devices or drivers.
+ <dt><b>--device-id </b><i>device-id-string</i>
+diff --git a/doc/help/man-lpmove.html b/doc/help/man-lpmove.html
+index d8019ee25..b0db753f9 100644
+--- a/doc/help/man-lpmove.html
++++ b/doc/help/man-lpmove.html
+@@ -12,10 +12,10 @@ lpmove - move a job or all jobs to a new destination
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>lpmove</b>
+ [
+-<b>-E</b>
+-] [
+ <b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ ] [
++<b>-E</b>
++] [
+ <b>-U</b>
+ <i>username</i>
+ ]
+@@ -24,10 +24,10 @@ lpmove - move a job or all jobs to a new destination
+ <br>
+ <b>lpmove</b>
+ [
+-<b>-E</b>
+-] [
+ <b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ ] [
++<b>-E</b>
++] [
+ <b>-U</b>
+ <i>username</i>
+ ]
+@@ -44,6 +44,7 @@ The <b>lpmove</b> command supports the following options:
+ <dd style="margin-left: 5.0em">Specifies an alternate username.
+ <dt><b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ <dd style="margin-left: 5.0em">Specifies an alternate server.
++Note: This option must occur before all others.
+ </dl>
+ <h2 class="title"><a name="EXAMPLES">Examples</a></h2>
+ Move job 123 from "oldprinter" to "newprinter":
+diff --git a/doc/help/man-lpoptions.html b/doc/help/man-lpoptions.html
+index 6dda87f64..6af78290b 100644
+--- a/doc/help/man-lpoptions.html
++++ b/doc/help/man-lpoptions.html
+@@ -12,9 +12,9 @@ lpoptions - display or set printer options and defaults
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>lpoptions</b>
+ [
+-<b>-E</b>
+-] [
+ <b>-h </b><i>server</i>[<b>:</b><i>port</i>]
++] [
++<b>-E</b>
+ ]
+ <b>-d </b><i>destination</i>[<b>/</b><i>instance</i>]
+ [
+@@ -23,20 +23,20 @@ lpoptions - display or set printer options and defaults
+ <br>
+ <b>lpoptions</b>
+ [
+-<b>-E</b>
+-] [
+ <b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ ] [
++<b>-E</b>
++] [
+ <b>-p </b><i>destination</i>[<b>/</b><i>instance</i>]
+ ]
+ <b>-o </b><i>option</i>[<b>=</b><i>value</i>] ...
+ <br>
+ <b>lpoptions</b>
+ [
+-<b>-E</b>
+-] [
+ <b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ ] [
++<b>-E</b>
++] [
+ <b>-p </b><i>destination</i>[<b>/</b><i>instance</i>]
+ ]
+ <b>-r</b>
+@@ -44,9 +44,9 @@ lpoptions - display or set printer options and defaults
+ <br>
+ <b>lpoptions</b>
+ [
+-<b>-E</b>
+-] [
+ <b>-h </b><i>server</i>[<b>:</b><i>port</i>]
++] [
++<b>-E</b>
+ ]
+ <b>-x </b><i>destination</i>[<b>/</b><i>instance</i>]
+ <h2 class="title"><a name="DESCRIPTION">Description</a></h2>
+@@ -72,6 +72,7 @@ If <i>instance</i> is supplied then that particular instance is used.
+ This option overrides the system default printer for the current user.
+ <dt><b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ <dd style="margin-left: 5.0em">Uses an alternate server.
++Note: This option must occur before all others.
+ <dt><b>-l</b>
+ <dd style="margin-left: 5.0em">Lists the printer specific options and their current settings.
+ <dt><b>-o </b><i>option</i>[<b>=</b><i>value</i>]
+diff --git a/doc/help/man-lpq.html b/doc/help/man-lpq.html
+index 1c9e704ff..19e536d3c 100644
+--- a/doc/help/man-lpq.html
++++ b/doc/help/man-lpq.html
+@@ -12,13 +12,13 @@ lpq - show printer queue status
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>lpq</b>
+ [
++<b>-h </b><i>server</i>[<b>:</b><i>port</i>]
++] [
+ <b>-E</b>
+ ] [
+ <b>-U</b>
+ <i>username</i>
+ ] [
+-<b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+-] [
+ <b>-P </b><i>destination</i>[<b>/</b><i>instance</i>]
+ ] [
+ <b>-a</b>
+@@ -44,6 +44,7 @@ Jobs queued on the default destination will be shown if no printer or class is s
+ <dd style="margin-left: 5.0em">Reports jobs on all printers.
+ <dt><b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ <dd style="margin-left: 5.0em">Specifies an alternate server.
++Note: This option must occur before all others.
+ <dt><b>-l</b>
+ <dd style="margin-left: 5.0em">Requests a more verbose (long) reporting format.
+ </dl>
+diff --git a/doc/help/man-lpr.html b/doc/help/man-lpr.html
+index d044ab1a8..f9b19e1fe 100644
+--- a/doc/help/man-lpr.html
++++ b/doc/help/man-lpr.html
+@@ -12,10 +12,10 @@ lpr - print files
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>lpr</b>
+ [
+-<b>-E</b>
+-] [
+ <b>-H </b><i>server</i>[<b>:</b><i>port</i>]
+ ] [
++<b>-E</b>
++] [
+ <b>-U</b>
+ <i>username</i>
+ ] [
+@@ -67,6 +67,7 @@ The following options are recognized by <i>lpr</i>:
+ <dd style="margin-left: 5.0em">Forces encryption when connecting to the server.
+ <dt><b>-H </b><i>server</i>[<b>:</b><i>port</i>]
+ <dd style="margin-left: 5.0em">Specifies an alternate server.
++Note: This option must occur before all others.
+ <dt><b>-C "</b><i>name</i><b>"</b>
+ <dd style="margin-left: 5.0em"><dt><b>-J "</b><i>name</i><b>"</b>
+ <dd style="margin-left: 5.0em"><dt><b>-T "</b><i>name</i><b>"</b>
+diff --git a/doc/help/man-lprm.html b/doc/help/man-lprm.html
+index 7410320a3..dbe7f20de 100644
+--- a/doc/help/man-lprm.html
++++ b/doc/help/man-lprm.html
+@@ -12,14 +12,13 @@ lprm - cancel print jobs
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>lprm</b>
+ [
++<b>-h </b><i>hostname</i>[<b>:</b><i>port</i>]
++] [
+ <b>-E</b>
+ ] [
+ <b>-U</b>
+ <i>username</i>
+ ] [
+-<b>-h</b>
+-<i>server</i>[<i>:port</i>]
+-] [
+ <b>-P</b>
+ <i>destination</i>[<i>/instance</i>]
+ ] [
+@@ -45,6 +44,7 @@ command supports the following options:
+ <dd style="margin-left: 5.0em">Specifies an alternate username.
+ <dt><b>-h </b><i>server</i>[<i>:port</i>]
+ <dd style="margin-left: 5.0em">Specifies an alternate server.
++Note: This option must occur before all others.
+ </dl>
+ <h2 class="title"><a name="CONFORMING_TO">Conforming To</a></h2>
+ The CUPS version of
+diff --git a/doc/help/man-lpstat.html b/doc/help/man-lpstat.html
+index f23089bbe..2c5dedc7c 100644
+--- a/doc/help/man-lpstat.html
++++ b/doc/help/man-lpstat.html
+@@ -12,6 +12,8 @@ lpstat - print cups status information
+ <h2 class="title"><a name="SYNOPSIS">Synopsis</a></h2>
+ <b>lpstat</b>
+ [
++<b>-h </b><i>hostname</i>[<b>:</b><i>port</i>]
++] [
+ <b>-E</b>
+ ] [
+ <b>-H</b>
+@@ -19,8 +21,6 @@ lpstat - print cups status information
+ <b>-U</b>
+ <i>username</i>
+ ] [
+-<b>-h </b><i>hostname</i>[<b>:</b><i>port</i>]
+-] [
+ <b>-l</b>
+ ] [
+ <b>-W</b>
+@@ -91,6 +91,7 @@ If no classes are specified then all classes are listed.
+ <dd style="margin-left: 5.0em">Shows all available destinations on the local network.
+ <dt><b>-h </b><i>server</i>[<b>:</b><i>port</i>]
+ <dd style="margin-left: 5.0em">Specifies an alternate server.
++Note: This option must occur before all others.
+ <dt><b>-l</b>
+ <dd style="margin-left: 5.0em">Shows a long listing of printers, classes, or jobs.
+ <dt><b>-o </b>[<i>destination(s)</i>]
+diff --git a/man/cancel.1 b/man/cancel.1
+index 34a5d9fc0..caea0ed69 100644
+--- a/man/cancel.1
++++ b/man/cancel.1
+@@ -8,12 +8,15 @@
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ .\" information.
+ .\"
+-.TH cancel 1 "CUPS" "26 April 2019" "Apple Inc."
++.TH cancel 1 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ cancel \- cancel jobs
+ .SH SYNOPSIS
+ .B cancel
+ [
++.B \-h
++.I hostname[:port]
++] [
+ .B \-E
+ ] [
+ .B \-U
+@@ -21,9 +24,6 @@ cancel \- cancel jobs
+ ] [
+ .B \-a
+ ] [
+-.B \-h
+-.I hostname[:port]
+-] [
+ .B \-u
+ .I username
+ ] [
+@@ -50,6 +50,7 @@ Forces encryption when connecting to the server.
+ .TP 5
+ \fB\-h \fIhostname\fR[\fI:port\fR]
+ Specifies an alternate server.
++Note: This option must occur before all others.
+ .TP 5
+ \fB\-U \fIusername\fR
+ Specifies the username to use when connecting to the server.
+diff --git a/man/cupsctl.8 b/man/cupsctl.8
+index 1b1ff4183..7e50d07ac 100644
+--- a/man/cupsctl.8
++++ b/man/cupsctl.8
+@@ -8,20 +8,20 @@
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ .\" information.
+ .\"
+-.TH cupsctl 8 "CUPS" "26 April 2019" "Apple Inc."
++.TH cupsctl 8 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ cupsctl \- configure cupsd.conf options
+ .SH SYNOPSIS
+ .B cupsctl
+ [
++.B \-h
++\fIserver\fR[\fB:\fIport\fR]
++] [
+ .B \-E
+ ] [
+ .B \-U
+ .I username
+ ] [
+-.B \-h
+-\fIserver\fR[\fB:\fIport\fR]
+-] [
+ \fB\-\-\fR[\fBno\-\fR]\fBdebug\-logging\fR
+ ] [
+ \fB\-\-\fR[\fBno\-\fR]\fBremote\-admin\fR
+@@ -49,6 +49,7 @@ Specifies an alternate username to use when authenticating with the scheduler.
+ .TP 5
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ Specifies the server address.
++Note: This option must occur before all others.
+ .TP 5
+ \fB\-\-\fR[\fBno\-\fR]\fBdebug\-logging\fR
+ Enables (disables) debug logging to the \fIerror_log\fR file.
+diff --git a/man/lp.1 b/man/lp.1
+index a54f904a5..4bdd2de7b 100644
+--- a/man/lp.1
++++ b/man/lp.1
+@@ -8,12 +8,14 @@
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ .\" information.
+ .\"
+-.TH lp 1 "CUPS" "26 April 2019" "Apple Inc."
++.TH lp 1 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ lp \- print files
+ .SH SYNOPSIS
+ .B lp
+ [
++\fB\-h \fIhostname\fR[\fB:\fIport\fR]
++] [
+ .B \-E
+ ] [
+ .B \-U
+@@ -23,8 +25,6 @@ lp \- print files
+ ] [
+ \fB\-d \fIdestination\fR[\fB/\fIinstance\fR]
+ ] [
+-\fB\-h \fIhostname\fR[\fB:\fIport\fR]
+-] [
+ .B \-m
+ ] [
+ .B \-n
+@@ -53,6 +53,8 @@ lp \- print files
+ .br
+ .B lp
+ [
++\fB\-h \fIhostname\fR[\fB:\fIport\fR]
++] [
+ .B \-E
+ ] [
+ .B \-U
+@@ -60,8 +62,6 @@ lp \- print files
+ ] [
+ .B \-c
+ ] [
+-\fB\-h \fIhostname\fR[\fB:\fIport\fR]
+-] [
+ .B \-i
+ .I job-id
+ ] [
+@@ -113,6 +113,7 @@ Prints files to the named printer.
+ .TP 5
+ \fB\-h \fIhostname\fR[\fB:\fIport\fR]
+ Chooses an alternate server.
++Note: This option must occur before all others.
+ .TP 5
+ \fB\-i \fIjob-id\fR
+ Specifies an existing job to modify.
+diff --git a/man/lpinfo.8 b/man/lpinfo.8
+index d238f9a60..d44b568d2 100644
+--- a/man/lpinfo.8
++++ b/man/lpinfo.8
+@@ -8,16 +8,16 @@
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ .\" information.
+ .\"
+-.TH lpinfo 8 "CUPS" "26 April 2019" "Apple Inc."
++.TH lpinfo 8 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ lpinfo \- show available devices or drivers (deprecated)
+ .SH SYNOPSIS
+ .B lpinfo
+ [
+-.B \-E
+-] [
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ ] [
++.B \-E
++] [
+ .B \-l
+ ] [
+ .B \-\-device\-id
+@@ -42,10 +42,10 @@ lpinfo \- show available devices or drivers (deprecated)
+ .br
+ .B lpinfo
+ [
+-.B \-E
+-] [
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ ] [
++.B \-E
++] [
+ .B \-l
+ ] [
+ .B \-\-exclude\-schemes
+@@ -69,6 +69,7 @@ Forces encryption when connecting to the server.
+ .TP 5
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ Selects an alternate server.
++Note: This option must occur before all others.
+ .TP 5
+ .B \-l
+ Shows a "long" listing of devices or drivers.
+diff --git a/man/lpmove.8 b/man/lpmove.8
+index af3c6b63c..62adba654 100644
+--- a/man/lpmove.8
++++ b/man/lpmove.8
+@@ -8,16 +8,16 @@
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ .\" information.
+ .\"
+-.TH lpmove 8 "CUPS" "26 April 2019" "Apple Inc."
++.TH lpmove 8 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ lpmove \- move a job or all jobs to a new destination
+ .SH SYNOPSIS
+ .B lpmove
+ [
+-.B \-E
+-] [
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ ] [
++.B \-E
++] [
+ .B \-U
+ .I username
+ ]
+@@ -26,10 +26,10 @@ lpmove \- move a job or all jobs to a new destination
+ .br
+ .B lpmove
+ [
+-.B \-E
+-] [
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ ] [
++.B \-E
++] [
+ .B \-U
+ .I username
+ ]
+@@ -48,6 +48,7 @@ Specifies an alternate username.
+ .TP 5
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ Specifies an alternate server.
++Note: This option must occur before all others.
+ .SH EXAMPLES
+ Move job 123 from "oldprinter" to "newprinter":
+ .nf
+diff --git a/man/lpoptions.1 b/man/lpoptions.1
+index 372f46a37..2eb5b6010 100644
+--- a/man/lpoptions.1
++++ b/man/lpoptions.1
+@@ -8,15 +8,15 @@
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ .\" information.
+ .\"
+-.TH lpoptions 1 "CUPS" "26 April 2019" "Apple Inc."
++.TH lpoptions 1 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ lpoptions \- display or set printer options and defaults
+ .SH SYNOPSIS
+ .B lpoptions
+ [
+-.B \-E
+-] [
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
++] [
++.B \-E
+ ]
+ \fB\-d \fIdestination\fR[\fB/\fIinstance\fR]
+ [
+@@ -25,20 +25,20 @@ lpoptions \- display or set printer options and defaults
+ .br
+ .B lpoptions
+ [
+-.B \-E
+-] [
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ ] [
++.B \-E
++] [
+ \fB\-p \fIdestination\fR[\fB/\fIinstance\fR]
+ ]
+ \fB\-o \fIoption\fR[\fB=\fIvalue\fR] ...
+ .br
+ .B lpoptions
+ [
+-.B \-E
+-] [
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ ] [
++.B \-E
++] [
+ \fB\-p \fIdestination\fR[\fB/\fIinstance\fR]
+ ]
+ .B \-r
+@@ -46,9 +46,9 @@ lpoptions \- display or set printer options and defaults
+ .br
+ .B lpoptions
+ [
+-.B \-E
+-] [
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
++] [
++.B \-E
+ ]
+ \fB\-x \fIdestination\fR[\fB/\fIinstance\fR]
+ .SH DESCRIPTION
+@@ -79,6 +79,7 @@ This option overrides the system default printer for the current user.
+ .TP 5
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ Uses an alternate server.
++Note: This option must occur before all others.
+ .TP 5
+ .B \-l
+ Lists the printer specific options and their current settings.
+diff --git a/man/lpq.1 b/man/lpq.1
+index ce23a6c81..a81633ecb 100644
+--- a/man/lpq.1
++++ b/man/lpq.1
+@@ -8,19 +8,19 @@
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ .\" information.
+ .\"
+-.TH lpq 1 "CUPS" "26 April 2019" "Apple Inc."
++.TH lpq 1 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ lpq \- show printer queue status
+ .SH SYNOPSIS
+ .B lpq
+ [
++\fB\-h \fIserver\fR[\fB:\fIport\fR]
++] [
+ .B \-E
+ ] [
+ .B \-U
+ .I username
+ ] [
+-\fB\-h \fIserver\fR[\fB:\fIport\fR]
+-] [
+ \fB\-P \fIdestination\fR[\fB/\fIinstance\fR]
+ ] [
+ .B \-a
+@@ -51,6 +51,7 @@ Reports jobs on all printers.
+ .TP 5
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ Specifies an alternate server.
++Note: This option must occur before all others.
+ .TP 5
+ .B \-l
+ Requests a more verbose (long) reporting format.
+diff --git a/man/lpr.1 b/man/lpr.1
+index e5f9f9018..77a62b305 100644
+--- a/man/lpr.1
++++ b/man/lpr.1
+@@ -8,16 +8,16 @@
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ .\" information.
+ .\"
+-.TH lpr 1 "CUPS" "26 April 2019" "Apple Inc."
++.TH lpr 1 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ lpr \- print files
+ .SH SYNOPSIS
+ .B lpr
+ [
+-.B \-E
+-] [
+ \fB\-H \fIserver\fR[\fB:\fIport\fR]
+ ] [
++.B \-E
++] [
+ .B \-U
+ .I username
+ ] [
+@@ -70,6 +70,7 @@ Forces encryption when connecting to the server.
+ .TP 5
+ \fB\-H \fIserver\fR[\fB:\fIport\fR]
+ Specifies an alternate server.
++Note: This option must occur before all others.
+ .TP 5
+ \fB\-C "\fIname\fB"\fR
+ .TP 5
+diff --git a/man/lprm.1 b/man/lprm.1
+index 094166539..0cf88ac51 100644
+--- a/man/lprm.1
++++ b/man/lprm.1
+@@ -8,20 +8,19 @@
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ .\" information.
+ .\"
+-.TH lprm 1 "CUPS" "26 April 2019" "Apple Inc."
++.TH lprm 1 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ lprm \- cancel print jobs
+ .SH SYNOPSIS
+ .B lprm
+ [
++\fB\-h \fIhostname\fR[\fB:\fIport\fR]
++] [
+ .B \-E
+ ] [
+ .B \-U
+ .I username
+ ] [
+-.B \-h
+-.IR server [ :port ]
+-] [
+ .B \-P
+ .IR destination [ /instance ]
+ ] [
+@@ -50,6 +49,7 @@ Specifies an alternate username.
+ .TP 5
+ \fB\-h \fIserver\fR[\fI:port\fR]
+ Specifies an alternate server.
++Note: This option must occur before all others.
+ .SH CONFORMING TO
+ The CUPS version of
+ .B lprm
+diff --git a/man/lpstat.1 b/man/lpstat.1
+index 0a10cd9bc..88acff7b3 100644
+--- a/man/lpstat.1
++++ b/man/lpstat.1
+@@ -1,17 +1,20 @@
+ .\"
+ .\" lpstat man page for CUPS.
+ .\"
+-.\" Copyright 2007-2019 by Apple Inc.
+-.\" Copyright 1997-2006 by Easy Software Products.
++.\" Copyright © 2021-2022 by OpenPrinting.
++.\" Copyright © 2007-2019 by Apple Inc.
++.\" Copyright © 1997-2006 by Easy Software Products.
+ .\"
+ .\" Licensed under Apache License v2.0.  See the file "LICENSE" for more information.
+ .\"
+-.TH lpstat 1 "CUPS" "26 April 2019" "Apple Inc."
++.TH lpstat 1 "CUPS" "2022-05-02" "OpenPrinting"
+ .SH NAME
+ lpstat \- print cups status information
+ .SH SYNOPSIS
+ .B lpstat
+ [
++\fB\-h \fIhostname\fR[\fB:\fIport\fR]
++] [
+ .B \-E
+ ] [
+ .B \-H
+@@ -19,8 +22,6 @@
+ .B \-U
+ .I username
+ ] [
+-\fB\-h \fIhostname\fR[\fB:\fIport\fR]
+-] [
+ .B \-l
+ ] [
+ .B \-W
+@@ -100,6 +101,7 @@
+ .TP 5
+ \fB\-h \fIserver\fR[\fB:\fIport\fR]
+ Specifies an alternate server.
++Note: This option must occur before all others.
+ .TP 5
+ .B \-l
+ Shows a long listing of printers, classes, or jobs.
+@@ -145,4 +147,4 @@
+ .BR lprm (1),
+ CUPS Online Help (http://localhost:631/help)
+ .SH COPYRIGHT
+-Copyright \[co] 2007-2019 by Apple Inc.
++Copyright \[co] 2021-2022 by OpenPrinting.

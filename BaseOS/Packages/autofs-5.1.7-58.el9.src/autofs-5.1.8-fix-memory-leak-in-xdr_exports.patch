@@ -1,0 +1,40 @@
+autofs-5.1.8 - fix memory leak in xdr_exports()
+
+From: Ian Kent <raven@themaw.net>
+
+Converting xdr_exports() to not be recursive introduced a memory leak
+if an error is encountered, fix it.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG      |    1 +
+ lib/rpc_subs.c |    7 ++++++-
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -91,6 +91,7 @@
+ - fix loop under run in cache_get_offset_parent().
+ - simplify cache_add() a little.
+ - fix use after free in tree_mapent_delete_offset_tree().
++- fix memory leak in xdr_exports().
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/lib/rpc_subs.c
++++ autofs-5.1.7/lib/rpc_subs.c
+@@ -1151,8 +1151,13 @@ bool_t xdr_exports(XDR *xdrs, struct exp
+ 
+ 	export = (char **) exports;
+ 	while (1) {
+-		if (!xdr_pointer(xdrs, export, size, (xdrproc_t) xdr_export))
++		if (!xdr_pointer(xdrs, export, size, (xdrproc_t) xdr_export)) {
++			if (*exports) {
++				rpc_exports_free(*exports);
++				*exports = NULL;
++			}
+ 			return FALSE;
++		}
+ 		if (!*export)
+ 			break;
+ 		export = (char **) &((struct exportinfo *) *export)->next;

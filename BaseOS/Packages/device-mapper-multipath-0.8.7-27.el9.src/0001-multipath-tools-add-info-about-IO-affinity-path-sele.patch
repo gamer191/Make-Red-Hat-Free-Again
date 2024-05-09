@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Date: Wed, 8 Sep 2021 22:33:54 +0200
+Subject: [PATCH] multipath-tools: add info about IO affinity path selector to
+ manpage
+
+Added in 5.11: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=e4d2e82b2300b03f66b3ca8417590c86e661fab1
+
+Cc: Mike Christie <michael.christie@oracle.com>
+Cc: Martin Wilck <mwilck@suse.com>
+Cc: Benjamin Marzinski <bmarzins@redhat.com>
+Cc: Christophe Varoqui <christophe.varoqui@opensvc.com>
+Cc: DM-DEVEL ML <dm-devel@redhat.com>
+Signed-off-by: Xose Vazquez Perez <xose.vazquez@gmail.com>
+
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/multipath.conf.5 | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index d6b8c7f6..42a15ffd 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -6,7 +6,7 @@
+ .\"
+ .\" ----------------------------------------------------------------------------
+ .
+-.TH MULTIPATH.CONF 5 2018-05-21 Linux
++.TH MULTIPATH.CONF 5 2021-09-08 Linux
+ .
+ .
+ .\" ----------------------------------------------------------------------------
+@@ -210,6 +210,10 @@ of outstanding I/O to the path and its relative throughput.
+ estimation of future service time based on the history of previous I/O submitted
+ to each path.
+ .TP
++.I "io-affinity 0"
++(Since 5.11 kernel) Choose the path for the next bunch of I/O based on a CPU to
++path mapping the user passes in and what CPU we are executing on.
++.TP
+ The default is: \fBservice-time 0\fR
+ .RE
+ .

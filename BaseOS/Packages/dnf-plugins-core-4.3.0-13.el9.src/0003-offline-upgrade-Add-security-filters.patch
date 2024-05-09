@@ -1,0 +1,61 @@
+From eef927ac825c1a07082e10ffbf11e16ecbd7688c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Tarc=C3=ADsio=20Ladeia=20de=20Oliveira?=
+ <wyrquill@gmail.com>
+Date: Thu, 20 Oct 2022 22:16:59 -0300
+Subject: [PATCH 1/2] [offline-upgrade] Add security filters (RhBug:1939975)
+
+Add support for security filter options that are available in the main
+`dnf` commands, that is, `--advisory`, `--bugfix`, `--security`, and
+`--enhancement`.
+
+= changelog =
+msg: [offline-upgrade] Add support for security filters
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1939975
+---
+ plugins/system_upgrade.py | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/plugins/system_upgrade.py b/plugins/system_upgrade.py
+index 0baf978..ef1de73 100644
+--- a/plugins/system_upgrade.py
++++ b/plugins/system_upgrade.py
+@@ -467,6 +467,9 @@ class SystemUpgradeCommand(dnf.cli.Command):
+                     logger.error(_("Operation aborted."))
+                     sys.exit(1)
+             check_release_ver(self.base.conf, target=self.opts.releasever)
++        elif 'offline-upgrade' == self.opts.command:
++            self.cli._populate_update_security_filter(self.opts)
++
+         self.cli.demands.root_user = True
+         self.cli.demands.resolving = True
+         self.cli.demands.available_repos = True
+-- 
+2.38.1
+
+
+From 7e5d3028caa743f3e5ac7bf921c3ec39a4d2c85b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Tarc=C3=ADsio=20Ladeia=20de=20Oliveira?=
+ <wyrquill@gmail.com>
+Date: Thu, 20 Oct 2022 22:27:22 -0300
+Subject: [PATCH 2/2] Add myself as contributor in AUTHORS
+
+---
+ AUTHORS | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/AUTHORS b/AUTHORS
+index 352e195..f098cb6 100644
+--- a/AUTHORS
++++ b/AUTHORS
+@@ -32,6 +32,7 @@ DNF-PLUGINS-CORE CONTRIBUTORS
+     Neal Gompa <ngompa13@gmail.com>
+     Paul Howarth <paul@city-fan.org>
+     Rickard Dybeck <r.dybeck@gmail.com>
++    Tarcísio Ladeia de Oliveira <wyrquill@gmail.com>
+     Tomas Babej <tomasbabej@gmail.com>
+     Vladan Kudlac <vladankudlac@gmail.com>
+     Wieland Hoffmann <themineo@gmail.com>
+-- 
+2.38.1
+

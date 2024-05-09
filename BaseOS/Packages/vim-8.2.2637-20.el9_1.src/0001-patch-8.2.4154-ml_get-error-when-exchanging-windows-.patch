@@ -1,0 +1,43 @@
+diff -up vim82/src/testdir/test_visual.vim.cve0319 vim82/src/testdir/test_visual.vim
+--- vim82/src/testdir/test_visual.vim.cve0319	2022-02-08 13:24:54.170813231 +0100
++++ vim82/src/testdir/test_visual.vim	2022-02-08 13:26:21.313747976 +0100
+@@ -985,4 +985,15 @@ func Test_visual_block_insert_round_off(
+   bwipe!
+ endfunc
+ 
++" this was causing an ml_get error
++func Test_visual_exchange_windows()
++  enew!
++  new
++  call setline(1, ['foo', 'bar'])
++  exe "normal G\<C-V>gg\<C-W>\<C-X>OO\<Esc>"
++  bwipe!
++  bwipe!
++endfunc
++
++
+ " vim: shiftwidth=2 sts=2 expandtab
+diff -up vim82/src/window.c.cve0319 vim82/src/window.c
+--- vim82/src/window.c.cve0319	2022-02-08 13:24:54.137813879 +0100
++++ vim82/src/window.c	2022-02-08 13:24:54.171813211 +0100
+@@ -1697,6 +1697,11 @@ win_exchange(long Prenum)
+ 
+     (void)win_comp_pos();		// recompute window positions
+ 
++    if (wp->w_buffer != curbuf)
++	reset_VIsual_and_resel();
++    else if (VIsual_active)
++	wp->w_cursor = curwin->w_cursor;
++
+     win_enter(wp, TRUE);
+     redraw_all_later(NOT_VALID);
+ }
+@@ -5261,7 +5266,7 @@ frame_remove(frame_T *frp)
+ win_alloc_lines(win_T *wp)
+ {
+     wp->w_lines_valid = 0;
+-    wp->w_lines = ALLOC_CLEAR_MULT(wline_T, Rows );
++    wp->w_lines = ALLOC_CLEAR_MULT(wline_T, Rows);
+     if (wp->w_lines == NULL)
+ 	return FAIL;
+     return OK;

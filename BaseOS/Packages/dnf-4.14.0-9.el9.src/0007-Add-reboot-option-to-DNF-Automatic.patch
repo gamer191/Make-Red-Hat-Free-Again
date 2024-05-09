@@ -1,0 +1,252 @@
+From 56d3e10ecb666da53a77d17e9ac7524f3e1341d8 Mon Sep 17 00:00:00 2001
+From: Evan Goode <mail@evangoo.de>
+Date: Tue, 24 Jan 2023 09:53:47 -0500
+Subject: [PATCH 1/4] Add reboot option to DNF Automatic (RhBug:2124793)
+
+Add ability in DNF Automatic to automatically trigger a reboot after an
+upgrade. The `reboot` option supports three settings: ``never`` does not
+reboot the system (current behavior). ``when-changed`` triggers a reboot
+after any upgrade. ``when-needed`` triggers a reboot only when rebooting
+is necessary to apply changes, such as when systemd or the kernel is
+upgraded. The `reboot_command` option allows customizing the command
+used to reboot (default is `shutdown -r`).
+
+= changelog =
+msg: Add `reboot` option to DNF Automatic
+type: enhancement
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2124793
+---
+ dnf/automatic/main.py        |  9 +++++++++
+ dnf/base.py                  | 14 ++++++++++++++
+ doc/automatic.rst            | 12 ++++++++++++
+ etc/dnf/automatic.conf       |  9 +++++++++
+ tests/automatic/test_main.py |  4 ++++
+ 5 files changed, 48 insertions(+)
+
+diff --git a/dnf/automatic/main.py b/dnf/automatic/main.py
+index b53d9c00..b68962c2 100644
+--- a/dnf/automatic/main.py
++++ b/dnf/automatic/main.py
+@@ -24,6 +24,7 @@ from __future__ import unicode_literals
+ 
+ import argparse
+ import logging
++import os
+ import random
+ import socket
+ import time
+@@ -179,6 +180,9 @@ class CommandsConfig(Config):
+                         libdnf.conf.VectorString(['default', 'security'])))
+         self.add_option('random_sleep', libdnf.conf.OptionNumberInt32(300))
+         self.add_option('network_online_timeout', libdnf.conf.OptionNumberInt32(60))
++        self.add_option('reboot', libdnf.conf.OptionEnumString('never',
++                        libdnf.conf.VectorString(['never', 'when-changed', 'when-needed'])))
++        self.add_option('reboot_command', libdnf.conf.OptionString('shutdown -r'))
+ 
+     def imply(self):
+         if self.apply_updates:
+@@ -340,6 +344,11 @@ def main(args):
+             base.do_transaction()
+             emitters.notify_applied()
+             emitters.commit()
++
++            if (conf.commands.reboot == 'when-changed' or
++               (conf.commands.reboot == 'when-needed' and base.reboot_needed())):
++                if os.waitstatus_to_exitcode(os.system(conf.commands.reboot_command)) != 0:
++                    return 1
+     except dnf.exceptions.Error as exc:
+         logger.error(_('Error: %s'), ucd(exc))
+         return 1
+diff --git a/dnf/base.py b/dnf/base.py
+index 154eb4e3..24c5a444 100644
+--- a/dnf/base.py
++++ b/dnf/base.py
+@@ -2790,6 +2790,20 @@ class Base(object):
+ 
+         return skipped_conflicts, skipped_dependency
+ 
++    def reboot_needed(self):
++        """Check whether a system reboot is recommended following the transaction
++
++        :return: bool
++        """
++        if not self.transaction:
++            return False
++
++        # List taken from DNF needs-restarting
++        need_reboot = frozenset(('kernel', 'kernel-rt', 'glibc',
++                                'linux-firmware', 'systemd', 'dbus',
++                                'dbus-broker', 'dbus-daemon'))
++        changed_pkgs = self.transaction.install_set | self.transaction.remove_set
++        return any(pkg.name in need_reboot for pkg in changed_pkgs)
+ 
+ def _msg_installed(pkg):
+     name = ucd(pkg)
+diff --git a/doc/automatic.rst b/doc/automatic.rst
+index b8e47ad1..ade0ca1a 100644
+--- a/doc/automatic.rst
++++ b/doc/automatic.rst
+@@ -90,6 +90,18 @@ Setting the mode of operation of the program.
+ 
+     What kind of upgrades to look at. ``default`` signals looking for all available updates, ``security`` only those with an issued security advisory.
+ 
++``reboot``
++    either one of ``never``, ``when-changed``, ``when-needed``, default: ``never``
++
++    When the system should reboot following upgrades. ``never`` does not reboot the system. ``when-changed`` triggers a reboot after any upgrade. ``when-needed`` triggers a reboot only when rebooting is necessary to apply changes, such as when systemd or the kernel is upgraded.
++
++``reboot_command``
++    string, default: ``shutdown -r``
++
++    Specify the command to run to trigger a reboot of the system. For example, add a 5-minute delay and a wall message by using ``shutdown -r +5 'Rebooting after upgrading packages'`` 
++
++
++
+ ----------------------
+ ``[emitters]`` section
+ ----------------------
+diff --git a/etc/dnf/automatic.conf b/etc/dnf/automatic.conf
+index 1f7e9402..9735447f 100644
+--- a/etc/dnf/automatic.conf
++++ b/etc/dnf/automatic.conf
+@@ -21,6 +21,15 @@ download_updates = yes
+ # install.timer override this setting.
+ apply_updates = no
+ 
++# When the system should reboot following upgrades:
++# never                              = don't reboot after upgrades
++# when-changed                       = reboot after any changes
++# when-needed                        = reboot when necessary to apply changes
++reboot = never
++
++# The command that is run to trigger a system reboot.
++reboot_command = "shutdown -r"
++
+ 
+ [emitters]
+ # Name to use for this system in messages that are emitted.  Default is the
+diff --git a/tests/automatic/test_main.py b/tests/automatic/test_main.py
+index 27ffa407..dc4acd52 100644
+--- a/tests/automatic/test_main.py
++++ b/tests/automatic/test_main.py
+@@ -49,3 +49,7 @@ class TestConfig(tests.support.TestCase):
+         conf = dnf.automatic.main.AutomaticConfig(FILE, downloadupdates=True, installupdates=False)
+         self.assertTrue(conf.commands.download_updates)
+         self.assertFalse(conf.commands.apply_updates)
++
++        # test that reboot is "never" by default
++        conf = dnf.automatic.main.AutomaticConfig(FILE)
++        self.assertEqual(conf.commands.reboot, 'never')
+-- 
+2.40.0
+
+
+From 8d7608f3462deddf36d5a75ff66f847a30b78026 Mon Sep 17 00:00:00 2001
+From: Evan Goode <mail@evangoo.de>
+Date: Tue, 24 Jan 2023 09:59:22 -0500
+Subject: [PATCH 2/4] Add Evan Goode to AUTHORS
+
+---
+ AUTHORS | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/AUTHORS b/AUTHORS
+index 50bff95b..e802a51e 100644
+--- a/AUTHORS
++++ b/AUTHORS
+@@ -69,6 +69,7 @@ DNF CONTRIBUTORS
+     Dave Johansen <davejohansen@gmail.com>
+     Dylan Pindur <dylanpindur@gmail.com>
+     Eduard Cuba <ecuba@redhat.com>
++    Evan Goode <egoode@redhat.com>
+     Filipe Brandenburger <filbranden@gmail.com>
+     Frank Dana <ferdnyc@gmail.com>
+     George Machitidze <giomac@gmail.com>
+-- 
+2.40.0
+
+
+From 9deed331cb7a1890e1f11a57c989c300b1641a88 Mon Sep 17 00:00:00 2001
+From: Evan Goode <mail@evangoo.de>
+Date: Tue, 24 Jan 2023 17:12:46 -0500
+Subject: [PATCH 3/4] DNF Automatic reboot: 5-minute delay and wall by default
+
+---
+ dnf/automatic/main.py  | 2 +-
+ doc/automatic.rst      | 4 ++--
+ etc/dnf/automatic.conf | 2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/dnf/automatic/main.py b/dnf/automatic/main.py
+index b68962c2..a03c359f 100644
+--- a/dnf/automatic/main.py
++++ b/dnf/automatic/main.py
+@@ -182,7 +182,7 @@ class CommandsConfig(Config):
+         self.add_option('network_online_timeout', libdnf.conf.OptionNumberInt32(60))
+         self.add_option('reboot', libdnf.conf.OptionEnumString('never',
+                         libdnf.conf.VectorString(['never', 'when-changed', 'when-needed'])))
+-        self.add_option('reboot_command', libdnf.conf.OptionString('shutdown -r'))
++        self.add_option('reboot_command', libdnf.conf.OptionString('shutdown -r +5 \'Rebooting after applying package updates\''))
+ 
+     def imply(self):
+         if self.apply_updates:
+diff --git a/doc/automatic.rst b/doc/automatic.rst
+index ade0ca1a..329c2f46 100644
+--- a/doc/automatic.rst
++++ b/doc/automatic.rst
+@@ -96,9 +96,9 @@ Setting the mode of operation of the program.
+     When the system should reboot following upgrades. ``never`` does not reboot the system. ``when-changed`` triggers a reboot after any upgrade. ``when-needed`` triggers a reboot only when rebooting is necessary to apply changes, such as when systemd or the kernel is upgraded.
+ 
+ ``reboot_command``
+-    string, default: ``shutdown -r``
++    string, default: ``shutdown -r +5 'Rebooting after applying package updates'``
+ 
+-    Specify the command to run to trigger a reboot of the system. For example, add a 5-minute delay and a wall message by using ``shutdown -r +5 'Rebooting after upgrading packages'`` 
++    Specify the command to run to trigger a reboot of the system. For example, to skip the 5-minute delay and wall message, use ``shutdown -r``
+ 
+ 
+ 
+diff --git a/etc/dnf/automatic.conf b/etc/dnf/automatic.conf
+index 9735447f..e61b12af 100644
+--- a/etc/dnf/automatic.conf
++++ b/etc/dnf/automatic.conf
+@@ -28,7 +28,7 @@ apply_updates = no
+ reboot = never
+ 
+ # The command that is run to trigger a system reboot.
+-reboot_command = "shutdown -r"
++reboot_command = "shutdown -r +5 'Rebooting after applying package updates'"
+ 
+ 
+ [emitters]
+-- 
+2.40.0
+
+
+From b002f47a763e442277913a06df963b0ca91deb54 Mon Sep 17 00:00:00 2001
+From: Evan Goode <mail@evangoo.de>
+Date: Wed, 25 Jan 2023 09:47:59 -0500
+Subject: [PATCH 4/4] DNF Automatic: error message for failed reboot command
+
+---
+ dnf/automatic/main.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/dnf/automatic/main.py b/dnf/automatic/main.py
+index a03c359f..11c35ecf 100644
+--- a/dnf/automatic/main.py
++++ b/dnf/automatic/main.py
+@@ -347,7 +347,9 @@ def main(args):
+ 
+             if (conf.commands.reboot == 'when-changed' or
+                (conf.commands.reboot == 'when-needed' and base.reboot_needed())):
+-                if os.waitstatus_to_exitcode(os.system(conf.commands.reboot_command)) != 0:
++                exit_code = os.waitstatus_to_exitcode(os.system(conf.commands.reboot_command))
++                if exit_code != 0:
++                    logger.error('Error: reboot command returned nonzero exit code: %d', exit_code)
+                     return 1
+     except dnf.exceptions.Error as exc:
+         logger.error(_('Error: %s'), ucd(exc))
+-- 
+2.40.0
+

@@ -1,0 +1,52 @@
+--- a/mkfs/xfs_mkfs.c.orig	2022-08-12 20:38:21.000000000 +0200
++++ b/mkfs/xfs_mkfs.c	2023-01-25 11:06:01.863076713 +0100
+@@ -13,6 +13,8 @@
+ #include "libfrog/dahashselftest.h"
+ #include "proto.h"
+ #include <ini.h>
++#include <linux/version.h>
++#include <sys/utsname.h>
+ 
+ #define TERABYTES(count, blog)	((uint64_t)(count) << (40 - (blog)))
+ #define GIGABYTES(count, blog)	((uint64_t)(count) << (30 - (blog)))
+@@ -3998,6 +4000,23 @@
+ 		cli->cfgfile);
+ }
+ 
++static unsigned int get_system_kver(void)
++{
++	const char *kver = getenv("KVER");
++	struct utsname utsname;
++	int a, b, c;
++
++	if (!kver) {
++		uname(&utsname);
++		kver = utsname.release;
++	}
++
++	if (sscanf(kver, "%d.%d.%d", &a, &b, &c) != 3)
++		return LINUX_VERSION_CODE;
++
++	return KERNEL_VERSION(a,b,c);
++}
++
+ int
+ main(
+ 	int			argc,
+@@ -4077,8 +4096,16 @@
+ 	};
+ 
+ 	struct list_head	buffer_list;
++	unsigned int		kver;
+ 	int			error;
+ 
++	/* turn bigtime & inobtcnt back off if running under older kernels */
++	kver = get_system_kver();
++	if (kver < KERNEL_VERSION(5,10,0)) {
++		dft.sb_feat.inobtcnt = false;
++		dft.sb_feat.bigtime = false;
++	}
++
+ 	platform_uuid_generate(&cli.uuid);
+ 	progname = basename(argv[0]);
+ 	setlocale(LC_ALL, "");

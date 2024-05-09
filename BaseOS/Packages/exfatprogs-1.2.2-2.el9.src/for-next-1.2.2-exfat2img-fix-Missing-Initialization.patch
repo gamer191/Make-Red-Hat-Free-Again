@@ -1,0 +1,29 @@
+From 79b5b71cc6a1dbc45eeb63f53a6b51aa924309c8 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Mon, 13 Nov 2023 08:13:27 +0100
+Subject: [PATCH] exfat2img: fix Missing Initialization
+
+exfatprogs-1.2.2/exfat2img/exfat2img.c:895: uninit_use: Using uninitialized value "ret".
+
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+Signed-off-by: Namjae Jeon <linkinjeon@kernel.org>
+---
+ exfat2img/exfat2img.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/exfat2img/exfat2img.c b/exfat2img/exfat2img.c
+index 3f83588..f1a4ef2 100644
+--- a/exfat2img/exfat2img.c
++++ b/exfat2img/exfat2img.c
+@@ -762,7 +762,7 @@ static ssize_t read_stream(int fd, void *buf, size_t len)
+ 
+ static int restore_from_stdin(struct exfat2img *ei)
+ {
+-	int in_fd, ret;
++	int in_fd, ret = 0;
+ 	unsigned char cc;
+ 	unsigned int clu, end_clu;
+ 	unsigned int cc_clu_count;
+-- 
+2.43.0
+

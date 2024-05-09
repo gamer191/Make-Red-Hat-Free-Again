@@ -1,0 +1,20 @@
+diff -up cracklib-2.9.6/lib/rules.c.coverity cracklib-2.9.6/lib/rules.c
+--- cracklib-2.9.6/lib/rules.c.coverity	2018-10-09 12:15:31.455187555 +0200
++++ cracklib-2.9.6/lib/rules.c	2018-10-10 14:28:43.472740618 +0200
+@@ -774,6 +774,8 @@ Mangle(input, control, area)		/* returns
+ 		    }
+ 		}
+ 	    }
++	    break;
++
+ 	case RULE_MLAST:
+ 	    if (!ptr[1] || (ptr[1] == RULE_CLASS && !ptr[2]))
+ 	    {
+@@ -809,6 +811,7 @@ Mangle(input, control, area)		/* returns
+ 		    }
+ 		}
+ 	    }
++	    break;
+ 
+ 	default:
+ 	    Debug(1, "Mangle: unknown command %c in %s\n", *ptr, control);

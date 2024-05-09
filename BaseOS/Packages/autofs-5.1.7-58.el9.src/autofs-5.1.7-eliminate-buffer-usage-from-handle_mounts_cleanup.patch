@@ -1,0 +1,82 @@
+autofs-5.1.7 - eliminate buffer usage from handle_mounts_cleanup()
+
+From: Ian Kent <raven@themaw.net>
+
+This buffer was originally added because a SEGV was seen accessing
+the ap->path field on shutdown.
+
+But this was actually caused by calling master_remove_mapent() too
+early which adds the map entry to the master map join list that leads
+to freeing the autofs_point (ap in the code) which also frees ap->path.
+
+But the master map join list is protected by the master map mutex which
+is held until after all the accesses are completed. So whatever the
+problem was it doesn't appear to be present any more.
+
+Nevertheless, to be sure, delay the call to master_remove_mapent() until
+after all accesses to ap->path are completed.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG          |    1 +
+ daemon/automount.c |   13 ++++++-------
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -148,6 +148,7 @@
+ - change to use printf functions in amd parser.
+ - dont call umount_subtree_mounts() on parent at umount.
+ - dont take parent source lock at mount shutdown.
++- eliminate buffer usage from handle_mounts_cleanup().
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/automount.c
++++ autofs-5.1.7/daemon/automount.c
+@@ -1724,7 +1724,6 @@ void handle_mounts_startup_cond_destroy(
+ static void handle_mounts_cleanup(void *arg)
+ {
+ 	struct autofs_point *ap;
+-	char path[PATH_MAX + 1];
+ 	char buf[MAX_ERR_BUF];
+ 	unsigned int clean = 0, submount, logopt;
+ 	unsigned int pending = 0;
+@@ -1734,7 +1733,6 @@ static void handle_mounts_cleanup(void *
+ 	logopt = ap->logopt;
+ 	submount = ap->submount;
+ 
+-	strcpy(path, ap->path);
+ 	if (!submount && strcmp(ap->path, "/-") &&
+ 	    ap->flags & MOUNT_FLAG_DIR_CREATED)
+ 		clean = 1;
+@@ -1756,8 +1754,8 @@ static void handle_mounts_cleanup(void *
+ 	/* Don't signal the handler if we have already done so */
+ 	if (!list_empty(&master_list->completed))
+ 		pending = 1;
+-	master_remove_mapent(ap->entry);
+-	master_source_unlock(ap->entry);
++
++	info(logopt, "shut down path %s", ap->path);
+ 
+ 	/*
+ 	 * Submounts are detached threads and don't belong to the
+@@ -1770,14 +1768,15 @@ static void handle_mounts_cleanup(void *
+ 	}
+ 
+ 	if (clean) {
+-		if (rmdir(path) == -1) {
++		if (rmdir(ap->path) == -1) {
+ 			char *estr = strerror_r(errno, buf, MAX_ERR_BUF);
+ 			warn(logopt, "failed to remove dir %s: %s",
+-			     path, estr);
++			     ap->path, estr);
+ 		}
+ 	}
+ 
+-	info(logopt, "shut down path %s", path);
++	master_remove_mapent(ap->entry);
++	master_source_unlock(ap->entry);
+ 
+ 	/*
+ 	 * If we are not a submount send a signal to the signal handler

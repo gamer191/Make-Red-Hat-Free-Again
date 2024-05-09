@@ -1,0 +1,32 @@
+From f7b0194f9858d0248399ada65e77540f74d74da7 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Thu, 2 Jun 2022 16:02:54 +0200
+Subject: libblkid: (hfs) fix label use [fuzzing]
+
+Addresses: https://issues.redhat.com/browse/RHEL-16071
+Upstream: http://github.com/util-linux/util-linux/commit/74e48269ee9a15e230e25d0e3d2e50f5b0ba2b04
+Reported-by: Thibault Guittet <tguittet@redhat.com>
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libblkid/src/superblocks/hfs.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/libblkid/src/superblocks/hfs.c b/libblkid/src/superblocks/hfs.c
+index 9674b1481..68cb30edb 100644
+--- a/libblkid/src/superblocks/hfs.c
++++ b/libblkid/src/superblocks/hfs.c
+@@ -173,7 +173,10 @@ static int probe_hfs(blkid_probe pr, const struct blkid_idmag *mag)
+ 
+ 	hfs_set_uuid(pr, hfs->finder_info.id, sizeof(hfs->finder_info.id));
+ 
+-	blkid_probe_set_label(pr, hfs->label, hfs->label_len);
++	size = hfs->label_len;
++	if ((size_t) size > sizeof(hfs->label))
++		size = sizeof(hfs->label);
++	blkid_probe_set_label(pr, hfs->label, size);
+ 	return 0;
+ }
+ 
+-- 
+2.43.0
+

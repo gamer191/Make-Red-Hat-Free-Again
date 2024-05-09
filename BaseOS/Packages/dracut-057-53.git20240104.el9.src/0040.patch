@@ -1,0 +1,24 @@
+From 9c1c19de50de5dba6d0875425539cb9259dd7451 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Mon, 14 Aug 2023 12:37:33 +0200
+Subject: [PATCH] fix(rngd): spacing
+
+Related: #2158155
+---
+ modules.d/06rngd/module-setup.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules.d/06rngd/module-setup.sh b/modules.d/06rngd/module-setup.sh
+index 66923a38..1e5f0eb9 100644
+--- a/modules.d/06rngd/module-setup.sh
++++ b/modules.d/06rngd/module-setup.sh
+@@ -35,7 +35,7 @@ install() {
+     inst_simple "${systemdsystemunitdir}/rngd.service"
+ 
+     if [ -r /etc/sysconfig/rngd ]; then
+-      inst_simple "${moddir}/sysconfig" "/etc/sysconfig/rngd"
++        inst_simple "${moddir}/sysconfig" "/etc/sysconfig/rngd"
+     fi
+ 
+     # make sure dependant libs are installed too
+

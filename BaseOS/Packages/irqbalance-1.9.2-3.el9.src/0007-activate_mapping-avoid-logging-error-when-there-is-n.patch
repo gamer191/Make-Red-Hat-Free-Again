@@ -1,0 +1,28 @@
+From bc7794dc78474c463a26926749537f23abc4c082 Mon Sep 17 00:00:00 2001
+From: Robin Jarry <rjarry@redhat.com>
+Date: Thu, 13 Jul 2023 20:49:16 +0200
+Subject: [PATCH 7/7] activate_mapping: avoid logging error when there is none
+
+Add missing return statement.
+
+Fixes: 470a64b19062 ("activate_mapping: make sure to catch all errors")
+Signed-off-by: Robin Jarry <rjarry@redhat.com>
+---
+ activate.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/activate.c b/activate.c
+index 7353692..548a401 100644
+--- a/activate.c
++++ b/activate.c
+@@ -89,6 +89,7 @@ static void activate_mapping(struct irq_info *info, void *data __attribute__((un
+ 	if (ret < 0)
+ 		goto error;
+ 	info->moved = 0; /*migration is done*/
++	return;
+ error:
+ 	log(TO_ALL, LOG_WARNING,
+ 		"Cannot change IRQ %i affinity: %s\n",
+-- 
+2.40.1
+

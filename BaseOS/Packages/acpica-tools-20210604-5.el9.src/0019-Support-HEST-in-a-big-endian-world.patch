@@ -1,0 +1,75 @@
+From 6b73a4881e436bb8cf86c05c1cc4b5360efe1c7f Mon Sep 17 00:00:00 2001
+From: Al Stone <ahs3@redhat.com>
+Date: Wed, 23 Sep 2020 11:54:49 -0600
+Subject: [PATCH 19/45] Support HEST in a big-endian world
+
+Signed-off-by: Al Stone <ahs3@redhat.com>
+---
+ source/common/dmtbdump1.c  | 10 ++++++----
+ source/compiler/dttable1.c |  4 +++-
+ 2 files changed, 9 insertions(+), 5 deletions(-)
+
+Index: acpica-unix2-20210604/source/common/dmtbdump1.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/common/dmtbdump1.c
++++ acpica-unix2-20210604/source/common/dmtbdump1.c
+@@ -1216,12 +1216,13 @@ AcpiDmDumpHest (
+ {
+     ACPI_STATUS             Status;
+     ACPI_HEST_HEADER        *Subtable;
+-    UINT32                  Length = Table->Length;
++    UINT32                  Length = AcpiUtReadUint32 (&Table->Length);
+     UINT32                  Offset = sizeof (ACPI_TABLE_HEST);
+     ACPI_DMTABLE_INFO       *InfoTable;
+     UINT32                  SubtableLength;
+     UINT32                  BankCount;
+     ACPI_HEST_IA_ERROR_BANK *BankTable;
++    UINT16                  SubtableType;
+ 
+ 
+     /* Main table */
+@@ -1235,10 +1236,11 @@ AcpiDmDumpHest (
+     /* Subtables */
+ 
+     Subtable = ACPI_ADD_PTR (ACPI_HEST_HEADER, Table, Offset);
+-    while (Offset < Table->Length)
++    while (Offset < Length)
+     {
+         BankCount = 0;
+-        switch (Subtable->Type)
++        SubtableType = Subtable->Type;
++        switch (SubtableType)
+         {
+         case ACPI_HEST_TYPE_IA32_CHECK:
+ 
+@@ -1305,7 +1307,7 @@ AcpiDmDumpHest (
+             /* Cannot continue on unknown type - no length */
+ 
+             AcpiOsPrintf ("\n**** Unknown HEST subtable type 0x%X\n",
+-                Subtable->Type);
++                SubtableType);
+             return;
+         }
+ 
+Index: acpica-unix2-20210604/source/compiler/dttable1.c
+===================================================================
+--- acpica-unix2-20210604.orig/source/compiler/dttable1.c
++++ acpica-unix2-20210604/source/compiler/dttable1.c
+@@ -1207,6 +1207,7 @@ DtCompileHest (
+     DT_FIELD                *SubtableStart;
+     ACPI_DMTABLE_INFO       *InfoTable;
+     UINT16                  Type;
++    UINT16                  Tmp16;
+     UINT32                  BankCount;
+ 
+ 
+@@ -1225,7 +1226,8 @@ DtCompileHest (
+         /* Get subtable type */
+ 
+         SubtableStart = *PFieldList;
+-        DtCompileInteger ((UINT8 *) &Type, *PFieldList, 2, 0);
++        DtCompileInteger ((UINT8 *) &Tmp16, *PFieldList, 2, 0);
++        Type = AcpiUtReadUint32 (&Tmp16);
+ 
+         switch (Type)
+         {

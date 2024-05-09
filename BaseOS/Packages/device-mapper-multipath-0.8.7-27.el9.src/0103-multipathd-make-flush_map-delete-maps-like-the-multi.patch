@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Thu, 7 Dec 2023 11:23:18 -0500
+Subject: [PATCH] multipathd: make flush_map() delete maps like the multipath
+ command
+
+When the multipath command tries to delete a multipath device, it first
+disables queueing and then suspends the device to force the IOs to get
+flushed. Then it attempts to delete the device and any kpartx
+partitions.  multipathd, on the other hand, simply tries to delete the
+device and kpartx partitions, without disabling queueing or suspending.
+If there are no paths but there is outstanding IO, multipathd will hang
+trying to delete the last kpartx device. This is because it must be the
+last opener of the multipath device (multipath won't try to delete the
+device if it has any openers besides the kpartx devices) and the kernel
+will not allow the last opener of a block device to close until all the
+outstanding IO is flushed.  This hang can be avoided if multipathd calls
+dm_suspend_and_flush_map() like the multipath command does, instead of
+dm_flush_map().
+
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipathd/main.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 1b5f82e7..3eeca82f 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -695,7 +695,7 @@ sync_maps_state(vector mpvec)
+ int
+ flush_map(struct multipath * mpp, struct vectors * vecs)
+ {
+-	int r = dm_flush_map(mpp->alias);
++	int r = dm_suspend_and_flush_map(mpp->alias, 0);
+ 	if (r) {
+ 		condlog(0, "%s: can't flush", mpp->alias);
+ 		return r;

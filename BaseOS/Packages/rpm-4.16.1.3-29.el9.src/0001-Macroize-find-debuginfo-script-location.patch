@@ -1,0 +1,51 @@
+From 1a2554da434548e916240796fe7ca9689c5771fe Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Thu, 27 May 2021 13:58:58 +0300
+Subject: [PATCH] Macroize find-debuginfo script location
+
+Makes it easier to handle varying paths, mainly in preparation for the
+next step.
+
+(cherry picked from commit ce48167f37af59b6366083fb78a314f7931c0c6b)
+---
+ configure.ac | 1 +
+ macros.in    | 4 +++-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index 39f9a0e5b..35b4dff4c 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -113,6 +113,7 @@ AC_PATH_PROG(__NM, nm, /usr/bin/nm, $MYPATH)
+ AC_PATH_PROG(__OBJCOPY, objcopy, /usr/bin/objcopy, $MYPATH)
+ AC_PATH_PROG(__OBJDUMP, objdump, /usr/bin/objdump, $MYPATH)
+ AC_PATH_PROG(__STRIP, strip, /usr/bin/strip, $MYPATH)
++AC_PATH_PROG(__FIND_DEBUGINFO, find-debuginfo, /usr/bin/find-debuginfo, $MYPATH)
+ 
+ AC_PATH_PROG(__GIT, git, /usr/bin/git, $MYPATH)
+ AC_PATH_PROG(__HG, hg, /usr/bin/hg, $MYPATH)
+diff --git a/macros.in b/macros.in
+index 24b124702..2bcf07ef8 100644
+--- a/macros.in
++++ b/macros.in
+@@ -80,6 +80,8 @@
+ %__remsh		%{__rsh}
+ %__strip		@__STRIP@
+ 
++%__find_debuginfo	@__FIND_DEBUGINFO@
++
+ #==============================================================================
+ # Conditional build stuff.
+ 
+@@ -149,7 +151,7 @@
+ #       _find_debuginfo_vendor_opts to pass options to the script.
+ #
+ %__debug_install_post   \
+-    %{_rpmconfigdir}/find-debuginfo.sh \\\
++    %{__find_debuginfo} \\\
+     %{?_smp_build_ncpus:-j%{_smp_build_ncpus}} \\\
+     %{?_missing_build_ids_terminate_build:--strict-build-id} \\\
+     %{?_no_recompute_build_ids:-n} \\\
+-- 
+2.41.0
+

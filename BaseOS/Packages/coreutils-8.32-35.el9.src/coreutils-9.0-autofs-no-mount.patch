@@ -1,0 +1,87 @@
+From f4422844dbcd839ce486bcbc15b7bd5b72c9198d Mon Sep 17 00:00:00 2001
+From: Rohan Sable <rsable@redhat.com>
+Date: Mon, 7 Mar 2022 14:14:13 +0000
+Subject: [PATCH 1/2] ls: avoid triggering automounts
+
+statx() has different defaults wrt automounting
+compared to stat() or lstat(), so explicitly
+set the AT_NO_AUTOMOUNT flag to suppress that behavior,
+and avoid unintended operations or potential errors.
+
+* src/ls.c (do_statx): Pass AT_NO_AUTOMOUNT to avoid this behavior.
+Fixes https://bugs.gnu.org/54286
+
+Signed-off-by: Rohan Sable <rsable@redhat.com>
+
+Upstream-commit: 85c975df2c25bd799370b04bb294e568e001102f
+Signed-off-by: Kamil Dudka <kdudka@redhat.com>
+---
+ src/ls.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/ls.c b/src/ls.c
+index 1047801..fe0e9f8 100644
+--- a/src/ls.c
++++ b/src/ls.c
+@@ -1175,7 +1175,7 @@ do_statx (int fd, char const *name, struct stat *st, int flags,
+ {
+   struct statx stx;
+   bool want_btime = mask & STATX_BTIME;
+-  int ret = statx (fd, name, flags, mask, &stx);
++  int ret = statx (fd, name, flags | AT_NO_AUTOMOUNT, mask, &stx);
+   if (ret >= 0)
+     {
+       statx_to_stat (&stx, st);
+-- 
+2.34.1
+
+
+From 3d227f9e4f3fe806064721e4b9451ee06526bc80 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?P=C3=A1draig=20Brady?= <P@draigBrady.com>
+Date: Mon, 7 Mar 2022 23:29:20 +0000
+Subject: [PATCH 2/2] stat: only automount with --cached=never
+
+Revert to the default behavior before the introduction of statx().
+
+* src/stat.c (do_stat): Set AT_NO_AUTOMOUNT without --cached=never.
+* doc/coreutils.texi (stat invocation): Mention the automount
+behavior with --cached=never.
+
+Fixes https://bugs.gnu.org/54287
+
+Upstream-commit: 92cb8427c537f37edd43c5cef1909585201372ab
+Signed-off-by: Kamil Dudka <kdudka@redhat.com>
+---
+ doc/coreutils.texi | 1 +
+ src/stat.c         | 3 +++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/doc/coreutils.texi b/doc/coreutils.texi
+index 19b535c..0f5c16a 100644
+--- a/doc/coreutils.texi
++++ b/doc/coreutils.texi
+@@ -12564,6 +12564,7 @@ Always read the already cached attributes if available.
+ 
+ @item never
+ Always sychronize with the latest file system attributes.
++This also mounts automounted files.
+ 
+ @item default
+ Leave the caching behavior to the underlying file system.
+diff --git a/src/stat.c b/src/stat.c
+index 0c34501..803340a 100644
+--- a/src/stat.c
++++ b/src/stat.c
+@@ -1381,6 +1381,9 @@ do_stat (char const *filename, char const *format, char const *format2)
+   else if (force_sync)
+     flags |= AT_STATX_FORCE_SYNC;
+ 
++  if (! force_sync)
++    flags |= AT_NO_AUTOMOUNT;
++
+   fd = statx (fd, pathname, flags, format_to_mask (format), &stx);
+   if (fd < 0)
+     {
+-- 
+2.34.1
+

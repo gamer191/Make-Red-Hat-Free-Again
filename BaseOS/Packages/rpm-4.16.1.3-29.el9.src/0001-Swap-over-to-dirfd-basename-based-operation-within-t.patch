@@ -1,0 +1,90 @@
+From 6dd62720fe84f7e2ad902c915b952fc0b29e3dcd Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Tue, 15 Feb 2022 11:34:37 +0200
+Subject: [PATCH] Swap over to dirfd+basename based operation within the fsm
+
+Within fsm this is just a matter of adjusting error messages to include
+the directory... if it only wasn't for the plugins requiring absolute
+paths for outside users. For the plugins, we need to assemble absolute
+paths as needed, both in ensureDir() and plugin file slots.
+---
+ lib/rpmplugins.c | 20 +++++++++++++++++---
+ 2 files changed, 36 insertions(+), 14 deletions(-)
+
+diff --git a/lib/rpmplugins.c b/lib/rpmplugins.c
+index 703368c0d..f06fd7895 100644
+--- a/lib/rpmplugins.c
++++ b/lib/rpmplugins.c
+@@ -350,21 +350,31 @@ rpmRC rpmpluginsCallScriptletPost(rpmPlugins plugins, const char *s_name, int ty
+     return rc;
+ }
+ 
++static char *abspath(rpmfi fi, const char *path)
++{
++    if (*path == '/')
++	return xstrdup(path);
++    else
++	return rstrscat(NULL, rpmfiDN(fi), path, NULL);
++}
++
+ rpmRC rpmpluginsCallFsmFilePre(rpmPlugins plugins, rpmfi fi, const char *path,
+ 			       mode_t file_mode, rpmFsmOp op)
+ {
+     plugin_fsm_file_pre_func hookFunc;
+     int i;
+     rpmRC rc = RPMRC_OK;
++    char *apath = abspath(fi, path);
+ 
+     for (i = 0; i < plugins->count; i++) {
+ 	rpmPlugin plugin = plugins->plugins[i];
+ 	RPMPLUGINS_SET_HOOK_FUNC(fsm_file_pre);
+-	if (hookFunc && hookFunc(plugin, fi, path, file_mode, op) == RPMRC_FAIL) {
++	if (hookFunc && hookFunc(plugin, fi, apath, file_mode, op) == RPMRC_FAIL) {
+ 	    rpmlog(RPMLOG_ERR, "Plugin %s: hook fsm_file_pre failed\n", plugin->name);
+ 	    rc = RPMRC_FAIL;
+ 	}
+     }
++    free(apath);
+ 
+     return rc;
+ }
+@@ -375,14 +385,16 @@ rpmRC rpmpluginsCallFsmFilePost(rpmPlugins plugins, rpmfi fi, const char *path,
+     plugin_fsm_file_post_func hookFunc;
+     int i;
+     rpmRC rc = RPMRC_OK;
++    char *apath = abspath(fi, path);
+ 
+     for (i = 0; i < plugins->count; i++) {
+ 	rpmPlugin plugin = plugins->plugins[i];
+ 	RPMPLUGINS_SET_HOOK_FUNC(fsm_file_post);
+-	if (hookFunc && hookFunc(plugin, fi, path, file_mode, op, res) == RPMRC_FAIL) {
++	if (hookFunc && hookFunc(plugin, fi, apath, file_mode, op, res) == RPMRC_FAIL) {
+ 	    rpmlog(RPMLOG_WARNING, "Plugin %s: hook fsm_file_post failed\n", plugin->name);
+ 	}
+     }
++    free(apath);
+ 
+     return rc;
+ }
+@@ -394,15 +406,17 @@ rpmRC rpmpluginsCallFsmFilePrepare(rpmPlugins plugins, rpmfi fi,
+     plugin_fsm_file_prepare_func hookFunc;
+     int i;
+     rpmRC rc = RPMRC_OK;
++    char *apath = abspath(fi, path);
+ 
+     for (i = 0; i < plugins->count; i++) {
+ 	rpmPlugin plugin = plugins->plugins[i];
+ 	RPMPLUGINS_SET_HOOK_FUNC(fsm_file_prepare);
+-	if (hookFunc && hookFunc(plugin, fi, fd, path, dest, file_mode, op) == RPMRC_FAIL) {
++	if (hookFunc && hookFunc(plugin, fi, fd, apath, dest, file_mode, op) == RPMRC_FAIL) {
+ 	    rpmlog(RPMLOG_ERR, "Plugin %s: hook fsm_file_prepare failed\n", plugin->name);
+ 	    rc = RPMRC_FAIL;
+ 	}
+     }
++    free(apath);
+ 
+     return rc;
+ }
+-- 
+2.41.0
+

@@ -1,0 +1,142 @@
+From 25062cf34c70012f5d42ce1fef7e2dc129807c10 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Fri, 17 Dec 2021 21:14:37 -0700
+Subject: [PATCH 064/217] ndctl: release v72
+
+This release incorporates functionality up to the 5.16 kernel.
+
+Highlights include a new utility and library for interfacing with the
+'CXL' drivers and devices, a policy based configuration mechanism for
+ndctl and daxctl, fixes, test updates, and general additions for the
+PAPR family of NVDIMMs, more seed device accounting fixes, misc unit
+test and documentation updates, and fixes to NVDIMM bus scrubbing.
+
+Commands:
+  cxl-cli: new utility providing list, {read,write,zero}-label commands
+  daxctl-reconfigure-device: new --check-config option
+  ndctl-monitor: add support for a new unified config file format
+  ndctl-*-namespace: seed namespace accounting fixes
+
+Tests:
+  Fix device-dax mremap() test
+  Exercise soft_offline_page() corner cases
+  Fix btt expect table compile warning
+  monitor.sh: add checking the presence of jq command ahead of time
+
+APIs:
+  ndctl_bus_nfit_translate_spa
+  ndctl_dimm_sizeof_namespace_index
+  ndctl_get_config_path
+  ndctl_set_config_path
+  daxctl_dev_has_online_memory
+  daxctl_dev_will_auto_online_memory
+  daxctl_get_config_path
+  daxctl_set_config_path
+  cxl_cmd_get_devname
+  cxl_cmd_get_mbox_status
+  cxl_cmd_get_out_size
+  cxl_cmd_health_info_get_dirty_shutdowns
+  cxl_cmd_health_info_get_ext_corrected_persistent_normal
+  cxl_cmd_health_info_get_ext_corrected_persistent_warning
+  cxl_cmd_health_info_get_ext_corrected_volatile_normal
+  cxl_cmd_health_info_get_ext_corrected_volatile_warning
+  cxl_cmd_health_info_get_ext_life_used_critical
+  cxl_cmd_health_info_get_ext_life_used_normal
+  cxl_cmd_health_info_get_ext_life_used_warning
+  cxl_cmd_health_info_get_ext_temperature_critical
+  cxl_cmd_health_info_get_ext_temperature_normal
+  cxl_cmd_health_info_get_ext_temperature_warning
+  cxl_cmd_health_info_get_hw_replacement_needed
+  cxl_cmd_health_info_get_life_used
+  cxl_cmd_health_info_get_maintenance_needed
+  cxl_cmd_health_info_get_media_data_loss_imminent
+  cxl_cmd_health_info_get_media_data_lost
+  cxl_cmd_health_info_get_media_normal
+  cxl_cmd_health_info_get_media_not_ready
+  cxl_cmd_health_info_get_media_persistence_loss_imminent
+  cxl_cmd_health_info_get_media_persistence_lost
+  cxl_cmd_health_info_get_media_powerloss_data_loss
+  cxl_cmd_health_info_get_media_powerloss_persistence_loss
+  cxl_cmd_health_info_get_media_shutdown_data_loss
+  cxl_cmd_health_info_get_media_shutdown_persistence_loss
+  cxl_cmd_health_info_get_performance_degraded
+  cxl_cmd_health_info_get_pmem_errors
+  cxl_cmd_health_info_get_temperature
+  cxl_cmd_health_info_get_volatile_errors
+  cxl_cmd_identify_get_fw_rev
+  cxl_cmd_identify_get_label_size
+  cxl_cmd_identify_get_partition_align
+  cxl_cmd_new_get_health_info
+  cxl_cmd_new_identify
+  cxl_cmd_new_raw
+  cxl_cmd_new_read_label
+  cxl_cmd_new_write_label
+  cxl_cmd_read_label_get_payload
+  cxl_cmd_ref
+  cxl_cmd_set_input_payload
+  cxl_cmd_set_output_payload
+  cxl_cmd_submit
+  cxl_cmd_unref
+  cxl_get_log_priority
+  cxl_get_private_data
+  cxl_get_userdata
+  cxl_memdev_get_ctx
+  cxl_memdev_get_devname
+  cxl_memdev_get_firmware_verison
+  cxl_memdev_get_first
+  cxl_memdev_get_id
+  cxl_memdev_get_label_size
+  cxl_memdev_get_major
+  cxl_memdev_get_minor
+  cxl_memdev_get_next
+  cxl_memdev_get_pmem_size
+  cxl_memdev_get_ram_size
+  cxl_memdev_nvdimm_bridge_active
+  cxl_memdev_read_label
+  cxl_memdev_write_label
+  cxl_memdev_zero_label
+  cxl_new
+  cxl_ref
+  cxl_set_log_fn
+  cxl_set_log_priority
+  cxl_set_private_data
+  cxl_set_userdata
+  cxl_unref
+---
+ Makefile.am.in | 8 ++++----
+ git-version    | 2 +-
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff -up ndctl-71.1/Makefile.am.in.orig ndctl-71.1/Makefile.am.in
+--- ndctl-71.1/Makefile.am.in.orig	2022-10-07 15:20:47.982353042 -0400
++++ ndctl-71.1/Makefile.am.in	2022-10-07 15:21:02.174401362 -0400
+@@ -36,13 +36,13 @@ SED_PROCESS = \
+ 	-e 's,@includedir\@,$(includedir),g' \
+ 	< $< > $@ || rm $@
+ 
+-LIBNDCTL_CURRENT=25
++LIBNDCTL_CURRENT=26
+ LIBNDCTL_REVISION=1
+-LIBNDCTL_AGE=19
++LIBNDCTL_AGE=20
+ 
+-LIBDAXCTL_CURRENT=6
++LIBDAXCTL_CURRENT=7
+ LIBDAXCTL_REVISION=0
+-LIBDAXCTL_AGE=5
++LIBDAXCTL_AGE=6
+ 
+ LIBCXL_CURRENT=1
+ LIBCXL_REVISION=0
+diff -up ndctl-71.1/git-version.orig ndctl-71.1/git-version
+--- ndctl-71.1/git-version.orig	2022-10-07 15:21:02.175401365 -0400
++++ ndctl-71.1/git-version	2022-10-07 15:21:27.267486796 -0400
+@@ -19,7 +19,7 @@ dirty() {
+ 	fi
+ }
+ 
+-DEF_VER=71.1
++DEF_VER=72
+ 
+ LF='
+ '

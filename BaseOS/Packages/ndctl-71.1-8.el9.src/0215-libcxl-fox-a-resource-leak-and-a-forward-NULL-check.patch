@@ -1,0 +1,50 @@
+From 4750c7f50050195bbd427da69037645916a59b24 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Tue, 23 Aug 2022 01:45:26 -0600
+Subject: [PATCH 215/217] libcxl: fox a resource leak and a forward NULL check
+
+Static analysis reports a couple of issues in add_cxl_region(). Firstly,
+'path' wasn't freed in the success case, only in the error case.
+Secondly, the error handling after 'calloc()'ing the region object
+erroneously jumped to the error path which tried to free the region object.
+
+Add a new error label to just free 'path' and return for this exit case.
+
+Link: https://lore.kernel.org/r/20220823074527.404435-3-vishal.l.verma@intel.com
+Cc: Dan Williams <dan.j.williams@intel.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 021d59f..e8c5d44 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -482,7 +482,7 @@ static void *add_cxl_region(void *parent, int id, const char *cxlregion_base)
+ 
+ 	region = calloc(1, sizeof(*region));
+ 	if (!region)
+-		goto err;
++		goto err_path;
+ 
+ 	region->id = id;
+ 	region->ctx = ctx;
+@@ -551,11 +551,13 @@ static void *add_cxl_region(void *parent, int id, const char *cxlregion_base)
+ 
+ 	list_add_sorted(&decoder->regions, region, list, region_start_cmp);
+ 
++	free(path);
+ 	return region;
+ err:
+ 	free(region->dev_path);
+ 	free(region->dev_buf);
+ 	free(region);
++err_path:
+ 	free(path);
+ 	return NULL;
+ }
+-- 
+2.27.0
+

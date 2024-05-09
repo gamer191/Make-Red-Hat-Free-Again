@@ -1,0 +1,155 @@
+From 7275c4b8f681846cc5d9acc4ae9e6b186f8267bf Mon Sep 17 00:00:00 2001
+From: Markus Koetter <koetter@luis.uni-hannover.de>
+Date: Tue, 30 Mar 2021 13:33:05 +0200
+Subject: [PATCH 1/2] add re-numeration of slots as engine ctrl command
+
+This was broken in  14cd0d328fff96b79fabcc30257e358399c8ad25.
+Previously, the engine would re-enumerate before loading keys/certs
+Not re-enumerating the slots results in un-awareness of changes in slots
+and tokens.
+This awareness is required to be able to change the token in a slot at
+runtime, else you use invalid sessions
+(PKCS#11 module:pkcs11_find_keys:Session handle invalid:p11_key.c:512)
+
+The patch adds the command RE_ENUMERATE as engine control, providing the
+ability to re-enumerate on demand/when required.
+---
+ src/eng_back.c  | 38 +++++++++++++++++++++++++++-----------
+ src/eng_front.c |  4 ++++
+ src/engine.h    |  1 +
+ 3 files changed, 32 insertions(+), 11 deletions(-)
+
+diff --git a/src/eng_back.c b/src/eng_back.c
+index 37ee076b..4ba069e7 100644
+--- a/src/eng_back.c
++++ b/src/eng_back.c
+@@ -264,24 +264,17 @@ int ctx_destroy(ENGINE_CTX *ctx)
+ 	return 1;
+ }
+ 
+-/* Initialize libp11 data: ctx->pkcs11_ctx and ctx->slot_list */
+-static void ctx_init_libp11_unlocked(ENGINE_CTX *ctx)
++static int ctx_enumerate_slots(ENGINE_CTX *ctx, PKCS11_CTX *pkcs11_ctx)
+ {
+-	PKCS11_CTX *pkcs11_ctx;
+ 	PKCS11_SLOT *slot_list = NULL;
+ 	unsigned int slot_count = 0;
+ 
+-	ctx_log(ctx, 1, "PKCS#11: Initializing the engine\n");
+-
+-	pkcs11_ctx = PKCS11_CTX_new();
+-	PKCS11_CTX_init_args(pkcs11_ctx, ctx->init_args);
+-	PKCS11_set_ui_method(pkcs11_ctx, ctx->ui_method, ctx->callback_data);
+ 
+ 	/* PKCS11_CTX_load() uses C_GetSlotList() via p11-kit */
+ 	if (PKCS11_CTX_load(pkcs11_ctx, ctx->module) < 0) {
+ 		ctx_log(ctx, 0, "Unable to load module %s\n", ctx->module);
+ 		PKCS11_CTX_free(pkcs11_ctx);
+-		return;
++		return 0;
+ 	}
+ 
+ 	/* PKCS11_enumerate_slots() uses C_GetSlotList() via libp11 */
+@@ -289,17 +282,38 @@ static void ctx_init_libp11_unlocked(ENGINE_CTX *ctx)
+ 		ctx_log(ctx, 0, "Failed to enumerate slots\n");
+ 		PKCS11_CTX_unload(pkcs11_ctx);
+ 		PKCS11_CTX_free(pkcs11_ctx);
+-		return;
++		return 0;
+ 	}
+ 
+ 	ctx_log(ctx, 1, "Found %u slot%s\n", slot_count,
+ 		slot_count <= 1 ? "" : "s");
+ 
+-	ctx->pkcs11_ctx = pkcs11_ctx;
+ 	ctx->slot_list = slot_list;
+ 	ctx->slot_count = slot_count;
++
++	return 1;
++}
++
++
++/* Initialize libp11 data: ctx->pkcs11_ctx and ctx->slot_list */
++static void ctx_init_libp11_unlocked(ENGINE_CTX *ctx)
++{
++	PKCS11_CTX *pkcs11_ctx;
++
++	ctx_log(ctx, 1, "PKCS#11: Initializing the engine\n");
++
++	pkcs11_ctx = PKCS11_CTX_new();
++	PKCS11_CTX_init_args(pkcs11_ctx, ctx->init_args);
++	PKCS11_set_ui_method(pkcs11_ctx, ctx->ui_method, ctx->callback_data);
++
++	if (ctx_enumerate_slots(ctx, pkcs11_ctx) != 1)
++		return;
++
++	ctx->pkcs11_ctx = pkcs11_ctx;
+ }
+ 
++
++
+ static int ctx_init_libp11(ENGINE_CTX *ctx)
+ {
+ #if OPENSSL_VERSION_NUMBER >= 0x10100004L && !defined(LIBRESSL_VERSION_NUMBER)
+@@ -1092,6 +1106,8 @@ int ctx_engine_ctrl(ENGINE_CTX *ctx, int cmd, long i, void *p, void (*f)())
+ 		return ctx_ctrl_set_callback_data(ctx, p);
+ 	case CMD_FORCE_LOGIN:
+ 		return ctx_ctrl_force_login(ctx);
++	case CMD_RE_ENUMERATE:
++		return ctx_enumerate_slots(ctx, ctx->pkcs11_ctx);
+ 	default:
+ 		ENGerr(ENG_F_CTX_ENGINE_CTRL, ENG_R_UNKNOWN_COMMAND);
+ 		break;
+diff --git a/src/eng_front.c b/src/eng_front.c
+index b2cc8b4c..3a3c8910 100644
+--- a/src/eng_front.c
++++ b/src/eng_front.c
+@@ -75,6 +75,10 @@ static const ENGINE_CMD_DEFN engine_cmd_defns[] = {
+ 		"FORCE_LOGIN",
+ 		"Force login to the PKCS#11 module",
+ 		ENGINE_CMD_FLAG_NO_INPUT},
++	{CMD_RE_ENUMERATE,
++		"RE_ENUMERATE",
++		"re enumerate slots",
++		ENGINE_CMD_FLAG_NO_INPUT},
+ 	{0, NULL, NULL, 0}
+ };
+ 
+diff --git a/src/engine.h b/src/engine.h
+index f46cf4e3..54bdcf03 100644
+--- a/src/engine.h
++++ b/src/engine.h
+@@ -51,6 +51,7 @@
+ #define CMD_SET_USER_INTERFACE	(ENGINE_CMD_BASE + 7)
+ #define CMD_SET_CALLBACK_DATA	(ENGINE_CMD_BASE + 8)
+ #define CMD_FORCE_LOGIN	(ENGINE_CMD_BASE+9)
++#define CMD_RE_ENUMERATE	(ENGINE_CMD_BASE+10)
+ 
+ typedef struct st_engine_ctx ENGINE_CTX; /* opaque */
+ 
+
+From 0d24455ec402ff6bd75f0a94c160426e7f2159d5 Mon Sep 17 00:00:00 2001
+From: commonism <commonism@users.noreply.github.com>
+Date: Wed, 7 Apr 2021 15:36:23 +0200
+Subject: [PATCH 2/2] Update README.md
+
+add RE_ENUMERATE
+---
+ README.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/README.md b/README.md
+index d1550846..d3c68bdd 100644
+--- a/README.md
++++ b/README.md
+@@ -168,6 +168,7 @@ The supported engine controls are the following.
+ * **SET_USER_INTERFACE**: Set the global user interface
+ * **SET_CALLBACK_DATA**: Set the global user interface extra data
+ * **FORCE_LOGIN**: Force login to the PKCS#11 module
++* **RE_ENUMERATE**: re-enumerate the slots/tokens, required when adding/removing tokens/slots
+ 
+ An example code snippet setting specific module is shown below.
+ 
+
+
+

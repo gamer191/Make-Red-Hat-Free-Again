@@ -1,0 +1,28 @@
+From 7912cb0d19b5d17321439d118d41e57236b5484b Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Wed, 5 Jan 2022 13:32:47 -0800
+Subject: [PATCH 081/217] ndctl: Drop executable bit for bash-completion script
+
+The rpm build process warns:
+
+*** WARNING: ./usr/share/bash-completion/completions/ndctl is executable but has no shebang, removing executable bit
+
+Clear the unnecessary executable bit since completion helpers are sourced,
+not executed.
+
+Link: https://lore.kernel.org/r/164141836772.3990253.4996882214531720931.stgit@dwillia2-desk3.amr.corp.intel.com
+Tested-by: Alison Schofield <alison.schofield@intel.com>
+Tested-by: Vaibhav Jain <vaibhav@linux.ibm.com>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ contrib/ndctl | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ mode change 100755 => 100644 contrib/ndctl
+
+diff --git a/contrib/ndctl b/contrib/ndctl
+old mode 100755
+new mode 100644
+-- 
+2.27.0
+

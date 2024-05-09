@@ -1,0 +1,46 @@
+autofs-5.1.8 - dont fail on duplicate host export entry
+
+From: Ian Kent <raven@themaw.net>
+
+If we encounter a duplicate host export entry don't fail, just ignore
+it and return the duplicate.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG    |    1 +
+ lib/mounts.c |    6 ++++--
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -87,6 +87,7 @@
+ - fix root offset error handling.
+ - fix fix root offset error handling.
+ - fix nonstrict fail handling of last offset mount.
++- dont fail on duplicate offset entry tree add.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/lib/mounts.c
++++ autofs-5.1.7/lib/mounts.c
+@@ -1341,7 +1341,7 @@ static struct tree_node *tree_add_node(s
+ 	}
+ 
+ 	if (!eq)
+-		error(LOGOPT_ANY, "cannot add duplicate entry to tree");
++		return p;
+ 	else {
+ 		if (eq < 0)
+ 			return tree_add_left(p, ptr);
+@@ -1515,8 +1515,10 @@ static int tree_host_cmp(struct tree_nod
+ 	int eq;
+ 
+ 	eq = strcmp(exp->dir, n_exp->dir);
+-	if (!eq)
++	if (!eq) {
++		error(LOGOPT_ANY, "duplicate entry %s ignored", exp->dir);
+ 		return 0;
++	}
+ 	return (exp_len < n_exp_len) ? -1 : 1;
+ }
+ 

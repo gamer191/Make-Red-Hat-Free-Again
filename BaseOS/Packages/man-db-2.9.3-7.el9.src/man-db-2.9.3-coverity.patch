@@ -1,0 +1,58 @@
+diff --git a/src/man.c b/src/man.c
+index b3d13d1..030a5d1 100644
+--- a/src/man.c
++++ b/src/man.c
+@@ -991,11 +991,17 @@ static char *get_preprocessors_from_file (pipeline *decomp, int prefixes)
+ 
+ 	if (!strncmp (line, PP_COOKIE, 4)) {
+ 		const char *newline = strchr (line, '\n');
+-		if (newline)
+-			return xstrndup (line + 4, newline - (line + 4));
+-		else
+-			return xstrdup (line + 4);
++		if (newline) {
++			char *ret = xstrndup (line + 4, newline - (line + 4));
++			free (line);
++			return ret;
++		} else {
++			char *ret = xstrdup (line + 4);
++			free (line);
++			return ret;
++		}
+ 	}
++	free (line);
+ 	return NULL;
+ }
+ 
+@@ -2401,6 +2407,7 @@ static int display (const char *dir, const char *man_file,
+ 		if (!found) {
+ 			pipeline_free (format_cmd);
+ 			pipeline_free (decomp);
++			free (formatted_encoding);
+ 			return found;
+ 		}
+ 
+diff --git a/src/zsoelim.c b/src/zsoelim.c
+index bf5c8ff..6a484c4 100644
+--- a/src/zsoelim.c
++++ b/src/zsoelim.c
+@@ -2528,6 +2528,7 @@ int zsoelim_open_file (const char *filename, gl_list_t manpathlist,
+ 					if (decomp) {
+ 						NAME = xstrdup (found_name);
+ 						gl_list_free (names);
++						free (name);
+ 						goto out;
+ 					}
+ 				} GL_LIST_FOREACH_END (names);
+diff --git a/src/zsoelim.l b/src/zsoelim.l
+index a8a7e3b..3cb552b 100644
+--- a/src/zsoelim.l
++++ b/src/zsoelim.l
+@@ -473,6 +473,7 @@ int zsoelim_open_file (const char *filename, gl_list_t manpathlist,
+ 					if (decomp) {
+ 						NAME = xstrdup (found_name);
+ 						gl_list_free (names);
++						free (name);
+ 						goto out;
+ 					}
+ 				} GL_LIST_FOREACH_END (names);

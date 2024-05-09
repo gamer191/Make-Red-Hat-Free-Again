@@ -1,0 +1,136 @@
+From ca582b2003a2335eafac382e71afdf0a6caaef18 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:54:11 -0800
+Subject: [PATCH 113/217] cxl/list: Add 'numa_node' to memdev listings
+
+If the kernel exports a valid numa_node, >= 0, include it in memdev objects
+listings.
+
+Link: https://lore.kernel.org/r/164298565156.3021641.14097226245654611710.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/lib/libcxl.txt |  4 ++++
+ cxl/json.c                       |  8 ++++++++
+ cxl/lib/libcxl.c                 | 11 +++++++++++
+ cxl/lib/libcxl.sym               |  1 +
+ cxl/lib/private.h                |  1 +
+ cxl/libcxl.h                     |  1 +
+ 6 files changed, 26 insertions(+)
+
+diff --git a/Documentation/cxl/lib/libcxl.txt b/Documentation/cxl/lib/libcxl.txt
+index b0253d7..de88d19 100644
+--- a/Documentation/cxl/lib/libcxl.txt
++++ b/Documentation/cxl/lib/libcxl.txt
+@@ -71,6 +71,7 @@ unsigned long long cxl_memdev_get_ram_size(struct cxl_memdev *memdev);
+ const char *cxl_memdev_get_firmware_verison(struct cxl_memdev *memdev);
+ size_t cxl_memdev_get_label_size(struct cxl_memdev *memdev);
+ int cxl_memdev_nvdimm_bridge_active(struct cxl_memdev *memdev);
++int cxl_memdev_get_numa_node(struct cxl_memdev *memdev);
+ ----
+ 
+ A memdev is given a kernel device name of the form "mem%d" where an id
+@@ -89,6 +90,9 @@ The 'pmem_size' and 'ram_size' attributes return the current
+ provisioning of DPA (Device Physical Address / local capacity) in the
+ device.
+ 
++cxl_memdev_get_numa_node() returns the affinitized CPU node number if
++available or -1 otherwise.
++
+ === MEMDEV: Commands
+ ----
+ struct cxl_cmd *cxl_cmd_new_raw(struct cxl_memdev *memdev, int opcode);
+diff --git a/cxl/json.c b/cxl/json.c
+index b809332..51918d6 100644
+--- a/cxl/json.c
++++ b/cxl/json.c
+@@ -190,6 +190,7 @@ struct json_object *util_cxl_memdev_to_json(struct cxl_memdev *memdev,
+ 	const char *devname = cxl_memdev_get_devname(memdev);
+ 	struct json_object *jdev, *jobj;
+ 	unsigned long long serial;
++	int numa_node;
+ 
+ 	jdev = json_object_new_object();
+ 	if (!jdev)
+@@ -220,6 +221,13 @@ struct json_object *util_cxl_memdev_to_json(struct cxl_memdev *memdev,
+ 			json_object_object_add(jdev, "serial", jobj);
+ 	}
+ 
++	numa_node = cxl_memdev_get_numa_node(memdev);
++	if (numa_node >= 0) {
++		jobj = json_object_new_int(numa_node);
++		if (jobj)
++			json_object_object_add(jdev, "numa_node", jobj);
++	}
++
+ 	jobj = json_object_new_string(cxl_memdev_get_host(memdev));
+ 	if (jobj)
+ 		json_object_object_add(jdev, "host", jobj);
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 0065f6b..14c7db8 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -348,6 +348,12 @@ static void *add_cxl_memdev(void *parent, int id, const char *cxlmem_base)
+ 	else
+ 		memdev->serial = strtoull(buf, NULL, 0);
+ 
++	sprintf(path, "%s/numa_node", cxlmem_base);
++	if (sysfs_read_attr(ctx, path, buf) < 0)
++		memdev->numa_node = -1;
++	else
++		memdev->numa_node = strtol(buf, NULL, 0);
++
+ 	memdev->dev_path = strdup(cxlmem_base);
+ 	if (!memdev->dev_path)
+ 		goto err_read;
+@@ -445,6 +451,11 @@ CXL_EXPORT unsigned long long cxl_memdev_get_serial(struct cxl_memdev *memdev)
+ 	return memdev->serial;
+ }
+ 
++CXL_EXPORT int cxl_memdev_get_numa_node(struct cxl_memdev *memdev)
++{
++	return memdev->numa_node;
++}
++
+ CXL_EXPORT const char *cxl_memdev_get_devname(struct cxl_memdev *memdev)
+ {
+ 	return devpath_to_devname(memdev->dev_path);
+diff --git a/cxl/lib/libcxl.sym b/cxl/lib/libcxl.sym
+index 29f3498..b13a2d6 100644
+--- a/cxl/lib/libcxl.sym
++++ b/cxl/lib/libcxl.sym
+@@ -77,6 +77,7 @@ local:
+ LIBCXL_2 {
+ global:
+ 	cxl_memdev_get_serial;
++	cxl_memdev_get_numa_node;
+ 	cxl_memdev_get_host;
+ 	cxl_bus_get_first;
+ 	cxl_bus_get_next;
+diff --git a/cxl/lib/private.h b/cxl/lib/private.h
+index b097bdf..c00bb36 100644
+--- a/cxl/lib/private.h
++++ b/cxl/lib/private.h
+@@ -20,6 +20,7 @@ struct cxl_pmem {
+ struct cxl_endpoint;
+ struct cxl_memdev {
+ 	int id, major, minor;
++	int numa_node;
+ 	void *dev_buf;
+ 	size_t buf_len;
+ 	char *host;
+diff --git a/cxl/libcxl.h b/cxl/libcxl.h
+index e7b675e..be656ed 100644
+--- a/cxl/libcxl.h
++++ b/cxl/libcxl.h
+@@ -37,6 +37,7 @@ struct cxl_memdev *cxl_memdev_get_first(struct cxl_ctx *ctx);
+ struct cxl_memdev *cxl_memdev_get_next(struct cxl_memdev *memdev);
+ int cxl_memdev_get_id(struct cxl_memdev *memdev);
+ unsigned long long cxl_memdev_get_serial(struct cxl_memdev *memdev);
++int cxl_memdev_get_numa_node(struct cxl_memdev *memdev);
+ const char *cxl_memdev_get_devname(struct cxl_memdev *memdev);
+ const char *cxl_memdev_get_host(struct cxl_memdev *memdev);
+ struct cxl_bus *cxl_memdev_get_bus(struct cxl_memdev *memdev);
+-- 
+2.27.0
+

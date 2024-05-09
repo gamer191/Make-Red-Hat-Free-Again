@@ -1,0 +1,26 @@
+commit d4de031fbb2d797ec9e738deda50feec97db7593
+Author: Steve Dickson <steved@redhat.com>
+Date:   Fri Oct 28 10:56:36 2022 -0400
+
+    nfsd.man: Explain that setting nfsv4=n turns off all v4 versions
+    
+    Update the man page to explicitly say setting
+    nfsv4=n turns off all v4 versions
+    
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/utils/nfsd/nfsd.man b/utils/nfsd/nfsd.man
+index 634b8a63..bb99fe2b 100644
+--- a/utils/nfsd/nfsd.man
++++ b/utils/nfsd/nfsd.man
+@@ -159,7 +159,9 @@ Enable or disable TCP support.
+ .B vers3
+ .TP
+ .B vers4
+-Enable or disable a major NFS version.  3 and 4 are normally enabled
++Enable or disable 
++.B all 
++NFSv4 versions.  All versions are normally enabled
+ by default.
+ .TP
+ .B vers4.1

@@ -1,0 +1,85 @@
+From 80e0d88c3098bd419e26146a8cb3b693fdd06417 Mon Sep 17 00:00:00 2001
+From: Santosh Sivaraj <santosh@fossix.org>
+Date: Wed, 6 Jan 2021 14:17:42 +0100
+Subject: [PATCH 030/217] namespace-action: Drop zero namespace checks.
+
+With seed namespaces catched early on these checks for sizes in enable
+and destroy namespace code path are not needed.
+
+Reverts commit b9cb03f6d5a8 ("ndctl/namespace: Fix enable-namespace
+error for seed namespaces")
+
+Reverts commit e01045e58ad5 ("ndctl/namespace: Fix destroy-namespace
+accounting relative to seed devices")
+
+Link: https://patchwork.kernel.org/patch/11739975/
+Link: https://lore.kernel.org/r/eb4bc7885708fa13e3d37286bc4a4219b1e4e5b6.1609938610.git.msuchanek@suse.de
+Fixes: b9cb03f6d5a8 ("ndctl/namespace: Fix enable-namespace error for seed namespaces")
+Fixes: e01045e58ad5 ("ndctl/namespace: Fix destroy-namespace accounting relative to seed devices")
+Signed-off-by: Santosh Sivaraj <santosh@fossix.org>
+[rebased on top of the previous patches]
+Signed-off-by: Michal Suchanek <msuchanek@suse.de>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ ndctl/lib/libndctl.c |  5 -----
+ ndctl/namespace.c    | 10 ----------
+ 2 files changed, 15 deletions(-)
+
+diff --git a/ndctl/lib/libndctl.c b/ndctl/lib/libndctl.c
+index 536e142..87f60b9 100644
+--- a/ndctl/lib/libndctl.c
++++ b/ndctl/lib/libndctl.c
+@@ -4531,16 +4531,11 @@ NDCTL_EXPORT int ndctl_namespace_enable(struct ndctl_namespace *ndns)
+ 	const char *devname = ndctl_namespace_get_devname(ndns);
+ 	struct ndctl_ctx *ctx = ndctl_namespace_get_ctx(ndns);
+ 	struct ndctl_region *region = ndns->region;
+-	unsigned long long size = ndctl_namespace_get_size(ndns);
+ 	int rc;
+ 
+ 	if (ndctl_namespace_is_enabled(ndns))
+ 		return 0;
+ 
+-	/* Don't try to enable idle namespace (no capacity allocated) */
+-	if (size == 0)
+-		return -ENXIO;
+-
+ 	rc = ndctl_bind(ctx, ndns->module, devname);
+ 
+ 	/*
+diff --git a/ndctl/namespace.c b/ndctl/namespace.c
+index cd822b3..c67c086 100644
+--- a/ndctl/namespace.c
++++ b/ndctl/namespace.c
+@@ -1164,15 +1164,12 @@ static int namespace_destroy(struct ndctl_region *region,
+ 		struct ndctl_namespace *ndns)
+ {
+ 	const char *devname = ndctl_namespace_get_devname(ndns);
+-	unsigned long long size;
+ 	int rc;
+ 
+ 	rc = namespace_prep_reconfig(region, ndns);
+ 	if (rc < 0)
+ 		return rc;
+ 
+-	size = ndctl_namespace_get_size(ndns);
+-
+ 	/* Labeled namespace, destroy label / allocation */
+ 	if (rc == 2) {
+ 		rc = ndctl_namespace_delete(ndns);
+@@ -1180,13 +1177,6 @@ static int namespace_destroy(struct ndctl_region *region,
+ 			debug("%s: failed to reclaim\n", devname);
+ 	}
+ 
+-	/*
+-	 * Don't report a destroyed namespace when no capacity was
+-	 * allocated.
+-	 */
+-	if (size == 0 && rc == 0)
+-		rc = 1;
+-
+ 	return rc;
+ }
+ 
+-- 
+2.27.0
+

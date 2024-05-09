@@ -1,0 +1,78 @@
+From 96888e99c5103d9dea5230c917b946732de2d302 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Thu, 22 Sep 2022 11:54:47 +0300
+Subject: [PATCH] Add a handler for libselinux log messages (RhBug:2123719,
+ RhBug:2050774)
+
+libselinux logs to stderr by default, which up to now has been just fine
+with us. However somewhere around libselinux 3.2 it begun issuing
+log messages for events discovered in selinux_status_updated().
+We only call that to see whether the status *was* updated behind our
+back and are not interested in these audit-style messages for our
+functionality, but to suppress them while preserving actually relevant
+errors and warnings, we need to have a log callback of our own. Might as
+well forward them to rpmlog then.
+
+SELINUX_ERROR and SELINUX_WARNING are pretty obvious, of SELINUX_AVC
+selinux_set_callback(3) says it should be treated as SELINUX_ERROR if
+not audited. The rest we suppress to debug messages, they may be handy
+for diagnostics some day.
+
+Note that this intentionally avoids explicit SELINUX_POLICYLOAD and
+SELINUX_SETENFORCE cases in the switch: we don't want to introduce
+libselinux >= 3.2 dependency just because of this silly thing.
+---
+ plugins/selinux.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/plugins/selinux.c b/plugins/selinux.c
+index 747f62d05..0f10331f0 100644
+--- a/plugins/selinux.c
++++ b/plugins/selinux.c
+@@ -18,6 +18,35 @@ static inline rpmlogLvl loglvl(int iserror)
+     return iserror ? RPMLOG_ERR : RPMLOG_DEBUG;
+ }
+ 
++static int logcb(int type, const char *fmt, ...)
++{
++    char *buf = NULL;
++    va_list ap;
++    int lvl;
++
++    switch (type) {
++    case SELINUX_ERROR:
++    case SELINUX_AVC:
++	lvl = RPMLOG_ERR;
++	break;
++    case SELINUX_WARNING:
++	lvl = RPMLOG_WARNING;
++	break;
++    default:
++	lvl = RPMLOG_DEBUG;
++	break;
++    }
++
++    va_start(ap, fmt);
++    rvasprintf(&buf, fmt, ap);
++    va_end(ap);
++
++    rpmlog(lvl, "libselinux: type %d: %s", type, buf);
++    free(buf);
++
++    return 0;
++}
++
+ static void sehandle_fini(int close_status)
+ {
+     if (sehandle) {
+@@ -44,6 +73,7 @@ static rpmRC sehandle_init(int open_status)
+ 	if (selinux_status_open(0) < 0) {
+ 	    return RPMRC_FAIL;
+ 	}
++	selinux_set_callback(SELINUX_CB_LOG, (union selinux_callback) &logcb);
+     } else if (!selinux_status_updated() && sehandle) {
+ 	return RPMRC_OK;
+     }
+-- 
+2.38.1
+

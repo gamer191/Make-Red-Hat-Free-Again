@@ -1,0 +1,55 @@
+From a36b8b815d2e8bfd8438b44d4775bdf3ffc3a6d8 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:52:26 -0800
+Subject: [PATCH 093/217] cxl/list: Support comma separated lists
+
+In addition to supporting a syntax like:
+
+   cxl list -m "0 1 2"
+
+...support:
+
+   cxl list -m 0,1,2
+
+Link: https://lore.kernel.org/r/164298554612.3021641.3315920699556984273.stgit@dwillia2-desk3.amr.corp.intel.com
+Reported-by: Vishal Verma <vishal.l.verma@intel.com>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/filter.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/cxl/filter.c b/cxl/filter.c
+index efafaf5..405b653 100644
+--- a/cxl/filter.c
++++ b/cxl/filter.c
+@@ -6,6 +6,15 @@
+ #include <cxl/libcxl.h>
+ #include "filter.h"
+ 
++static const char *which_sep(const char *filter)
++{
++	if (strchr(filter, ' '))
++		return " ";
++	if (strchr(filter, ','))
++		return ",";
++	return " ";
++}
++
+ struct cxl_memdev *util_cxl_memdev_filter(struct cxl_memdev *memdev,
+ 					  const char *__ident)
+ {
+@@ -20,8 +29,8 @@ struct cxl_memdev *util_cxl_memdev_filter(struct cxl_memdev *memdev,
+ 	if (!ident)
+ 		return NULL;
+ 
+-	for (name = strtok_r(ident, " ", &save); name;
+-	     name = strtok_r(NULL, " ", &save)) {
++	for (name = strtok_r(ident, which_sep(__ident), &save); name;
++	     name = strtok_r(NULL, which_sep(__ident), &save)) {
+ 		if (strcmp(name, "all") == 0)
+ 			break;
+ 
+-- 
+2.27.0
+

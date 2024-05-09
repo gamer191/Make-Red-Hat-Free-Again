@@ -1,0 +1,96 @@
+From d159552bbb05de6998388b960f50e5e0012828ea Mon Sep 17 00:00:00 2001
+From: "Darrick J. Wong" <djwong@kernel.org>
+Date: Mon, 5 Jun 2023 08:37:50 -0700
+Subject: [PATCH] xfs_repair: fix messaging when shortform_dir2_junk is called
+
+This function is called when we've decide to junk a shortform directory
+entry.  This is obviously corruption of some kind, so we should always
+say something, particularly if we're in !verbose repair mode.
+Otherwise, if we're in non-verbose repair mode, we print things like:
+
+entry "FOO" in shortform directory XXX references non-existent inode YYY
+
+Without telling the sysadmin that we're removing the dirent.
+
+Fixes: aaca101b1ae ("xfs_repair: add support for validating dirent ftype field")
+Signed-off-by: Darrick J. Wong <djwong@kernel.org>
+Reviewed-by: Carlos Maiolino <cmaiolino@redhat.com>
+Signed-off-by: Carlos Maiolino <cem@kernel.org>
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+---
+ repair/phase6.c | 17 +++++++----------
+ 1 file changed, 7 insertions(+), 10 deletions(-)
+
+diff --git a/repair/phase6.c b/repair/phase6.c
+index c6418534..be10d9b7 100644
+--- a/repair/phase6.c
++++ b/repair/phase6.c
+@@ -2440,10 +2440,7 @@ shortform_dir2_junk(
+ 	 */
+ 	(*index)--;
+ 
+-	if (verbose)
+-		do_warn(_("junking entry\n"));
+-	else
+-		do_warn("\n");
++	do_warn(_("junking entry\n"));
+ 	return sfep;
+ }
+ 
+@@ -2592,7 +2589,7 @@ shortform_dir2_entry_check(
+ 
+ 		if (irec == NULL)  {
+ 			do_warn(
+-	_("entry \"%s\" in shortform directory %" PRIu64 " references non-existent inode %" PRIu64 "\n"),
++	_("entry \"%s\" in shortform directory %" PRIu64 " references non-existent inode %" PRIu64 ", "),
+ 				fname, ino, lino);
+ 			next_sfep = shortform_dir2_junk(mp, sfp, sfep, lino,
+ 						&max_size, &i, &bytes_deleted,
+@@ -2609,7 +2606,7 @@ shortform_dir2_entry_check(
+ 		 */
+ 		if (is_inode_free(irec, ino_offset))  {
+ 			do_warn(
+-	_("entry \"%s\" in shortform directory inode %" PRIu64 " points to free inode %" PRIu64 "\n"),
++	_("entry \"%s\" in shortform directory inode %" PRIu64 " points to free inode %" PRIu64 ", "),
+ 				fname, ino, lino);
+ 			next_sfep = shortform_dir2_junk(mp, sfp, sfep, lino,
+ 						&max_size, &i, &bytes_deleted,
+@@ -2625,7 +2622,7 @@ shortform_dir2_entry_check(
+ 			 */
+ 			if (!inode_isadir(irec, ino_offset)) {
+ 				do_warn(
+-	_("%s (ino %" PRIu64 ") in root (%" PRIu64 ") is not a directory"),
++	_("%s (ino %" PRIu64 ") in root (%" PRIu64 ") is not a directory, "),
+ 					ORPHANAGE, lino, ino);
+ 				next_sfep = shortform_dir2_junk(mp, sfp, sfep,
+ 						lino, &max_size, &i,
+@@ -2647,7 +2644,7 @@ shortform_dir2_entry_check(
+ 				lino, sfep->namelen, sfep->name,
+ 				libxfs_dir2_sf_get_ftype(mp, sfep))) {
+ 			do_warn(
+-_("entry \"%s\" (ino %" PRIu64 ") in dir %" PRIu64 " is a duplicate name"),
++_("entry \"%s\" (ino %" PRIu64 ") in dir %" PRIu64 " is a duplicate name, "),
+ 				fname, lino, ino);
+ 			next_sfep = shortform_dir2_junk(mp, sfp, sfep, lino,
+ 						&max_size, &i, &bytes_deleted,
+@@ -2672,7 +2669,7 @@ _("entry \"%s\" (ino %" PRIu64 ") in dir %" PRIu64 " is a duplicate name"),
+ 			if (is_inode_reached(irec, ino_offset))  {
+ 				do_warn(
+ 	_("entry \"%s\" in directory inode %" PRIu64
+-	  " references already connected inode %" PRIu64 ".\n"),
++	  " references already connected inode %" PRIu64 ", "),
+ 					fname, ino, lino);
+ 				next_sfep = shortform_dir2_junk(mp, sfp, sfep,
+ 						lino, &max_size, &i,
+@@ -2696,7 +2693,7 @@ _("entry \"%s\" (ino %" PRIu64 ") in dir %" PRIu64 " is a duplicate name"),
+ 				do_warn(
+ 	_("entry \"%s\" in directory inode %" PRIu64
+ 	  " not consistent with .. value (%" PRIu64
+-	  ") in inode %" PRIu64 ",\n"),
++	  ") in inode %" PRIu64 ", "),
+ 					fname, ino, parent, lino);
+ 				next_sfep = shortform_dir2_junk(mp, sfp, sfep,
+ 						lino, &max_size, &i,
+-- 
+2.41.0
+

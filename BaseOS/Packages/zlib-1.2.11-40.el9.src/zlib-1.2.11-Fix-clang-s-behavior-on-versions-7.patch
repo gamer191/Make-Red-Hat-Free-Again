@@ -1,0 +1,54 @@
+From 480b65cae6c20a41aa698a6c9d3b260f6f744004 Mon Sep 17 00:00:00 2001
+From: Ilya Leoshkevich <iii@linux.ibm.com>
+Date: Thu, 2 Feb 2023 19:41:32 +0100
+Subject: [PATCH] 0003-PATCH-Fix-clang-s-behavior-on-versions-7.patch
+
+---
+ contrib/power/clang_workaround.h | 15 ++++++++++-----
+ 1 file changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/contrib/power/clang_workaround.h b/contrib/power/clang_workaround.h
+index b5e7dae..915f7e5 100644
+--- a/contrib/power/clang_workaround.h
++++ b/contrib/power/clang_workaround.h
+@@ -39,7 +39,12 @@ __vector unsigned long long  __builtin_pack_vector (unsigned long __a,
+ 	return __v;
+ }
+ 
+-#ifndef vec_xxpermdi
++/*
++ * Clang 7 changed the behavior of vec_xxpermdi in order to provide the same
++ * behavior of GCC. That means code adapted to Clang >= 7 does not work on
++ * Clang <= 6.  So, fallback to __builtin_unpack_vector() on Clang <= 6.
++ */
++#if !defined vec_xxpermdi || __clang_major__ <= 6
+ 
+ static inline
+ unsigned long __builtin_unpack_vector (__vector unsigned long long __v,
+@@ -62,9 +67,9 @@ static inline
+ unsigned long __builtin_unpack_vector_0 (__vector unsigned long long __v)
+ {
+ 	#if defined(__BIG_ENDIAN__)
+-	return vec_xxpermdi(__v, __v, 0x0)[1];
+-	#else
+ 	return vec_xxpermdi(__v, __v, 0x0)[0];
++	#else
++	return vec_xxpermdi(__v, __v, 0x3)[0];
+ 	#endif
+ }
+ 
+@@ -72,9 +77,9 @@ static inline
+ unsigned long __builtin_unpack_vector_1 (__vector unsigned long long __v)
+ {
+ 	#if defined(__BIG_ENDIAN__)
+-	return vec_xxpermdi(__v, __v, 0x3)[1];
+-	#else
+ 	return vec_xxpermdi(__v, __v, 0x3)[0];
++	#else
++	return vec_xxpermdi(__v, __v, 0x0)[0];
+ 	#endif
+ }
+ #endif /* vec_xxpermdi */
+-- 
+2.39.1
+

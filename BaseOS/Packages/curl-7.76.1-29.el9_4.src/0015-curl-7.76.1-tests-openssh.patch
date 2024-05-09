@@ -1,0 +1,101 @@
+From 85a8c0e9992cee271145ecf009f60b9bee9b7a60 Mon Sep 17 00:00:00 2001
+From: Kamil Dudka <kdudka@redhat.com>
+Date: Wed, 15 Sep 2021 09:59:14 +0200
+Subject: [PATCH] tests/sshserver.pl: make it work with openssh-8.7p1
+
+... by not using options with no argument where an argument is required:
+
+=== Start of file tests/log/ssh_server.log
+curl_sshd_config line 6: no argument after keyword "DenyGroups"
+curl_sshd_config line 7: no argument after keyword "AllowGroups"
+curl_sshd_config line 10: Deprecated option AuthorizedKeysFile2
+curl_sshd_config line 29: Deprecated option KeyRegenerationInterval
+curl_sshd_config line 39: Deprecated option RhostsRSAAuthentication
+curl_sshd_config line 40: Deprecated option RSAAuthentication
+curl_sshd_config line 41: Deprecated option ServerKeyBits
+curl_sshd_config line 45: Deprecated option UseLogin
+curl_sshd_config line 56: no argument after keyword "AcceptEnv"
+curl_sshd_config: terminating, 3 bad configuration options
+=== End of file tests/log/ssh_server.log
+
+=== Start of file log/sftp_server.log
+curl_sftp_config line 33: Unsupported option "rhostsrsaauthentication"
+curl_sftp_config line 34: Unsupported option "rsaauthentication"
+curl_sftp_config line 52: no argument after keyword "sendenv"
+curl_sftp_config: terminating, 1 bad configuration options
+Connection closed.
+Connection closed
+=== End of file log/sftp_server.log
+
+Closes #7724
+
+Upstream-commit: ab78d2c679dfb37b27e89f42ad050c3153fa7513
+Signed-off-by: Kamil Dudka <kdudka@redhat.com>
+---
+ tests/sshserver.pl | 14 --------------
+ 1 file changed, 14 deletions(-)
+
+diff --git a/tests/sshserver.pl b/tests/sshserver.pl
+index 9441939..2afaace 100644
+--- a/tests/sshserver.pl
++++ b/tests/sshserver.pl
+@@ -428,9 +428,7 @@ if ($sshdid =~ /OpenSSH-Windows/) {
+ #  ssh daemon configuration file options we might use and version support
+ #
+ #  AFSTokenPassing                  : OpenSSH 1.2.1 and later [1]
+-#  AcceptEnv                        : OpenSSH 3.9.0 and later
+ #  AddressFamily                    : OpenSSH 4.0.0 and later
+-#  AllowGroups                      : OpenSSH 1.2.1 and later
+ #  AllowTcpForwarding               : OpenSSH 2.3.0 and later
+ #  AllowUsers                       : OpenSSH 1.2.1 and later
+ #  AuthorizedKeysFile               : OpenSSH 2.9.9 and later
+@@ -441,7 +439,6 @@ if ($sshdid =~ /OpenSSH-Windows/) {
+ #  ClientAliveCountMax              : OpenSSH 2.9.0 and later
+ #  ClientAliveInterval              : OpenSSH 2.9.0 and later
+ #  Compression                      : OpenSSH 3.3.0 and later
+-#  DenyGroups                       : OpenSSH 1.2.1 and later
+ #  DenyUsers                        : OpenSSH 1.2.1 and later
+ #  ForceCommand                     : OpenSSH 4.4.0 and later [3]
+ #  GatewayPorts                     : OpenSSH 2.1.0 and later
+@@ -534,9 +531,6 @@ if ($sshdid =~ /OpenSSH-Windows/) {
+     push @cfgarr, "AllowUsers $username";
+ }
+ 
+-push @cfgarr, 'DenyGroups';
+-push @cfgarr, 'AllowGroups';
+-push @cfgarr, '#';
+ push @cfgarr, "AuthorizedKeysFile $clipubkeyf_config";
+ push @cfgarr, "AuthorizedKeysFile2 $clipubkeyf_config";
+ push @cfgarr, "HostKey $hstprvkeyf_config";
+@@ -684,9 +678,6 @@ push @cfgarr, '#';
+ #***************************************************************************
+ # Options that might be supported or not in sshd OpenSSH 2.9.9 and later
+ #
+-if(sshd_supports_opt('AcceptEnv','')) {
+-    push @cfgarr, 'AcceptEnv';
+-}
+ if(sshd_supports_opt('AddressFamily','any')) {
+     # Address family must be specified before ListenAddress
+     splice @cfgarr, 14, 0, 'AddressFamily any';
+@@ -873,7 +864,6 @@ if ($sshdid =~ /OpenSSH-Windows/) {
+ #  RemoteForward                     : OpenSSH 1.2.1 and later [3]
+ #  RhostsRSAAuthentication           : OpenSSH 1.2.1 and later
+ #  RSAAuthentication                 : OpenSSH 1.2.1 and later
+-#  SendEnv                           : OpenSSH 3.9.0 and later
+ #  ServerAliveCountMax               : OpenSSH 3.8.0 and later
+ #  ServerAliveInterval               : OpenSSH 3.8.0 and later
+ #  SmartcardDevice                   : OpenSSH 2.9.9 and later [1][3]
+@@ -1028,10 +1018,6 @@ if((($sshid =~ /OpenSSH/) && ($sshvernum >= 370)) ||
+     push @cfgarr, 'RekeyLimit 1G';
+ }
+ 
+-if(($sshid =~ /OpenSSH/) && ($sshvernum >= 390)) {
+-    push @cfgarr, 'SendEnv';
+-}
+-
+ if((($sshid =~ /OpenSSH/) && ($sshvernum >= 380)) ||
+    (($sshid =~ /SunSSH/) && ($sshvernum >= 120))) {
+     push @cfgarr, 'ServerAliveCountMax 3';
+-- 
+2.34.1
+

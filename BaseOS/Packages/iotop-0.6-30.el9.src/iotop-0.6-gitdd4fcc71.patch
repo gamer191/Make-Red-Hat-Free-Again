@@ -1,0 +1,52 @@
+diff -up iotop-0.6/iotop.8.gitdd4fcc71 iotop-0.6/iotop.8
+--- iotop-0.6/iotop.8.gitdd4fcc71	2013-05-27 00:44:18.000000000 +0200
++++ iotop-0.6/iotop.8	2022-02-15 21:48:24.738610077 +0100
+@@ -10,7 +10,8 @@ iotop watches I/O usage information outp
+ 2.6.20 or later) and displays a table of current I/O usage by processes
+ or threads on the system. At least the CONFIG_TASK_DELAY_ACCT,
+ CONFIG_TASK_IO_ACCOUNTING, CONFIG_TASKSTATS and CONFIG_VM_EVENT_COUNTERS
+-options need to be enabled in your Linux kernel build configuration.
++options need to be enabled in your Linux kernel build configuration and
++since Linux kernel 5.14, the kernel.task_delayacct sysctl enabled.
+ .PP
+ iotop displays columns for the I/O bandwidth read and written by each
+ process/thread during the sampling period. It also displays the percentage
+diff -up iotop-0.6/iotop/data.py.gitdd4fcc71 iotop-0.6/iotop/data.py
+--- iotop-0.6/iotop/data.py.gitdd4fcc71	2013-05-27 00:44:18.000000000 +0200
++++ iotop-0.6/iotop/data.py	2022-02-15 21:48:24.738610077 +0100
+@@ -49,7 +49,7 @@ if not ioaccounting or not vm_event_coun
+     if not ioaccounting:
+         print('  - I/O accounting support ' \
+           '(CONFIG_TASKSTATS, CONFIG_TASK_DELAY_ACCT, ' \
+-          'CONFIG_TASK_IO_ACCOUNTING)')
++          'CONFIG_TASK_IO_ACCOUNTING, kernel.task_delayacct sysctl)')
+     if not vm_event_counters:
+         print('  - VM event counters (CONFIG_VM_EVENT_COUNTERS)')
+     sys.exit(1)
+diff -up iotop-0.6/iotop/ui.py.gitdd4fcc71 iotop-0.6/iotop/ui.py
+--- iotop-0.6/iotop/ui.py.gitdd4fcc71	2022-02-15 21:48:24.738610077 +0100
++++ iotop-0.6/iotop/ui.py	2022-02-15 21:50:55.382602220 +0100
+@@ -467,7 +467,9 @@ class IOTopUI(object):
+             if Stats.has_blkio_delay_total:
+                 status_msg = None
+             else:
+-                status_msg = ('CONFIG_TASK_DELAY_ACCT not enabled in kernel, '
++                status_msg = ('CONFIG_TASK_DELAY_ACCT '
++                              'and kernel.task_delayacct sysctl '
++                              'not enabled in kernel, '
+                               'cannot determine SWAPIN and IO %')
+             num_lines = min(len(lines), self.height - 2 - int(bool(status_msg)))
+             for i in range(num_lines):
+diff -up iotop-0.6/README.gitdd4fcc71 iotop-0.6/README
+--- iotop-0.6/README.gitdd4fcc71	2013-05-27 00:44:18.000000000 +0200
++++ iotop-0.6/README	2022-02-15 21:48:24.738610077 +0100
+@@ -1,7 +1,8 @@
+ Iotop is a Python program with a top like UI used to show of behalf of which
+ process is the I/O going on. It requires Python >= 2.7 and a Linux kernel >=
+ 2.6.20 with the CONFIG_TASK_DELAY_ACCT CONFIG_TASKSTATS,
+-CONFIG_TASK_IO_ACCOUNTING and CONFIG_VM_EVENT_COUNTERS options on.
++CONFIG_TASK_IO_ACCOUNTING and CONFIG_VM_EVENT_COUNTERS build options on
++and for Linux kernels since 5.14, the kernel.task_delayacct sysctl enabled.
+ 
+ 
+ To run a local version of iotop:

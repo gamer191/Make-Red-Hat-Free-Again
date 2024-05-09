@@ -1,0 +1,55 @@
+From f65bb02d8c6fb6569c3e1db43c3b0e9f2a0ab283 Mon Sep 17 00:00:00 2001
+From: Todd Lewis <todd_lewis@unc.edu>
+Date: Wed, 16 Nov 2022 10:45:39 -0500
+Subject: [PATCH] Fix boot time derivation for systems with no rtc
+
+That addresses https://bugzilla.redhat.com/show_bug.cgi?id=2137935
+---
+ plugins/needs_restarting.py | 24 +++++++++++++++++++++++-
+ 1 file changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/plugins/needs_restarting.py b/plugins/needs_restarting.py
+index 91dbe66..03831fa 100644
+--- a/plugins/needs_restarting.py
++++ b/plugins/needs_restarting.py
+@@ -34,6 +34,7 @@ import functools
+ import os
+ import re
+ import stat
++import time
+ 
+ 
+ # For which package updates we should recommend a reboot
+@@ -199,7 +200,28 @@ class ProcessStart(object):
+ 
+     @staticmethod
+     def get_boot_time():
+-        return int(os.stat('/proc/1').st_mtime)
++        """
++        We have two sources from which to derive the boot time. These values vary
++        depending on containerization, existence of a Real Time Clock, etc.
++        For our purposes we want the latest derived value.
++        - st_mtime of /proc/1
++             Reflects the time the first process was run after booting
++             This works for all known cases except machines without
++             a RTC - they awake at the start of the epoch.
++        - /proc/uptime
++             Seconds field of /proc/uptime subtracted from the current time
++             Works for machines without RTC iff the current time is reasonably correct.
++             Does not work on containers which share their kernel with the
++             host - there the host kernel uptime is returned
++        """
++
++        proc_1_boot_time = int(os.stat('/proc/1').st_mtime)
++        if os.path.isfile('/proc/uptime'):
++            with open('/proc/uptime', 'rb') as f:
++                uptime = f.readline().strip().split()[0].strip()
++                proc_uptime_boot_time = int(time.time() - float(uptime))
++                return max(proc_1_boot_time, proc_uptime_boot_time)
++        return proc_1_boot_time
+ 
+     @staticmethod
+     def get_sc_clk_tck():
+-- 
+2.40.1
+

@@ -1,0 +1,56 @@
+autofs-5.1.7 - fix lookup_prune_one_cache() refactoring change
+
+From: Ian Kent <raven@themaw.net>
+
+Commit 256963d6b (autofs-5.1.7 - refactor lookup_prune_one_cache() a bit)
+changed the position of the getting the next enumeration map entry but
+failed to update a couple of other locations that assume the next map
+entry has been set. Under certain fairly common conditions this leads
+to an infinite loop.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG       |    1 +
+ daemon/lookup.c |    5 ++++-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -74,6 +74,7 @@
+ - eliminate redundant cache lookup in tree_mapent_add_node().
+ - fix hosts map offset order.
+ - fix direct mount deadlock.
++- fix lookup_prune_one_cache() refactoring change.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/lookup.c
++++ autofs-5.1.7/daemon/lookup.c
+@@ -1379,6 +1379,7 @@ void lookup_prune_one_cache(struct autof
+ 		if (!key || strchr(key, '*')) {
+ 			if (key)
+ 				free(key);
++			me = cache_enumerate(mc, me);
+ 			continue;
+ 		}
+ 
+@@ -1386,6 +1387,7 @@ void lookup_prune_one_cache(struct autof
+ 		if (!path) {
+ 			warn(ap->logopt, "can't malloc storage for path");
+ 			free(key);
++			me = cache_enumerate(mc, me);
+ 			continue;
+ 		}
+ 
+@@ -1413,9 +1415,10 @@ void lookup_prune_one_cache(struct autof
+ 		}
+ 		if (!valid &&
+ 		    is_mounted(path, MNTS_REAL)) {
+-			debug(ap->logopt, "prune posponed, %s mounted", path);
++			debug(ap->logopt, "prune postponed, %s mounted", path);
+ 			free(key);
+ 			free(path);
++			me = cache_enumerate(mc, me);
+ 			continue;
+ 		}
+ 		if (valid)

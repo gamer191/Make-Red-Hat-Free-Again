@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Thu, 2 Feb 2023 09:20:35 +0100
+Subject: [PATCH] libmpathpersist: fix resource leak in update_map_pr()
+
+The "no available paths" case would leak the memory resp points to.
+Found by coverity.
+
+Fixes: 50e2c16 ("multipathd: handle no active paths in update_map_pr")
+
+Signed-off-by: Martin Wilck <mwilck@suse.com>
+Reviewed-by: Benjamin Marzinski <bmarzins@redhat.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmpathpersist/mpath_persist.c | 15 ++++++++-------
+ 1 file changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/libmpathpersist/mpath_persist.c b/libmpathpersist/mpath_persist.c
+index 3fc60da2..29b64937 100644
+--- a/libmpathpersist/mpath_persist.c
++++ b/libmpathpersist/mpath_persist.c
+@@ -874,7 +874,7 @@ int update_map_pr(struct multipath *mpp)
+ 	int noisy=0;
+ 	struct prin_resp *resp;
+ 	unsigned int i;
+-	int ret, isFound;
++	int ret = MPATH_PR_OTHER, isFound;
+ 
+ 	if (!get_be64(mpp->reservation_key))
+ 	{
+@@ -895,7 +895,7 @@ int update_map_pr(struct multipath *mpp)
+ 	{
+ 		condlog(0,"%s: No available paths to check pr status",
+ 			mpp->alias);
+-		return MPATH_PR_OTHER;
++		goto out;
+ 	}
+ 	mpp->prflag = PRFLAG_UNSET;
+ 	ret = mpath_prin_activepath(mpp, MPATH_PRIN_RKEY_SA, resp, noisy);
+@@ -903,15 +903,15 @@ int update_map_pr(struct multipath *mpp)
+ 	if (ret != MPATH_PR_SUCCESS )
+ 	{
+ 		condlog(0,"%s : pr in read keys service action failed Error=%d", mpp->alias, ret);
+-		free(resp);
+-		return  ret;
++		goto out;
+ 	}
+ 
++	ret = MPATH_PR_SUCCESS;
++
+ 	if (resp->prin_descriptor.prin_readkeys.additional_length == 0 )
+ 	{
+ 		condlog(3,"%s: No key found. Device may not be registered. ", mpp->alias);
+-		free(resp);
+-		return MPATH_PR_SUCCESS;
++		goto out;
+ 	}
+ 
+ 	condlog(2, "%s: Multipath  reservation_key: 0x%" PRIx64 " ", mpp->alias,
+@@ -936,6 +936,7 @@ int update_map_pr(struct multipath *mpp)
+ 		condlog(2, "%s: prflag flag set.", mpp->alias );
+ 	}
+ 
++out:
+ 	free(resp);
+-	return MPATH_PR_SUCCESS;
++	return ret;
+ }

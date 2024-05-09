@@ -1,0 +1,58 @@
+From bbb2cb56f08d95ecf2c7c047a33cc3dd64eb7fde Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Thu, 16 Jun 2022 13:35:29 -0600
+Subject: [PATCH 173/217] util/wrapper.c: Fix gcc warning in xrealloc()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A GCC update (12.1.1) now produces a warning in the xrealloc() wrapper
+(originally copied from git, and used in strbuf operations):
+
+  ../util/wrapper.c: In function ‘xrealloc’:
+  ../util/wrapper.c:34:31: warning: pointer ‘ptr’ may be used after ‘realloc’ [-Wuse-after-free]
+     34 |                         ret = realloc(ptr, 1);
+        |                               ^~~~~~~~~~~~~~~
+
+Pull in an updated definition for xrealloc() from the git project to fix this.
+
+Link: https://lore.kernel.org/r/20220616193529.56513-1-vishal.l.verma@intel.com
+Cc: Dan Williams <dan.j.williams@intel.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ util/wrapper.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/util/wrapper.c b/util/wrapper.c
+index 026a54f..6adfde6 100644
+--- a/util/wrapper.c
++++ b/util/wrapper.c
+@@ -25,15 +25,15 @@ char *xstrdup(const char *str)
+ 
+ void *xrealloc(void *ptr, size_t size)
+ {
+-	void *ret = realloc(ptr, size);
+-	if (!ret && !size)
+-		ret = realloc(ptr, 1);
+-	if (!ret) {
+-		ret = realloc(ptr, size);
+-		if (!ret && !size)
+-			ret = realloc(ptr, 1);
+-		if (!ret)
+-			die("Out of memory, realloc failed");
++	void *ret;
++
++	if (!size) {
++		free(ptr);
++		return malloc(1);
+ 	}
++
++	ret = realloc(ptr, size);
++	if (!ret)
++		die("Out of memory, realloc failed");
+ 	return ret;
+ }
+-- 
+2.27.0
+

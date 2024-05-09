@@ -1,0 +1,37 @@
+From 2124f62aad2fcc00def36d119cfcdee22a7961e9 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 28 Apr 2022 15:10:32 -0700
+Subject: [PATCH 160/217] cxl/list: Auto-enable 'single' mode for port listings
+
+The --single parameter instructs the filter code to gate listing of
+ancestor ports. However, that behavior can be inferred by attempts to list
+a port without the --ports option, i.e. make:
+
+    cxl list -p $port
+
+...equivalent to:
+
+    cxl list -P -S -p $port
+
+Link: https://lore.kernel.org/r/165118383246.1676208.2097194779584921177.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/list.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/cxl/list.c b/cxl/list.c
+index 1e9d441..940782d 100644
+--- a/cxl/list.c
++++ b/cxl/list.c
+@@ -104,6 +104,7 @@ int cmd_list(int argc, const char **argv, struct cxl_ctx *ctx)
+ 			error("please specify entities to list, e.g. using -m/-M\n");
+ 			usage_with_options(u, options);
+ 		}
++		param.single = true;
+ 	}
+ 
+ 	log_init(&param.ctx, "cxl list", "CXL_LIST_LOG");
+-- 
+2.27.0
+

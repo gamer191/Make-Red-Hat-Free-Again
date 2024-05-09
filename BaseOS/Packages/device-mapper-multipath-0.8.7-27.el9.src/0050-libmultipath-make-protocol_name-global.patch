@@ -1,0 +1,85 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Wed, 13 Apr 2022 23:27:36 -0500
+Subject: [PATCH] libmultipath: make protocol_name global
+
+Future patches will make use of this, so move it out of
+snprint_path_protocol()
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/print.c   | 17 -----------------
+ libmultipath/structs.c | 18 ++++++++++++++++++
+ libmultipath/structs.h |  1 +
+ 3 files changed, 19 insertions(+), 17 deletions(-)
+
+diff --git a/libmultipath/print.c b/libmultipath/print.c
+index 8f1b18db..0dbd34e4 100644
+--- a/libmultipath/print.c
++++ b/libmultipath/print.c
+@@ -696,23 +696,6 @@ snprint_path_failures(struct strbuf *buff, const struct path * pp)
+ int
+ snprint_path_protocol(struct strbuf *buff, const struct path * pp)
+ {
+-	static const char * const protocol_name[LAST_BUS_PROTOCOL_ID + 1] = {
+-		[SYSFS_BUS_UNDEF] = "undef",
+-		[SYSFS_BUS_CCW] = "ccw",
+-		[SYSFS_BUS_CCISS] = "cciss",
+-		[SYSFS_BUS_NVME] = "nvme",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_FCP] = "scsi:fcp",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SPI] = "scsi:spi",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SSA] = "scsi:ssa",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SBP] = "scsi:sbp",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SRP] = "scsi:srp",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_ISCSI] = "scsi:iscsi",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SAS] = "scsi:sas",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_ADT] = "scsi:adt",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_ATA] = "scsi:ata",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_USB] = "scsi:usb",
+-		[SYSFS_BUS_SCSI + SCSI_PROTOCOL_UNSPEC] = "scsi:unspec",
+-	};
+ 	const char *pn = protocol_name[bus_protocol_id(pp)];
+ 
+ 	assert(pn != NULL);
+diff --git a/libmultipath/structs.c b/libmultipath/structs.c
+index 2b7cde0c..d20e1eea 100644
+--- a/libmultipath/structs.c
++++ b/libmultipath/structs.c
+@@ -20,6 +20,24 @@
+ #include "prioritizers/alua_spc3.h"
+ #include "dm-generic.h"
+ 
++const char * const protocol_name[LAST_BUS_PROTOCOL_ID + 1] = {
++	[SYSFS_BUS_UNDEF] = "undef",
++	[SYSFS_BUS_CCW] = "ccw",
++	[SYSFS_BUS_CCISS] = "cciss",
++	[SYSFS_BUS_NVME] = "nvme",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_FCP] = "scsi:fcp",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SPI] = "scsi:spi",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SSA] = "scsi:ssa",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SBP] = "scsi:sbp",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SRP] = "scsi:srp",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_ISCSI] = "scsi:iscsi",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SAS] = "scsi:sas",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_ADT] = "scsi:adt",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_ATA] = "scsi:ata",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_USB] = "scsi:usb",
++	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_UNSPEC] = "scsi:unspec",
++};
++
+ struct adapter_group *
+ alloc_adaptergroup(void)
+ {
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index 45294f11..618ff4fb 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -191,6 +191,7 @@ enum scsi_protocol {
+  */
+ #define LAST_BUS_PROTOCOL_ID (SYSFS_BUS_SCSI + SCSI_PROTOCOL_UNSPEC)
+ unsigned int bus_protocol_id(const struct path *pp);
++extern const char * const protocol_name[];
+ 
+ #define SCSI_INVALID_LUN ~0ULL
+ 

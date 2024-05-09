@@ -1,0 +1,180 @@
+From 410d8fc37f1ce5fc5a6f66eda3d3280a6fa0023c Mon Sep 17 00:00:00 2001
+From: Antonio Alvarez Feijoo <antonio.feijoo@suse.com>
+Date: Mon, 11 Jul 2022 12:52:58 +0200
+Subject: [PATCH] fix(dracut.sh): correct wrong systemd variable paths
+
+systemdsystemconfdir usually expands to /etc/systemd/system, but the local
+configuration of systemd-networkd, systemd-timesyncd, portablectl and systemd
+users is saved into directories whose parent is /etc/systemd
+(systemdutilconfdir).
+
+Also add missing exports.
+
+fix(network-legacy): correct wrong local network configuration path
+
+fix(network-manager): correct wrong local network configuration path
+
+refactor(systemd-networkd): use more precise global variables
+
+refactor(systemd-timesyncd): use more precise global variables
+
+refactor(network-legacy): use more precise global variables
+
+refactor(network-manager): use more precise global variables
+
+(Cherry-picked commits:
+  ae4c8744dc3dbceb142c6eb88fd69bc6aaf29e20
+  a60543bf9746022e4430d310892ee03bb837b6a2
+  cb39aec479bdabfa7b1af5168c14ca5683905a7d
+  5781b6e7ab8c2f176331c960c677de1fe8a39592
+  3866ebc601bff71996c7e0892392332577e2a9c7
+  7fa66e106af021dd24fca8e76893c422775a6b61
+  c8adc9f72fef906b5706fa6d0e788564a508f4ee)
+
+Resolves: RHEL-9479
+---
+ dracut.sh                                     | 14 ++++++++------
+ modules.d/01systemd-networkd/module-setup.sh  | 14 +++++++-------
+ modules.d/01systemd-timesyncd/module-setup.sh |  4 ++--
+ modules.d/35network-legacy/module-setup.sh    |  4 ++--
+ modules.d/35network-manager/module-setup.sh   |  4 ++--
+ 5 files changed, 21 insertions(+), 19 deletions(-)
+
+diff --git a/dracut.sh b/dracut.sh
+index 30dfb229..8c757b14 100755
+--- a/dracut.sh
++++ b/dracut.sh
+@@ -1830,7 +1830,7 @@ fi
+ [[ -d $dracutsysrootdir$systemdnetworkconfdir ]] \
+     || systemdnetworkconfdir=$(pkg-config systemd --variable=systemdnetworkconfdir 2> /dev/null)
+ 
+-[[ -d $dracutsysrootdir$systemdnetworkconfdir ]] || systemdnetworkconfdir=${systemdsystemconfdir}/network
++[[ -d $dracutsysrootdir$systemdnetworkconfdir ]] || systemdnetworkconfdir=${systemdutilconfdir}/network
+ 
+ [[ -d $dracutsysrootdir$systemdntpunits ]] \
+     || systemdntpunits=$(pkg-config systemd --variable=systemdntpunits 2> /dev/null)
+@@ -1840,7 +1840,7 @@ fi
+ [[ -d $dracutsysrootdir$systemdntpunitsconfdir ]] \
+     || systemdntpunitsconfdir=$(pkg-config systemd --variable=systemdntpunitsconfdir 2> /dev/null)
+ 
+-[[ -d $dracutsysrootdir$systemdntpunitsconfdir ]] || systemdntpunitsconfdir=${systemdsystemconfdir}/ntp-units.d
++[[ -d $dracutsysrootdir$systemdntpunitsconfdir ]] || systemdntpunitsconfdir=${systemdutilconfdir}/ntp-units.d
+ 
+ [[ -d $dracutsysrootdir$systemdportable ]] \
+     || systemdportable=$(pkg-config systemd --variable=systemdportable 2> /dev/null)
+@@ -1850,7 +1850,7 @@ fi
+ [[ -d $dracutsysrootdir$systemdportableconfdir ]] \
+     || systemdportableconfdir=$(pkg-config systemd --variable=systemdportableconfdir 2> /dev/null)
+ 
+-[[ -d "$dracutsysrootdir$systemdportableconfdir" ]] || systemdportableconfdir=${systemdsystemconfdir}/portable
++[[ -d "$dracutsysrootdir$systemdportableconfdir" ]] || systemdportableconfdir=${systemdutilconfdir}/portable
+ 
+ [[ -d $dracutsysrootdir$systemdsystemunitdir ]] \
+     || systemdsystemunitdir=$(pkg-config systemd --variable=systemdsystemunitdir 2> /dev/null)
+@@ -1865,7 +1865,7 @@ fi
+ [[ -d $dracutsysrootdir$systemduserconfdir ]] \
+     || systemduserconfdir=$(pkg-config systemd --variable=systemduserconfdir 2> /dev/null)
+ 
+-[[ -d $dracutsysrootdir$systemduserconfdir ]] || systemduserconfdir=${systemdsystemconfdir}/user
++[[ -d $dracutsysrootdir$systemduserconfdir ]] || systemduserconfdir=${systemdutilconfdir}/user
+ 
+ [[ -d $dracutsysrootdir$systemdsystemconfdir ]] \
+     || systemdsystemconfdir=$(pkg-config systemd --variable=systemdsystemconfdir 2> /dev/null)
+@@ -1919,8 +1919,10 @@ export initdir dracutbasedir \
+     dbussessionconfdir dbussystem dbussystemconfdir dbussystemservices \
+     dbussystemservicesconfdir environment environmentconfdir modulesload \
+     modulesloadconfdir sysctld sysctlconfdir sysusers sysusersconfdir \
+-    systemdutildir systemdutilconfdir systemdcatalog systemdntpunits \
+-    systemdntpunitsconfdir systemdsystemunitdir systemdsystemconfdir \
++    systemdutildir systemdutilconfdir systemdcatalog systemdnetwork \
++    systemdnetworkconfdir systemdntpunits systemdntpunitsconfdir \
++    systemdportable systemdportableconfdir systemdsystemunitdir \
++    systemdsystemconfdir systemduser systemduserconfdir \
+     hostonly_cmdline loginstall tmpfilesdir tmpfilesconfdir depmodd \
+     depmodconfdir
+ 
+diff --git a/modules.d/01systemd-networkd/module-setup.sh b/modules.d/01systemd-networkd/module-setup.sh
+index c3f3c051..e6d113d8 100755
+--- a/modules.d/01systemd-networkd/module-setup.sh
++++ b/modules.d/01systemd-networkd/module-setup.sh
+@@ -39,12 +39,12 @@ install() {
+         "$systemdutildir"/systemd-networkd \
+         "$systemdutildir"/systemd-network-generator \
+         "$systemdutildir"/systemd-networkd-wait-online \
+-        "$systemdutildir"/network/80-container-host0.network \
+-        "$systemdutildir"/network/80-container-ve.network \
+-        "$systemdutildir"/network/80-container-vz.network \
+-        "$systemdutildir"/network/80-vm-vt.network \
+-        "$systemdutildir"/network/80-wifi-adhoc.network \
+-        "$systemdutildir"/network/99-default.link \
++        "$systemdnetwork"/80-container-host0.network \
++        "$systemdnetwork"/80-container-ve.network \
++        "$systemdnetwork"/80-container-vz.network \
++        "$systemdnetwork"/80-vm-vt.network \
++        "$systemdnetwork"/80-wifi-adhoc.network \
++        "$systemdnetwork"/99-default.link \
+         "$systemdsystemunitdir"/systemd-networkd.service \
+         "$systemdsystemunitdir"/systemd-networkd.socket \
+         "$systemdsystemunitdir"/systemd-network-generator.service \
+@@ -67,7 +67,7 @@ install() {
+         inst_multiple -H -o \
+             "$systemdutilconfdir"/networkd.conf \
+             "$systemdutilconfdir/networkd.conf.d/*.conf" \
+-            "$systemdutilconfdir/network/*" \
++            "$systemdnetworkconfdir/*" \
+             "$systemdsystemconfdir"/systemd-networkd.service \
+             "$systemdsystemconfdir/systemd-networkd.service/*.conf" \
+             "$systemdsystemunitdir"/systemd-networkd.socket \
+diff --git a/modules.d/01systemd-timesyncd/module-setup.sh b/modules.d/01systemd-timesyncd/module-setup.sh
+index 015caecf..f6f35fee 100755
+--- a/modules.d/01systemd-timesyncd/module-setup.sh
++++ b/modules.d/01systemd-timesyncd/module-setup.sh
+@@ -35,7 +35,7 @@ install() {
+     inst_multiple -o \
+         "$dbussystem"/org.freedesktop.timesync1.conf \
+         "$dbussystemservices"/org.freedesktop.timesync1.service \
+-        "$systemdutildir/ntp-units.d/*.list" \
++        "$systemdntpunits/*.list" \
+         "$systemdutildir"/systemd-timesyncd \
+         "$systemdutildir"/systemd-time-wait-sync \
+         "$systemdutildir/timesyncd.conf.d/*.conf" \
+@@ -55,7 +55,7 @@ install() {
+     # Install the hosts local user configurations if enabled.
+     if [[ $hostonly ]]; then
+         inst_multiple -H -o \
+-            "$systemdutilconfdir/ntp-units.d/*.list" \
++            "$systemdntpunitsconfdir/*.list" \
+             "$systemdutilconfdir"/timesyncd.conf \
+             "$systemdutilconfdir/timesyncd.conf.d/*.conf" \
+             "$systemdsystemconfdir"/systemd-timesyncd.service \
+diff --git a/modules.d/35network-legacy/module-setup.sh b/modules.d/35network-legacy/module-setup.sh
+index 84dcf7f5..e57fc6fa 100755
+--- a/modules.d/35network-legacy/module-setup.sh
++++ b/modules.d/35network-legacy/module-setup.sh
+@@ -24,8 +24,8 @@ install() {
+ 
+     #Adding default link
+     if dracut_module_included "systemd"; then
+-        inst_multiple -o "${systemdutildir}/network/99-default.link"
+-        [[ $hostonly ]] && inst_multiple -H -o "${systemdsystemconfdir}/network/*.link"
++        inst_multiple -o "${systemdnetwork}/99-default.link"
++        [[ $hostonly ]] && inst_multiple -H -o "${systemdnetworkconfdir}/*.link"
+     fi
+ 
+     inst_multiple ip dhclient sed awk grep pgrep tr expr
+diff --git a/modules.d/35network-manager/module-setup.sh b/modules.d/35network-manager/module-setup.sh
+index 04898a39..c93c6a3c 100755
+--- a/modules.d/35network-manager/module-setup.sh
++++ b/modules.d/35network-manager/module-setup.sh
+@@ -52,8 +52,8 @@ install() {
+         inst_simple "$moddir"/nm-wait-online-initrd.service "$systemdsystemunitdir"/nm-wait-online-initrd.service
+ 
+         # Adding default link
+-        inst_multiple -o "${systemdutildir}/network/99-default.link"
+-        [[ $hostonly ]] && inst_multiple -H -o "${systemdsystemconfdir}/network/*.link"
++        inst_multiple -o "${systemdnetwork}/99-default.link"
++        [[ $hostonly ]] && inst_multiple -H -o "${systemdnetworkconfdir}/*.link"
+ 
+         $SYSTEMCTL -q --root "$initdir" enable nm-initrd.service
+     fi
+

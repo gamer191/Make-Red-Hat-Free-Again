@@ -1,0 +1,39 @@
+From fade1a8039446ed1aa8656f49121886c71d221a4 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Mon, 15 Aug 2022 13:22:12 -0600
+Subject: [PATCH 197/217] cxl/list: make memdevs and regions the default
+ listing
+
+Instead of only listing regions by default (which can often be empty if
+no regions have been configured), change the default listing mode to
+both memdevs and regions. This will allow a plain 'cxl-list' to be a
+quick health check of whether all the expected memdevs have enumerated
+correctly, and see any regions that have been configured.
+
+Link: https://lore.kernel.org/r/20220815192214.545800-10-vishal.l.verma@intel.com
+Cc: Dan Williams <dan.j.williams@intel.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/list.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/cxl/list.c b/cxl/list.c
+index 88ca9d9..5f604ec 100644
+--- a/cxl/list.c
++++ b/cxl/list.c
+@@ -100,9 +100,10 @@ int cmd_list(int argc, const char **argv, struct cxl_ctx *ctx)
+ 			param.regions = true;
+ 	}
+ 
+-	/* List regions by default */
++	/* List regions and memdevs by default */
+ 	if (num_list_flags() == 0) {
+ 		param.regions = true;
++		param.memdevs = true;
+ 	}
+ 
+ 	log_init(&param.ctx, "cxl list", "CXL_LIST_LOG");
+-- 
+2.27.0
+

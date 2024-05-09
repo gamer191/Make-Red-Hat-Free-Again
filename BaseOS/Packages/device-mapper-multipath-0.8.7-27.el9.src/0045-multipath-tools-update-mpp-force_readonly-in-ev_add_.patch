@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Uday Shankar <ushankar@purestorage.com>
+Date: Wed, 9 Mar 2022 13:03:26 -0700
+Subject: [PATCH] multipath-tools: update mpp->force_readonly in ev_add_path
+
+When NVMe disks are added to the system, no uevent containing the
+DISK_RO property is generated. As a result, dm-* nodes backed by
+readonly NVMe disks will not have their RO state set properly. The
+result looks like this:
+
+$ multipath -l
+eui.00c92c091fd6564424a9376600011bd1 dm-3 NVME,Pure Storage FlashArray
+size=1.0T features='0' hwhandler='0' wp=rw
+|-+- policy='service-time 0' prio=0 status=active
+| `- 0:2:2:72657 nvme0n2 259:4 active undef running
+`-+- policy='service-time 0' prio=0 status=enabled
+  `- 1:0:2:72657 nvme1n2 259:1 active undef running
+$ cat /sys/block/dm-3/ro
+0
+$ cat /sys/block/nvme*n2/ro
+1
+1
+
+This is not a problem for SCSI disks, since the kernel will emit change
+uevents containing the DISK_RO property when the disk is added to the
+system. See the following thread for my initial attempt to fix this
+issue at the kernel level:
+https://lore.kernel.org/linux-block/Yib8GqCA5e3SQYty@infradead.org/T/#t
+
+Fix the issue by picking up the path ro state from sysfs in ev_add_path,
+setting the mpp->force_readonly accordingly, and changing
+dm_addmap_create to be aware of mpp->force_readonly.
+
+Signed-off-by: Uday Shankar <ushankar@purestorage.com>
+Reviewed-by: Benjamin Marzinski <bmarzins@redhat.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/devmapper.c | 2 +-
+ multipathd/main.c        | 6 ++++++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/libmultipath/devmapper.c b/libmultipath/devmapper.c
+index c05dc201..1ff75c81 100644
+--- a/libmultipath/devmapper.c
++++ b/libmultipath/devmapper.c
+@@ -542,7 +542,7 @@ int dm_addmap_create (struct multipath *mpp, char * params)
+ 	int ro;
+ 	uint16_t udev_flags = build_udev_flags(mpp, 0);
+ 
+-	for (ro = 0; ro <= 1; ro++) {
++	for (ro = mpp->force_readonly ? 1 : 0; ro <= 1; ro++) {
+ 		int err;
+ 
+ 		if (dm_addmap(DM_DEVICE_CREATE, TGT_MPATH, mpp, params, ro,
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 45b9572f..ed2515e5 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -1048,6 +1048,7 @@ ev_add_path (struct path * pp, struct vectors * vecs, int need_do_map)
+ 	int retries = 3;
+ 	int start_waiter = 0;
+ 	int ret;
++	int ro;
+ 
+ 	/*
+ 	 * need path UID to go any further
+@@ -1112,6 +1113,11 @@ rescan:
+ 	/* persistent reservation check*/
+ 	mpath_pr_event_handle(pp);
+ 
++	/* ro check - if new path is ro, force map to be ro as well */
++	ro = sysfs_get_ro(pp);
++	if (ro == 1)
++		mpp->force_readonly = 1;
++
+ 	if (!need_do_map)
+ 		return 0;
+ 

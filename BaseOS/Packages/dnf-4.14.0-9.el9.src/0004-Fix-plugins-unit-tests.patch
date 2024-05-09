@@ -1,0 +1,94 @@
+From 3ef5ec915ea4b5e6fe7d25542f0daccef278c01e Mon Sep 17 00:00:00 2001
+From: Jan Kolarik <jkolarik@redhat.com>
+Date: Tue, 13 Sep 2022 14:35:10 +0200
+Subject: [PATCH] Fix plugins unit tests + unload plugins upon their deletion
+
+---
+ dnf/plugin.py              |  8 ++++++--
+ tests/api/test_dnf_base.py | 24 +++++++++++++++++++-----
+ 2 files changed, 25 insertions(+), 7 deletions(-)
+
+diff --git a/dnf/plugin.py b/dnf/plugin.py
+index b083727d..d2f46ce3 100644
+--- a/dnf/plugin.py
++++ b/dnf/plugin.py
+@@ -98,6 +98,9 @@ class Plugins(object):
+         self.plugin_cls = []
+         self.plugins = []
+ 
++    def __del__(self):
++        self._unload()
++
+     def _caller(self, method):
+         for plugin in self.plugins:
+             try:
+@@ -164,8 +167,9 @@ class Plugins(object):
+         self._caller('transaction')
+ 
+     def _unload(self):
+-        logger.debug(_('Plugins were unloaded'))
+-        del sys.modules[DYNAMIC_PACKAGE]
++        if DYNAMIC_PACKAGE in sys.modules:
++            logger.log(dnf.logging.DDEBUG, 'Plugins were unloaded.')
++            del sys.modules[DYNAMIC_PACKAGE]
+ 
+     def unload_removed_plugins(self, transaction):
+         """
+diff --git a/tests/api/test_dnf_base.py b/tests/api/test_dnf_base.py
+index e84e272b..19754b07 100644
+--- a/tests/api/test_dnf_base.py
++++ b/tests/api/test_dnf_base.py
+@@ -7,10 +7,23 @@ from __future__ import unicode_literals
+ import dnf
+ import dnf.conf
+ 
++import tests.support
++
+ from .common import TestCase
+ from .common import TOUR_4_4
+ 
+ 
++def conf_with_empty_plugins():
++    """
++    Use empty configuration to avoid importing plugins from default paths
++    which would lead to crash of other tests.
++    """
++    conf = tests.support.FakeConf()
++    conf.plugins = True
++    conf.pluginpath = []
++    return conf
++
++
+ class DnfBaseApiTest(TestCase):
+     def setUp(self):
+         self.base = dnf.Base(dnf.conf.Conf())
+@@ -75,13 +88,12 @@ class DnfBaseApiTest(TestCase):
+         self.assertHasType(self.base.transaction, dnf.db.group.RPMTransaction)
+ 
+     def test_init_plugins(self):
+-        # Base.init_plugins(disabled_glob=(), enable_plugins=(), cli=None)
++        # Base.init_plugins()
+         self.assertHasAttr(self.base, "init_plugins")
+ 
+-        # disable plugins to avoid calling dnf.plugin.Plugins._load() multiple times
+-        # which causes the tests to crash
+-        self.base.conf.plugins = False
+-        self.base.init_plugins(disabled_glob=(), enable_plugins=(), cli=None)
++        self.base._conf = conf_with_empty_plugins()
++
++        self.base.init_plugins()
+ 
+     def test_pre_configure_plugins(self):
+         # Base.pre_configure_plugins()
+@@ -99,6 +111,8 @@ class DnfBaseApiTest(TestCase):
+         # Base.unload_plugins()
+         self.assertHasAttr(self.base, "unload_plugins")
+ 
++        self.base._conf = conf_with_empty_plugins()
++
+         self.base.init_plugins()
+         self.base.unload_plugins()
+ 
+-- 
+2.38.1
+

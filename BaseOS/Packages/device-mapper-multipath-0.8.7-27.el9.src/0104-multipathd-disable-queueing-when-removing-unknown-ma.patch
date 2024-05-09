@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 8 Dec 2023 14:50:31 -0500
+Subject: [PATCH] multipathd: disable queueing when removing unknown maps
+
+Make cli_del_maps() call dm_suspend_and_flush_map() for the unknown
+multipath devices as well.
+
+After this change, all callers of cli_del_maps() set need_suspend, so
+simplify dm_flush_maps().
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/devmapper.c  | 7 ++-----
+ libmultipath/devmapper.h  | 2 +-
+ multipath/main.c          | 2 +-
+ multipathd/cli_handlers.c | 2 +-
+ 4 files changed, 5 insertions(+), 8 deletions(-)
+
+diff --git a/libmultipath/devmapper.c b/libmultipath/devmapper.c
+index 4b2e8a15..f9de3358 100644
+--- a/libmultipath/devmapper.c
++++ b/libmultipath/devmapper.c
+@@ -1145,7 +1145,7 @@ dm_flush_map_nopaths(const char * mapname,
+ 
+ #endif
+ 
+-int dm_flush_maps (int need_suspend, int retries)
++int dm_flush_maps (int retries)
+ {
+ 	int r = 1;
+ 	struct dm_task *dmt;
+@@ -1170,10 +1170,7 @@ int dm_flush_maps (int need_suspend, int retries)
+ 		goto out;
+ 
+ 	do {
+-		if (need_suspend)
+-			r |= dm_suspend_and_flush_map(names->name, retries);
+-		else
+-			r |= dm_flush_map(names->name);
++		r |= dm_suspend_and_flush_map(names->name, retries);
+ 		next = names->next;
+ 		names = (void *) names + next;
+ 	} while (next);
+diff --git a/libmultipath/devmapper.h b/libmultipath/devmapper.h
+index 45a676de..808da28d 100644
+--- a/libmultipath/devmapper.h
++++ b/libmultipath/devmapper.h
+@@ -55,7 +55,7 @@ int dm_flush_map_nopaths(const char * mapname, int deferred_remove);
+ #define dm_suspend_and_flush_map(mapname, retries) \
+ 	_dm_flush_map(mapname, 1, 0, 1, retries)
+ int dm_cancel_deferred_remove(struct multipath *mpp);
+-int dm_flush_maps (int need_suspend, int retries);
++int dm_flush_maps (int retries);
+ int dm_fail_path(const char * mapname, char * path);
+ int dm_reinstate_path(const char * mapname, char * path);
+ int dm_queue_if_no_path(const char *mapname, int enable);
+diff --git a/multipath/main.c b/multipath/main.c
+index f1077421..e296be6e 100644
+--- a/multipath/main.c
++++ b/multipath/main.c
+@@ -1126,7 +1126,7 @@ main (int argc, char *argv[])
+ 		goto out;
+ 	}
+ 	else if (cmd == CMD_FLUSH_ALL) {
+-		r = dm_flush_maps(1, retries) ? RTVL_FAIL : RTVL_OK;
++		r = dm_flush_maps(retries) ? RTVL_FAIL : RTVL_OK;
+ 		goto out;
+ 	}
+ 	while ((r = configure(conf, cmd, dev_type, dev)) == RTVL_RETRY)
+diff --git a/multipathd/cli_handlers.c b/multipathd/cli_handlers.c
+index f04fb558..aca8e2df 100644
+--- a/multipathd/cli_handlers.c
++++ b/multipathd/cli_handlers.c
+@@ -802,7 +802,7 @@ cli_del_maps (void *v, char **reply, int *len, void *data)
+ 			i--;
+ 	}
+ 	/* flush any multipath maps that aren't currently known by multipathd */
+-	ret |= dm_flush_maps(0, 0);
++	ret |= dm_flush_maps(0);
+ 	return ret;
+ }
+ 

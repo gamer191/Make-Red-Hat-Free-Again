@@ -1,0 +1,49 @@
+From 9d2a3df5453001612b225c7423451f6e02e06c19 Mon Sep 17 00:00:00 2001
+From: Alberto Planas <aplanas@suse.com>
+Date: Mon, 20 Jun 2022 17:13:19 +0200
+Subject: [PATCH] fix(integrity): do not enable EVM if there is no key
+
+Track when a key is successfully loaded, and return 1 if no key has been
+loaded.  This will not enable EVM if there are no keys available in the
+system.
+
+Fix #1847
+
+Signed-off-by: Alberto Planas <aplanas@suse.com>
+
+(Cherry-picked commit: 90585c624af15ba0abb7f32b0c2afc2b122dd019)
+
+Related: #2158155
+---
+ modules.d/98integrity/evm-enable.sh | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/modules.d/98integrity/evm-enable.sh b/modules.d/98integrity/evm-enable.sh
+index 0abdfb80..913b5f12 100755
+--- a/modules.d/98integrity/evm-enable.sh
++++ b/modules.d/98integrity/evm-enable.sh
+@@ -99,6 +99,7 @@ load_evm_x509() {
+     fi
+     # load the default EVM public key onto the EVM keyring along
+     # with all the other ones in $EVMKEYSDIR
++    local key_imported=1
+     for PUBKEY in ${EVMX509PATH} "${NEWROOT}${EVMKEYSDIR}"/*; do
+         if [ ! -f "${PUBKEY}" ]; then
+             if [ "${RD_DEBUG}" = "yes" ]; then
+@@ -110,13 +111,14 @@ load_evm_x509() {
+             info "integrity: failed to load the EVM X509 cert ${PUBKEY}"
+             return 1
+         fi
++        key_imported=0
+     done
+ 
+     if [ "${RD_DEBUG}" = "yes" ]; then
+         keyctl show @u
+     fi
+ 
+-    return 0
++    return ${key_imported}
+ }
+ 
+ unload_evm_key() {
+

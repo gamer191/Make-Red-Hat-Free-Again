@@ -1,0 +1,31 @@
+From 29a9e9daa67e2b68bb2433c31fdbc82e86b5f0fe Mon Sep 17 00:00:00 2001
+From: Shivaprasad G Bhat <sbhat@linux.ibm.com>
+Date: Mon, 18 Jul 2022 13:53:35 +0530
+Subject: [PATCH 174/217] libcxl: Fix memory leakage in cxl_port_init()
+
+The local variable 'path' is not freed in cxl_port_init() for success case.
+The patch fixes that.
+
+Link: https://lore.kernel.org/r/165813258358.95191.6678871197554236554.stgit@LAPTOP-TBQTPII8
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Shivaprasad G Bhat <sbhat@linux.ibm.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index c988ce2..bf3568d 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -769,6 +769,7 @@ static int cxl_port_init(struct cxl_port *port, struct cxl_port *parent_port,
+ 	if (sysfs_read_attr(ctx, path, buf) == 0)
+ 		port->module = util_modalias_to_module(ctx, buf);
+ 
++	free(path);
+ 	return 0;
+ err:
+ 	free(port->dev_path);
+-- 
+2.27.0
+

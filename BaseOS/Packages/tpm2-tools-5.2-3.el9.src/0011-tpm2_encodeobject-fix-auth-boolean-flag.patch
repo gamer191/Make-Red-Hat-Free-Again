@@ -1,0 +1,99 @@
+From 579bb674b5bdf2a0d50e8d3a3d6f5391d233bdff Mon Sep 17 00:00:00 2001
+From: William Roberts <william.c.roberts@intel.com>
+Date: Mon, 24 Oct 2022 10:48:18 -0500
+Subject: [PATCH 11/17] tpm2_encodeobject: fix auth boolean flag
+
+The flag for wether or not a key needs a password was being set based on
+if the parent needed a password or not when it should be set based on if
+the child object needs a password or not.
+
+Correct this by adding a -p/--key-auth option to indicate the value of
+this boolean.
+
+$ tpm2 encodeobject -C 0x81000000 -u key.pub -r key.priv -o key.pem
+$ openssl asn1parse -dump -inform PEM -in key.pem
+   <snip>
+   14:d=2  hl=2 l=   1 prim: BOOLEAN           :0
+   </snip>
+
+$ tpm2 encodeobject -C 0x81000000 -u key.pub -r key.priv -o key.pem -p
+$ openssl asn1parse -dump -inform PEM -in key.pem
+   <snip>
+   14:d=2  hl=2 l=   1 prim: BOOLEAN           :1
+   </snip>
+
+A workaround would be manually modifying the ASN1 PEM file boolean flag
+OR creating the same parent key but with a password and specifying the
+password via `-P`. Note that a primary key is the same given the same
+inputs and password doesn't change the generated key.
+
+Fixes: #3152
+
+Signed-off-by: William Roberts <william.c.roberts@intel.com>
+---
+ man/tpm2_encodeobject.1.md     | 5 +++++
+ tools/misc/tpm2_encodeobject.c | 9 +++++++--
+ 2 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/man/tpm2_encodeobject.1.md b/man/tpm2_encodeobject.1.md
+index 791eafbd..2e83fa7d 100644
+--- a/man/tpm2_encodeobject.1.md
++++ b/man/tpm2_encodeobject.1.md
+@@ -37,6 +37,11 @@ applications.
+ 
+     A file containing the sensitive portion of the object.
+ 
++  * **-p**, **\--key-auth**:
++
++    Indicates if an authorization value is needed for the object specified by
++    **-r** and **-u**.
++
+   * **-o**, **\--output**=_FILE_:
+ 
+     The output file path, recording the public portion of the object.
+diff --git a/tools/misc/tpm2_encodeobject.c b/tools/misc/tpm2_encodeobject.c
+index ccbd0e01..80de14f5 100644
+--- a/tools/misc/tpm2_encodeobject.c
++++ b/tools/misc/tpm2_encodeobject.c
+@@ -65,6 +65,7 @@ struct tpm_encodeobject_ctx {
+         const char *privpath;
+         TPM2B_PRIVATE private;
+         ESYS_TR handle;
++        bool needs_auth;
+     } object;
+ 
+     char *output_path;
+@@ -89,6 +90,9 @@ static bool on_option(char key, char *value) {
+     case 'o':
+         ctx.output_path = value;
+ 	break;
++    case 'p':
++        ctx.object.needs_auth = true;
++        break;
+     }
+ 
+     return true;
+@@ -101,9 +105,10 @@ static bool tpm2_tool_onstart(tpm2_options **opts) {
+       { "private",        required_argument, NULL, 'r' },
+       { "parent-context", required_argument, NULL, 'C' },
+       { "output",         required_argument, NULL, 'o' },
++      { "key-auth",       no_argument,       NULL, 'p' },
+     };
+ 
+-    *opts = tpm2_options_new("P:u:r:C:o:", ARRAY_LEN(topts), topts, on_option,
++    *opts = tpm2_options_new("P:u:r:C:o:p", ARRAY_LEN(topts), topts, on_option,
+             NULL, 0);
+ 
+     return *opts != NULL;
+@@ -190,7 +195,7 @@ encode(void)
+         goto error;
+     }
+ 
+-    tpk->emptyAuth = ctx.parent.auth_str == NULL ? 0xFF : 0;
++    tpk->emptyAuth = ctx.object.needs_auth;
+ 
+     if ((ctx.parent.object.handle >> TPM2_HR_SHIFT) == TPM2_HT_PERSISTENT) {
+ 	ASN1_INTEGER_set(tpk->parent, ctx.parent.object.handle);
+-- 
+2.40.1
+

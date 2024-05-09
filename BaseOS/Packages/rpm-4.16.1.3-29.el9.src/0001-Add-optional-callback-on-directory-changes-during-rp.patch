@@ -1,0 +1,107 @@
+From 186e0ab025b9ad92d900697f611633a6f6162f3b Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Wed, 9 Feb 2022 14:47:14 +0200
+Subject: [PATCH] Add optional callback on directory changes during rpmfi
+ iteration
+
+Internal only for now in case we need to fiddle with the API some more,
+but no reason this couldn't be made public later.
+---
+ lib/rpmfi.c          | 24 ++++++++++++++++++++----
+ lib/rpmfi_internal.h | 17 +++++++++++++++++
+ 2 files changed, 37 insertions(+), 4 deletions(-)
+
+diff --git a/lib/rpmfi.c b/lib/rpmfi.c
+index aec8220a3..6c631fdb5 100644
+--- a/lib/rpmfi.c
++++ b/lib/rpmfi.c
+@@ -53,6 +53,9 @@ struct rpmfi_s {
+     int intervalStart;		/*!< Start of iterating interval. */
+     int intervalEnd;		/*!< End of iterating interval. */
+ 
++    rpmfiChdirCb onChdir;	/*!< Callback for directory changes */
++    void *onChdirData;		/*!< Caller private callback data */
++
+     rpmfiles files;		/*!< File info set */
+     rpmcpio_t archive;		/*!< Archive with payload */
+     unsigned char * found;	/*!< Bit field of files found in the archive */
+@@ -298,11 +301,16 @@ rpm_count_t rpmfiDC(rpmfi fi)
+     return (fi != NULL ? rpmfilesDC(fi->files) : 0);
+ }
+ 
+-#ifdef	NOTYET
+-int rpmfiDI(rpmfi fi)
++int rpmfiSetOnChdir(rpmfi fi, rpmfiChdirCb cb, void *data)
+ {
++    int rc = -1;
++    if (fi != NULL) {
++	fi->onChdir = cb;
++	fi->onChdirData = data;
++	rc = 0;
++    }
++    return rc;
+ }
+-#endif
+ 
+ int rpmfiFX(rpmfi fi)
+ {
+@@ -314,9 +322,17 @@ int rpmfiSetFX(rpmfi fi, int fx)
+     int i = -1;
+ 
+     if (fi != NULL && fx >= 0 && fx < rpmfilesFC(fi->files)) {
++	int dx = fi->j;
+ 	i = fi->i;
+ 	fi->i = fx;
+ 	fi->j = rpmfilesDI(fi->files, fi->i);
++	i = fi->i;
++
++	if (fi->j != dx && fi->onChdir) {
++	    int chrc = fi->onChdir(fi, fi->onChdirData);
++	    if (chrc < 0)
++		i = chrc;
++	}
+     }
+     return i;
+ }
+@@ -1682,9 +1698,9 @@ static rpmfi initIter(rpmfiles files, int itype, int link)
+     if (files && itype>=0 && itype<=RPMFILEITERMAX) {
+ 	fi = xcalloc(1, sizeof(*fi)); 
+ 	fi->i = -1;
++	fi->j = -1;
+ 	fi->files = link ? rpmfilesLink(files) : files;
+ 	fi->next = nextfuncs[itype];
+-	fi->i = -1;
+ 	if (itype == RPMFI_ITER_BACK) {
+ 	    fi->i = rpmfilesFC(fi->files);
+ 	} else if (itype >=RPMFI_ITER_READ_ARCHIVE
+diff --git a/lib/rpmfi_internal.h b/lib/rpmfi_internal.h
+index dccc6ccbe..37f1d45f5 100644
+--- a/lib/rpmfi_internal.h
++++ b/lib/rpmfi_internal.h
+@@ -13,6 +13,23 @@
+ extern "C" {
+ #endif
+ 
++/** \ingroup rpmfi
++ * Callback on file iterator directory changes
++ * @param fi		file info
++ * @param data		caller private callback data
++ * @return		0 on success, < 0 on error (to stop iteration)
++ */
++typedef int (*rpmfiChdirCb)(rpmfi fi, void *data);
++
++/** \ingroup rpmfi
++ * Set a callback for directory changes during iteration.
++ * @param fi		file info
++ * @param cb		callback function
++ * @param data		caller private callback data
++ * @return		string pool handle (weak reference)
++ */
++int rpmfiSetOnChdir(rpmfi fi, rpmfiChdirCb cb, void *data);
++
+ /** \ingroup rpmfi
+  * Return file info set string pool handle
+  * @param fi		file info
+-- 
+2.41.0
+

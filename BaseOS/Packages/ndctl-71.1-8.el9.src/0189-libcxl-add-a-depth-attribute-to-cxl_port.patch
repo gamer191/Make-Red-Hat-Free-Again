@@ -1,0 +1,45 @@
+From 0a43bfdf030b4a84fce562462944a9a44888afaa Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Mon, 15 Aug 2022 13:22:04 -0600
+Subject: [PATCH 189/217] libcxl: add a depth attribute to cxl_port
+
+Add a depth attribute to the cxl_port structure, that can be used for
+calculating its distance from the root port, and will be needed for
+interleave granularity calculations during region creation.
+
+Link: https://lore.kernel.org/r/20220815192214.545800-2-vishal.l.verma@intel.com
+Suggested-by: Dan Williams <dan.j.williams@intel.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c  | 1 +
+ cxl/lib/private.h | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index e52896f..145c6ba 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -744,6 +744,7 @@ static int cxl_port_init(struct cxl_port *port, struct cxl_port *parent_port,
+ 	port->type = type;
+ 	port->parent = parent_port;
+ 	port->type = type;
++	port->depth = parent_port ? parent_port->depth + 1 : 0;
+ 
+ 	list_head_init(&port->child_ports);
+ 	list_head_init(&port->endpoints);
+diff --git a/cxl/lib/private.h b/cxl/lib/private.h
+index f6d4573..832a815 100644
+--- a/cxl/lib/private.h
++++ b/cxl/lib/private.h
+@@ -66,6 +66,7 @@ struct cxl_port {
+ 	int decoders_init;
+ 	int dports_init;
+ 	int nr_dports;
++	int depth;
+ 	struct cxl_ctx *ctx;
+ 	struct cxl_bus *bus;
+ 	enum cxl_port_type type;
+-- 
+2.27.0
+

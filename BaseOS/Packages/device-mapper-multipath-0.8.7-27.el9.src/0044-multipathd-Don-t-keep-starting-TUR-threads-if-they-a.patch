@@ -1,0 +1,86 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 29 Mar 2022 22:22:10 -0500
+Subject: [PATCH] multipathd: Don't keep starting TUR threads, if they always
+ hang.
+
+If tur thead hangs, multipathd was simply creating a new thread, and
+assuming that the old thread would get cleaned up eventually. I have
+seen a case recently where there were 26000 multipathd threads on a
+system, all stuck trying to send TUR commands to path devices. The root
+cause of the issue was a scsi kernel issue, but it shows that the way
+multipathd currently deals with stuck threads could use some refinement.
+
+Now, when one tur thread hangs, multipathd will act as it did before.
+If a second one in a row hangs, multipathd will instead wait for it to
+complete before starting another thread. Once the thread completes, the
+count is reset.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com
+---
+ libmultipath/checkers/tur.c | 23 +++++++++++++++++++++--
+ 1 file changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/libmultipath/checkers/tur.c b/libmultipath/checkers/tur.c
+index a4b4a213..d82f7dbc 100644
+--- a/libmultipath/checkers/tur.c
++++ b/libmultipath/checkers/tur.c
+@@ -27,6 +27,7 @@
+ 
+ #define TUR_CMD_LEN 6
+ #define HEAVY_CHECK_COUNT       10
++#define MAX_NR_TIMEOUTS 1
+ 
+ enum {
+ 	MSG_TUR_RUNNING = CHECKER_FIRST_MSGID,
+@@ -55,6 +56,7 @@ struct tur_checker_context {
+ 	int holders; /* uatomic access only */
+ 	int msgid;
+ 	struct checker_context ctx;
++	unsigned int nr_timeouts;
+ };
+ 
+ int libcheck_init (struct checker * c)
+@@ -359,8 +361,23 @@ int libcheck_check(struct checker * c)
+ 		}
+ 	} else {
+ 		if (uatomic_read(&ct->holders) > 1) {
++			/* The thread has been cancelled but hasn't quit. */
++			if (ct->nr_timeouts == MAX_NR_TIMEOUTS) {
++				condlog(2, "%d:%d : waiting for stalled tur thread to finish",
++					major(ct->devt), minor(ct->devt));
++				ct->nr_timeouts++;
++			}
+ 			/*
+-			 * The thread has been cancelled but hasn't quit.
++			 * Don't start new threads until the last once has
++			 * finished.
++			 */
++			if (ct->nr_timeouts > MAX_NR_TIMEOUTS) {
++				c->msgid = MSG_TUR_TIMEOUT;
++				return PATH_TIMEOUT;
++			}
++			ct->nr_timeouts++;
++			/*
++			 * Start a new thread while the old one is stalled.
+ 			 * We have to prevent it from interfering with the new
+ 			 * thread. We create a new context and leave the old
+ 			 * one with the stale thread, hoping it will clean up
+@@ -376,13 +393,15 @@ int libcheck_check(struct checker * c)
+ 			 */
+ 			if (libcheck_init(c) != 0)
+ 				return PATH_UNCHECKED;
++			((struct tur_checker_context *)c->context)->nr_timeouts = ct->nr_timeouts;
+ 
+ 			if (!uatomic_sub_return(&ct->holders, 1))
+ 				/* It did terminate, eventually */
+ 				cleanup_context(ct);
+ 
+ 			ct = c->context;
+-		}
++		} else
++			ct->nr_timeouts = 0;
+ 		/* Start new TUR checker */
+ 		pthread_mutex_lock(&ct->lock);
+ 		tur_status = ct->state = PATH_PENDING;

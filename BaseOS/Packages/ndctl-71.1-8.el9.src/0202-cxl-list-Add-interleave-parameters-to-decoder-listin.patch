@@ -1,0 +1,49 @@
+From 0ee9ca3f6423a2af8ade983f596274f6fcfe66d6 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Fri, 5 Aug 2022 13:38:03 -0700
+Subject: [PATCH 202/217] cxl/list: Add interleave parameters to decoder
+ listings
+
+Emit interleave_ways and interleave_granularity in decoder output.
+
+Link: https://lore.kernel.org/r/165973188300.1528532.222988685552982872.stgit@dwillia2-xfh.jf.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/json.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/cxl/json.c b/cxl/json.c
+index 9cec58b..ada1dbe 100644
+--- a/cxl/json.c
++++ b/cxl/json.c
+@@ -466,6 +466,26 @@ struct json_object *util_cxl_decoder_to_json(struct cxl_decoder *decoder,
+ 			json_object_object_add(jdecoder, "size", jobj);
+ 	}
+ 
++	val = cxl_decoder_get_interleave_ways(decoder);
++	if (val < UINT_MAX) {
++		jobj = json_object_new_int(val);
++		if (jobj)
++			json_object_object_add(jdecoder, "interleave_ways",
++					       jobj);
++
++		/* granularity is a don't care if not interleaving */
++		if (val > 1) {
++			val = cxl_decoder_get_interleave_granularity(decoder);
++			if (val < UINT_MAX) {
++				jobj = json_object_new_int(val);
++				if (jobj)
++					json_object_object_add(
++						jdecoder,
++						"interleave_granularity", jobj);
++			}
++		}
++	}
++
+ 	if (size == 0) {
+ 		jobj = json_object_new_string("disabled");
+ 		if (jobj)
+-- 
+2.27.0
+

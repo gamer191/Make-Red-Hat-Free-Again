@@ -1,0 +1,55 @@
+From 2781de8cb60d0e8efb72d57eb1178f2f6df9415c Mon Sep 17 00:00:00 2001
+From: Jerry Snitselaar <jsnitsel@redhat.com>
+Date: Tue, 2 Aug 2022 11:59:06 -0700
+Subject: [PATCH 4/9] tpm2_eventlog: clean up some magic numbers
+
+Make the code a bit clearer by making it clear
+we are subtracting the size of the EFI_GUID member
+from the EFI_SIGNATURE_DATA size.
+
+Signed-off-by: Jerry Snitselaar <jsnitsel@redhat.com>
+---
+ lib/tpm2_eventlog_yaml.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/lib/tpm2_eventlog_yaml.c b/lib/tpm2_eventlog_yaml.c
+index 647a2225..fee78027 100644
+--- a/lib/tpm2_eventlog_yaml.c
++++ b/lib/tpm2_eventlog_yaml.c
+@@ -374,13 +374,13 @@ static bool yaml_uefi_var(UEFI_VARIABLE_DATA *data, size_t size, UINT32 type,
+                     for (i = 0; i < signatures; i++) {
+                         EFI_SIGNATURE_DATA *s = (EFI_SIGNATURE_DATA *)signature;
+                         char *sdata = calloc (1,
+-                            BYTES_TO_HEX_STRING_SIZE(slist->SignatureSize-16));
++                            BYTES_TO_HEX_STRING_SIZE(slist->SignatureSize - sizeof(EFI_GUID)));
+                         if (sdata == NULL) {
+                             LOG_ERR("Failled to allocate data: %s\n", strerror(errno));
+                             return false;
+                         }
+-                        bytes_to_str(s->SignatureData, slist->SignatureSize-16,
+-                            sdata, BYTES_TO_HEX_STRING_SIZE(slist->SignatureSize-16));
++                        bytes_to_str(s->SignatureData, slist->SignatureSize - sizeof(EFI_GUID),
++                            sdata, BYTES_TO_HEX_STRING_SIZE(slist->SignatureSize - sizeof(EFI_GUID)));
+                         guid_unparse_lower(s->SignatureOwner, uuidstr);
+                         tpm2_tool_output("      - SignatureOwner: %s\n"
+                                          "        SignatureData: %s\n",
+@@ -426,13 +426,13 @@ static bool yaml_uefi_var(UEFI_VARIABLE_DATA *data, size_t size, UINT32 type,
+             EFI_SIGNATURE_DATA *s= (EFI_SIGNATURE_DATA *)&data->UnicodeName[
+                 data->UnicodeNameLength];
+             char *sdata = calloc (1,
+-                BYTES_TO_HEX_STRING_SIZE(data->VariableDataLength - 16));
++                BYTES_TO_HEX_STRING_SIZE(data->VariableDataLength - sizeof(EFI_GUID)));
+             if (sdata == NULL) {
+                 LOG_ERR("Failled to allocate data: %s\n", strerror(errno));
+                 return false;
+             }
+-            bytes_to_str(s->SignatureData, data->VariableDataLength - 16,
+-                sdata, BYTES_TO_HEX_STRING_SIZE(data->VariableDataLength - 16));
++            bytes_to_str(s->SignatureData, data->VariableDataLength - sizeof(EFI_GUID),
++                sdata, BYTES_TO_HEX_STRING_SIZE(data->VariableDataLength - sizeof(EFI_GUID)));
+             guid_unparse_lower(s->SignatureOwner, uuidstr);
+             tpm2_tool_output("    - SignatureOwner: %s\n"
+                              "      SignatureData: %s\n",
+-- 
+2.37.3
+

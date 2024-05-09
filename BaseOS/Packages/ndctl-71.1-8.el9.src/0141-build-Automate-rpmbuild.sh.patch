@@ -1,0 +1,49 @@
+From 55f36387ee8a88c489863103347ae275b1bc9191 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Wed, 23 Feb 2022 18:41:45 -0800
+Subject: [PATCH 141/217] build: Automate rpmbuild.sh
+
+Prior to the meson conversion rpmbuild.sh with no arguments would find a
+pre-created ndctl.spec file relative to the script. Restore that
+behavior by looking for the script in the build/ directory, and try to
+create it if not there.
+
+Yes, this fails if someone picks a directory other than build/ for the
+output directory, but build/ is conventional.
+
+Another regression from autotools is the loss of support for building
+"dirty" rpms i.e. rpms from git source trees with uncommitted changes.
+At least provide a coherent error message for that case.
+
+Link: https://lore.kernel.org/r/164567050589.2266739.68846452427328787.stgit@dwillia2-desk3.amr.corp.intel.com
+Reported-by: Jane Chu <jane.chu@oracle.com>
+Reported-by: Vishal Verma <vishal.l.verma@intel.com>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ rpmbuild.sh | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/rpmbuild.sh b/rpmbuild.sh
+index b1f4d9e..d9823e5 100755
+--- a/rpmbuild.sh
++++ b/rpmbuild.sh
+@@ -4,6 +4,15 @@ spec=${1:-$(dirname $0)/rhel/ndctl.spec)}
+ 
+ pushd $(dirname $0) >/dev/null
+ [ ! -d ~/rpmbuild/SOURCES ] && echo "rpmdev tree not found" && exit 1
++if ./git-version | grep -q dirty; then
++	echo "Uncommitted changes detected, commit or undo them to proceed"
++	git status -uno --short
++	exit 1
++fi
++if [ ! -f $spec ]; then
++	meson compile -C build rhel/ndctl.spec
++	spec=$(dirname $0)/build/rhel/ndctl.spec
++fi
+ ./make-git-snapshot.sh
+ popd > /dev/null
+ rpmbuild --nocheck -ba $spec
+-- 
+2.27.0
+

@@ -1,0 +1,214 @@
+From baae5b4a06c905d9f52ed1f922a0d7d0625d11cf Mon Sep 17 00:00:00 2001
+From: Martin Kletzander <nert.pinx@gmail.com>
+Date: Wed, 1 Feb 2023 15:36:41 +0100
+Subject: [PATCH] find_new_[gu]id(): Skip over IDs that are reserved for legacy
+ reasons
+
+Some programs don't support `(uint16_t) -1` or `(uint32_t) -1` as user
+or group IDs.  This is because `-1` is used as an error code or as an
+unspecified ID, e.g. in `chown(2)` parameters, and in the past, `gid_t`
+and `uid_t` have changed width.  For legacy reasons, those values have
+been kept reserved in programs today (for example systemd does this; see
+the documentation in the link below).
+
+This should not be confused with catching overflow in the ID values,
+since that is already caught by our ERANGE checks.  This is about not
+using reserved values that have been reserved for legacy reasons.
+
+Link: <https://systemd.io/UIDS-GIDS/>
+Reviewed-by: Alejandro Colomar <alx@kernel.org>
+Signed-off-by: Martin Kletzander <mkletzan@redhat.com>
+---
+ libmisc/find_new_gid.c | 38 ++++++++++++++++++++++++++++----------
+ libmisc/find_new_uid.c | 38 ++++++++++++++++++++++++++++----------
+ 2 files changed, 56 insertions(+), 20 deletions(-)
+
+diff --git a/libmisc/find_new_gid.c b/libmisc/find_new_gid.c
+index 70ba95a2..da1d8d55 100644
+--- a/libmisc/find_new_gid.c
++++ b/libmisc/find_new_gid.c
+@@ -98,6 +98,7 @@ static int get_ranges (bool sys_group, gid_t *min_id, gid_t *max_id,
+  *
+  * On success, return 0
+  * If the ID is in use, return EEXIST
++ * If the ID might clash with -1, return EINVAL
+  * If the ID is outside the range, return ERANGE
+  * In other cases, return errno from getgrgid()
+  */
+@@ -111,6 +112,11 @@ static int check_gid (const gid_t gid,
+ 		return ERANGE;
+ 	}
+ 
++	/* Check for compatibility with 16b and 32b gid_t error codes */
++	if (gid == UINT16_MAX || gid == UINT32_MAX) {
++		return EINVAL;
++	}
++
+ 	/*
+ 	 * Check whether we already detected this GID
+ 	 * using the gr_next() loop
+@@ -182,10 +188,10 @@ int find_new_gid (bool sys_group,
+ 			 * gr_locate_gid() found the GID in an as-yet uncommitted
+ 			 * entry. We'll proceed below and auto-set a GID.
+ 			 */
+-		} else if (result == EEXIST || result == ERANGE) {
++		} else if (result == EEXIST || result == ERANGE || result == EINVAL) {
+ 			/*
+ 			 * Continue on below. At this time, we won't
+-			 * treat these two cases differently.
++			 * treat these three cases differently.
+ 			 */
+ 		} else {
+ 			/*
+@@ -296,8 +302,11 @@ int find_new_gid (bool sys_group,
+ 				*gid = id;
+ 				free (used_gids);
+ 				return 0;
+-			} else if (result == EEXIST) {
+-				/* This GID is in use, we'll continue to the next */
++			} else if (result == EEXIST || result == EINVAL) {
++				/*
++				 * This GID is in use or unusable, we'll
++				 * continue to the next.
++				 */
+ 			} else {
+ 				/*
+ 				 * An unexpected error occurred.
+@@ -339,8 +348,11 @@ int find_new_gid (bool sys_group,
+ 					*gid = id;
+ 					free (used_gids);
+ 					return 0;
+-				} else if (result == EEXIST) {
+-					/* This GID is in use, we'll continue to the next */
++				} else if (result == EEXIST || result == EINVAL) {
++					/*
++					 * This GID is in use or unusable, we'll
++					 * continue to the next.
++					 */
+ 				} else {
+ 					/*
+ 					 * An unexpected error occurred.
+@@ -399,8 +411,11 @@ int find_new_gid (bool sys_group,
+ 				*gid = id;
+ 				free (used_gids);
+ 				return 0;
+-			} else if (result == EEXIST) {
+-				/* This GID is in use, we'll continue to the next */
++			} else if (result == EEXIST || result == EINVAL) {
++				/*
++				 * This GID is in use or unusable, we'll
++				 * continue to the next.
++				 */
+ 			} else {
+ 				/*
+ 				 * An unexpected error occurred.
+@@ -442,8 +457,11 @@ int find_new_gid (bool sys_group,
+ 					*gid = id;
+ 					free (used_gids);
+ 					return 0;
+-				} else if (result == EEXIST) {
+-					/* This GID is in use, we'll continue to the next */
++				} else if (result == EEXIST || result == EINVAL) {
++					/*
++					 * This GID is in use or unusable, we'll
++					 * continue to the next.
++					 */
+ 				} else {
+ 					/*
+ 					 * An unexpected error occurred.
+diff --git a/libmisc/find_new_uid.c b/libmisc/find_new_uid.c
+index 6b71dfe5..09885236 100644
+--- a/libmisc/find_new_uid.c
++++ b/libmisc/find_new_uid.c
+@@ -98,6 +98,7 @@ static int get_ranges (bool sys_user, uid_t *min_id, uid_t *max_id,
+  *
+  * On success, return 0
+  * If the ID is in use, return EEXIST
++ * If the ID might clash with -1, return EINVAL
+  * If the ID is outside the range, return ERANGE
+  * In other cases, return errno from getpwuid()
+  */
+@@ -111,6 +112,11 @@ static int check_uid(const uid_t uid,
+ 		return ERANGE;
+ 	}
+ 
++	/* Check for compatibility with 16b and 32b uid_t error codes */
++	if (uid == UINT16_MAX || uid == UINT32_MAX) {
++		return EINVAL;
++	}
++
+ 	/*
+ 	 * Check whether we already detected this UID
+ 	 * using the pw_next() loop
+@@ -182,10 +188,10 @@ int find_new_uid(bool sys_user,
+ 			 * pw_locate_uid() found the UID in an as-yet uncommitted
+ 			 * entry. We'll proceed below and auto-set an UID.
+ 			 */
+-		} else if (result == EEXIST || result == ERANGE) {
++		} else if (result == EEXIST || result == ERANGE || result == EINVAL) {
+ 			/*
+ 			 * Continue on below. At this time, we won't
+-			 * treat these two cases differently.
++			 * treat these three cases differently.
+ 			 */
+ 		} else {
+ 			/*
+@@ -296,8 +302,11 @@ int find_new_uid(bool sys_user,
+ 				*uid = id;
+ 				free (used_uids);
+ 				return 0;
+-			} else if (result == EEXIST) {
+-				/* This UID is in use, we'll continue to the next */
++			} else if (result == EEXIST || result == EINVAL) {
++				/*
++				 * This GID is in use or unusable, we'll
++				 * continue to the next.
++				 */
+ 			} else {
+ 				/*
+ 				 * An unexpected error occurred.
+@@ -339,8 +348,11 @@ int find_new_uid(bool sys_user,
+ 					*uid = id;
+ 					free (used_uids);
+ 					return 0;
+-				} else if (result == EEXIST) {
+-					/* This UID is in use, we'll continue to the next */
++				} else if (result == EEXIST || result == EINVAL) {
++					/*
++					 * This GID is in use or unusable, we'll
++					 * continue to the next.
++					 */
+ 				} else {
+ 					/*
+ 					 * An unexpected error occurred.
+@@ -399,8 +411,11 @@ int find_new_uid(bool sys_user,
+ 				*uid = id;
+ 				free (used_uids);
+ 				return 0;
+-			} else if (result == EEXIST) {
+-				/* This UID is in use, we'll continue to the next */
++			} else if (result == EEXIST || result == EINVAL) {
++				/*
++				 * This GID is in use or unusable, we'll
++				 * continue to the next.
++				 */
+ 			} else {
+ 				/*
+ 				 * An unexpected error occurred.
+@@ -442,8 +457,11 @@ int find_new_uid(bool sys_user,
+ 					*uid = id;
+ 					free (used_uids);
+ 					return 0;
+-				} else if (result == EEXIST) {
+-					/* This UID is in use, we'll continue to the next */
++				} else if (result == EEXIST || result == EINVAL) {
++					/*
++					 * This GID is in use or unusable, we'll
++					 * continue to the next.
++					 */
+ 				} else {
+ 					/*
+ 					 * An unexpected error occurred.
+-- 
+2.40.1
+

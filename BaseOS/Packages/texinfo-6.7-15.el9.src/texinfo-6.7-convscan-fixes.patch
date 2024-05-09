@@ -1,0 +1,53 @@
+diff -up texinfo-6.7/gnulib/lib/regex_internal.c.orig texinfo-6.7/gnulib/lib/regex_internal.c
+--- texinfo-6.7/gnulib/lib/regex_internal.c.orig	2019-08-25 19:11:45.000000000 +0200
++++ texinfo-6.7/gnulib/lib/regex_internal.c	2022-02-09 09:51:41.084596377 +0100
+@@ -1724,7 +1724,10 @@ create_cd_newstate (const re_dfa_t *dfa,
+ 		}
+ 	      if (re_node_set_init_copy (newstate->entrance_nodes, nodes)
+ 		  != REG_NOERROR)
+-		return NULL;
++		{
++		  free_state (newstate);
++		  return NULL;
++		}
+ 	      nctx_nodes = 0;
+ 	      newstate->has_constraint = 1;
+ 	    }
+diff -up texinfo-6.7/info/session.c.orig texinfo-6.7/info/session.c
+--- texinfo-6.7/info/session.c.orig	2022-02-09 09:51:30.952589716 +0100
++++ texinfo-6.7/info/session.c	2022-02-09 09:51:41.085596377 +0100
+@@ -2897,7 +2897,10 @@ DECLARE_INFO_COMMAND (info_menu_sequence
+           node = info_follow_menus (dir_node, nodes, &error, 0);
+           info_set_node_of_window (window, node);
+           if (error)
+-            show_error_node (error);
++            {
++              show_error_node (error);
++              free (error);
++            }
+         }
+ 
+       free (nodes);
+@@ -3668,8 +3671,9 @@ DECLARE_INFO_COMMAND (info_view_file, _(
+       else
+         info_set_node_of_window (window, node);
+ 
+-      free (line);
+     }
++
++  free (line);
+ }
+ 
+ /* **************************************************************** */
+diff -up texinfo-6.7/util/texi2dvi.orig texinfo-6.7/util/texi2dvi
+--- texinfo-6.7/util/texi2dvi.orig	2019-09-23 20:28:10.000000000 +0200
++++ texinfo-6.7/util/texi2dvi	2022-02-09 09:51:41.086596378 +0100
+@@ -1697,7 +1697,7 @@ cleanup ()
+ input_file_name_decode ()
+ {
+   case $command_line_filename in
+-    *\\input{*}*)
++    *\\input\{*\}*)
+       # Let AUC-TeX error parser deal with line numbers.
+       line_error=false
+       command_line_filename=`\

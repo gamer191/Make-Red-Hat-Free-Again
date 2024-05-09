@@ -1,0 +1,59 @@
+From 37e73a30c5b75a57de9e2bb6843eb9a1dab12abf Mon Sep 17 00:00:00 2001
+From: Laszlo Gombos <laszlo.gombos@gmail.com>
+Date: Sun, 14 Aug 2022 22:46:10 +0000
+Subject: [PATCH] test(16-DMSQUASH): make it pass on arch
+
+Include additional kernel drivers and install squashfs-tools
+into the arch container.
+
+(cherry picked from commit b8ffc87d13989f95c8f48ec64613dd9138835618)
+
+Related: #2135060
+---
+ test/TEST-16-DMSQUASH/test.sh  | 4 +++-
+ test/container/Dockerfile-Arch | 2 +-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/test/TEST-16-DMSQUASH/test.sh b/test/TEST-16-DMSQUASH/test.sh
+index cf433489..52029375 100755
+--- a/test/TEST-16-DMSQUASH/test.sh
++++ b/test/TEST-16-DMSQUASH/test.sh
+@@ -6,7 +6,7 @@ TEST_DESCRIPTION="live root on a squash filesystem"
+ KVERSION="${KVERSION-$(uname -r)}"
+ 
+ # Uncomment this to debug failures
+-# DEBUGFAIL="rd.shell rd.debug loglevel=7"
++#DEBUGFAIL="rd.shell rd.debug loglevel=7"
+ 
+ test_run() {
+     dd if=/dev/zero of="$TESTDIR"/marker.img bs=1MiB count=1
+@@ -72,6 +72,7 @@ test_setup() {
+     # devices, volume groups, encrypted partitions, etc.
+     "$basedir"/dracut.sh -l -i "$TESTDIR"/overlay / \
+         --modules "rootfs-block qemu" \
++        --drivers "ext4 sd_mod" \
+         --no-hostonly --no-hostonly-cmdline --no-early-microcode --nofscks --nomdadmconf --nohardlink --nostrip \
+         --force "$TESTDIR"/initramfs.makeroot "$KVERSION" || return 1
+     rm -rf -- "$TESTDIR"/overlay
+@@ -109,6 +110,7 @@ test_setup() {
+     "$basedir"/dracut.sh -l -i "$TESTDIR"/overlay / \
+         --modules "dmsquash-live qemu" \
+         --omit "rngd" \
++        --drivers "ext4 sd_mod" \
+         --no-hostonly --no-hostonly-cmdline \
+         --force "$TESTDIR"/initramfs.testing "$KVERSION" || return 1
+ 
+diff --git a/test/container/Dockerfile-Arch b/test/container/Dockerfile-Arch
+index 922b8ede..ac1513a1 100644
+--- a/test/container/Dockerfile-Arch
++++ b/test/container/Dockerfile-Arch
+@@ -9,7 +9,7 @@ RUN echo 'export DRACUT_NO_XATTR=1 KVERSION=$(cd /lib/modules; ls -1 | tail -1)'
+ 
+ # Install needed packages for the dracut CI container
+ RUN pacman --noconfirm -Sy \
+-    linux dash strace dhclient asciidoc cpio pigz \
++    linux dash strace dhclient asciidoc cpio pigz squashfs-tools \
+     qemu btrfs-progs mdadm dmraid nfs-utils nfsidmap lvm2 nbd \
+     dhcp networkmanager multipath-tools vi tcpdump open-iscsi \
+     git shfmt shellcheck astyle which base-devel && yes | pacman  -Scc
+

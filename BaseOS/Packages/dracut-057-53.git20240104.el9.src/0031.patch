@@ -1,0 +1,48 @@
+From 5f0e59418133379f50cc7af30674ce96569d9038 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.de>
+Date: Sat, 17 Sep 2022 00:51:46 +0200
+Subject: [PATCH] fix(nvmf): make sure "rd.nvmf.discover=fc,auto" takes
+ precedence
+
+The command line may contain several rd.nvmf.discover options.
+The "fc,auto" option should take precedence.
+
+Resolves: #1933787
+---
+ modules.d/95nvmf/parse-nvmf-boot-connections.sh | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/modules.d/95nvmf/parse-nvmf-boot-connections.sh b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+index df104606..c8078a76 100755
+--- a/modules.d/95nvmf/parse-nvmf-boot-connections.sh
++++ b/modules.d/95nvmf/parse-nvmf-boot-connections.sh
+@@ -92,19 +92,21 @@ if [ -n "$nvmf_hostid" ]; then
+     echo "$nvmf_hostid" > /etc/nvme/hostid
+ fi
+ 
++NVMF_FC_AUTO=
+ for d in $(getargs rd.nvmf.discover -d nvmf.discover=); do
+-    parse_nvmf_discover "$d" || break
++    parse_nvmf_discover "$d" || {
++        NVMF_FC_AUTO=1
++        break
++    }
+ done
+ 
+ # Host NQN and host id are mandatory for NVMe-oF
+ [ -f "/etc/nvme/hostnqn" ] || exit 0
+ [ -f "/etc/nvme/hostid" ] || exit 0
+ 
+-if [ -f "/etc/nvme/discovery.conf" ]; then
+-    /sbin/initqueue --settled --onetime --unique --name nvme-discover /usr/sbin/nvme connect-all
++# If no nvme command line arguments present, try autodiscovery
++if [ $NVMF_FC_AUTO ] || [ ! -f "/etc/nvme/discovery.conf" ]; then
++    /sbin/initqueue --settled --onetime --unique --name nvme-fc-autoconnect /sbin/nvmf-autoconnect.sh
+ else
+-    # No nvme command line arguments present, try autodiscovery
+-    if [ "$trtype" = "fc" ]; then
+-        /sbin/initqueue --settled --onetime --unique --name nvme-fc-autoconnect /sbin/nvmf-autoconnect.sh
+-    fi
++    /sbin/initqueue --settled --onetime --unique --name nvme-discover /usr/sbin/nvme connect-all
+ fi
+

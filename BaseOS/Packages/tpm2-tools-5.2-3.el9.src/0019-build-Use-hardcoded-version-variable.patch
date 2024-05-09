@@ -1,0 +1,32 @@
+From 395651f059ceb21d56c44cddda05e055caa0fd19 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=C5=A0t=C4=9Bp=C3=A1n=20Hor=C3=A1=C4=8Dek?=
+ <shoracek@redhat.com>
+Date: Mon, 18 Oct 2021 19:04:54 +0200
+Subject: [PATCH] build: Use hardcoded version variable
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Before this commit the version was generated from git tag/commit hash.
+This caused problems with having empty version variable while building
+outside of git. Fix this by hardcoding the variable.
+
+Signed-off-by: Štěpán Horáček <shoracek@redhat.com>
+---
+ configure.ac | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 9561fa86..2bf3a790 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1,5 +1,4 @@
+-AC_INIT([tpm2-tools],
+-    [m4_esyscmd_s([git describe --tags --always --dirty])])
++AC_INIT([tpm2-tools], [5.2])
+ AC_CONFIG_MACRO_DIR([m4])
+ 
+ AX_IS_RELEASE([dash-version])
+-- 
+2.31.1
+

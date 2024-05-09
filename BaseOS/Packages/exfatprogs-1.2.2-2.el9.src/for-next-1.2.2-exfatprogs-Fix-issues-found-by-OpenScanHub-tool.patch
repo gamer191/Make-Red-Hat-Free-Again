@@ -1,0 +1,71 @@
+From cb641bd9b81179b7f039e6d0e64cd67e7fb4e11c Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Wed, 6 Dec 2023 22:01:04 +0100
+Subject: [PATCH] exfatprogs: Fix issues found by OpenScanHub tool
+
+Fix some issues found by red hat internal OpenScanHub tool.
+
+exfatprogs-1.2.2/exfat2img/exfat2img.c:893: check_return: Calling
+	"fsync" without checking return value (as is done elsewhere
+	6 out of 7 times).
+
+exfatprogs-1.2.2/fsck/fsck.c:1251:2: warning[deadcode.DeadStores]:
+	Value stored to 'err' is never read
+
+exfatprogs-1.2.2/lib/libexfat.c:983: returned_null: "malloc" returns
+	 "NULL" (checked 20 out of 23 times)
+
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+Signed-off-by: Namjae Jeon <linkinjeon@kernel.org>
+---
+ exfat2img/exfat2img.c | 5 ++++-
+ fsck/fsck.c           | 1 -
+ lib/libexfat.c        | 4 ++++
+ 3 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/exfat2img/exfat2img.c b/exfat2img/exfat2img.c
+index f1a4ef2..4774a56 100644
+--- a/exfat2img/exfat2img.c
++++ b/exfat2img/exfat2img.c
+@@ -890,7 +890,10 @@ static int restore_from_stdin(struct exfat2img *ei)
+ 		}
+ 	}
+ out:
+-	fsync(ei->out_fd);
++	if (fsync(ei->out_fd)) {
++		exfat_err("failed to fsync: %d\n", errno);
++		ret = -EIO;
++	}
+ 	exfat_free_buffer(ei->dump_bdesc, 2);
+ 	return ret;
+ }
+diff --git a/fsck/fsck.c b/fsck/fsck.c
+index 77272aa..a5517d2 100644
+--- a/fsck/fsck.c
++++ b/fsck/fsck.c
+@@ -1248,7 +1248,6 @@ static int exfat_root_dir_check(struct exfat *exfat)
+ 	err = exfat_read_volume_label(exfat);
+ 	if (err && err != EOF)
+ 		exfat_err("failed to read volume label\n");
+-	err = 0;
+ 
+ 	err = read_bitmap(exfat);
+ 	if (err) {
+diff --git a/lib/libexfat.c b/lib/libexfat.c
+index d7b8344..6ae5742 100644
+--- a/lib/libexfat.c
++++ b/lib/libexfat.c
+@@ -981,6 +981,10 @@ int read_boot_sect(struct exfat_blk_dev *bdev, struct pbr **bs)
+ 	unsigned int sect_size, clu_size;
+ 
+ 	pbr = malloc(sizeof(struct pbr));
++	if (!pbr) {
++		exfat_err("failed to allocate memory\n");
++		return -ENOMEM;
++	}
+ 
+ 	if (exfat_read(bdev->dev_fd, pbr, sizeof(*pbr), 0) !=
+ 	    (ssize_t)sizeof(*pbr)) {
+-- 
+2.43.0
+

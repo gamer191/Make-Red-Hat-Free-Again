@@ -1,0 +1,35 @@
+From 8bbc0aeca0187ad3f5f942408198bc0fc055b0f8 Mon Sep 17 00:00:00 2001
+From: Tao Liu <ltao@redhat.com>
+Date: Tue, 4 Jul 2023 10:04:10 +0800
+Subject: [PATCH 1/7] activate_mapping: fflush the buffered data to
+ smp_affinity
+
+Previously irqbalance uses the return value of fprintf() to decide whether
+the modification of smp_affinity is successful or not. However it is not
+reliable because fprintf() is stream buffered, a fflush() should be used to
+check the buffered data been successfully written into the file before the
+judgement.
+
+This patch fixes the issue by introducing fflush() after fprintf().
+
+Signed-off-by: Tao Liu <ltao@redhat.com>
+---
+ activate.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/activate.c b/activate.c
+index 62cfd08..6d0b096 100644
+--- a/activate.c
++++ b/activate.c
+@@ -76,7 +76,7 @@ static void activate_mapping(struct irq_info *info, void *data __attribute__((un
+ 
+ 	cpumask_scnprintf(buf, PATH_MAX, applied_mask);
+ 	ret = fprintf(file, "%s", buf);
+-	if (ret < 0) {
++	if (ret < 0 || fflush(file)) {
+ 		log(TO_ALL, LOG_WARNING, "cannot change irq %i's affinity, add it to banned list", info->irq);
+ 		add_banned_irq(info->irq);
+ 		remove_one_irq_from_db(info->irq);
+-- 
+2.40.1
+

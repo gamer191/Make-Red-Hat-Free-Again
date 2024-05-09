@@ -1,0 +1,46 @@
+From c55b18181281b2fffadb9e0e8955d74b8b719349 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Fri, 17 Dec 2021 19:25:11 -0700
+Subject: [PATCH 061/217] libcxl: fix potential NULL dereference in
+ cxl_memdev_nvdimm_bridge_active()
+
+Static analysis points out that the function above has a check for
+'if (!bridge)', implying that bridge maybe NULL, but it is dereferenced
+before the check, which could result in a NULL dereference.
+
+Fix this by moving any accesses to the bridge structure after the NULL
+check.
+
+Link: https://lore.kernel.org/r/20211218022511.314928-1-vishal.l.verma@intel.com
+Cc: Dan Williams <dan.j.williams@intel.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index f0664be..3390eb9 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -420,12 +420,15 @@ CXL_EXPORT int cxl_memdev_nvdimm_bridge_active(struct cxl_memdev *memdev)
+ {
+ 	struct cxl_ctx *ctx = cxl_memdev_get_ctx(memdev);
+ 	struct cxl_nvdimm_bridge *bridge = memdev->bridge;
+-	char *path = bridge->dev_buf;
+-	int len = bridge->buf_len;
++	char *path;
++	int len;
+ 
+ 	if (!bridge)
+ 		return 0;
+ 
++	path = bridge->dev_buf;
++	len = bridge->buf_len;
++
+ 	if (snprintf(path, len, "%s/driver", bridge->dev_path) >= len) {
+ 		err(ctx, "%s: nvdimm bridge buffer too small!\n",
+ 				cxl_memdev_get_devname(memdev));
+-- 
+2.27.0
+

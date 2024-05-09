@@ -1,0 +1,625 @@
+From 5a6af47c3db45b6303bac4dcd6da186fd5cd178c Mon Sep 17 00:00:00 2001
+From: Ondrej Valousek <ondrej.valousek.xm@renesas.com>
+Date: Fri, 2 Dec 2022 13:40:19 +0100
+Subject: [PATCH 1/3] file-has-acl: Basic support for checking NFSv4 ACLs in
+ Linux.
+
+* lib/acl-internal.h (acl_nfs4_nontrivial): New declaration.
+* lib/acl-internal.c (acl_nfs4_nontrivial): New function.
+* lib/file-has-acl.c: Include <arpa/inet.h>.
+(XATTR_NAME_NFSV4_ACL, TRIVIAL_NFS4_ACL_MAX_LENGTH): New macros.
+(file_has_acl): Test for NFSv4 ACLs.
+* doc/acl-nfsv4.txt: New file.
+
+Upstream-commit: b0604a8e134dbcc307c0ffdd5ebd3693e9de7081
+Signed-off-by: Kamil Dudka <kdudka@redhat.com>
+---
+ doc/acl-nfsv4.txt  |  17 ++++++++
+ lib/acl-internal.c | 100 +++++++++++++++++++++++++++++++++++++++++++++
+ lib/acl-internal.h |   3 ++
+ lib/file-has-acl.c |  21 ++++++++++
+ 4 files changed, 141 insertions(+)
+ create mode 100644 doc/acl-nfsv4.txt
+
+diff --git a/doc/acl-nfsv4.txt b/doc/acl-nfsv4.txt
+new file mode 100644
+index 0000000..71352f5
+--- /dev/null
++++ b/doc/acl-nfsv4.txt
+@@ -0,0 +1,17 @@
++General introduction:
++   https://linux.die.net/man/5/nfs4_acl
++
++The NFSv4 acls are defined in RFC7530 and as such, every NFSv4 server supporting ACLs
++will support this kind of ACLs (note the difference from POSIX draft ACLs)
++
++The ACLs can be obtained via the nfsv4-acl-tools, i.e.
++
++$ nfs4_getfacl <file>
++
++# file: <file>
++A::OWNER@:rwaDxtTnNcCy
++A::GROUP@:rwaDxtTnNcy
++A::EVERYONE@:rwaDxtTnNcy
++
++Gnulib is aiming to only provide a basic support of these, i.e. recognize trivial
++and non-trivial ACLs
+diff --git a/lib/acl-internal.c b/lib/acl-internal.c
+index be244c6..4c65dff 100644
+--- a/lib/acl-internal.c
++++ b/lib/acl-internal.c
+@@ -25,6 +25,9 @@
+ 
+ #if USE_ACL && HAVE_ACL_GET_FILE /* Linux, FreeBSD, Mac OS X, IRIX, Tru64, Cygwin >= 2.5 */
+ 
++# include <string.h>
++# include <arpa/inet.h>
++
+ # if HAVE_ACL_TYPE_EXTENDED /* Mac OS X */
+ 
+ /* ACL is an ACL, from a file, stored as type ACL_TYPE_EXTENDED.
+@@ -122,6 +125,103 @@ acl_default_nontrivial (acl_t acl)
+   return (acl_entries (acl) > 0);
+ }
+ 
++#  define ACE4_WHO_OWNER    "OWNER@"
++#  define ACE4_WHO_GROUP    "GROUP@"
++#  define ACE4_WHO_EVERYONE "EVERYONE@"
++
++#  define ACE4_ACCESS_ALLOWED_ACE_TYPE   0
++#  define ACE4_ACCESS_DENIED_ACE_TYPE    1
++
++/* ACE flag values */
++#  define ACE4_IDENTIFIER_GROUP          0x00000040
++#  define ROUNDUP(x, y)                  (((x) + (y) - 1) & - (y))
++
++int
++acl_nfs4_nontrivial (char *xattr, int len)
++{
++  int      bufs = len;
++  uint32_t num_aces = ntohl (*((uint32_t*)(xattr))), /* Grab the number of aces in the acl */
++           num_a_aces = 0,
++           num_d_aces = 0;
++  char *bufp = xattr;
++
++  bufp += 4;  /* sizeof(uint32_t); */
++  bufs -= 4;
++
++  for (uint32_t ace_n = 0; num_aces > ace_n ; ace_n++)
++    {
++      int      d_ptr;
++      uint32_t flag,
++               wholen,
++               type;
++
++      /* Get the acl type */
++      if (bufs <= 0)
++        return -1;
++
++      type = ntohl (*((uint32_t*)bufp));
++
++      bufp += 4;
++      bufs -= 4;
++      if (bufs <= 0)
++        return -1;
++
++      flag = ntohl (*((uint32_t*)bufp));
++      /* As per RFC 7530, the flag should be 0, but we are just generous to Netapp
++       * and also accept the Group flag
++       */
++      if (flag & ~ACE4_IDENTIFIER_GROUP)
++        return 1;
++
++      /* we skip mask -
++       * it's too risky to test it and it does not seem to be actually needed */
++      bufp += 2*4;
++      bufs -= 2*4;
++
++      if (bufs <= 0)
++        return -1;
++
++      wholen = ntohl (*((uint32_t*)bufp));
++
++      bufp += 4;
++      bufs -= 4;
++
++      /* Get the who string */
++      if (bufs <= 0)
++        return -1;
++
++      /* for trivial ACL, we expect max 5 (typically 3) ACES, 3 Allow, 2 deny */
++      if (((strncmp (bufp, ACE4_WHO_OWNER, wholen) == 0)
++          || (strncmp (bufp, ACE4_WHO_GROUP, wholen) == 0))
++          &&  wholen == 6)
++        {
++          if (type == ACE4_ACCESS_ALLOWED_ACE_TYPE)
++            num_a_aces++;
++          if (type == ACE4_ACCESS_DENIED_ACE_TYPE)
++            num_d_aces++;
++        }
++      else
++        if ((strncmp (bufp, ACE4_WHO_EVERYONE, wholen) == 0)
++            && (type == ACE4_ACCESS_ALLOWED_ACE_TYPE)
++            && (wholen == 9))
++          num_a_aces++;
++        else
++          return 1;
++
++      d_ptr = ROUNDUP (wholen, 4);
++      bufp += d_ptr;
++      bufs -= d_ptr;
++
++      /* Make sure we aren't outside our domain */
++      if (bufs < 0)
++        return -1;
++
++    }
++  return !((num_a_aces <= 3) && (num_d_aces <= 2)
++         && (num_a_aces + num_d_aces == num_aces));
++
++}
++
+ # endif
+ 
+ #elif USE_ACL && HAVE_FACL && defined GETACL /* Solaris, Cygwin < 2.5, not HP-UX */
+diff --git a/lib/acl-internal.h b/lib/acl-internal.h
+index 9353376..2a249ff 100644
+--- a/lib/acl-internal.h
++++ b/lib/acl-internal.h
+@@ -147,6 +147,9 @@ rpl_acl_set_fd (int fd, acl_t acl)
+ #   define acl_entries rpl_acl_entries
+ extern int acl_entries (acl_t);
+ #  endif
++/* Return 1 if given ACL in XDR format is non-trivial
++ * Return 0 if it is trivial */
++extern int acl_nfs4_nontrivial (char *, int);
+ 
+ #  if HAVE_ACL_TYPE_EXTENDED /* Mac OS X */
+ /* ACL is an ACL, from a file, stored as type ACL_TYPE_EXTENDED.
+diff --git a/lib/file-has-acl.c b/lib/file-has-acl.c
+index e02f062..1710234 100644
+--- a/lib/file-has-acl.c
++++ b/lib/file-has-acl.c
+@@ -32,6 +32,11 @@
+ #if GETXATTR_WITH_POSIX_ACLS
+ # include <sys/xattr.h>
+ # include <linux/xattr.h>
++# include <arpa/inet.h>
++# ifndef XATTR_NAME_NFSV4_ACL
++#  define XATTR_NAME_NFSV4_ACL "system.nfs4_acl"
++# endif
++# define TRIVIAL_NFS4_ACL_MAX_LENGTH 128
+ #endif
+ 
+ /* Return 1 if NAME has a nontrivial access control list,
+@@ -67,6 +72,22 @@ file_has_acl (char const *name, struct stat const *sb)
+             return 1;
+         }
+ 
++      if (ret < 0)
++        { /* we might be on NFS, so try to check NFSv4 ACLs too */
++          char xattr[TRIVIAL_NFS4_ACL_MAX_LENGTH];
++
++          errno = 0; /* we need to reset errno set by the previous getxattr() */
++          ret = getxattr (name, XATTR_NAME_NFSV4_ACL, xattr, TRIVIAL_NFS4_ACL_MAX_LENGTH);
++          if (ret < 0 && errno == ENODATA)
++            ret = 0;
++          else
++            if (ret < 0 && errno == ERANGE)
++              return 1;  /* we won't fit into the buffer, so non-trivial ACL is presented */
++            else
++              if (ret > 0)
++                /* looks like trivial ACL, but we need to investigate further */
++                return acl_nfs4_nontrivial (xattr, ret);
++        }
+       if (ret < 0)
+         return - acl_errno_valid (errno);
+       return ret;
+-- 
+2.38.1
+
+
+From c5266d204a446bea619fa18da8520dceb0a54192 Mon Sep 17 00:00:00 2001
+From: Paul Eggert <eggert@cs.ucla.edu>
+Date: Fri, 23 Dec 2022 15:18:29 -0800
+Subject: [PATCH 2/3] file-has-acl: improve recent NFSv4 support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This fixes a link failure with emacsclient on GNU/Linux.  This
+program wants file_has_acl but none of the other ACL primitives,
+so it doesn’t link acl-internal.o; this way it doesn’t need to
+link with -lacl.  While I was at it I reviewed the recent changes,
+fixed some unlikely overflow bugs, and adjusted to GNU style.
+* doc/acl-nfsv4.txt: Remove.  Its contents are now in a
+comment in lib/file-has-acl.c.
+* lib/acl-internal.c, lib/acl-internal.h: Move recent changes
+relating to acl_nfs4_nontrivial to lib/file-has-acl.c, so that
+there is no trouble linking programs that need only file_has_acl.
+* lib/file-has-acl.c (acl_nfs4_nontrivial): Move here from
+lib/acl-internal.c, so that we needn't link -lacl in
+programs that want only file_has_acl, such as emacsclient.
+Do not assume a char buffer is aligned for uint32_t.
+Check more carefully for buffer read overrun.
+Allow up to 6 ACEs, since other code does; but check
+that they’re distinct.  Avoid integer overflow.
+Use memcmp rather than strncmp to compare memory blocks.
+(file_has_acl): Preserve initial errno instead of setting to 0.
+Allocate a bit more room for trivial ACL buffer.
+Use EINVAL for botchedk NFSv4 ACLs (which shouldn’t happen).
+
+Upstream-commit: 35bd46f0c816948dc1a0430c8ba8b10a01167320
+Signed-off-by: Kamil Dudka <kdudka@redhat.com>
+---
+ doc/acl-nfsv4.txt  |  17 ------
+ lib/acl-internal.c | 100 -----------------------------------
+ lib/acl-internal.h |   3 --
+ lib/file-has-acl.c | 129 +++++++++++++++++++++++++++++++++++++++------
+ 4 files changed, 113 insertions(+), 136 deletions(-)
+ delete mode 100644 doc/acl-nfsv4.txt
+
+diff --git a/doc/acl-nfsv4.txt b/doc/acl-nfsv4.txt
+deleted file mode 100644
+index 71352f5..0000000
+--- a/doc/acl-nfsv4.txt
++++ /dev/null
+@@ -1,17 +0,0 @@
+-General introduction:
+-   https://linux.die.net/man/5/nfs4_acl
+-
+-The NFSv4 acls are defined in RFC7530 and as such, every NFSv4 server supporting ACLs
+-will support this kind of ACLs (note the difference from POSIX draft ACLs)
+-
+-The ACLs can be obtained via the nfsv4-acl-tools, i.e.
+-
+-$ nfs4_getfacl <file>
+-
+-# file: <file>
+-A::OWNER@:rwaDxtTnNcCy
+-A::GROUP@:rwaDxtTnNcy
+-A::EVERYONE@:rwaDxtTnNcy
+-
+-Gnulib is aiming to only provide a basic support of these, i.e. recognize trivial
+-and non-trivial ACLs
+diff --git a/lib/acl-internal.c b/lib/acl-internal.c
+index 4c65dff..be244c6 100644
+--- a/lib/acl-internal.c
++++ b/lib/acl-internal.c
+@@ -25,9 +25,6 @@
+ 
+ #if USE_ACL && HAVE_ACL_GET_FILE /* Linux, FreeBSD, Mac OS X, IRIX, Tru64, Cygwin >= 2.5 */
+ 
+-# include <string.h>
+-# include <arpa/inet.h>
+-
+ # if HAVE_ACL_TYPE_EXTENDED /* Mac OS X */
+ 
+ /* ACL is an ACL, from a file, stored as type ACL_TYPE_EXTENDED.
+@@ -125,103 +122,6 @@ acl_default_nontrivial (acl_t acl)
+   return (acl_entries (acl) > 0);
+ }
+ 
+-#  define ACE4_WHO_OWNER    "OWNER@"
+-#  define ACE4_WHO_GROUP    "GROUP@"
+-#  define ACE4_WHO_EVERYONE "EVERYONE@"
+-
+-#  define ACE4_ACCESS_ALLOWED_ACE_TYPE   0
+-#  define ACE4_ACCESS_DENIED_ACE_TYPE    1
+-
+-/* ACE flag values */
+-#  define ACE4_IDENTIFIER_GROUP          0x00000040
+-#  define ROUNDUP(x, y)                  (((x) + (y) - 1) & - (y))
+-
+-int
+-acl_nfs4_nontrivial (char *xattr, int len)
+-{
+-  int      bufs = len;
+-  uint32_t num_aces = ntohl (*((uint32_t*)(xattr))), /* Grab the number of aces in the acl */
+-           num_a_aces = 0,
+-           num_d_aces = 0;
+-  char *bufp = xattr;
+-
+-  bufp += 4;  /* sizeof(uint32_t); */
+-  bufs -= 4;
+-
+-  for (uint32_t ace_n = 0; num_aces > ace_n ; ace_n++)
+-    {
+-      int      d_ptr;
+-      uint32_t flag,
+-               wholen,
+-               type;
+-
+-      /* Get the acl type */
+-      if (bufs <= 0)
+-        return -1;
+-
+-      type = ntohl (*((uint32_t*)bufp));
+-
+-      bufp += 4;
+-      bufs -= 4;
+-      if (bufs <= 0)
+-        return -1;
+-
+-      flag = ntohl (*((uint32_t*)bufp));
+-      /* As per RFC 7530, the flag should be 0, but we are just generous to Netapp
+-       * and also accept the Group flag
+-       */
+-      if (flag & ~ACE4_IDENTIFIER_GROUP)
+-        return 1;
+-
+-      /* we skip mask -
+-       * it's too risky to test it and it does not seem to be actually needed */
+-      bufp += 2*4;
+-      bufs -= 2*4;
+-
+-      if (bufs <= 0)
+-        return -1;
+-
+-      wholen = ntohl (*((uint32_t*)bufp));
+-
+-      bufp += 4;
+-      bufs -= 4;
+-
+-      /* Get the who string */
+-      if (bufs <= 0)
+-        return -1;
+-
+-      /* for trivial ACL, we expect max 5 (typically 3) ACES, 3 Allow, 2 deny */
+-      if (((strncmp (bufp, ACE4_WHO_OWNER, wholen) == 0)
+-          || (strncmp (bufp, ACE4_WHO_GROUP, wholen) == 0))
+-          &&  wholen == 6)
+-        {
+-          if (type == ACE4_ACCESS_ALLOWED_ACE_TYPE)
+-            num_a_aces++;
+-          if (type == ACE4_ACCESS_DENIED_ACE_TYPE)
+-            num_d_aces++;
+-        }
+-      else
+-        if ((strncmp (bufp, ACE4_WHO_EVERYONE, wholen) == 0)
+-            && (type == ACE4_ACCESS_ALLOWED_ACE_TYPE)
+-            && (wholen == 9))
+-          num_a_aces++;
+-        else
+-          return 1;
+-
+-      d_ptr = ROUNDUP (wholen, 4);
+-      bufp += d_ptr;
+-      bufs -= d_ptr;
+-
+-      /* Make sure we aren't outside our domain */
+-      if (bufs < 0)
+-        return -1;
+-
+-    }
+-  return !((num_a_aces <= 3) && (num_d_aces <= 2)
+-         && (num_a_aces + num_d_aces == num_aces));
+-
+-}
+-
+ # endif
+ 
+ #elif USE_ACL && HAVE_FACL && defined GETACL /* Solaris, Cygwin < 2.5, not HP-UX */
+diff --git a/lib/acl-internal.h b/lib/acl-internal.h
+index 2a249ff..9353376 100644
+--- a/lib/acl-internal.h
++++ b/lib/acl-internal.h
+@@ -147,9 +147,6 @@ rpl_acl_set_fd (int fd, acl_t acl)
+ #   define acl_entries rpl_acl_entries
+ extern int acl_entries (acl_t);
+ #  endif
+-/* Return 1 if given ACL in XDR format is non-trivial
+- * Return 0 if it is trivial */
+-extern int acl_nfs4_nontrivial (char *, int);
+ 
+ #  if HAVE_ACL_TYPE_EXTENDED /* Mac OS X */
+ /* ACL is an ACL, from a file, stored as type ACL_TYPE_EXTENDED.
+diff --git a/lib/file-has-acl.c b/lib/file-has-acl.c
+index 1710234..676523b 100644
+--- a/lib/file-has-acl.c
++++ b/lib/file-has-acl.c
+@@ -29,14 +29,97 @@
+ 
+ #include "acl-internal.h"
+ 
+-#if GETXATTR_WITH_POSIX_ACLS
++#if USE_ACL && GETXATTR_WITH_POSIX_ACLS
++# include <string.h>
++# include <arpa/inet.h>
+ # include <sys/xattr.h>
+ # include <linux/xattr.h>
+-# include <arpa/inet.h>
+ # ifndef XATTR_NAME_NFSV4_ACL
+ #  define XATTR_NAME_NFSV4_ACL "system.nfs4_acl"
+ # endif
+-# define TRIVIAL_NFS4_ACL_MAX_LENGTH 128
++
++enum {
++  /* ACE4_ACCESS_ALLOWED_ACE_TYPE = 0x00000000, */
++  ACE4_ACCESS_DENIED_ACE_TYPE  = 0x00000001,
++  ACE4_IDENTIFIER_GROUP        = 0x00000040
++};
++
++/* Return 1 if given ACL in XDR format is non-trivial, 0 if it is trivial.
++   -1 upon failure to determine it.  Possibly change errno.  Assume that
++   the ACL is valid, except avoid undefined behavior even if invalid.
++
++   See <https://linux.die.net/man/5/nfs4_acl>.  The NFSv4 acls are
++   defined in Internet RFC 7530 and as such, every NFSv4 server
++   supporting ACLs should support NFSv4 ACLs (they differ from from
++   POSIX draft ACLs).  The ACLs can be obtained via the
++   nfsv4-acl-tools, e.g., the nfs4_getfacl command.  Gnulib provides
++   only basic support of NFSv4 ACLs, i.e., recognize trivial vs
++   nontrivial ACLs.  */
++
++static int
++acl_nfs4_nontrivial (uint32_t *xattr, ssize_t nbytes)
++{
++  enum { BYTES_PER_NETWORK_UINT = 4};
++
++  /* Grab the number of aces in the acl.  */
++  nbytes -= BYTES_PER_NETWORK_UINT;
++  if (nbytes < 0)
++    return -1;
++  uint32_t num_aces = ntohl (*xattr++);
++  if (6 < num_aces)
++    return 1;
++  int ace_found = 0;
++
++  for (int ace_n = 0; ace_n < num_aces; ace_n++)
++    {
++      /* Get the acl type and flag.  Skip the mask; it's too risky to
++         test it and it does not seem to be needed.  Get the wholen.  */
++      nbytes -= 4 * BYTES_PER_NETWORK_UINT;
++      if (nbytes < 0)
++        return -1;
++      uint32_t type = ntohl (xattr[0]);
++      uint32_t flag = ntohl (xattr[1]);
++      uint32_t wholen = ntohl (xattr[3]);
++      xattr += 4;
++      int64_t wholen4 = wholen;
++      wholen4 = ((wholen4 + (BYTES_PER_NETWORK_UINT))
++                 & ~ (BYTES_PER_NETWORK_UINT - 1));
++
++      /* Trivial ACLs have only ACE4_ACCESS_ALLOWED_ACE_TYPE or
++         ACE4_ACCESS_DENIED_ACE_TYPE.  */
++      if (ACE4_ACCESS_DENIED_ACE_TYPE < type)
++        return 1;
++
++      /* RFC 7530 says FLAG should be 0, but be generous to NetApp and
++         also accept the group flag.  */
++      if (flag & ~ACE4_IDENTIFIER_GROUP)
++        return 1;
++
++      /* Get the who string.  Check NBYTES - WHOLEN4 before storing
++         into NBYTES, to avoid truncation on conversion.  */
++      if (nbytes - wholen4 < 0)
++        return -1;
++      nbytes -= wholen4;
++
++      /* For a trivial ACL, max 6 (typically 3) ACEs, 3 allow, 3 deny.
++         Check that there is at most one ACE of each TYPE and WHO.  */
++      int who2
++        = (wholen == 6 && memcmp (xattr, "OWNER@", 6) == 0 ? 0
++           : wholen == 6 && memcmp (xattr, "GROUP@", 6) == 0 ? 2
++           : wholen == 9 && memcmp (xattr, "EVERYONE@", 9) == 0 ? 4
++           : -1);
++      if (who2 < 0)
++        return 1;
++      int ace_found_bit = 1 << (who2 | type);
++      if (ace_found & ace_found_bit)
++        return 1;
++      ace_found |= ace_found_bit;
++
++      xattr = (uint32_t *) ((char *) xattr + wholen4);
++    }
++
++  return 0;
++}
+ #endif
+ 
+ /* Return 1 if NAME has a nontrivial access control list,
+@@ -56,6 +139,7 @@ file_has_acl (char const *name, struct stat const *sb)
+ # if GETXATTR_WITH_POSIX_ACLS
+ 
+       ssize_t ret;
++      int initial_errno = errno;
+ 
+       ret = getxattr (name, XATTR_NAME_POSIX_ACL_ACCESS, NULL, 0);
+       if (ret < 0 && errno == ENODATA)
+@@ -73,20 +157,33 @@ file_has_acl (char const *name, struct stat const *sb)
+         }
+ 
+       if (ret < 0)
+-        { /* we might be on NFS, so try to check NFSv4 ACLs too */
+-          char xattr[TRIVIAL_NFS4_ACL_MAX_LENGTH];
+-
+-          errno = 0; /* we need to reset errno set by the previous getxattr() */
+-          ret = getxattr (name, XATTR_NAME_NFSV4_ACL, xattr, TRIVIAL_NFS4_ACL_MAX_LENGTH);
+-          if (ret < 0 && errno == ENODATA)
+-            ret = 0;
++        {
++          /* Check for NFSv4 ACLs.  The max length of a trivial
++             ACL is 6 words for owner, 6 for group, 7 for everyone,
++             all times 2 because there are both allow and deny ACEs.
++             There are 6 words for owner because of type, flag, mask,
++             wholen, "OWNER@"+pad and similarly for group; everyone is
++             another word to hold "EVERYONE@".  */
++          uint32_t xattr[2 * (6 + 6 + 7)];
++
++          ret = getxattr (name, XATTR_NAME_NFSV4_ACL, xattr, sizeof xattr);
++          if (ret < 0)
++            switch (errno)
++              {
++              case ENODATA: return 0;
++              case ERANGE : return 1; /* ACL must be nontrivial.  */
++              }
+           else
+-            if (ret < 0 && errno == ERANGE)
+-              return 1;  /* we won't fit into the buffer, so non-trivial ACL is presented */
+-            else
+-              if (ret > 0)
+-                /* looks like trivial ACL, but we need to investigate further */
+-                return acl_nfs4_nontrivial (xattr, ret);
++            {
++              /* It looks like a trivial ACL, but investigate further.  */
++              ret = acl_nfs4_nontrivial (xattr, ret);
++              if (ret < 0)
++                {
++                  errno = EINVAL;
++                  return ret;
++                }
++              errno = initial_errno;
++            }
+         }
+       if (ret < 0)
+         return - acl_errno_valid (errno);
+-- 
+2.38.1
+
+
+From faf965110372c82cd99e9f44f0c64f03cdabb2c1 Mon Sep 17 00:00:00 2001
+From: Paul Eggert <eggert@cs.ucla.edu>
+Date: Tue, 27 Dec 2022 20:00:58 -0800
+Subject: [PATCH 3/3] file-has-acl: fix recently-introduced NFSv4 bug
+
+* lib/file-has-acl.c (acl_nfs4_nontrivial): Fix off-by-one
+error when rounding WHOLEN up to next multiple of 4.
+Pacify GCC 12.2.1 -Wcast-align.
+
+Upstream-commit: d65e5a8ba77595a598c9ddb8dfa09c4aea732659
+Signed-off-by: Kamil Dudka <kdudka@redhat.com>
+---
+ lib/file-has-acl.c | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/lib/file-has-acl.c b/lib/file-has-acl.c
+index 676523b..7876edc 100644
+--- a/lib/file-has-acl.c
++++ b/lib/file-has-acl.c
+@@ -81,9 +81,10 @@ acl_nfs4_nontrivial (uint32_t *xattr, ssize_t nbytes)
+       uint32_t flag = ntohl (xattr[1]);
+       uint32_t wholen = ntohl (xattr[3]);
+       xattr += 4;
+-      int64_t wholen4 = wholen;
+-      wholen4 = ((wholen4 + (BYTES_PER_NETWORK_UINT))
+-                 & ~ (BYTES_PER_NETWORK_UINT - 1));
++      int whowords = (wholen / BYTES_PER_NETWORK_UINT
++                      + (wholen % BYTES_PER_NETWORK_UINT != 0));
++      int64_t wholen4 = whowords;
++      wholen4 *= BYTES_PER_NETWORK_UINT;
+ 
+       /* Trivial ACLs have only ACE4_ACCESS_ALLOWED_ACE_TYPE or
+          ACE4_ACCESS_DENIED_ACE_TYPE.  */
+@@ -115,7 +116,7 @@ acl_nfs4_nontrivial (uint32_t *xattr, ssize_t nbytes)
+         return 1;
+       ace_found |= ace_found_bit;
+ 
+-      xattr = (uint32_t *) ((char *) xattr + wholen4);
++      xattr += whowords;
+     }
+ 
+   return 0;
+-- 
+2.38.1
+

@@ -1,0 +1,58 @@
+autofs-5.1.8 - fix possible use after free in handle_mounts_exit()
+
+From: Ian Kent <raven@themaw.net>
+
+Don't free the submount map entry until it's no longer used.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG          |    1 +
+ daemon/automount.c |   20 ++++++++++----------
+ 2 files changed, 11 insertions(+), 10 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -149,6 +149,7 @@
+ - dont call umount_subtree_mounts() on parent at umount.
+ - dont take parent source lock at mount shutdown.
+ - eliminate buffer usage from handle_mounts_cleanup().
++- fix possible use after free in handle_mounts_exit().
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/automount.c
++++ autofs-5.1.7/daemon/automount.c
+@@ -1757,16 +1757,6 @@ static void handle_mounts_cleanup(void *
+ 
+ 	info(logopt, "shut down path %s", ap->path);
+ 
+-	/*
+-	 * Submounts are detached threads and don't belong to the
+-	 * master map entry list so we need to free their resources
+-	 * here.
+-	 */
+-	if (submount) {
+-		master_free_mapent_sources(ap->entry, 1);
+-		master_free_mapent(ap->entry);
+-	}
+-
+ 	if (clean) {
+ 		if (rmdir(ap->path) == -1) {
+ 			char *estr = strerror_r(errno, buf, MAX_ERR_BUF);
+@@ -1779,6 +1769,16 @@ static void handle_mounts_cleanup(void *
+ 	master_source_unlock(ap->entry);
+ 
+ 	/*
++	 * Submounts are detached threads and don't belong to the
++	 * master map entry list so we need to free their resources
++	 * here.
++	 */
++	if (submount) {
++		master_free_mapent_sources(ap->entry, 1);
++		master_free_mapent(ap->entry);
++	}
++
++	/*
+ 	 * If we are not a submount send a signal to the signal handler
+ 	 * so it can join with any completed handle_mounts() threads and
+ 	 * perform final cleanup.

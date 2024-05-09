@@ -1,0 +1,62 @@
+diff --git a/src/ops.c b/src/ops.c
+index 88992b6..80e0ea1 100644
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -527,24 +527,8 @@ block_insert(
+ 	}
+ 
+ 	if (has_mbyte && spaces > 0)
+-	{
+-	    int off;
+-
+-	    // Avoid starting halfway a multi-byte character.
+-	    if (b_insert)
+-	    {
+-		off = (*mb_head_off)(oldp, oldp + offset + spaces);
+-		spaces -= off;
+-		count -= off;
+-	    }
+-	    else
+-	    {
+-		// spaces fill the gap, the character that's at the edge moves
+-		// right
+-		off = (*mb_head_off)(oldp, oldp + offset);
+-		offset -= off;
+-	    }
+-	}
++	    // avoid copying part of a multi-byte character
++	    offset -= (*mb_head_off)(oldp, oldp + offset);
+ 
+ 	// Make sure the allocated size matches what is actually copied below.
+ 	newp = alloc(STRLEN(oldp) + spaces + s_len
+diff --git a/src/testdir/test_utf8.vim b/src/testdir/test_utf8.vim
+index 5454e43..bedec20 100644
+--- a/src/testdir/test_utf8.vim
++++ b/src/testdir/test_utf8.vim
+@@ -7,7 +7,7 @@ func Test_visual_block_insert()
+   new
+   call setline(1, ["aaa", "あああ", "bbb"])
+   exe ":norm! gg0l\<C-V>jjIx\<Esc>"
+-  call assert_equal(['axaa', 'xあああ', 'bxbb'], getline(1, '$'))
++  call assert_equal(['axaa', ' xあああ', 'bxbb'], getline(1, '$'))
+   bwipeout!
+ endfunc
+ 
+diff --git a/src/testdir/test_visual.vim b/src/testdir/test_visual.vim
+index dc8e376..8de9e3d 100644
+--- a/src/testdir/test_visual.vim
++++ b/src/testdir/test_visual.vim
+@@ -976,4 +976,13 @@ func Test_visual_block_append_invalid_char()
+   bwipe!
+ endfunc
+ 
++func Test_visual_block_insert_round_off()
++  new
++  " The number of characters are tuned to fill a 4096 byte allocated block,
++  " so that valgrind reports going over the end.
++  call setline(1, ['xxxxx', repeat('0', 1350), "\t", repeat('x', 60)])
++  exe "normal gg0\<C-V>GI" .. repeat('0', 1320) .. "\<Esc>"
++  bwipe!
++endfunc
++
+ " vim: shiftwidth=2 sts=2 expandtab

@@ -1,0 +1,59 @@
+From ec4cf328499dbcd8f51e2501076a0799b156d580 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Tue, 25 May 2021 11:32:51 +0200
+Subject: lscpu: use locale-independent strtod() when read from kernel
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Addresses: https://issues.redhat.com/browse/RHEL-12783
+Upstream: http://github.com/util-linux/util-linux/commit/0b538002dad7bb5e178740191961bcc69509a80d
+Upstream: http://github.com/util-linux/util-linux/commit/670b10ae363d40fbe7dfd3c2e9c3f8044bf630f1
+Reported-by: Thomas Weißschuh
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ sys-utils/lscpu-cputype.c | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/sys-utils/lscpu-cputype.c b/sys-utils/lscpu-cputype.c
+index dd0c86084..bf6a7068c 100644
+--- a/sys-utils/lscpu-cputype.c
++++ b/sys-utils/lscpu-cputype.c
+@@ -6,10 +6,25 @@
+ # include <librtas.h>
+ #endif
+ 
++#include <locale.h>
+ #include "lscpu.h"
+ 
+ #include "fileutils.h"
+ 
++/* Simplified backport from upstrem to RHEL */
++static volatile locale_t c_locale;
++
++static double c_strtod(char const *str, char **end)
++{
++	if (!c_locale)
++		c_locale = newlocale(LC_ALL_MASK, "C", (locale_t) 0);
++	if (c_locale)
++		return strtod_l(str, end, c_locale);
++
++	return strtod(str, end);
++}
++
++
+ /* Lookup a pattern and get the value for format  "<pattern> : <key>"
+  */
+ int lookup(char *line, char *pattern, char **value)
+@@ -532,7 +547,7 @@ int lscpu_read_cpuinfo(struct lscpu_cxt *cxt)
+ 				pr->curr_type->bogomips = xstrdup(value);
+ 			if (pattern->id == PAT_MHZ && pr->curr_cpu && value) {
+ 				errno = 0;
+-				pr->curr_cpu->mhz_cur_freq = strtof(value, NULL);
++				pr->curr_cpu->mhz_cur_freq = (float) c_strtod(value, NULL);
+ 				if (errno)
+ 					pr->curr_cpu->mhz_cur_freq = 0;
+ 			}
+-- 
+2.43.0
+

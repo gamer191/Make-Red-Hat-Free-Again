@@ -1,0 +1,56 @@
+From e604d7bfd18cf5f29e6723091cc1db2945c918c9 Mon Sep 17 00:00:00 2001
+From: Eugene Syromyatnikov <evgsyr@gmail.com>
+Date: Tue, 28 Jun 2022 16:46:53 +0200
+Subject: [PATCH] strauss: tips whitespace and phrasing cleanups
+
+* src/strauss.c (tips_tricks_tweaks): Fix some whitespace and phrasing
+issues.
+---
+ src/strauss.c | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+Index: strace-5.18/src/strauss.c
+===================================================================
+--- strace-5.18.orig/src/strauss.c	2022-07-12 17:17:08.712197019 +0200
++++ strace-5.18/src/strauss.c	2022-07-12 17:17:20.685055717 +0200
+@@ -128,8 +128,8 @@
+ 	{ "strace is about as old as the Linux kernel.",
+ 	  "It has been originally written for SunOS",
+ 	  "by Paul Kranenburg in 1991.  The support",
+-	  "for all OSes except Linux has been dropped",
+-	  "since 2012, though, in strace 4.7." },
++	  "for all OSes except Linux was dropped"
++	  "in 2012, though, in strace 4.7." },
+ 	{ "strace is able to decode netlink messages.",
+ 	  "It does so automatically for I/O performed",
+ 	  "on netlink sockets.  Try it yourself:", "",
+@@ -187,7 +187,7 @@
+ 	  "want to try --seccomp-bpf option, maybe you",
+ 	  "will feel better." },
+ 	{ "-v is a shorthand for -e abbrev=none and not",
+-	  " for -e verbose=all. It is idiosyncratic,",
++	  "for -e verbose=all.  It is idiosyncratic,",
+ 	  "but it is the historic behaviour." },
+ 	{ "strace uses netlink for printing",
+ 	  "protocol-specific information about socket",
+@@ -254,7 +254,7 @@
+ 	  "by invoking it with the following options:", "",
+ 	  "    strace -DDDqqq -enone --signal=none" },
+ 	{ "Historically, supplying -o option to strace",
+-	  "led to silencing of messages about tracee",
++	  "leads to silencing of messages about tracee",
+ 	  "attach/detach and personality changes.",
+ 	  "It can be now overridden with --quiet=none",
+ 	  "option." },
+@@ -285,8 +285,9 @@
+ 	  "will trace all syscalls related to accessing",
+ 	  "and modifying process's user/group IDs",
+ 	  "and capability sets.  Other pre-defined",
+-	  "syscall classes include %clock, %desc,%file,",
+-	  "%ipc,%memory, %net,%process, and %signal." },
++	  "syscall classes include %clock, %desc,"
++	  "%file, %ipc, %memory, %net, %process,"
++	  "and %signal." },
+ 	{ "Trying to figure out communication between",
+ 	  "tracees inside a different PID namespace",
+ 	  "(in so-called \"containers\", for example)?",

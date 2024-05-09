@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Date: Tue, 28 Sep 2021 19:20:59 +0200
+Subject: [PATCH] multipath-tools: make EMC/SYMMETRIX config work with alua and
+ multibus
+
+ALUA is supported since VMAX3 and HYPERMAX OS 5977.811.784, pag#113:
+https://www.delltechnologies.com/en-us/collaterals/unauth/technical-guides-support-information/products/storage-2/docu5128.pdf
+
+Cc: Martin Wilck <mwilck@suse.com>
+Cc: Benjamin Marzinski <bmarzins@redhat.com>
+Cc: Christophe Varoqui <christophe.varoqui@opensvc.com>
+Cc: DM-DEVEL ML <dm-devel@redhat.com>
+Signed-off-by: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ libmultipath/hwtable.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index f115c4f9..7095aaf1 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -329,8 +329,9 @@ static struct hwentry default_hw[] = {
+ 		/* Symmetrix / DMX / VMAX / PowerMax */
+ 		.vendor        = "EMC",
+ 		.product       = "SYMMETRIX",
+-		.pgpolicy      = MULTIBUS,
++		.pgpolicy      = GROUP_BY_PRIO,
+ 		.no_path_retry = 6,
++		.pgfailback    = -FAILBACK_IMMEDIATE,
+ 	},
+ 	{
+ 		/* DGC CLARiiON CX/AX / VNX and Unity */

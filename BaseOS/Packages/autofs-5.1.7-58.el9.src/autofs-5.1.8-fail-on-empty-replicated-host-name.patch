@@ -1,0 +1,57 @@
+autofs-5.1.8 - fail on empty replicated host name
+
+From: Ian Kent <raven@themaw.net>
+
+If a mount location host (or hosts) has an empty host name it has to be
+a mistake so fail the automount request.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG           |    1 +
+ modules/parse_sun.c |   18 ++++++++++++++++++
+ 2 files changed, 19 insertions(+)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -112,6 +112,7 @@
+ - fix memory leak in update_hosts_mounts().
+ - fix minus only option handling in concat_options().
+ - fix incorrect path for is_mounted() in try_remount().
++- fail on empty replicated host name.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/modules/parse_sun.c
++++ autofs-5.1.7/modules/parse_sun.c
+@@ -935,6 +935,12 @@ static int validate_location(unsigned in
+ 	if (*ptr == ':')
+ 		return 1;
+ 
++	/* Fail on replicated entry with empty first host name */
++	if (*ptr == ',') {
++		error(logopt, "missing first host name in location %s", loc);
++		return 0;
++	}
++
+ 	/*
+ 	 * If a ':/' is present now it must be a host name, except
+ 	 * for those special file systems like sshfs which use "#"
+@@ -971,6 +977,18 @@ static int validate_location(unsigned in
+ 				      "found in location %s", *ptr, loc);
+ 				return 0;
+ 			}
++
++			/* Fail on replicated entry with empty host name */
++			if (*ptr == ',') {
++				char next = *(ptr + 1);
++
++				if (next == ',' || next == ':') {
++					error(logopt,
++					      "missing host name in location %s", loc);
++					return 0;
++				}
++			}
++
+ 			ptr++;
+ 		}
+ 

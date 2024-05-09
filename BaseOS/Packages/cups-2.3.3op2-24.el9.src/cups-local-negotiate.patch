@@ -1,0 +1,115 @@
+diff --git a/cups/auth.c b/cups/auth.c
+index db45bbb..b6fec6b 100644
+--- a/cups/auth.c
++++ b/cups/auth.c
+@@ -90,6 +90,7 @@ static void	cups_gss_printf(OM_uint32 major_status, OM_uint32 minor_status,
+ #    define	cups_gss_printf(major, minor, message)
+ #  endif /* DEBUG */
+ #endif /* HAVE_GSSAPI */
++static int	cups_is_local_connection(http_t *http);
+ static int	cups_local_auth(http_t *http);
+ 
+ 
+@@ -174,10 +175,10 @@ cupsDoAuthentication(
+     DEBUG_printf(("2cupsDoAuthentication: Trying scheme \"%s\"...", scheme));
+ 
+ #ifdef HAVE_GSSAPI
+-    if (!_cups_strcasecmp(scheme, "Negotiate"))
++    if (!_cups_strcasecmp(scheme, "Negotiate") && !cups_is_local_connection(http))
+     {
+      /*
+-      * Kerberos authentication...
++      * Kerberos authentication to remote server...
+       */
+ 
+       int gss_status;			/* Auth status */
+@@ -201,7 +202,9 @@ cupsDoAuthentication(
+     }
+     else
+ #endif /* HAVE_GSSAPI */
+-    if (_cups_strcasecmp(scheme, "Basic") && _cups_strcasecmp(scheme, "Digest"))
++    if (_cups_strcasecmp(scheme, "Basic") &&
++	_cups_strcasecmp(scheme, "Digest") &&
++	_cups_strcasecmp(scheme, "Negotiate"))
+     {
+      /*
+       * Other schemes not yet supported...
+@@ -215,7 +218,7 @@ cupsDoAuthentication(
+     * See if we should retry the current username:password...
+     */
+ 
+-    if ((http->digest_tries > 1 || !http->userpass[0]) && (!_cups_strcasecmp(scheme, "Basic") || (!_cups_strcasecmp(scheme, "Digest"))))
++    if (http->digest_tries > 1 || !http->userpass[0])
+     {
+      /*
+       * Nope - get a new password from the user...
+@@ -295,7 +298,7 @@ cupsDoAuthentication(
+     }
+   }
+ 
+-  if (http->authstring)
++  if (http->authstring && http->authstring[0])
+   {
+     DEBUG_printf(("1cupsDoAuthentication: authstring=\"%s\".", http->authstring));
+ 
+@@ -916,6 +919,14 @@ cups_gss_printf(OM_uint32  major_status,/* I - Major status code */
+ #  endif /* DEBUG */
+ #endif /* HAVE_GSSAPI */
+ 
++static int				/* O - 0 if not a local connection */
++					/*     1  if local connection */
++cups_is_local_connection(http_t *http)	/* I - HTTP connection to server */
++{
++  if (!httpAddrLocalhost(http->hostaddr) && _cups_strcasecmp(http->hostname, "localhost") != 0)
++    return 0;
++  return 1;
++}
+ 
+ /*
+  * 'cups_local_auth()' - Get the local authorization certificate if
+@@ -958,7 +969,7 @@ cups_local_auth(http_t *http)		/* I - HTTP connection to server */
+   * See if we are accessing localhost...
+   */
+ 
+-  if (!httpAddrLocalhost(http->hostaddr) && _cups_strcasecmp(http->hostname, "localhost") != 0)
++  if (!cups_is_local_connection(http))
+   {
+     DEBUG_puts("8cups_local_auth: Not a local connection!");
+     return (1);
+@@ -1032,11 +1043,6 @@ cups_local_auth(http_t *http)		/* I - HTTP connection to server */
+   }
+ #  endif /* HAVE_AUTHORIZATION_H */
+ 
+-#  ifdef HAVE_GSSAPI
+-  if (cups_auth_find(www_auth, "Negotiate"))
+-    return (1);
+-#  endif /* HAVE_GSSAPI */
+-
+ #  if defined(SO_PEERCRED) && defined(AF_LOCAL)
+  /*
+   * See if we can authenticate using the peer credentials provided over a
+diff --git a/scheduler/client.c b/scheduler/client.c
+index 89c76bf..40708d9 100644
+--- a/scheduler/client.c
++++ b/scheduler/client.c
+@@ -2244,18 +2244,13 @@ cupsdSendHeader(
+     }
+     else if (auth_type == CUPSD_AUTH_NEGOTIATE)
+     {
+-#if defined(SO_PEERCRED) && defined(AF_LOCAL)
+-      if (httpAddrFamily(httpGetAddress(con->http)) == AF_LOCAL)
+-	strlcpy(auth_str, "PeerCred", sizeof(auth_str));
+-      else
+-#endif /* SO_PEERCRED && AF_LOCAL */
+       strlcpy(auth_str, "Negotiate", sizeof(auth_str));
+     }
+ 
+-    if (con->best && auth_type != CUPSD_AUTH_NEGOTIATE && !con->is_browser && !_cups_strcasecmp(httpGetHostname(con->http, NULL, 0), "localhost"))
++    if (con->best && !con->is_browser && !_cups_strcasecmp(httpGetHostname(con->http, NULL, 0), "localhost"))
+     {
+      /*
+-      * Add a "trc" (try root certification) parameter for local non-Kerberos
++      * Add a "trc" (try root certification) parameter for local
+       * requests when the request requires system group membership - then the
+       * client knows the root certificate can/should be used.
+       *

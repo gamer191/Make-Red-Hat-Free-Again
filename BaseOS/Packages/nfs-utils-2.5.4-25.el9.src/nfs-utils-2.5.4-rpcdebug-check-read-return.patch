@@ -1,0 +1,24 @@
+commit a746c35822e557766d1871ec976490a71e6962d9
+Author: Zhi Li <yieli@redhat.com>
+Date:   Wed Apr 5 12:08:10 2023 -0400
+
+    rpcdebug: avoid buffer underflow if read() returns 0
+    
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2176740
+    
+    Signed-off-by: Zhi Li <yieli@redhat.com>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/tools/rpcdebug/rpcdebug.c b/tools/rpcdebug/rpcdebug.c
+index 68206cc5..ec05179e 100644
+--- a/tools/rpcdebug/rpcdebug.c
++++ b/tools/rpcdebug/rpcdebug.c
+@@ -257,7 +257,7 @@ get_flags(char *module)
+ 		perror(filename);
+ 		exit(1);
+ 	}
+-	if ((len = read(sysfd, buffer, sizeof(buffer))) < 0) {
++	if ((len = read(sysfd, buffer, sizeof(buffer))) <= 0) {
+ 		perror("read");
+ 		exit(1);
+ 	}

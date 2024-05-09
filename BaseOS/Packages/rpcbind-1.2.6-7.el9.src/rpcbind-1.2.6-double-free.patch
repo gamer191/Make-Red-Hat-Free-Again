@@ -1,0 +1,15 @@
+diff -up rpcbind-1.2.6/src/rpcbind.c.orig rpcbind-1.2.6/src/rpcbind.c
+--- rpcbind-1.2.6/src/rpcbind.c.orig	2022-08-16 10:16:03.196903368 -0400
++++ rpcbind-1.2.6/src/rpcbind.c	2022-08-16 10:16:38.595062481 -0400
+@@ -562,8 +562,10 @@ init_transport(struct netconfig *nconf)
+ 				syslog(LOG_ERR, "cannot bind %s on %s: %m",
+ 					(hosts[nhostsbak] == NULL) ? "*" :
+ 					hosts[nhostsbak], nconf->nc_netid);
+-				if (res != NULL)
++				if (res != NULL) {
+ 					freeaddrinfo(res);
++					res = NULL;
++				}
+ 				continue;
+ 			} else
+ 				checkbind++;

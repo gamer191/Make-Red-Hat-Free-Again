@@ -1,0 +1,33 @@
+From 777edc3d865ac52837072da904748a6f70d36b8b Mon Sep 17 00:00:00 2001
+From: Josh Boyer <jwboyer@redhat.com>
+Date: Fri, 7 Apr 2023 12:22:06 -0400
+Subject: [PATCH 04/12] Fix memory leak with condition on error path
+
+---
+ format.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/format.c b/format.c
+index 01204b8a..6f057b5e 100644
+--- a/format.c
++++ b/format.c
+@@ -4019,7 +4019,7 @@ format_replace(struct format_expand_state *es, const char *key, size_t keylen,
+ 	struct window_pane		 *wp = ft->wp;
+ 	const char			 *errstr, *copy, *cp, *marker = NULL;
+ 	const char			 *time_format = NULL;
+-	char				 *copy0, *condition, *found, *new;
++	char				 *copy0, *condition = NULL, *found, *new;
+ 	char				 *value, *left, *right, c;
+ 	size_t				  valuelen;
+ 	int				  modifiers = 0, limit = 0, width = 0;
+@@ -4425,6 +4425,7 @@ fail:
+ 	free(sub);
+ 	format_free_modifiers(list, count);
+ 	free(copy0);
++	free(condition);
+ 	free(time_format);
+ 	return (-1);
+ }
+-- 
+2.31.1
+

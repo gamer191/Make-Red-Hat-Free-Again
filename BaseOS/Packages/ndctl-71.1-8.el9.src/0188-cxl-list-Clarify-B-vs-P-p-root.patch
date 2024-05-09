@@ -1,0 +1,93 @@
+From db55c5254d932d8d1be1fc082ea7a919def47a5d Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Tue, 26 Jul 2022 18:54:54 -0700
+Subject: [PATCH 188/217] cxl/list: Clarify "-B" vs "-P -p root"
+
+Matthew notes that 'cxl list' documentation claims that 'cxl list -B' and
+'cxl list -P -p root' are equivalent. Which they are not:
+
+$ cxl list -B
+[
+  {
+    "bus":"root0",
+    "provider":"ACPI.CXL"
+  }
+]
+
+$ cxl list -P -p root
+[
+  {
+    "bus":"root0",
+    "provider":"ACPI.CXL",
+    "ports:root0":[
+      {
+        "port":"port1",
+        "host":"ACPI0016:00"
+      }
+    ]
+  }
+]
+
+Clarify that '--single' needs to be appended to '-P -p root' to make it
+equivalent to 'cxl list -B'. This is due to the behavior that listing ports
+includes all descendants of a port that matches the filter. In the case of
+'-P -p root' that results in all enabled ports.
+
+$ cxl list -P -p root -S
+[
+  {
+    "bus":"root0",
+    "provider":"ACPI.CXL"
+  }
+]
+
+Link: https://lore.kernel.org/r/165888675979.3375698.5785835464908538946.stgit@dwillia2-xfh.jf.intel.com
+Cc: Adam Manzanares <a.manzanares@samsung.com>
+Reported-by: Matthew Ho <sunfishho12@gmail.com>
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/cxl-list.txt | 20 ++++++++++++++------
+ 1 file changed, 14 insertions(+), 6 deletions(-)
+
+diff --git a/Documentation/cxl/cxl-list.txt b/Documentation/cxl/cxl-list.txt
+index f6aba0c..088ea70 100644
+--- a/Documentation/cxl/cxl-list.txt
++++ b/Documentation/cxl/cxl-list.txt
+@@ -255,19 +255,27 @@ OPTIONS
+ --port=::
+ 	Specify CXL Port device name(s), device id(s), and or port type
+ 	names to filter the listing. The supported port type names are "root"
+-	and "switch". Note that since a bus object is also a port, the following
+-	two syntaxes are equivalent:
++	and "switch". Note that a bus object is also a port, so the
++	following two syntaxes are equivalent:
+ ----
+ # cxl list -B
+-# cxl list -P -p root
++# cxl list -P -p root -S
+ ----
+-	Additionally, endpoint objects are also ports so the following commands
+-	are also equivalent.
++	...where the '-S/--single' is required since descendant ports are always
++	included in a port listing and '-S/--single' stops after listing the
++	bus.  Additionally, endpoint objects are ports so the following commands
++	are equivalent, and no '-S/--single' is required as endpoint ports are
++	terminal:
+ ----
+ # cxl list -E
+ # cxl list -P -p endpoint
+ ----
+-	By default, only 'switch' ports are listed.
++	By default, only 'switch' ports are listed, i.e.
++----
++# cxl list -P
++# cxl list -P -p switch
++----
++	...are equivalent.
+ 
+ -S::
+ --single::
+-- 
+2.27.0
+

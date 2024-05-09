@@ -1,0 +1,165 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Tue, 20 Dec 2022 17:41:11 -0600
+Subject: [PATCH] libmultipath: make prflag an enum
+
+In preparation for a future patch, make prflag an enum, and change the
+reply of cli_getprstatus() to a string.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmpathpersist/mpath_persist.c |  2 +-
+ libmultipath/structs.h          |  8 +++++++-
+ multipathd/cli_handlers.c       | 16 +++++++++-------
+ multipathd/main.c               | 14 +++++++-------
+ 4 files changed, 24 insertions(+), 16 deletions(-)
+
+diff --git a/libmpathpersist/mpath_persist.c b/libmpathpersist/mpath_persist.c
+index 803a2a28..01e8ca25 100644
+--- a/libmpathpersist/mpath_persist.c
++++ b/libmpathpersist/mpath_persist.c
+@@ -924,7 +924,7 @@ int update_map_pr(struct multipath *mpp)
+ 
+ 	if (isFound)
+ 	{
+-		mpp->prflag = 1;
++		mpp->prflag = PRFLAG_SET;
+ 		condlog(2, "%s: prflag flag set.", mpp->alias );
+ 	}
+ 
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index 4b308561..5ec591bc 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -368,6 +368,12 @@ struct path {
+ 
+ typedef int (pgpolicyfn) (struct multipath *, vector);
+ 
++
++enum prflag_value {
++	PRFLAG_UNSET,
++	PRFLAG_SET,
++};
++
+ struct multipath {
+ 	char wwid[WWID_SIZE];
+ 	char alias_old[WWID_SIZE];
+@@ -441,7 +447,7 @@ struct multipath {
+ 	int prkey_source;
+ 	struct be64 reservation_key;
+ 	uint8_t sa_flags;
+-	unsigned char prflag;
++	int prflag;
+ 	int all_tg_pt;
+ 	struct gen_multipath generic_mp;
+ 	bool fpin_must_reload;
+diff --git a/multipathd/cli_handlers.c b/multipathd/cli_handlers.c
+index 6d3a0ae2..90d2c388 100644
+--- a/multipathd/cli_handlers.c
++++ b/multipathd/cli_handlers.c
+@@ -1304,6 +1304,10 @@ cli_shutdown (void * v, char ** reply, int * len, void * data)
+ int
+ cli_getprstatus (void * v, char ** reply, int * len, void * data)
+ {
++	static const char * const prflag_str[] = {
++		[PRFLAG_UNSET] = "unset\n",
++		[PRFLAG_SET] = "set\n",
++	};
+ 	struct multipath * mpp;
+ 	struct vectors * vecs = (struct vectors *)data;
+ 	char * param = get_keyparam(v, MAP);
+@@ -1315,9 +1319,7 @@ cli_getprstatus (void * v, char ** reply, int * len, void * data)
+ 	if (!mpp)
+ 		return 1;
+ 
+-	condlog(3, "%s: prflag = %u", param, (unsigned int)mpp->prflag);
+-
+-	*len = asprintf(reply, "%d", mpp->prflag);
++	*len = asprintf(reply, "%s", prflag_str[mpp->prflag]);
+ 	if (*len < 0)
+ 		return 1;
+ 
+@@ -1340,8 +1342,8 @@ cli_setprstatus(void * v, char ** reply, int * len, void * data)
+ 	if (!mpp)
+ 		return 1;
+ 
+-	if (!mpp->prflag) {
+-		mpp->prflag = 1;
++	if (mpp->prflag != PRFLAG_SET) {
++		mpp->prflag = PRFLAG_SET;
+ 		condlog(2, "%s: prflag set", param);
+ 	}
+ 
+@@ -1363,8 +1365,8 @@ cli_unsetprstatus(void * v, char ** reply, int * len, void * data)
+ 	if (!mpp)
+ 		return 1;
+ 
+-	if (mpp->prflag) {
+-		mpp->prflag = 0;
++	if (mpp->prflag != PRFLAG_UNSET) {
++		mpp->prflag = PRFLAG_UNSET;
+ 		condlog(2, "%s: prflag unset", param);
+ 	}
+ 
+diff --git a/multipathd/main.c b/multipathd/main.c
+index e7c17182..532ca15b 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -573,9 +573,9 @@ fail:
+ 
+ 	sync_map_state(mpp);
+ 
+-	if (!mpp->prflag)
++	if (mpp->prflag == PRFLAG_UNSET)
+ 		update_map_pr(mpp);
+-	if (mpp->prflag)
++	if (mpp->prflag == PRFLAG_SET)
+ 		pr_register_active_paths(mpp);
+ 
+ 	if (retries < 0)
+@@ -1082,7 +1082,7 @@ ev_add_path (struct path * pp, struct vectors * vecs, int need_do_map)
+ 	int start_waiter = 0;
+ 	int ret;
+ 	int ro;
+-	unsigned char prflag = 0;
++	unsigned char prflag = PRFLAG_UNSET;
+ 
+ 	/*
+ 	 * need path UID to go any further
+@@ -1212,7 +1212,7 @@ rescan:
+ 	if (retries >= 0) {
+ 		if (start_waiter)
+ 			update_map_pr(mpp);
+-		if (mpp->prflag && !prflag)
++		if (mpp->prflag == PRFLAG_SET && prflag == PRFLAG_UNSET)
+ 				pr_register_active_paths(mpp);
+ 		condlog(2, "%s [%s]: path added to devmap %s",
+ 			pp->dev, pp->dev_t, mpp->alias);
+@@ -2414,7 +2414,7 @@ check_path (struct vectors * vecs, struct path * pp, unsigned int ticks)
+ 		}
+ 
+ 		if (newstate == PATH_UP || newstate == PATH_GHOST) {
+-			if (pp->mpp->prflag) {
++			if (pp->mpp->prflag == PRFLAG_SET) {
+ 				/*
+ 				 * Check Persistent Reservation.
+ 				 */
+@@ -2758,7 +2758,7 @@ configure (struct vectors * vecs)
+ 		if (remember_wwid(mpp->wwid) == 1)
+ 			trigger_paths_udev_change(mpp, true);
+ 		update_map_pr(mpp);
+-		if (mpp->prflag)
++		if (mpp->prflag == PRFLAG_SET)
+ 			pr_register_active_paths(mpp);
+ 	}
+ 
+@@ -3668,7 +3668,7 @@ void *  mpath_pr_event_handler_fn (void * pathp )
+ 	{
+ 		condlog(0,"%s: Reservation registration failed. Error: %d", pp->dev, ret);
+ 	}
+-	mpp->prflag = 1;
++	mpp->prflag = PRFLAG_SET;
+ 
+ 	free(param);
+ out:

@@ -1,0 +1,88 @@
+From 351badda9e5b6454e56f31992e9325c4656680bd Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Fri, 14 Jan 2022 18:32:29 -0700
+Subject: [PATCH 086/217] ndctl: update README.md for meson build
+
+Update the README to replace the autotools build and test instructions
+with meson equivalents. Also provide an example for setting meson
+configuration options by illustrating the destructive unit tests use
+case.
+
+Link: https://lore.kernel.org/r/20220115013229.1604139-1-vishal.l.verma@intel.com
+Cc: Dan Williams <dan.j.williams@intel.com>
+Reported-by: Alison Schofield <alison.schofield@intel.com>
+Reported-by: Jane Chu <jane.chu@oracle.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ README.md | 33 ++++++++++++++++++++++-----------
+ 1 file changed, 22 insertions(+), 11 deletions(-)
+
+diff --git a/README.md b/README.md
+index 6f36a6d..f3fe65b 100644
+--- a/README.md
++++ b/README.md
+@@ -9,11 +9,14 @@ Build
+ =====
+ 
+ ```
+-./autogen.sh
+-./configure CFLAGS='-g -O2' --prefix=/usr --sysconfdir=/etc --libdir=/usr/lib64
+-make
+-make check
+-sudo make install
++meson setup build;
++meson compile -C build;
++```
++
++Optionally, to install:
++
++```
++meson install -C build
+ ```
+ 
+ There are a number of packages required for the build steps that may not
+@@ -34,7 +37,7 @@ https://nvdimm.wiki.kernel.org/start
+ 
+ Unit Tests
+ ==========
+-The unit tests run by `make check` require the nfit_test.ko module to be
++The unit tests run by `meson test` require the nfit_test.ko module to be
+ loaded.  To build and install nfit_test.ko:
+ 
+ 1. Obtain the kernel source.  For example,  
+@@ -78,8 +81,16 @@ loaded.  To build and install nfit_test.ko:
+    sudo make modules_install
+    ```
+ 
+-1. Now run `make check` in the ndctl source directory, or `ndctl test`,
+-   if ndctl was built with `--enable-test`.
++1. Now run `meson test -C build` in the ndctl source directory, or `ndctl test`,
++   if ndctl was built with `-Dtest=enabled` as a configuration option to meson.
++
++1. To run the 'destructive' set of tests that may clobber existing pmem
++   configurations and data, configure meson with the destructive option after the
++   `meson setup` step:
++
++   ```
++   meson configure -Dtest=enabled -Ddestructive=enabled build;
++   ```
+ 
+ Troubleshooting
+ ===============
+@@ -87,9 +98,9 @@ Troubleshooting
+ The unit tests will validate that the environment is set up correctly
+ before they try to run. If the platform is misconfigured, i.e. the unit
+ test modules are not available, or the test versions of the modules are
+-superseded by the "in-tree/production" version of the modules `make
+-check` will skip tests and report a message like the following in
+-test/test-suite.log:  
++superseded by the "in-tree/production" version of the modules `meson
++test` will skip tests and report a message like the following in
++`build/meson-logs/testlog.txt`
+ 
+ ```
+ SKIP: libndctl
+-- 
+2.27.0
+

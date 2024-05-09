@@ -1,0 +1,30 @@
+From 965f91091e4442ea74132aa0c3c6795d922bda8c Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Thu, 8 Jun 2023 11:13:20 +0200
+Subject: [PATCH] mkfs: fix man's default value for sparse option
+
+Fixes: 9cf846b51 ("mkfs: enable sparse inodes by default")
+Suggested-by: Lukas Herbolt <lukas@herbolt.com>
+Signed-off-by: Pavel Reichl <preichl@redhat.com>
+Reviewed-by: Darrick J. Wong <djwong@kernel.org>
+Signed-off-by: Carlos Maiolino <cem@kernel.org>
+---
+ man/man8/mkfs.xfs.8.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/man/man8/mkfs.xfs.8.in b/man/man8/mkfs.xfs.8.in
+index 01f9dc6e..ce6f1e2d 100644
+--- a/man/man8/mkfs.xfs.8.in
++++ b/man/man8/mkfs.xfs.8.in
+@@ -631,7 +631,7 @@ Enable sparse inode chunk allocation. The
+ .I value
+ is either 0 or 1, with 1 signifying that sparse allocation is enabled.
+ If the value is omitted, 1 is assumed. Sparse inode allocation is
+-disabled by default. This feature is only available for filesystems
++enabled by default. This feature is only available for filesystems
+ formatted with
+ .B \-m crc=1.
+ .IP
+-- 
+2.41.0
+

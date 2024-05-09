@@ -1,0 +1,79 @@
+diff --git a/runtime/defaults.vim b/runtime/defaults.vim
+index f3c639b..20637e2 100644
+--- a/runtime/defaults.vim
++++ b/runtime/defaults.vim
+@@ -73,18 +73,6 @@ map Q gq
+ " Revert with ":iunmap <C-U>".
+ inoremap <C-U> <C-G>u<C-U>
+ 
+-" In many terminal emulators the mouse works just fine.  By enabling it you
+-" can position the cursor, Visually select and scroll with the mouse.
+-" Only xterm can grab the mouse events when using the shift key, for other
+-" terminals use ":", select text and press Esc.
+-if has('mouse')
+-  if &term =~ 'xterm'
+-    set mouse=a
+-  else
+-    set mouse=nvi
+-  endif
+-endif
+-
+ " Only do this part when Vim was compiled with the +eval feature.
+ if 1
+ 
+diff --git a/src/testdir/test_balloon.vim b/src/testdir/test_balloon.vim
+index 319e546..8fcf63c 100644
+--- a/src/testdir/test_balloon.vim
++++ b/src/testdir/test_balloon.vim
+@@ -9,6 +9,7 @@ source screendump.vim
+ CheckScreendump
+ 
+ let s:common_script =<< trim [CODE]
++  set mouse=a
+   call setline(1, ["one one one", "two tXo two", "three three three"])
+   set balloonevalterm balloonexpr=MyBalloonExpr() balloondelay=100
+   func MyBalloonExpr()
+diff --git a/src/testdir/test_popupwin.vim b/src/testdir/test_popupwin.vim
+index f13252b..ec755a4 100644
+--- a/src/testdir/test_popupwin.vim
++++ b/src/testdir/test_popupwin.vim
+@@ -553,6 +553,7 @@ func Test_popup_drag()
+   " create a popup that covers the command line
+   let lines =<< trim END
+ 	call setline(1, range(1, 20))
++	set mouse=a
+ 	split
+ 	vsplit
+ 	$wincmd w
+@@ -599,6 +600,7 @@ func Test_popup_drag_termwin()
+   let lines =<< trim END
+ 	set foldmethod=marker
+ 	call setline(1, range(100))
++  set mouse=a
+ 	for nr in range(7)
+ 	  call setline(nr * 12 + 1, "fold {{{")
+ 	  call setline(nr * 12 + 11, "end }}}")
+@@ -652,6 +654,7 @@ func Test_popup_close_with_mouse()
+ 
+   let lines =<< trim END
+ 	call setline(1, range(1, 20))
++	set mouse=a
+ 	" With border, can click on X
+ 	let winid = popup_create('foobar', #{
+ 	      \ close: 'button',
+@@ -1479,6 +1482,7 @@ func Test_popup_beval()
+   let lines =<< trim END
+ 	call setline(1, range(1, 20))
+ 	call setline(5, 'here is some text to hover over')
++	set mouse=a
+ 	set balloonevalterm
+ 	set balloonexpr=BalloonExpr()
+ 	set balloondelay=100
+@@ -2170,6 +2174,7 @@ func Test_popup_scrollbar()
+ 
+   let lines =<< trim END
+     call setline(1, range(1, 20))
++    set mouse=a
+     hi ScrollThumb ctermbg=blue
+     hi ScrollBar ctermbg=red
+     let winid = popup_create(['one', 'two', 'three', 'four', 'five',

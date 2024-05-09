@@ -1,0 +1,26 @@
+From 4351d850bb664941f88463229758171c2603080a Mon Sep 17 00:00:00 2001
+From: Erik Larsson <who+github@cnackers.org>
+Date: Mon, 4 Oct 2021 10:21:49 +0200
+Subject: [PATCH 1/9] lib/tpm2_eventlog_yaml: use char16_t for UEFI characters
+
+Signed-off-by: Erik Larsson <who+github@cnackers.org>
+---
+ lib/tpm2_eventlog_yaml.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/tpm2_eventlog_yaml.c b/lib/tpm2_eventlog_yaml.c
+index 6e6923e5..9b048db1 100644
+--- a/lib/tpm2_eventlog_yaml.c
++++ b/lib/tpm2_eventlog_yaml.c
+@@ -475,7 +475,7 @@ static bool yaml_uefi_var(UEFI_VARIABLE_DATA *data, size_t size, UINT32 type,
+                 tpm2_tool_output("      Description: \"");
+                 int i;
+                 for (i = 0; (wchar_t)loadopt->Description[i] != 0; i++) {
+-                    wchar_t c = (wchar_t)loadopt->Description[i];
++                    char16_t c = (char16_t)loadopt->Description[i];
+                     tpm2_tool_output("%lc", c);
+                 }
+                 tpm2_tool_output("\"\n");
+-- 
+2.37.3
+

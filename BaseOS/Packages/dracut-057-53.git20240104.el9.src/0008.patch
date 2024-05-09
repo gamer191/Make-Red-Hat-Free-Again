@@ -1,0 +1,29 @@
+From 263b9095200cf277db3bff4753b06306175b1534 Mon Sep 17 00:00:00 2001
+From: Pavel Valena <pvalena@redhat.com>
+Date: Thu, 21 Jul 2022 17:40:20 +0200
+Subject: [PATCH] fix(dracut.sh): do not fail on irregular files
+
+If file is not a regular file (test -f), dracut.sh fails,
+which is unexpected change of behaviour.
+The workaround would be to create an empty file.
+
+rhel-only
+Fixes: #1835
+---
+ dracut.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dracut.sh b/dracut.sh
+index a1ea1bc3..210a8275 100755
+--- a/dracut.sh
++++ b/dracut.sh
+@@ -905,7 +905,7 @@ if [[ -z $conffile ]]; then
+     else
+         conffile="$dracutsysrootdir/etc/dracut.conf"
+     fi
+-elif [[ ! -f $conffile ]]; then
++elif [[ ! -e $conffile ]]; then
+     printf "%s\n" "dracut: Configuration file '$conffile' not found." >&2
+     exit 1
+ fi
+

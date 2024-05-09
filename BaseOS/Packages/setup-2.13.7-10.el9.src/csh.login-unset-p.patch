@@ -1,0 +1,12 @@
+diff --git a/csh.login b/csh.login
+index e4b1990..18c5136 100644
+--- a/csh.login
++++ b/csh.login
+@@ -23,6 +23,7 @@ else
+ 			breaksw
+ 		endsw
+ 	end
++	unset p
+ endif
+ 
+ setenv HOSTNAME `/usr/bin/hostname`

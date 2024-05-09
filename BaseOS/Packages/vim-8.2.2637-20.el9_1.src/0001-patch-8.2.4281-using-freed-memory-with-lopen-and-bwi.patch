@@ -1,0 +1,75 @@
+diff -up vim82/src/buffer.c.cve0443 vim82/src/buffer.c
+--- vim82/src/buffer.c.cve0443	2021-03-22 10:02:42.000000000 +0100
++++ vim82/src/buffer.c	2022-02-10 08:33:19.159488384 +0100
+@@ -1710,6 +1710,7 @@ set_curbuf(buf_T *buf, int action)
+ #endif
+     bufref_T	newbufref;
+     bufref_T	prevbufref;
++    int		valid;
+ 
+     setpcmark();
+     if ((cmdmod.cmod_flags & CMOD_KEEPALT) == 0)
+@@ -1763,13 +1764,19 @@ set_curbuf(buf_T *buf, int action)
+     // An autocommand may have deleted "buf", already entered it (e.g., when
+     // it did ":bunload") or aborted the script processing.
+     // If curwin->w_buffer is null, enter_buffer() will make it valid again
+-    if ((buf_valid(buf) && buf != curbuf
++    valid = buf_valid(buf);
++    if ((valid && buf != curbuf
+ #ifdef FEAT_EVAL
+ 		&& !aborting()
+ #endif
+ 	) || curwin->w_buffer == NULL)
+     {
+-	enter_buffer(buf);
++	// If the buffer is not valid but curwin->w_buffer is NULL we must
++	// enter some buffer.  Using the last one is hopefully OK.
++	if (!valid)
++	    enter_buffer(lastbuf);
++	else
++	    enter_buffer(buf);
+ #ifdef FEAT_SYN_HL
+ 	if (old_tw != curbuf->b_p_tw)
+ 	    check_colorcolumn(curwin);
+@@ -2286,8 +2293,7 @@ free_buf_options(
+     clear_string_option(&buf->b_p_vsts);
+     vim_free(buf->b_p_vsts_nopaste);
+     buf->b_p_vsts_nopaste = NULL;
+-    vim_free(buf->b_p_vsts_array);
+-    buf->b_p_vsts_array = NULL;
++    VIM_CLEAR(buf->b_p_vsts_array);
+     clear_string_option(&buf->b_p_vts);
+     VIM_CLEAR(buf->b_p_vts_array);
+ #endif
+diff -up vim82/src/testdir/test_quickfix.vim.cve0443 vim82/src/testdir/test_quickfix.vim
+--- vim82/src/testdir/test_quickfix.vim.cve0443	2021-03-22 10:02:42.000000000 +0100
++++ vim82/src/testdir/test_quickfix.vim	2022-02-10 08:34:10.288204457 +0100
+@@ -923,6 +923,7 @@ func Test_locationlist_curwin_was_closed
+   call assert_fails('lrewind', 'E924:')
+ 
+   augroup! testgroup
++  delfunc R
+ endfunc
+ 
+ func Test_locationlist_cross_tab_jump()
+@@ -5372,4 +5373,20 @@ func Test_vimgrep_noswapfile()
+   set swapfile
+ endfunc
+ 
++" Weird sequence of commands that caused entering a wiped-out buffer
++func Test_lopen_bwipe()
++  func R()
++    silent! tab lopen
++    e x
++    silent! lfile
++  endfunc
++
++  cal R()
++  cal R()
++  cal R()
++  bw!
++  delfunc R
++endfunc
++
++
+ " vim: shiftwidth=2 sts=2 expandtab

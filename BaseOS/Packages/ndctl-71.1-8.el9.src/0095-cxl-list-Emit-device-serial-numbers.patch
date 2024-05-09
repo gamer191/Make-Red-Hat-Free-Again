@@ -1,0 +1,159 @@
+From 2d1b8cea119ca2bb0eec8ebb2dfb1b6c4d844ddd Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:52:36 -0800
+Subject: [PATCH 095/217] cxl/list: Emit device serial numbers
+
+Starting with the v5.17 kernel the CXL driver emits the mandatory device
+serial number for each memory device. Include it in the memory device
+listing.
+
+Link: https://lore.kernel.org/r/164298555630.3021641.3246226448369816200.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/cxl-list.txt | 15 +++++++++------
+ cxl/json.c                     | 11 ++++++++++-
+ cxl/lib/libcxl.c               | 11 +++++++++++
+ cxl/lib/libcxl.sym             |  5 +++++
+ cxl/lib/private.h              |  1 +
+ cxl/libcxl.h                   |  1 +
+ 6 files changed, 37 insertions(+), 7 deletions(-)
+
+diff --git a/Documentation/cxl/cxl-list.txt b/Documentation/cxl/cxl-list.txt
+index 4d409ba..bd0207e 100644
+--- a/Documentation/cxl/cxl-list.txt
++++ b/Documentation/cxl/cxl-list.txt
+@@ -41,22 +41,25 @@ OPTIONS
+   "ram_size":0,
+ }
+ 
+-# cxl list -m "0 mem1 2"
++# cxl list -M --memdev="0 mem3 5"
+ [
+   {
+     "memdev":"mem0",
+     "pmem_size":268435456,
+-    "ram_size":0
++    "ram_size":0,
++    "serial":0
+   },
+   {
+-    "memdev":"mem2",
++    "memdev":"mem3",
+     "pmem_size":268435456,
+-    "ram_size":268435456
++    "ram_size":268435456,
++    "serial":2
+   },
+   {
+-    "memdev":"mem1",
++    "memdev":"mem5",
+     "pmem_size":268435456,
+-    "ram_size":268435456
++    "ram_size":268435456,
++    "serial":4
+   }
+ ]
+ ----
+diff --git a/cxl/json.c b/cxl/json.c
+index 3ef9f76..d8e65df 100644
+--- a/cxl/json.c
++++ b/cxl/json.c
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: GPL-2.0
+-// Copyright (C) 2015-2020 Intel Corporation. All rights reserved.
++// Copyright (C) 2015-2021 Intel Corporation. All rights reserved.
++#include <limits.h>
+ #include <util/json.h>
+ #include <uuid/uuid.h>
+ #include <cxl/libcxl.h>
+@@ -188,6 +189,7 @@ struct json_object *util_cxl_memdev_to_json(struct cxl_memdev *memdev,
+ {
+ 	const char *devname = cxl_memdev_get_devname(memdev);
+ 	struct json_object *jdev, *jobj;
++	unsigned long long serial;
+ 
+ 	jdev = json_object_new_object();
+ 	if (!jdev)
+@@ -210,5 +212,12 @@ struct json_object *util_cxl_memdev_to_json(struct cxl_memdev *memdev,
+ 		if (jobj)
+ 			json_object_object_add(jdev, "health", jobj);
+ 	}
++
++	serial = cxl_memdev_get_serial(memdev);
++	if (serial < ULLONG_MAX) {
++		jobj = util_json_object_hex(serial, flags);
++		if (jobj)
++			json_object_object_add(jdev, "serial", jobj);
++	}
+ 	return jdev;
+ }
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 3390eb9..8d3cf80 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -296,6 +296,12 @@ static void *add_cxl_memdev(void *parent, int id, const char *cxlmem_base)
+ 	if (memdev->lsa_size == ULLONG_MAX)
+ 		goto err_read;
+ 
++	sprintf(path, "%s/serial", cxlmem_base);
++	if (sysfs_read_attr(ctx, path, buf) < 0)
++		memdev->serial = ULLONG_MAX;
++	else
++		memdev->serial = strtoull(buf, NULL, 0);
++
+ 	memdev->dev_path = strdup(cxlmem_base);
+ 	if (!memdev->dev_path)
+ 		goto err_read;
+@@ -371,6 +377,11 @@ CXL_EXPORT int cxl_memdev_get_id(struct cxl_memdev *memdev)
+ 	return memdev->id;
+ }
+ 
++CXL_EXPORT unsigned long long cxl_memdev_get_serial(struct cxl_memdev *memdev)
++{
++	return memdev->serial;
++}
++
+ CXL_EXPORT const char *cxl_memdev_get_devname(struct cxl_memdev *memdev)
+ {
+ 	return devpath_to_devname(memdev->dev_path);
+diff --git a/cxl/lib/libcxl.sym b/cxl/lib/libcxl.sym
+index 077d104..4411035 100644
+--- a/cxl/lib/libcxl.sym
++++ b/cxl/lib/libcxl.sym
+@@ -73,3 +73,8 @@ global:
+ local:
+         *;
+ };
++
++LIBCXL_2 {
++global:
++	cxl_memdev_get_serial;
++} LIBCXL_1;
+diff --git a/cxl/lib/private.h b/cxl/lib/private.h
+index a1b8b50..28f7e16 100644
+--- a/cxl/lib/private.h
++++ b/cxl/lib/private.h
+@@ -31,6 +31,7 @@ struct cxl_memdev {
+ 	size_t lsa_size;
+ 	struct kmod_module *module;
+ 	struct cxl_nvdimm_bridge *bridge;
++	unsigned long long serial;
+ };
+ 
+ enum cxl_cmd_query_status {
+diff --git a/cxl/libcxl.h b/cxl/libcxl.h
+index 89d35ba..bcdede8 100644
+--- a/cxl/libcxl.h
++++ b/cxl/libcxl.h
+@@ -35,6 +35,7 @@ struct cxl_memdev;
+ struct cxl_memdev *cxl_memdev_get_first(struct cxl_ctx *ctx);
+ struct cxl_memdev *cxl_memdev_get_next(struct cxl_memdev *memdev);
+ int cxl_memdev_get_id(struct cxl_memdev *memdev);
++unsigned long long cxl_memdev_get_serial(struct cxl_memdev *memdev);
+ const char *cxl_memdev_get_devname(struct cxl_memdev *memdev);
+ int cxl_memdev_get_major(struct cxl_memdev *memdev);
+ int cxl_memdev_get_minor(struct cxl_memdev *memdev);
+-- 
+2.27.0
+

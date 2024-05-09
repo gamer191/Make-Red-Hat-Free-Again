@@ -1,0 +1,66 @@
+From 9ce0fa95778a76d2334848e2629d111c4d636515 Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Wed, 15 Jun 2022 16:48:13 -0600
+Subject: [PATCH 212/217] scripts: update release helper scripts for meson and
+ cxl
+
+The prepare-release.sh and do_abidiff scripts perform sanity checking
+for library versioning and also guard against accidental ABI breakage
+by comparing the current release with the previous using 'abipkgdiff'
+from libabigail. Teach the scripts about libcxl, so that it too can
+participate in the above checks.
+
+Additionally, move the checks over to the new meson regime. This does
+break any checking for the older autotools based build, but that should
+be okay.
+
+Link: https://lore.kernel.org/r/20220615224813.523053-6-vishal.l.verma@intel.com
+Cc: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ scripts/do_abidiff         | 3 ++-
+ scripts/prepare-release.sh | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/do_abidiff b/scripts/do_abidiff
+index e8c3a65..ec3e344 100755
+--- a/scripts/do_abidiff
++++ b/scripts/do_abidiff
+@@ -53,7 +53,7 @@ do_diff()
+ 	local old_lib="$(find . -regex "./release/rel_${old}/${pkg}-libs-[0-9]+.*" | head -1)"
+ 	local new_lib="$(find . -regex "./release/rel_${new}/${pkg}-libs-[0-9]+.*" | head -1)"
+ 
+-	[ -n "$pkg" ] || err "specify a package for diff (ndctl, daxctl)"
++	[ -n "$pkg" ] || err "specify a package for diff (ndctl, daxctl, cxl)"
+ 	[ -n "$old_base" ] || err "$pkg: old_base empty, possible build failure"
+ 	[ -n "$new_base" ] || err "$pkg: new_base empty, possible build failure"
+ 
+@@ -75,3 +75,4 @@ build_rpm $old > release/buildlog_$old 2>&1
+ build_rpm $new > release/buildlog_$new 2>&1
+ do_diff ndctl
+ do_diff daxctl
++do_diff cxl
+diff --git a/scripts/prepare-release.sh b/scripts/prepare-release.sh
+index 97ab964..8901b50 100755
+--- a/scripts/prepare-release.sh
++++ b/scripts/prepare-release.sh
+@@ -100,7 +100,7 @@ gen_lists()
+ }
+ 
+ # Check libtool versions in Makefile.am.in
+-# $1: lib name (currently libndctl or libdaxctl)
++# $1: lib name (currently libndctl, libdaxctl, or libcxl)
+ check_libtool_vers()
+ {
+ 	local lib="$1"
+@@ -181,6 +181,7 @@ next_fix=$(next_fix "$last_fix")
+ 
+ check_libtool_vers "libndctl"
+ check_libtool_vers "libdaxctl"
++check_libtool_vers "libcxl"
+ 
+ # HEAD~1 because HEAD would be the release commit
+ gen_lists ${last_ref}..HEAD~1
+-- 
+2.27.0
+

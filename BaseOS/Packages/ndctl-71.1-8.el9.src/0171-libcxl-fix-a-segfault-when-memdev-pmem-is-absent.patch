@@ -1,0 +1,45 @@
+From 50e7a021314aa0365c9c85a359a31f26313fe93b Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Thu, 2 Jun 2022 09:44:27 -0600
+Subject: [PATCH 171/217] libcxl: fix a segfault when memdev->pmem is absent
+
+A CXL memdev may not have any persistent capacity, and in this case it
+is possible that a 'pmem' object never gets instantiated. Such a
+scenario would cause free_pmem () to dereference a NULL pointer and
+segfault.
+
+Fix this by only proceeding in free_pmem() if 'pmem' was valid.
+
+Link: https://lore.kernel.org/r/20220602154427.462852-1-vishal.l.verma@intel.com
+Fixes: cd1aed6cefe8 ("libcxl: add representation for an nvdimm bridge object")
+Cc: Dan Williams <dan.j.williams@intel.com>
+Reported-by: Steven Garcia <steven.garcia@intel.com>
+Tested-by: Steven Garcia <steven.garcia@intel.com>
+Reviewed-by: Alison Schofield <alison.schofield@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 374b0f1..c988ce2 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -49,9 +49,11 @@ struct cxl_ctx {
+ 
+ static void free_pmem(struct cxl_pmem *pmem)
+ {
+-	free(pmem->dev_buf);
+-	free(pmem->dev_path);
+-	free(pmem);
++	if (pmem) {
++		free(pmem->dev_buf);
++		free(pmem->dev_path);
++		free(pmem);
++	}
+ }
+ 
+ static void free_memdev(struct cxl_memdev *memdev, struct list_head *head)
+-- 
+2.27.0
+

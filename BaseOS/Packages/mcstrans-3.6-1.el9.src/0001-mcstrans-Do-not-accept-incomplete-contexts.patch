@@ -1,0 +1,60 @@
+From 8695c655aebda25e4ac3114b5bb2d1678248eeac Mon Sep 17 00:00:00 2001
+From: Petr Lautrbach <plautrba@redhat.com>
+Date: Mon, 15 Apr 2019 15:22:51 +0200
+Subject: [PATCH] mcstrans: Do not accept incomplete contexts
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+Content-type: text/plain
+
+Fixes:
+$ python3
+> import selinux
+> selinux.selinux_raw_context_to_color("xyz_u:xyz_r:xyz_t:")
+
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+OSError: [Errno 0] Error
+
+:: [ 10:25:45 ] :: [  BEGIN   ] :: Running 'service mcstransd status'
+Redirecting to /bin/systemctl status mcstransd.service
+● mcstrans.service - Translates SELinux MCS/MLS labels to human readable form
+   Loaded: loaded (/usr/lib/systemd/system/mcstrans.service; disabled; vendor preset: disabled)
+   Active: failed (Result: core-dump) since Fri 2019-04-12 10:25:44 EDT; 1s ago
+  Process: 16681 ExecStart=/sbin/mcstransd -f (code=dumped, signal=SEGV)
+ Main PID: 16681 (code=dumped, signal=SEGV)
+
+systemd[1]: mcstrans.service: Main process exited, code=dumped, status=11/SEGV
+systemd[1]: mcstrans.service: Failed with result 'core-dump'.
+
+Signed-off-by: Petr Lautrbach <plautrba@redhat.com>
+---
+ mcstrans/src/mcscolor.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/mcstrans/src/mcscolor.c b/mcstrans/src/mcscolor.c
+index 9ff0ce2f29f1..275a99b7b12a 100644
+--- a/mcstrans/src/mcscolor.c
++++ b/mcstrans/src/mcscolor.c
+@@ -274,10 +274,14 @@ static const unsigned precedence[N_COLOR][N_COLOR - 1] = {
+ static const secolor_t default_color = { 0x000000, 0xffffff };
+ 
+ static int parse_components(context_t con, char **components) {
+-	components[COLOR_USER] = (char *)context_user_get(con);
+-	components[COLOR_ROLE] = (char *)context_role_get(con);
+-	components[COLOR_TYPE] = (char *)context_type_get(con);
+-	components[COLOR_RANGE] = (char *)context_range_get(con);
++	if ((components[COLOR_USER] = (char *)context_user_get(con)) == NULL)
++		return -1;
++	if ((components[COLOR_ROLE] = (char *)context_role_get(con)) == NULL)
++		return -1;
++	if ((components[COLOR_TYPE] = (char *)context_type_get(con)) == NULL)
++		return -1;
++	if ((components[COLOR_RANGE] = (char *)context_range_get(con)) == NULL)
++		return -1;
+ 
+ 	return 0;
+ }
+-- 
+2.41.0
+

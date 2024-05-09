@@ -1,0 +1,270 @@
+From b13e8ee2caaa84046e25a73e52dedb9c0f5c57a3 Mon Sep 17 00:00:00 2001
+From: Pavel Valena <pvalena@redhat.com>
+Date: Tue, 12 Jul 2022 14:12:04 +0200
+Subject: [PATCH] ci: all layered RHEL-9 changes
+
+ - previous downstream changes
+ - use dracut.spec as submitted in the PR
+ - sync selected changes from upstream
+ - add new-main for pull-requests temporarily
+
+rhel-only
+Related: #2066816
+---
+ .github/workflows/container.yml               |  7 ++--
+ .github/workflows/differential-shellcheck.yml | 19 ++++++++++
+ .github/workflows/integration.yml             | 47 ++++++++++++++++++++++--
+ .github/workflows/lint.yml                    |  4 +-
+ .packit.yml                                   | 36 ++++++++++++++++++
+ test/container/Dockerfile-CentOS-9-Stream     | 53 +++++++++++++++++++++++++++
+ 6 files changed, 158 insertions(+), 8 deletions(-)
+
+diff --git a/.github/workflows/container.yml b/.github/workflows/container.yml
+index 03c9c5ec..99d57f5b 100644
+--- a/.github/workflows/container.yml
++++ b/.github/workflows/container.yml
+@@ -3,12 +3,12 @@ on:
+     schedule:
+         -  cron: '30 11 * * *'   # every day at 4:40
+     push:
+-        branches: [ master ]
++        branches: [ main ]
+         paths:
+             - 'test/container/**'
+             - '.github/workflows/container.yml'
+     pull_request:
+-        branches: [ master ]
++        branches: [ main new-main ]
+         paths:
+             - 'test/container/**'
+             - '.github/workflows/container.yml'
+@@ -31,6 +31,7 @@ jobs:
+                     - { dockerfile: 'Dockerfile-Fedora-latest',     tag: 'fedora:latest' }
+                     - { dockerfile: 'Dockerfile-OpenSuse-latest',   tag: 'opensuse:latest' }
+                     - { dockerfile: 'Dockerfile-Arch',              tag: 'arch:latest' }
++                    - { dockerfile: 'Dockerfile-CentOS-9-Stream',   tag: 'centos:stream9' }
+                     - { dockerfile: 'Dockerfile-Debian',            tag: 'debian:latest' }
+         steps:
+             -   name: Check out the repo
+@@ -49,5 +50,5 @@ jobs:
+                 uses: docker/build-push-action@v2
+                 with:
+                     file: test/container/${{ matrix.config.dockerfile }}
+-                    tags: ghcr.io/dracutdevs/${{ matrix.config.tag }}
++                    tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.config.tag }}
+                     push: ${{ github.event_name == 'push' ||  github.event_name == 'schedule' }}
+diff --git a/.github/workflows/differential-shellcheck.yml b/.github/workflows/differential-shellcheck.yml
+new file mode 100644
+index 00000000..c4b05fad
+--- /dev/null
++++ b/.github/workflows/differential-shellcheck.yml
+@@ -0,0 +1,19 @@
++name: Differential ShellCheck
++on:
++  pull_request:
++    branches: [ main new-main ]
++
++jobs:
++  test:
++    runs-on: ubuntu-20.04
++
++    steps: 
++      - name: Repository checkout
++        uses: actions/checkout@v3
++        with:
++          fetch-depth: 0
++
++      - name: Differential ShellCheck
++        uses: redhat-plumbers-in-action/differential-shellcheck@v2
++        with:
++          token: ${{ secrets.GITHUB_TOKEN }}
+diff --git a/.github/workflows/integration.yml b/.github/workflows/integration.yml
+index 3d78555f..aa354e3e 100644
+--- a/.github/workflows/integration.yml
++++ b/.github/workflows/integration.yml
+@@ -2,7 +2,7 @@ name: Integration Test
+ 
+ on:
+     pull_request:
+-        branches: [ master ]
++        branches: [ main new-main ]
+ 
+ jobs:
+     basic:
+@@ -24,7 +24,7 @@ jobs:
+                 ]
+             fail-fast: false
+         container:
+-            image: ghcr.io/dracutdevs/${{ matrix.container }}
++            image: ghcr.io/${{ github.repository_owner }}/${{ matrix.container }}
+             options: "--privileged -v /dev:/dev"
+         steps:
+             -   name: "Checkout Repository"
+@@ -69,7 +69,48 @@ jobs:
+                 ]
+             fail-fast: false
+         container:
+-            image: ghcr.io/dracutdevs/${{ matrix.container }}
++            image: ghcr.io/${{ github.repository_owner }}/${{ matrix.container }}
++            options: "--privileged -v /dev:/dev"
++        steps:
++            -   name: "Checkout Repository"
++                uses: actions/checkout@v2
++                with:
++                    fetch-depth: 0
++
++            -   name: "${{ matrix.container }} TEST-${{ matrix.test }}"
++                run: ./tools/test-github.sh "TEST-${{ matrix.test }}" ${{ matrix.test }}
++    centos-9-stream:
++        runs-on: ubuntu-latest
++        timeout-minutes: 45
++        concurrency:
++            group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.container }}-${{ matrix.test }}
++            cancel-in-progress: true
++        strategy:
++            matrix:
++                container: [
++                        "centos:stream9",
++                ]
++                # Disabled tests (due to dropped packages in RHEL/CentOS):
++                # 03, 04, 15: requires btrfs
++                # 14: requires dmraid
++                # 30, 31, 35, 36: requires scsi-target-utils
++                test: [
++                        "01",
++                        "02",
++                        "10",
++                        "11",
++                        "12",
++                        "13",
++                        "17",
++                        "20",
++                        "21",
++                        "40",
++                        "41",
++                        "98",
++                ]
++            fail-fast: false
++        container:
++            image: ghcr.io/${{ github.repository_owner }}/${{ matrix.container }}
+             options: "--privileged -v /dev:/dev"
+         steps:
+             -   name: "Checkout Repository"
+diff --git a/.github/workflows/lint.yml b/.github/workflows/lint.yml
+index 7b1b8ee7..5e3a299f 100644
+--- a/.github/workflows/lint.yml
++++ b/.github/workflows/lint.yml
+@@ -2,9 +2,9 @@ name: Lint
+ 
+ on:
+   push:
+-    branches: [ master ]
++    branches: [ main ]
+   pull_request:
+-    branches: [ master ]
++    branches: [ main new-main ]
+ 
+ jobs:
+   lint-c:
+diff --git a/.packit.yml b/.packit.yml
+new file mode 100644
+index 00000000..86ba83d2
+--- /dev/null
++++ b/.packit.yml
+@@ -0,0 +1,36 @@
++---
++# This file is part of dracut.
++# SPDX-License-Identifier: GPL-2.0-or-later
++#
++# vi:ts=2 sw=2 et:
++#
++# Docs: https://packit.dev/docs/
++
++specfile_path: pkgbuild/dracut.spec
++synced_files:
++  - .packit.yaml
++upstream_package_name: dracut
++downstream_package_name: dracut
++upstream_tag_template: "{version}"
++
++actions:
++  post-upstream-clone:
++    # Use the current specfile
++    - "cp pkgbuild/dracut.spec ."
++
++# Available targets can be listed via `copr-cli list-chroots`
++jobs:
++# Build test
++- job: copr_build
++  trigger: pull_request
++  metadata:
++    targets:
++      - centos-stream-9-x86_64
++      - centos-stream-9-aarch64
++
++# Run tests (via testing farm)
++- job: tests
++  trigger: pull_request
++  metadata:
++    targets:
++      - centos-stream-9-x86_64
+diff --git a/test/container/Dockerfile-CentOS-9-Stream b/test/container/Dockerfile-CentOS-9-Stream
+new file mode 100644
+index 00000000..c9a96020
+--- /dev/null
++++ b/test/container/Dockerfile-CentOS-9-Stream
+@@ -0,0 +1,53 @@
++FROM quay.io/centos/centos:stream9
++
++MAINTAINER https://github.com/dracutdevs/dracut
++
++ENV container docker
++LABEL RUN="docker run -it --name NAME --privileged --ipc=host --net=host --pid=host -e NAME=NAME -e IMAGE=IMAGE IMAGE"
++
++RUN echo 'export DRACUT_NO_XATTR=1 KVERSION=$(cd /lib/modules; ls -1 | tail -1)' > /etc/profile.d/dracut-test.sh
++
++# Install needed packages for the dracut CI container
++# FIXME: properly re-add dash once C9S EPEL is available
++RUN dnf -y install --enablerepo crb --setopt=install_weak_deps=False \
++    http://mirrors.kernel.org/fedora/releases/34/Everything/x86_64/os/Packages/d/dash-0.5.10.2-8.fc34.x86_64.rpm \
++    qemu-kvm \
++    NetworkManager \
++    asciidoc \
++    bash-completion \
++    bzip2 \
++    cryptsetup \
++    dbus-daemon \
++    dhcp-client \
++    dhcp-server \
++    e2fsprogs \
++    gcc \
++    git \
++    iproute \
++    iputils \
++    iscsi-initiator-utils \
++    kbd \
++    kernel \
++    kmod-devel \
++    lvm2 \
++    make \
++    mdadm \
++    nfs-utils \
++    pigz \
++    rpm-build \
++    strace \
++    sudo \
++    tar \
++    tcpdump \
++    wget \
++    which \
++    xz \
++    && dnf -y update && dnf clean all
++
++# C9S ships only qemu-kvm, but it disables the KVM accel when it's not
++# available
++RUN ln -sv /usr/libexec/qemu-kvm /usr/bin/qemu-kvm && \
++    ln -sv /usr/libexec/qemu-kvm /usr/bin/qemu-system-$(uname -m)
++
++# Set default command
++CMD ["/usr/bin/bash"]
+

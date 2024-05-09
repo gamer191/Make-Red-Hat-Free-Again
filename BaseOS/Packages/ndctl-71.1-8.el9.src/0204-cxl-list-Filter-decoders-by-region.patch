@@ -1,0 +1,59 @@
+From 81ad0ed44690596a846ac39da0b2fd966973fc21 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Fri, 5 Aug 2022 13:38:14 -0700
+Subject: [PATCH 204/217] cxl/list: Filter decoders by region
+
+With a region name in hand, it is useful to be able to filter all the
+decoders in the topology that are mapping that region.
+
+Link: https://lore.kernel.org/r/165973189465.1528532.9072953032089147905.stgit@dwillia2-xfh.jf.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/filter.c | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/cxl/filter.c b/cxl/filter.c
+index 38ece55..9a3de8c 100644
+--- a/cxl/filter.c
++++ b/cxl/filter.c
+@@ -652,6 +652,26 @@ struct cxl_region *util_cxl_region_filter(struct cxl_region *region,
+ 
+ }
+ 
++static struct cxl_decoder *
++util_cxl_decoder_filter_by_region(struct cxl_decoder *decoder,
++				  const char *__ident)
++{
++	struct cxl_region *region;
++
++	if (!__ident)
++		return decoder;
++
++	region = cxl_decoder_get_region(decoder);
++	if (!region)
++		return NULL;
++
++	region = util_cxl_region_filter(region, __ident);
++	if (!region)
++		return NULL;
++
++	return decoder;
++}
++
+ static unsigned long params_to_flags(struct cxl_filter_params *param)
+ {
+ 	unsigned long flags = 0;
+@@ -790,6 +810,9 @@ static void walk_decoders(struct cxl_port *port, struct cxl_filter_params *p,
+ 		if (!util_cxl_decoder_filter_by_memdev(
+ 			    decoder, p->memdev_filter, p->serial_filter))
+ 			goto walk_children;
++		if (!util_cxl_decoder_filter_by_region(decoder,
++						       p->region_filter))
++			goto walk_children;
+ 		if (!p->idle && cxl_decoder_get_size(decoder) == 0)
+ 			continue;
+ 		jdecoder = util_cxl_decoder_to_json(decoder, flags);
+-- 
+2.27.0
+

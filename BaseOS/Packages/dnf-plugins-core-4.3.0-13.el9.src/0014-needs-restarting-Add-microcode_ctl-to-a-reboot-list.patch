@@ -1,0 +1,40 @@
+From b4b3affd654f53d5f1a808e1ed7ea004fe875f96 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20P=C3=ADsa=C5=99?= <ppisar@redhat.com>
+Date: Thu, 23 Nov 2023 16:26:06 +0100
+Subject: [PATCH] needs-restarting: Add microcode_ctl to a reboot list
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+commit 9f46488c6b1ac553989a3fd8a9ea18271451c5e8 upstream.
+
+To fully update CPU microcode, a reboot is needed because the
+microcode update should be applied before starting a kernel and other
+process.
+
+Therefore recommend a reboot after installing or updating
+microcode_ctl package.
+
+https://issues.redhat.com/browse/RHEL-4600
+Signed-off-by: Petr Písař <ppisar@redhat.com>
+---
+ plugins/needs_restarting.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/plugins/needs_restarting.py b/plugins/needs_restarting.py
+index baadde0..309a216 100644
+--- a/plugins/needs_restarting.py
++++ b/plugins/needs_restarting.py
+@@ -40,7 +40,8 @@ import time
+ # For which package updates we should recommend a reboot
+ # Mostly taken from https://access.redhat.com/solutions/27943
+ NEED_REBOOT = ['kernel', 'kernel-rt', 'glibc', 'linux-firmware',
+-               'systemd', 'dbus', 'dbus-broker', 'dbus-daemon']
++               'systemd', 'dbus', 'dbus-broker', 'dbus-daemon',
++               'microcode_ctl']
+ 
+ def get_options_from_dir(filepath, base):
+     """
+-- 
+2.43.0
+

@@ -1,0 +1,31 @@
+commit 8a835cebb149ba2a54b6518722c79019cf8e3da4
+Author: Benjamin Coddington <bcodding@redhat.com>
+Date:   Mon Aug 1 13:19:04 2022 -0400
+
+    rpc-statd.service: Stop rpcbind and rpc.stat in an exit race
+    
+    When `systemctl stop rpcbind.socket` is run, the dependency means
+    that systemd first sends SIGTERM to rpcbind, then sigterm to rpc.statd.
+    
+    On SIGTERM, rpcbind tears down /var/run/rpcbind.sock.  However,
+    rpc-statd on SIGTERM attempts to unregister from rpcbind
+    
+    systemd needs to wait for rpc.statd to exit before sending
+    SIGTERM to rpcbind
+    
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2100395
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/systemd/rpc-statd.service b/systemd/rpc-statd.service
+index 095629f2..392750da 100644
+--- a/systemd/rpc-statd.service
++++ b/systemd/rpc-statd.service
+@@ -5,7 +5,7 @@ Conflicts=umount.target
+ Requires=nss-lookup.target rpcbind.socket
+ Wants=network-online.target
+ Wants=rpc-statd-notify.service
+-After=network-online.target nss-lookup.target rpcbind.socket
++After=network-online.target nss-lookup.target rpcbind.service
+ 
+ PartOf=nfs-utils.service
+ IgnoreOnIsolate=yes

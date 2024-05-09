@@ -1,0 +1,25 @@
+diff -up diffutils-3.7/lib/c-stack.c.sigstksz diffutils-3.7/lib/c-stack.c
+--- diffutils-3.7/lib/c-stack.c.sigstksz	2021-04-12 10:58:48.892279388 +0100
++++ diffutils-3.7/lib/c-stack.c	2021-04-12 11:04:59.488695551 +0100
+@@ -52,12 +52,18 @@ typedef struct sigaltstack stack_t;
+ #endif
+ #ifndef SIGSTKSZ
+ # define SIGSTKSZ 16384
+-#elif HAVE_LIBSIGSEGV && SIGSTKSZ < 16384
++#elif HAVE_LIBSIGSEGV
+ /* libsigsegv 2.6 through 2.8 have a bug where some architectures use
+    more than the Linux default of an 8k alternate stack when deciding
+    if a fault was caused by stack overflow.  */
+-# undef SIGSTKSZ
+-# define SIGSTKSZ 16384
++# if defined _SC_SIGSTKSZ && _SC_SIGSTKSZ < 16384
++   /* glibc 2.34 defines SIGSTKSZ to sysconf (_SC_SIGSTKSZ) */
++#  undef SIGSTKSZ
++#  define SIGSTKSZ 16384
++# elif SIGSTKSZ < 16384
++#  undef SIGSTKSZ
++#  define SIGSTKSZ 16384
++# endif
+ #endif
+ 
+ #include <stdlib.h>

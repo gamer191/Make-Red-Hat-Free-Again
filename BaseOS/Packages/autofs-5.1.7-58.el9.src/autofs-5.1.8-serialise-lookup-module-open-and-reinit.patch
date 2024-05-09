@@ -1,0 +1,272 @@
+autofs-5.1.8 - serialise lookup module open and reinit
+
+From: Ian Kent <raven@themaw.net>
+
+Add a map source lock to serialise map setting and use of module
+structure fields such as the context.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG           |    1 +
+ daemon/lookup.c     |   35 +++++++++++++++++++++--------------
+ daemon/master.c     |   43 +++++++++++++++++++++++++++++++++++++++++++
+ include/master.h    |    5 +++++
+ modules/parse_amd.c |   26 +++++++++++++++-----------
+ 5 files changed, 85 insertions(+), 25 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -105,6 +105,7 @@
+ - fix invalid tsv access.
+ - fix missing unlock in sasl_do_kinit_ext_cc().
+ - fix parse module instance mutex naming.
++- serialise lookup module open and reinit.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/lookup.c
++++ autofs-5.1.7/daemon/lookup.c
+@@ -318,28 +318,27 @@ static int do_read_map(struct autofs_poi
+ 	struct lookup_mod *lookup;
+ 	int status;
+ 
+-	lookup = NULL;
+-	master_source_writelock(ap->entry);
++	pthread_cleanup_push(map_module_lock_cleanup, map);
++	map_module_writelock(map);
+ 	if (!map->lookup) {
+ 		status = open_lookup(map->type, "", map->format,
+ 				     map->argc, map->argv, &lookup);
+-		if (status != NSS_STATUS_SUCCESS) {
+-			master_source_unlock(ap->entry);
++		if (status == NSS_STATUS_SUCCESS)
++			map->lookup = lookup;
++		else
+ 			debug(ap->logopt,
+ 			      "lookup module %s open failed", map->type);
+-			return status;
+-		}
+-		map->lookup = lookup;
+ 	} else {
+-		lookup = map->lookup;
+-		status = lookup->lookup_reinit(map->format,
+-					       map->argc, map->argv,
+-					       &lookup->context);
++		status = map->lookup->lookup_reinit(map->format,
++						    map->argc, map->argv,
++						    &map->lookup->context);
+ 		if (status)
+ 			warn(ap->logopt,
+ 			     "lookup module %s reinit failed", map->type);
+ 	}
+-	master_source_unlock(ap->entry);
++	pthread_cleanup_pop(1);
++	if (status != NSS_STATUS_SUCCESS)
++		return status;
+ 
+ 	if (!map->stale)
+ 		return NSS_STATUS_SUCCESS;
+@@ -347,7 +346,11 @@ static int do_read_map(struct autofs_poi
+ 	master_source_current_wait(ap->entry);
+ 	ap->entry->current = map;
+ 
++	pthread_cleanup_push(map_module_lock_cleanup, map);
++	map_module_readlock(map);
++	lookup = map->lookup;
+ 	status = lookup->lookup_read_map(ap, age, lookup->context);
++	pthread_cleanup_pop(1);
+ 
+ 	if (status != NSS_STATUS_SUCCESS)
+ 		map->stale = 0;
+@@ -804,23 +807,27 @@ int do_lookup_mount(struct autofs_point
+ 	struct lookup_mod *lookup;
+ 	int status;
+ 
++	map_module_writelock(map);
+ 	if (!map->lookup) {
+ 		status = open_lookup(map->type, "",
+ 				     map->format, map->argc, map->argv, &lookup);
+ 		if (status != NSS_STATUS_SUCCESS) {
++			map_module_unlock(map);
+ 			debug(ap->logopt,
+ 			      "lookup module %s open failed", map->type);
+ 			return status;
+ 		}
+ 		map->lookup = lookup;
+ 	}
+-
+-	lookup = map->lookup;
++	map_module_unlock(map);
+ 
+ 	master_source_current_wait(ap->entry);
+ 	ap->entry->current = map;
+ 
++	map_module_readlock(map);
++	lookup = map->lookup;
+ 	status = lookup->lookup_mount(ap, name, name_len, lookup->context);
++	map_module_unlock(map);
+ 
+ 	return status;
+ }
+--- autofs-5.1.7.orig/daemon/master.c
++++ autofs-5.1.7/daemon/master.c
+@@ -65,6 +65,34 @@ void master_mutex_lock_cleanup(void *arg
+ 	return;
+ }
+ 
++void map_module_writelock(struct map_source *map)
++{
++	int status = pthread_rwlock_wrlock(&map->module_lock);
++	if (status)
++		fatal(status);
++}
++
++void map_module_readlock(struct map_source *map)
++{
++	int status = pthread_rwlock_rdlock(&map->module_lock);
++	if (status)
++		fatal(status);
++}
++
++void map_module_unlock(struct map_source *map)
++{
++	int status = pthread_rwlock_unlock(&map->module_lock);
++	if (status)
++		fatal(status);
++}
++
++void map_module_lock_cleanup(void *arg)
++{
++	struct map_source *map = (struct map_source *) arg;
++
++	map_module_unlock(map);
++}
++
+ int master_add_autofs_point(struct master_mapent *entry, unsigned logopt,
+ 			    unsigned nobind, unsigned ghost, int submount)
+ {
+@@ -155,6 +183,7 @@ master_add_map_source(struct master_mape
+ 	struct map_source *source;
+ 	char *ntype, *nformat;
+ 	const char **tmpargv;
++	int status;
+ 
+ 	source = malloc(sizeof(struct map_source));
+ 	if (!source)
+@@ -241,6 +270,10 @@ master_add_map_source(struct master_mape
+ 
+ 	master_source_unlock(entry);
+ 
++	status = pthread_rwlock_init(&source->module_lock, NULL);
++	if (status)
++		fatal(status);
++
+ 	return source;
+ }
+ 
+@@ -330,6 +363,8 @@ master_get_map_source(struct master_mape
+ 
+ static void __master_free_map_source(struct map_source *source, unsigned int free_cache)
+ {
++	int status;
++
+ 	/* instance map sources are not ref counted */
+ 	if (source->ref && --source->ref)
+ 		return;
+@@ -365,6 +400,10 @@ static void __master_free_map_source(str
+ 		}
+ 	}
+ 
++	status = pthread_rwlock_destroy(&source->module_lock);
++	if (status)
++		fatal(status);
++
+ 	free(source);
+ 
+ 	return;
+@@ -496,6 +535,10 @@ master_add_source_instance(struct map_so
+ 	if (status)
+ 		fatal(status);
+ 
++	status = pthread_rwlock_init(&new->module_lock, NULL);
++	if (status)
++		fatal(status);
++
+ 	return new;
+ }
+ 
+--- autofs-5.1.7.orig/include/master.h
++++ autofs-5.1.7/include/master.h
+@@ -35,6 +35,7 @@ struct map_source {
+ 	unsigned int stale;
+ 	unsigned int recurse;
+ 	unsigned int depth;
++	pthread_rwlock_t module_lock;
+ 	struct lookup_mod *lookup;
+ 	int argc;
+ 	const char **argv;
+@@ -126,5 +127,9 @@ int __master_list_empty(struct master *)
+ int master_list_empty(struct master *);
+ int master_done(struct master *);
+ int master_kill(struct master *);
++void map_module_writelock(struct map_source *map);
++void map_module_readlock(struct map_source *map);
++void map_module_unlock(struct map_source *map);
++void map_module_lock_cleanup(void *arg);
+ 
+ #endif
+--- autofs-5.1.7.orig/modules/parse_amd.c
++++ autofs-5.1.7/modules/parse_amd.c
+@@ -1358,14 +1358,6 @@ static int do_host_mount(struct autofs_p
+ 		argc = 1;
+ 	}
+ 
+-	parse_instance_mutex_lock();
+-	status = open_lookup("hosts", MODPREFIX, NULL, argc, pargv, &lookup);
+-	if (status != NSS_STATUS_SUCCESS) {
+-		debug(ap->logopt, "open lookup module hosts failed");
+-		parse_instance_mutex_unlock();
+-		goto out;
+-	}
+-
+ 	instance = master_find_source_instance(source,
+ 					 "hosts", "sun", argc, pargv);
+ 	if (!instance) {
+@@ -1374,13 +1366,22 @@ static int do_host_mount(struct autofs_p
+ 		if (!instance) {
+ 			error(ap->logopt, MODPREFIX
+ 			     "failed to create source instance for hosts map");
+-			parse_instance_mutex_unlock();
+ 			close_lookup(lookup);
+ 			goto out;
+ 		}
+ 	}
+-	instance->lookup = lookup;
+-	parse_instance_mutex_unlock();
++
++	map_module_writelock(instance);
++	if (!instance->lookup) {
++		status = open_lookup("hosts", MODPREFIX, NULL, argc, pargv, &lookup);
++		if (status != NSS_STATUS_SUCCESS) {
++			map_module_unlock(instance);
++			debug(ap->logopt, "open lookup module hosts failed");
++			goto out;
++		}
++		instance->lookup = lookup;
++	}
++	map_module_unlock(instance);
+ 
+ 	cache_writelock(source->mc);
+ 	me = cache_lookup_distinct(source->mc, name);
+@@ -1391,8 +1392,11 @@ static int do_host_mount(struct autofs_p
+ 	master_source_current_wait(ap->entry);
+ 	ap->entry->current = source;
+ 
++	map_module_readlock(instance);
++	lookup = instance->lookup;
+ 	ret = lookup->lookup_mount(ap, entry->rhost,
+ 				   strlen(entry->rhost), lookup->context);
++	map_module_unlock(instance);
+ 
+ 	if (!strcmp(name, entry->rhost))
+ 		goto out;

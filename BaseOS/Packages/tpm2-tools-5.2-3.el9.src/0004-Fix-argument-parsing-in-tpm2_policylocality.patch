@@ -1,0 +1,45 @@
+From f365a0adca8379ce89ff86fdf740082cf6a56f1b Mon Sep 17 00:00:00 2001
+From: Tien-Ren Chen <trchen1033@gmail.com>
+Date: Thu, 25 Nov 2021 12:41:52 -0500
+Subject: [PATCH 04/17] Fix argument parsing in tpm2_policylocality
+
+This patch fixes a bug that caused tpm2_policylocality to almost
+always generate PolicyLocality(0).
+
+There was a logical inversion that caused almost any argument
+(including invalid ones) to be interpreted as zero, except "zero"
+would be interpreted as one.
+
+Signed-off-by: Tien-Ren Chen <trchen1033@gmail.com>
+---
+ tools/tpm2_policylocality.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/tools/tpm2_policylocality.c b/tools/tpm2_policylocality.c
+index 81edbe65..b1d43d02 100644
+--- a/tools/tpm2_policylocality.c
++++ b/tools/tpm2_policylocality.c
+@@ -54,15 +54,15 @@ static bool on_arg(int argc, char **argv) {
+         return false;
+     }
+ 
+-    if (strcmp(argv[0], "zero")) {
++    if (strcmp(argv[0], "zero") == 0) {
+         ctx.locality = TPMA_LOCALITY_TPM2_LOC_ZERO;
+-    } else if (strcmp(argv[0], "one")) {
++    } else if (strcmp(argv[0], "one") == 0) {
+         ctx.locality = TPMA_LOCALITY_TPM2_LOC_ONE;
+-    } else if (strcmp(argv[0], "two")) {
++    } else if (strcmp(argv[0], "two") == 0) {
+         ctx.locality = TPMA_LOCALITY_TPM2_LOC_TWO;
+-    } else if (strcmp(argv[0], "three")) {
++    } else if (strcmp(argv[0], "three") == 0) {
+         ctx.locality = TPMA_LOCALITY_TPM2_LOC_THREE;
+-    } else if (strcmp(argv[0], "four")) {
++    } else if (strcmp(argv[0], "four") == 0) {
+         ctx.locality = TPMA_LOCALITY_TPM2_LOC_FOUR;
+     } else {
+         bool result = tpm2_util_string_to_uint8(argv[0], &ctx.locality);
+-- 
+2.40.1
+

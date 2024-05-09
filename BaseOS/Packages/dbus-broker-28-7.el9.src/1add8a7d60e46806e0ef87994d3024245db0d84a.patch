@@ -1,0 +1,38 @@
+From 1add8a7d60e46806e0ef87994d3024245db0d84a Mon Sep 17 00:00:00 2001
+From: David Rheinsberg <david.rheinsberg@gmail.com>
+Date: Thu, 18 Mar 2021 11:10:02 +0100
+Subject: [PATCH] launch/policy: fix incorrect assertion for at_console
+
+We write at_console policies for ranges of uids. If one of those ranges
+is 0, an overflow assertion will incorrectly fire. Fix this and simplify
+the assertions for better readability.
+
+Note that such empty ranges will happen if more than one user on the
+system is considered `at_console` **and** those users have consecutive
+UIDs. Another possibility for empty ranges is when uid 0 is considered
+at_console.
+
+In any case, the assertion will abort the application incorrectly. So
+this is not a security issue, but merely an incorrect assertion.
+
+Signed-off-by: David Rheinsberg <david.rheinsberg@gmail.com>
+---
+ src/launch/policy.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/launch/policy.c b/src/launch/policy.c
+index f91f11b..75eb0d3 100644
+--- a/src/launch/policy.c
++++ b/src/launch/policy.c
+@@ -934,7 +934,10 @@ static int policy_export_xmit(Policy *policy, CList *list1, CList *list2, sd_bus
+ static int policy_export_console(Policy *policy, sd_bus_message *m, PolicyEntries *entries, uint32_t uid_start, uint32_t n_uid) {
+         int r;
+ 
+-        c_assert(((uint32_t)-1) - n_uid + 1 >= uid_start);
++        /* check for overflow */
++        c_assert(uid_start + n_uid >= uid_start);
++        /* check for encoding into dbus `u` type */
++        c_assert(uid_start + n_uid <= (uint32_t)-1);
+ 
+         if (n_uid == 0)
+                 return 0;

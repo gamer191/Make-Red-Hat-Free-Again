@@ -1,0 +1,50 @@
+diff -up vim82/src/normal.c.cve-3796 vim82/src/normal.c
+--- vim82/src/normal.c.cve-3796	2021-03-22 10:02:42.000000000 +0100
++++ vim82/src/normal.c	2021-10-15 10:45:21.397258123 +0200
+@@ -5076,19 +5076,23 @@ nv_replace(cmdarg_T *cap)
+ 	    {
+ 		/*
+ 		 * Get ptr again, because u_save and/or showmatch() will have
+-		 * released the line.  At the same time we let know that the
+-		 * line will be changed.
++		 * released the line.  This may also happen in ins_copychar().
++		 * At the same time we let know that the line will be changed.
+ 		 */
+-		ptr = ml_get_buf(curbuf, curwin->w_cursor.lnum, TRUE);
+ 		if (cap->nchar == Ctrl_E || cap->nchar == Ctrl_Y)
+ 		{
+ 		  int c = ins_copychar(curwin->w_cursor.lnum
+ 					   + (cap->nchar == Ctrl_Y ? -1 : 1));
++
++		  ptr = ml_get_buf(curbuf, curwin->w_cursor.lnum, TRUE);
+ 		  if (c != NUL)
+ 		    ptr[curwin->w_cursor.col] = c;
+ 		}
+ 		else
++		{
++		    ptr = ml_get_buf(curbuf, curwin->w_cursor.lnum, TRUE);
+ 		    ptr[curwin->w_cursor.col] = cap->nchar;
++		}
+ 		if (p_sm && msg_silent == 0)
+ 		    showmatch(cap->nchar);
+ 		++curwin->w_cursor.col;
+diff -up vim82/src/testdir/test_edit.vim.cve-3796 vim82/src/testdir/test_edit.vim
+--- vim82/src/testdir/test_edit.vim.cve-3796	2021-10-15 10:45:21.398258115 +0200
++++ vim82/src/testdir/test_edit.vim	2021-10-15 10:46:22.892764135 +0200
+@@ -1844,4 +1844,16 @@ func Test_read_invalid()
+   set encoding=utf-8
+ endfunc
+ 
++" Test for getting the character of the line below after "p"
++func Test_edit_put_CTRL_E()
++  set encoding=latin1
++  new
++  let @" = ''
++  sil! norm orggRx
++  sil! norm pr
++  call assert_equal(['r', 'r'], getline(1, 2))
++  bwipe!
++  set encoding=utf-8
++endfunc
++
+ " vim: shiftwidth=2 sts=2 expandtab

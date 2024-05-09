@@ -1,0 +1,108 @@
+From 8b61e8e75443d79d22bf6e74e6b0e36acdd605c3 Mon Sep 17 00:00:00 2001
+From: Matthew Ho <sunfishho12@gmail.com>
+Date: Fri, 12 Aug 2022 15:15:53 -0700
+Subject: [PATCH 200/217] cxl: Add list verbose option to the cxl command
+
+This adds the new subcommands cxl list -v, cxl list -vv, and cxl list -vvv.
+
+cxl list -v is now equivalent to cxl list -RMBDPT, cxl list -vv is
+equivalent to cxl list -RMBDPTi, and cxl list -vvv is equivalent to
+cxl list -RMBDPTiHI. These additions make it easier to list all of the CXL
+devices without having to remember which subcommand must be appended for each
+type of device.
+
+Link: https://lore.kernel.org/r/20220812221553.92278-1-sunfishho12@gmail.com
+Reviewed-by: Adam Manzanares <a.manzanares@samsung.com>
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Acked-by: Davidlohr Bueso <dave@stgolabs.net>
+Signed-off-by: Matthew Ho <sunfishho12@gmail.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/cxl-list.txt | 18 ++++++++++++++++++
+ cxl/filter.h                   |  1 +
+ cxl/list.c                     | 21 +++++++++++++++++++++
+ 3 files changed, 40 insertions(+)
+
+diff --git a/Documentation/cxl/cxl-list.txt b/Documentation/cxl/cxl-list.txt
+index b88940a..14a2b4b 100644
+--- a/Documentation/cxl/cxl-list.txt
++++ b/Documentation/cxl/cxl-list.txt
+@@ -344,6 +344,24 @@ OPTIONS
+ --region::
+ 	Specify CXL region device name(s), or device id(s), to filter the listing.
+ 
++-v::
++--verbose::
++	Increase verbosity of the output. This can be specified
++	multiple times to be even more verbose on the
++	informational and miscellaneous output, and can be used
++	to override omitted flags for showing specific
++	information. Note that cxl list --verbose --verbose is
++	equivalent to cxl list -vv.
++	- *-v*
++	  Enable --memdevs, --regions, --buses,
++	  --ports, --decoders, and --targets.
++	- *-vv*
++	  Everything *-v* provides, plus include disabled
++	  devices with --idle.
++	- *-vvv*
++	  Everything *-vv* provides, plus enable
++	  --health and --partition.
++
+ --debug::
+ 	If the cxl tool was built with debug enabled, turn on debug
+ 	messages.
+diff --git a/cxl/filter.h b/cxl/filter.h
+index d22d8b1..256df49 100644
+--- a/cxl/filter.h
++++ b/cxl/filter.h
+@@ -26,6 +26,7 @@ struct cxl_filter_params {
+ 	bool human;
+ 	bool health;
+ 	bool partition;
++	int verbose;
+ 	struct log_ctx ctx;
+ };
+ 
+diff --git a/cxl/list.c b/cxl/list.c
+index 5f604ec..8c48fbb 100644
+--- a/cxl/list.c
++++ b/cxl/list.c
+@@ -52,6 +52,8 @@ static const struct option options[] = {
+ 		    "include memory device health information"),
+ 	OPT_BOOLEAN('I', "partition", &param.partition,
+ 		    "include memory device partition information"),
++	OPT_INCR('v', "verbose", &param.verbose,
++		 "increase output detail"),
+ #ifdef ENABLE_DEBUG
+ 	OPT_BOOLEAN(0, "debug", &debug, "debug list walk"),
+ #endif
+@@ -106,6 +108,25 @@ int cmd_list(int argc, const char **argv, struct cxl_ctx *ctx)
+ 		param.memdevs = true;
+ 	}
+ 
++	switch(param.verbose){
++	default:
++	case 3:
++		param.health = true;
++		param.partition = true;
++		/* fallthrough */
++	case 2:
++		param.idle = true;
++		/* fallthrough */
++	case 1:
++		param.buses = true;
++		param.ports = true;
++		param.decoders = true;
++		param.targets = true;
++		/*fallthrough*/
++	case 0:
++		break;
++	}
++
+ 	log_init(&param.ctx, "cxl list", "CXL_LIST_LOG");
+ 	if (debug) {
+ 		cxl_set_log_priority(ctx, LOG_DEBUG);
+-- 
+2.27.0
+

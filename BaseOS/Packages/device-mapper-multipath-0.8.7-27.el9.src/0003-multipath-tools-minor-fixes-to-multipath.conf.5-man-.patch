@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Date: Thu, 16 Sep 2021 00:44:49 +0200
+Subject: [PATCH] multipath-tools: minor fixes to multipath.conf.5 man page
+
+Cc: Martin Wilck <mwilck@suse.com>
+Cc: Benjamin Marzinski <bmarzins@redhat.com>
+Cc: Christophe Varoqui <christophe.varoqui@opensvc.com>
+Cc: DM-DEVEL ML <dm-devel@redhat.com>
+Signed-off-by: Xose Vazquez Perez <xose.vazquez@gmail.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ multipath/multipath.conf.5 | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index 42a15ffd..c74129bd 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -1,9 +1,9 @@
+ .\" ----------------------------------------------------------------------------
+-.\" Update the date below if you make any significant change.
+ .\" Make sure there are no errors with:
+ .\" groff -z -wall -b -e -t multipath/multipath.conf.5
+ .\" man --warnings -E UTF-8 -l -Tutf8 -Z multipath/multipath.conf.5 >/dev/null
+ .\"
++.\" Update the date below if you make any significant change.
+ .\" ----------------------------------------------------------------------------
+ .
+ .TH MULTIPATH.CONF 5 2021-09-08 Linux
+@@ -189,7 +189,7 @@ The default is: \fB<system dependent>\fR
+ .TP
+ .B path_selector
+ The default path selector algorithm to use; they are offered by the
+-kernel multipath target. There are three selector algorithms:
++kernel multipath target:
+ .RS
+ .TP 12
+ .I "round-robin 0"
+@@ -206,7 +206,7 @@ of outstanding I/O to the path.
+ of outstanding I/O to the path and its relative throughput.
+ .TP
+ .I "historical-service-time 0"
+-(Since 5.8 kernel) Choose the path for the next bunch of IOs based on the
++(Since 5.8 kernel) Choose the path for the next bunch of I/O based on the
+ estimation of future service time based on the history of previous I/O submitted
+ to each path.
+ .TP

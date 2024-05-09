@@ -1,0 +1,53 @@
+From ac0066a6095e9ed0910fc560277ec693d3b507fa Mon Sep 17 00:00:00 2001
+From: Alison Schofield <alison.schofield@intel.com>
+Date: Tue, 22 Feb 2022 11:56:05 -0800
+Subject: [PATCH 134/217] libcxl: return the partition alignment field in bytes
+
+Per the CXL specification, the partition alignment field reports
+the alignment value in multiples of 256MB. In the libcxl API, values
+for all capacity fields are defined to return bytes.
+
+Update the partition alignment accessor to return bytes so that it
+is in sync with other capacity related fields.
+
+Since this is early in the development cycle, the expectation is that
+no third party consumers of this library have come to depend on the
+encoded capacity field. If that is not the case, the original format
+can be restored, and a new _bytes version introduced.
+
+Link: https://lore.kernel.org/r/6b937b09b61ddf95e069fd7acfda0c5bbb845be8.1645558189.git.alison.schofield@intel.com
+Reviewed-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Alison Schofield <alison.schofield@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ cxl/lib/libcxl.c | 13 +++++--------
+ 1 file changed, 5 insertions(+), 8 deletions(-)
+
+diff --git a/cxl/lib/libcxl.c b/cxl/lib/libcxl.c
+index 9413384..c05c13c 100644
+--- a/cxl/lib/libcxl.c
++++ b/cxl/lib/libcxl.c
+@@ -2308,15 +2308,12 @@ CXL_EXPORT int cxl_cmd_identify_get_fw_rev(struct cxl_cmd *cmd, char *fw_rev,
+ CXL_EXPORT unsigned long long cxl_cmd_identify_get_partition_align(
+ 		struct cxl_cmd *cmd)
+ {
+-	struct cxl_cmd_identify *id =
+-			(struct cxl_cmd_identify *)cmd->send_cmd->out.payload;
+-
+-	if (cmd->send_cmd->id != CXL_MEM_COMMAND_ID_IDENTIFY)
+-		return -EINVAL;
+-	if (cmd->status < 0)
+-		return cmd->status;
++	struct cxl_cmd_identify *c;
+ 
+-	return le64_to_cpu(id->partition_align);
++	c = cmd_to_identify(cmd);
++	if (!c)
++		return ULLONG_MAX;
++	return cxl_capacity_to_bytes(c->partition_align);
+ }
+ 
+ CXL_EXPORT unsigned int cxl_cmd_identify_get_label_size(struct cxl_cmd *cmd)
+-- 
+2.27.0
+

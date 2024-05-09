@@ -1,0 +1,50 @@
+diff -up vim82/src/errors.h.cve1621 vim82/src/errors.h
+--- vim82/src/errors.h.cve1621	2022-05-24 13:36:23.883370040 +0200
++++ vim82/src/errors.h	2022-05-24 13:36:47.665487703 +0200
+@@ -387,3 +387,7 @@ EXTERN char e_resulting_text_too_long[]
+ EXTERN char e_string_or_function_required_for_arrow_parens_expr[]
+ 	INIT(= N_("E1275: String or function required for ->(expr)"));
+ #endif
++#ifdef FEAT_SPELL
++EXTERN char e_illegal_character_in_word[]
++	INIT(= N_("E1280: Illegal character in word"));
++#endif
+diff -up vim82/src/mbyte.c.cve1621 vim82/src/mbyte.c
+--- vim82/src/mbyte.c.cve1621	2021-03-22 10:02:42.000000000 +0100
++++ vim82/src/mbyte.c	2022-05-24 13:36:23.884370045 +0200
+@@ -4181,7 +4181,7 @@ theend:
+     convert_setup(&vimconv, NULL, NULL);
+ }
+ 
+-#if defined(FEAT_GUI_GTK) || defined(PROTO)
++#if defined(FEAT_GUI_GTK) || defined(FEAT_SPELL) || defined(PROTO)
+ /*
+  * Return TRUE if string "s" is a valid utf-8 string.
+  * When "end" is NULL stop at the first NUL.
+diff -up vim82/src/spellfile.c.cve1621 vim82/src/spellfile.c
+--- vim82/src/spellfile.c.cve1621	2021-03-22 10:02:42.000000000 +0100
++++ vim82/src/spellfile.c	2022-05-24 13:36:23.885370049 +0200
+@@ -4391,6 +4391,10 @@ store_word(
+     int		res = OK;
+     char_u	*p;
+ 
++    // Avoid adding illegal bytes to the word tree.
++    if (enc_utf8 && !utf_valid_string(word, NULL))
++	return FAIL;
++
+     (void)spell_casefold(word, len, foldword, MAXWLEN);
+     for (p = pfxlist; res == OK; ++p)
+     {
+@@ -6191,6 +6195,12 @@ spell_add_word(
+     int		i;
+     char_u	*spf;
+ 
++    if (enc_utf8 && !utf_valid_string(word, NULL))
++    {
++	emsg(_(e_illegal_character_in_word));
++	return;
++    }
++
+     if (idx == 0)	    // use internal wordlist
+     {
+ 	if (int_wordlist == NULL)

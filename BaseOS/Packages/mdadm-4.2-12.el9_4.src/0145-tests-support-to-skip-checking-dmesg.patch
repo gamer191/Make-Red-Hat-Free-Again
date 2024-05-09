@@ -1,0 +1,38 @@
+From 0ef9465f6355db612e53afc32e3084721c3dd7c7 Mon Sep 17 00:00:00 2001
+From: Yu Kuai <yukuai3@huawei.com>
+Date: Mon, 29 May 2023 21:28:20 +0800
+Subject: [PATCH 145/165] tests: support to skip checking dmesg
+
+Prepare to add a regression test for raid10 that require error injection
+to trigger error path, and kernel will complain about io error, checking
+dmesg for error log will make it impossible to pass this test.
+
+Signed-off-by: Yu Kuai <yukuai3@huawei.com>
+Acked-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Signed-off-by: Jes Sorensen <jes@trained-monkey.org>
+---
+ test | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/test b/test
+index 61d9ee83..b244453b 100755
+--- a/test
++++ b/test
+@@ -107,8 +107,12 @@ do_test() {
+ 		echo -ne "$_script... "
+ 		if ( set -ex ; . $_script ) &> $targetdir/log
+ 		then
+-			dmesg | grep -iq "error\|call trace\|segfault" &&
+-				die "dmesg prints errors when testing $_basename!"
++			if [ -f "${_script}.inject_error" ]; then
++				echo "dmesg checking is skipped because test inject error"
++			else
++				dmesg | grep -iq "error\|call trace\|segfault" &&
++					die "dmesg prints errors when testing $_basename!"
++			fi
+ 			echo "succeeded"
+ 			_fail=0
+ 		else
+-- 
+2.40.1
+

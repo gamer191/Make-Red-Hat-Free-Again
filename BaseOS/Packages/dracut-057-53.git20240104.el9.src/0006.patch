@@ -1,0 +1,65 @@
+From c1dee82d80d1b4d76a476d822cdf817686da7ebb Mon Sep 17 00:00:00 2001
+From: Pavel Valena <pvalena@redhat.com>
+Date: Tue, 19 Jul 2022 16:42:59 +0200
+Subject: [PATCH] ci: fix branch to run integration tests in
+
+---
+ .github/workflows/container.yml               | 2 +-
+ .github/workflows/differential-shellcheck.yml | 2 +-
+ .github/workflows/integration.yml             | 2 +-
+ .github/workflows/lint.yml                    | 2 +-
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/.github/workflows/container.yml b/.github/workflows/container.yml
+index 99d57f5b..82d7a097 100644
+--- a/.github/workflows/container.yml
++++ b/.github/workflows/container.yml
+@@ -8,7 +8,7 @@ on:
+             - 'test/container/**'
+             - '.github/workflows/container.yml'
+     pull_request:
+-        branches: [ main new-main ]
++        branches: [ main ]
+         paths:
+             - 'test/container/**'
+             - '.github/workflows/container.yml'
+diff --git a/.github/workflows/differential-shellcheck.yml b/.github/workflows/differential-shellcheck.yml
+index c4b05fad..63a022bf 100644
+--- a/.github/workflows/differential-shellcheck.yml
++++ b/.github/workflows/differential-shellcheck.yml
+@@ -1,7 +1,7 @@
+ name: Differential ShellCheck
+ on:
+   pull_request:
+-    branches: [ main new-main ]
++    branches: [ main ]
+ 
+ jobs:
+   test:
+diff --git a/.github/workflows/integration.yml b/.github/workflows/integration.yml
+index aa354e3e..82d01457 100644
+--- a/.github/workflows/integration.yml
++++ b/.github/workflows/integration.yml
+@@ -2,7 +2,7 @@ name: Integration Test
+ 
+ on:
+     pull_request:
+-        branches: [ main new-main ]
++        branches: [ main ]
+ 
+ jobs:
+     basic:
+diff --git a/.github/workflows/lint.yml b/.github/workflows/lint.yml
+index 5e3a299f..f6778a65 100644
+--- a/.github/workflows/lint.yml
++++ b/.github/workflows/lint.yml
+@@ -4,7 +4,7 @@ on:
+   push:
+     branches: [ main ]
+   pull_request:
+-    branches: [ main new-main ]
++    branches: [ main ]
+ 
+ jobs:
+   lint-c:
+

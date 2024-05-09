@@ -1,0 +1,141 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Thu, 1 Sep 2022 19:21:30 +0200
+Subject: [PATCH] multipath-tools: use /run instead of /dev/shm
+
+/dev/shm may have unsafe permissions. Use /run instead.
+Use systemd's tmpfiles.d mechanism to create /run/multipath
+early during boot.
+
+For backward compatibilty, make the runtime directory configurable
+via the "runtimedir" make variable.
+
+Signed-off-by: Martin Wilck <mwilck@suse.com>
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+---
+ .gitignore                                        | 2 ++
+ Makefile.inc                                      | 4 +++-
+ libmultipath/defaults.h                           | 2 +-
+ multipath/Makefile                                | 9 +++++++--
+ multipath/{multipath.rules => multipath.rules.in} | 4 ++--
+ multipath/tmpfiles.conf.in                        | 1 +
+ 6 files changed, 16 insertions(+), 6 deletions(-)
+ rename multipath/{multipath.rules => multipath.rules.in} (96%)
+ create mode 100644 multipath/tmpfiles.conf.in
+
+diff --git a/.gitignore b/.gitignore
+index 087dffc2..6ee4fa09 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -11,6 +11,8 @@ cscope.files
+ cscope.out
+ kpartx/kpartx
+ multipath/multipath
++multipath/multipath.rules
++multipath/tmpfiles.conf
+ multipathd/multipathd
+ mpathpersist/mpathpersist
+ .nfs*
+diff --git a/Makefile.inc b/Makefile.inc
+index 05027703..4c452159 100644
+--- a/Makefile.inc
++++ b/Makefile.inc
+@@ -62,6 +62,7 @@ exec_prefix	= $(prefix)
+ usr_prefix	= $(prefix)
+ bindir		= $(exec_prefix)/usr/sbin
+ libudevdir	= $(prefix)/$(SYSTEMDPATH)/udev
++tmpfilesdir	= $(prefix)/$(SYSTEMDPATH)/tmpfiles.d
+ udevrulesdir	= $(libudevdir)/rules.d
+ multipathdir	= $(TOPDIR)/libmultipath
+ man8dir		= $(prefix)/usr/share/man/man8
+@@ -79,6 +80,7 @@ libdmmpdir	= $(TOPDIR)/libdmmp
+ nvmedir		= $(TOPDIR)/libmultipath/nvme
+ includedir	= $(prefix)/usr/include
+ pkgconfdir	= $(usrlibdir)/pkgconfig
++runtimedir	= /$(RUN)
+ 
+ GZIP		= gzip -9 -c
+ RM		= rm -f
+@@ -120,7 +122,7 @@ WARNFLAGS	:= -Werror -Wextra -Wformat=2 $(WFORMATOVERFLOW) -Werror=implicit-int
+ 		  $(WNOCLOBBERED) -Werror=cast-qual $(ERROR_DISCARDED_QUALIFIERS) \
+ 		  -Wstrict-prototypes
+ CFLAGS		:= --std=gnu99 $(CFLAGS) $(OPTFLAGS) $(WARNFLAGS) -pipe \
+-		   -DBIN_DIR=\"$(bindir)\" -DLIB_STRING=\"${LIB}\" -DRUN_DIR=\"${RUN}\" \
++		   -DBIN_DIR=\"$(bindir)\" -DLIB_STRING=\"${LIB}\" -DRUN_DIR=\"${RUN}\" -DRUNTIME_DIR=\"$(runtimedir)\" \
+ 		   -MMD -MP
+ BIN_CFLAGS	= -fPIE -DPIE
+ LIB_CFLAGS	= -fPIC
+diff --git a/libmultipath/defaults.h b/libmultipath/defaults.h
+index e0dd32ad..cec82f07 100644
+--- a/libmultipath/defaults.h
++++ b/libmultipath/defaults.h
+@@ -69,7 +69,7 @@
+ #define DEFAULT_WWIDS_FILE	"/etc/multipath/wwids"
+ #define DEFAULT_PRKEYS_FILE    "/etc/multipath/prkeys"
+ #define DEFAULT_CONFIG_DIR	"/etc/multipath/conf.d"
+-#define MULTIPATH_SHM_BASE	"/dev/shm/multipath/"
++#define MULTIPATH_SHM_BASE	RUNTIME_DIR "/multipath/"
+ 
+ 
+ static inline char *set_default(char *str)
+diff --git a/multipath/Makefile b/multipath/Makefile
+index e720c7f6..f3d98012 100644
+--- a/multipath/Makefile
++++ b/multipath/Makefile
+@@ -12,7 +12,7 @@ EXEC = multipath
+ 
+ OBJS = main.o
+ 
+-all: $(EXEC)
++all: $(EXEC) multipath.rules tmpfiles.conf
+ 
+ $(EXEC): $(OBJS) $(multipathdir)/libmultipath.so $(mpathcmddir)/libmpathcmd.so
+ 	$(CC) $(CFLAGS) $(OBJS) -o $(EXEC) $(LDFLAGS) $(LIBDEPS)
+@@ -27,6 +27,8 @@ install:
+ 	$(INSTALL_PROGRAM) -d $(DESTDIR)$(udevrulesdir)
+ 	$(INSTALL_PROGRAM) -m 644 11-dm-mpath.rules $(DESTDIR)$(udevrulesdir)
+ 	$(INSTALL_PROGRAM) -m 644 $(EXEC).rules $(DESTDIR)$(libudevdir)/rules.d/62-multipath.rules
++	$(INSTALL_PROGRAM) -d $(DESTDIR)$(tmpfilesdir)
++	$(INSTALL_PROGRAM) -m 644 tmpfiles.conf $(DESTDIR)$(tmpfilesdir)/multipath.conf
+ 	$(INSTALL_PROGRAM) -d $(DESTDIR)$(man8dir)
+ 	$(INSTALL_PROGRAM) -m 644 $(EXEC).8.gz $(DESTDIR)$(man8dir)
+ 	$(INSTALL_PROGRAM) -d $(DESTDIR)$(man5dir)
+@@ -43,9 +45,12 @@ uninstall:
+ 	$(RM) $(DESTDIR)$(man8dir)/mpathconf.8.gz
+ 
+ clean: dep_clean
+-	$(RM) core *.o $(EXEC) *.gz
++	$(RM) core *.o $(EXEC) *.gz multipath.rules tmpfiles.conf
+ 
+ include $(wildcard $(OBJS:.o=.d))
+ 
+ dep_clean:
+ 	$(RM) $(OBJS:.o=.d)
++
++%: %.in
++	sed 's,@RUNTIME_DIR@,$(runtimedir),' $< >$@
+diff --git a/multipath/multipath.rules b/multipath/multipath.rules.in
+similarity index 96%
+rename from multipath/multipath.rules
+rename to multipath/multipath.rules.in
+index 68c30644..5c4447a2 100644
+--- a/multipath/multipath.rules
++++ b/multipath/multipath.rules.in
+@@ -1,8 +1,8 @@
+ # Set DM_MULTIPATH_DEVICE_PATH if the device should be handled by multipath
+ SUBSYSTEM!="block", GOTO="end_mpath"
+ KERNEL!="sd*|dasd*|nvme*", GOTO="end_mpath"
+-ACTION=="remove", TEST=="/dev/shm/multipath/find_multipaths/$major:$minor", \
+-	RUN+="/usr/bin/rm -f /dev/shm/multipath/find_multipaths/$major:$minor"
++ACTION=="remove", TEST=="@RUNTIME_DIR@/multipath/find_multipaths/$major:$minor", \
++	RUN+="/usr/bin/rm -f @RUNTIME_DIR@/multipath/find_multipaths/$major:$minor"
+ ACTION!="add|change", GOTO="end_mpath"
+ 
+ IMPORT{cmdline}="nompath"
+diff --git a/multipath/tmpfiles.conf.in b/multipath/tmpfiles.conf.in
+new file mode 100644
+index 00000000..21be438a
+--- /dev/null
++++ b/multipath/tmpfiles.conf.in
+@@ -0,0 +1 @@
++d @RUNTIME_DIR@/multipath 0700 root root -

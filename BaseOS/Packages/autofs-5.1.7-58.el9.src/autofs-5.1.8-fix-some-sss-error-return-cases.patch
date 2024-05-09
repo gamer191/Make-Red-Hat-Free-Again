@@ -1,0 +1,78 @@
+autofs-5.1.8 - fix some sss error return cases
+
+From: Ian Kent <raven@themaw.net>
+
+There are some cases where the error return handling isn't quite right,
+fix them.
+
+Also fix a typo. in configuration file comment.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG                      |    1 +
+ modules/lookup_sss.c           |    6 +++---
+ redhat/autofs.conf.default.in  |    2 +-
+ samples/autofs.conf.default.in |    2 +-
+ 4 files changed, 6 insertions(+), 5 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -154,6 +154,7 @@
+ - add soucre parameter to module functions.
+ - add ioctlfd open helper.
+ - make open files limit configurable.
++- fix some sss error return cases.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/modules/lookup_sss.c
++++ autofs-5.1.7/modules/lookup_sss.c
+@@ -368,7 +368,7 @@ static int setautomntent_wait(unsigned i
+ 			*sss_ctxt = NULL;
+ 		}
+ 
+-		if (proto_version(ctxt) == 0 && retry > retries)
++		if (proto_version(ctxt) == 0 && retry >= retries)
+ 			ret = ETIMEDOUT;
+ 	}
+ 	return ret;
+@@ -496,7 +496,7 @@ static int getautomntent_wait(unsigned i
+ 		info(logopt,
+ 		     "successfully contacted sssd to get map entry");
+ 	else {
+-		if (retry == retries)
++		if (proto_version(ctxt) == 0 && retry >= retries)
+ 			ret = ETIMEDOUT;
+ 	}
+ 	return ret;
+@@ -621,7 +621,7 @@ static int getautomntbyname_wait(unsigne
+ 		info(logopt,
+ 		     "successfully contacted sssd to lookup key value");
+ 	else {
+-		if (proto_version(ctxt) == 0 && retry > retries)
++		if (proto_version(ctxt) == 0 && retry >= retries)
+ 			ret = ETIMEDOUT;
+ 	}
+ 	return ret;
+--- autofs-5.1.7.orig/redhat/autofs.conf.default.in
++++ autofs-5.1.7/redhat/autofs.conf.default.in
+@@ -209,7 +209,7 @@ mount_nfs_default_protocol = 4
+ # sss_master_map_wait - When sssd is starting up it can sometimes return
+ #			"no such entry" for a short time until it has read
+ # 			in the LDAP map information. Internal default is 0
+-# 			(don't wait) or 10 if sss supports returning EHSTDOWN.
++# 			(don't wait) or 10 if sss supports returning EHOSTDOWN.
+ # 			If there is a problem with autofs not finding the
+ # 			master map at startup (when it should) then try setting
+ # 			this to 10 or more. If the sss library supports returning
+--- autofs-5.1.7.orig/samples/autofs.conf.default.in
++++ autofs-5.1.7/samples/autofs.conf.default.in
+@@ -208,7 +208,7 @@ browse_mode = no
+ # sss_master_map_wait - When sssd is starting up it can sometimes return
+ #			"no such entry" for a short time until it has read
+ # 			in the LDAP map information. Internal default is 0
+-# 			(don't wait) or 10 if sss supports returning EHSTDOWN.
++# 			(don't wait) or 10 if sss supports returning EHOSTDOWN.
+ # 			If there is a problem with autofs not finding the
+ # 			master map at startup (when it should) then try setting
+ # 			this to 10 or more. If the sss library supports returning

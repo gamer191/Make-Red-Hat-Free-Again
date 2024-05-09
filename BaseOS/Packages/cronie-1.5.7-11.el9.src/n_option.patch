@@ -1,0 +1,205 @@
+From ce7d5bf0a43d147f8502e6424cd523b56adf5599 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ond=C5=99ej=20Poho=C5=99elsk=C3=BD?= <opohorel@redhat.com>
+Date: Mon, 26 Sep 2022 16:51:41 +0200
+Subject: [PATCH] Add -n option for crontab entries
+
+The -n option causes no mail to be sent
+when the command finishes successfully.
+
+These kind of options are already supported in *BSD;
+in fact, this is a port of a patch from NetBSD [1].
+
+This was requested in [2].
+
+[1]: NetBSD/src@666eac5
+[2]: https://bugzilla.redhat.com/show_bug.cgi?id=1591763
+---
+ src/do_command.c | 32 +++++++++++++++++++++++++++++---
+ src/entry.c      | 31 +++++++++++++++++++++++++++++++
+ src/funcs.h      |  1 +
+ src/popen.c      | 33 ++++++++++++++++++++++++++++++---
+ src/structs.h    |  1 +
+ 5 files changed, 92 insertions(+), 6 deletions(-)
+
+diff --git a/src/do_command.c b/src/do_command.c
+index 87f996f..6a3886a 100644
+--- a/src/do_command.c
++++ b/src/do_command.c
+@@ -94,6 +94,7 @@ static int child_process(entry * e, char **jobenv) {
+ 	char mailfrom_expanded[MAX_EMAILSTR];
+ 	int children = 0;
+ 	pid_t pid = getpid();
++	pid_t jobpid = -1;
+ 	struct sigaction sa;
+ 
+ 	/* Ignore SIGPIPE as we will be writing to pipes and do not want to terminate
+@@ -199,7 +200,7 @@ static int child_process(entry * e, char **jobenv) {
+ 
+ 	/* fork again, this time so we can exec the user's command.
+ 	 */
+-	switch (fork()) {
++	switch (jobpid = fork()) {
+ 	case -1:
+ 		log_it("CRON", pid, "CAN'T FORK", "child_process", errno);
+ 		return ERROR_EXIT;
+@@ -552,10 +553,35 @@ static int child_process(entry * e, char **jobenv) {
+ 				}
+ #endif
+ 			}
+-			/* only close pipe if we opened it -- i.e., we're
+-			 * mailing...
++			/* if -n option was specified, abort the sending
++			 * now when we read all of the command output
++			 * and thus can wait for it's exit status
+ 			 */
++			if (mail && e->flags & MAIL_WHEN_ERR) {
++				int jobstatus = -1;
++				if (jobpid > 0) {
++					while (waitpid(jobpid, &jobstatus, WNOHANG) == -1) {
++						if (errno == EINTR) continue;
++						log_it("CRON", getpid(), "error", "invalid job pid", errno);
++						break;
++					}
++				} else {
++					log_it("CRON", getpid(), "error", "invalid job pid", 0);
++				}
+ 
++				/* if everything went well, -n is set, and we have mail,
++				 * we won't be mailing – so shoot the messenger!
++				 */
++				if (WIFEXITED(jobstatus) && WEXITSTATUS(jobstatus) == EXIT_SUCCESS) {
++					Debug(DPROC, ("[%ld] aborting pipe to mail\n", (long)getpid()));
++					status = cron_pabort(mail);
++					mail = NULL;
++				}
++			}
++
++			/* only close pipe if we opened it -- i.e., we're (still)
++			 * mailing...
++			 */
+ 			if (mail) {
+ 				Debug(DPROC, ("[%ld] closing pipe to mail\n", (long) getpid()));
+ 					/* Note: the pclose will probably see
+diff --git a/src/entry.c b/src/entry.c
+index bb7cb62..9e199fe 100644
+--- a/src/entry.c
++++ b/src/entry.c
+@@ -417,6 +417,37 @@ entry *load_entry(FILE * file, void (*error_func) (), struct passwd *pw,
+ 
+ 	Debug(DPARS, ("load_entry()...about to parse command\n"));
+ 
++	/* If the first character of the command is '-', it is a cron option. */
++	ch = get_char(file);
++	while (ch == '-') {
++		switch (ch = get_char(file)) {
++			case 'n':
++				/* only allow user to set the option once */
++				if ((e->flags & MAIL_WHEN_ERR) == MAIL_WHEN_ERR) {
++					ecode = e_option;
++					goto eof;
++				}
++				e->flags |= MAIL_WHEN_ERR;
++				break;
++
++			default:
++				ecode = e_option;
++				goto eof;
++		}
++
++		ch = get_char(file);
++		if (ch != '\t' && ch != ' ') {
++			ecode = e_option;
++			goto eof;
++		}
++		Skip_Blanks(ch, file);
++		if (ch == EOF || ch == '\n') {
++			ecode = e_cmd;
++			goto eof;
++		}
++	}
++	unget_char(ch, file);
++
+ 	/* Everything up to the next \n or EOF is part of the command...
+ 	 * too bad we don't know in advance how long it will be, since we
+ 	 * need to malloc a string for it... so, we limit it to MAX_COMMAND.
+diff --git a/src/funcs.h b/src/funcs.h
+index dea737e..427e027 100644
+--- a/src/funcs.h
++++ b/src/funcs.h
+@@ -67,6 +67,7 @@ int		load_database(cron_db *),
+ 		swap_uids_back(void),
+ 		load_env(char *, FILE *),
+ 		env_set_from_environ(char ***envpp),
++		cron_pabort(FILE *),
+ 		cron_pclose(FILE *),
+ 		glue_strings(char *, size_t, const char *, const char *, char),
+ 		strcmp_until(const char *, const char *, char),
+diff --git a/src/popen.c b/src/popen.c
+index 4397264..3043eb6 100644
+--- a/src/popen.c
++++ b/src/popen.c
+@@ -167,7 +167,7 @@ FILE *cron_popen(char *program, const char *type, struct passwd *pw, char **jobe
+ 	return (iop);
+ }
+ 
+-int cron_pclose(FILE * iop) {
++static int cron_finalize(FILE * iop, int sig) {
+ 	int fdes;
+ 	sigset_t oset, nset;
+ 	WAIT_T stat_loc;
+@@ -180,7 +180,12 @@ int cron_pclose(FILE * iop) {
+ 	fdes = fileno(iop);
+ 	if (pids == NULL || fdes >= fds || pids[fdes] == 0L)
+ 		return (-1);
+-	(void) fclose(iop);
++	
++	if (!sig) {
++		(void) fclose(iop);
++	} else if (kill(pids[fdes], sig) == -1) {
++		return -1;
++	}
+ 
+ 	sigemptyset(&nset);
+ 	sigaddset(&nset, SIGINT);
+@@ -189,6 +194,28 @@ int cron_pclose(FILE * iop) {
+ 	(void) sigprocmask(SIG_BLOCK, &nset, &oset);
+ 	while ((pid = wait(&stat_loc)) != pids[fdes] && pid != -1) ;
+ 	(void) sigprocmask(SIG_SETMASK, &oset, NULL);
++	
++	if (sig) {
++		(void) fclose(iop);
++	}
+ 	pids[fdes] = 0;
+-	return (pid == -1 ? -1 : WEXITSTATUS(stat_loc));
++
++	if (pid < 0) {
++		return pid;
++	}
++
++	if (WIFEXITED(stat_loc)) {
++		return WEXITSTATUS(stat_loc);
++	} else {
++		return WTERMSIG(stat_loc);
++	}
++}
++
++int cron_pclose(FILE * iop) {
++	return cron_finalize(iop, 0);
++}
++
++int cron_pabort(FILE * iop) {
++	int esig = cron_finalize(iop, SIGKILL);
++	return esig == SIGKILL ? 0 : esig;
+ }
+diff --git a/src/structs.h b/src/structs.h
+index 6d3c15b..d930da5 100644
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -48,6 +48,7 @@ typedef	struct _entry {
+ #define	DOW_STAR	0x08
+ #define	WHEN_REBOOT	0x10
+ #define	DONT_LOG	0x20
++#define	MAIL_WHEN_ERR	0x40
+ } entry;
+ 
+ 			/* the crontab database will be a list of the

@@ -1,0 +1,95 @@
+diff -up vim82/src/indent.c.cve0417 vim82/src/indent.c
+--- vim82/src/indent.c.cve0417	2022-02-09 10:01:34.250009316 +0100
++++ vim82/src/indent.c	2022-02-09 10:02:54.802588536 +0100
+@@ -71,7 +71,7 @@ tabstop_set(char_u *var, int **array)
+ 	int n = atoi((char *)cp);
+ 
+ 	// Catch negative values, overflow and ridiculous big values.
+-	if (n < 0 || n > 9999)
++	if (n < 0 || n > TABSTOP_MAX)
+ 	{
+ 	    semsg(_(e_invarg2), cp);
+ 	    vim_free(*array);
+@@ -1595,7 +1595,7 @@ ex_retab(exarg_T *eap)
+ 	emsg(_(e_positive));
+ 	return;
+     }
+-    if (new_ts < 0 || new_ts > 9999)
++    if (new_ts < 0 || new_ts > TABSTOP_MAX)
+     {
+ 	semsg(_(e_invarg2), eap->arg);
+ 	return;
+diff -up vim82/src/option.c.cve0417 vim82/src/option.c
+--- vim82/src/option.c.cve0417	2022-02-09 10:01:34.196009598 +0100
++++ vim82/src/option.c	2022-02-09 10:28:10.398548161 +0100
+@@ -3640,6 +3640,11 @@ set_num_option(
+ 	errmsg = e_positive;
+ 	curbuf->b_p_ts = 8;
+     }
++    else if (curbuf->b_p_ts > TABSTOP_MAX)
++    {
++	errmsg = e_invarg;
++	curbuf->b_p_ts = 8;
++    }
+     if (p_tm < 0)
+     {
+ 	errmsg = e_positive;
+@@ -5830,7 +5835,7 @@ buf_copy_options(buf_T *buf, int flags)
+ 	    if (p_vsts && p_vsts != empty_option)
+ 		(void)tabstop_set(p_vsts, &buf->b_p_vsts_array);
+ 	    else
+-		buf->b_p_vsts_array = 0;
++		buf->b_p_vsts_array = NULL;
+ 	    buf->b_p_vsts_nopaste = p_vsts_nopaste
+ 				 ? vim_strsave(p_vsts_nopaste) : NULL;
+ #endif
+@@ -6649,9 +6654,7 @@ paste_option_changed(void)
+ 	    if (buf->b_p_vsts)
+ 		free_string_option(buf->b_p_vsts);
+ 	    buf->b_p_vsts = empty_option;
+-	    if (buf->b_p_vsts_array)
+-		vim_free(buf->b_p_vsts_array);
+-	    buf->b_p_vsts_array = 0;
++	    VIM_CLEAR(buf->b_p_vsts_array);
+ #endif
+ 	}
+ 
+@@ -6697,12 +6700,11 @@ paste_option_changed(void)
+ 		free_string_option(buf->b_p_vsts);
+ 	    buf->b_p_vsts = buf->b_p_vsts_nopaste
+ 			 ? vim_strsave(buf->b_p_vsts_nopaste) : empty_option;
+-	    if (buf->b_p_vsts_array)
+-		vim_free(buf->b_p_vsts_array);
++	    vim_free(buf->b_p_vsts_array);
+ 	    if (buf->b_p_vsts && buf->b_p_vsts != empty_option)
+ 		(void)tabstop_set(buf->b_p_vsts, &buf->b_p_vsts_array);
+ 	    else
+-		buf->b_p_vsts_array = 0;
++		buf->b_p_vsts_array = NULL;
+ #endif
+ 	}
+ 
+diff -up vim82/src/testdir/test_options.vim.cve0417 vim82/src/testdir/test_options.vim
+--- vim82/src/testdir/test_options.vim.cve0417	2021-03-22 10:02:42.000000000 +0100
++++ vim82/src/testdir/test_options.vim	2022-02-09 10:01:34.251009311 +0100
+@@ -362,6 +362,8 @@ func Test_set_errors()
+   call assert_fails('set shiftwidth=-1', 'E487:')
+   call assert_fails('set sidescroll=-1', 'E487:')
+   call assert_fails('set tabstop=-1', 'E487:')
++  call assert_fails('set tabstop=10000', 'E474:')
++  call assert_fails('set tabstop=5500000000', 'E474:')
+   call assert_fails('set textwidth=-1', 'E487:')
+   call assert_fails('set timeoutlen=-1', 'E487:')
+   call assert_fails('set updatecount=-1', 'E487:')
+diff -up vim82/src/vim.h.cve0417 vim82/src/vim.h
+--- vim82/src/vim.h.cve0417	2021-03-22 10:02:42.000000000 +0100
++++ vim82/src/vim.h	2022-02-09 10:01:34.252009306 +0100
+@@ -2032,6 +2032,8 @@ typedef int sock_T;
+ 
+ #define DICT_MAXNEST 100	// maximum nesting of lists and dicts
+ 
++#define TABSTOP_MAX 9999
++
+ #ifdef FEAT_CLIPBOARD
+ 
+ // VIM_ATOM_NAME is the older Vim-specific selection type for X11.  Still

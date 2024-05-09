@@ -1,0 +1,26 @@
+From aea74c289c6000b86964ad0bb9ac1a05bba2456a Mon Sep 17 00:00:00 2001
+From: Josh Boyer <jwboyer@redhat.com>
+Date: Fri, 7 Apr 2023 16:29:55 -0400
+Subject: [PATCH 09/12] Fix buf memory leak
+
+---
+ cmd-capture-pane.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cmd-capture-pane.c b/cmd-capture-pane.c
+index 6f37bc8f..341d1048 100644
+--- a/cmd-capture-pane.c
++++ b/cmd-capture-pane.c
+@@ -226,8 +226,8 @@ cmd_capture_pane_exec(struct cmd *self, struct cmdq_item *item)
+ 			}
+ 			file_print_buffer(c, buf, len);
+ 			file_print(c, "\n");
+-			free(buf);
+ 		}
++		free(buf);
+ 	} else {
+ 		bufname = NULL;
+ 		if (args_has(args, 'b'))
+-- 
+2.31.1
+

@@ -1,0 +1,133 @@
+From c09c507e5a608718ac96af088fdc8cb441b09d0b Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:54:06 -0800
+Subject: [PATCH 112/217] cxl/memdev: Add serial support for memdev-related
+ commands
+
+Allow for a "-s, --serial" option to turn the argument list into serial
+identifiers.
+
+Link: https://lore.kernel.org/r/164298564631.3021641.5552442288217413180.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Documentation/cxl/memdev-option.txt |  5 ++++
+ Documentation/cxl/meson.build       |  4 ++-
+ cxl/memdev.c                        | 45 +++++++++++++++++++++--------
+ 3 files changed, 41 insertions(+), 13 deletions(-)
+
+diff --git a/Documentation/cxl/memdev-option.txt b/Documentation/cxl/memdev-option.txt
+index e778582..64348be 100644
+--- a/Documentation/cxl/memdev-option.txt
++++ b/Documentation/cxl/memdev-option.txt
+@@ -2,3 +2,8 @@
+ A 'memX' device name, or a memdev id number. Restrict the operation to
+ the specified memdev(s). The keyword 'all' can be specified to indicate
+ the lack of any restriction.
++
++-S::
++--serial::
++	Rather an a memdev id number, interpret the <memdev> argument(s)
++	as a list of serial numbers.
+diff --git a/Documentation/cxl/meson.build b/Documentation/cxl/meson.build
+index 64ce13f..0a6346b 100644
+--- a/Documentation/cxl/meson.build
++++ b/Documentation/cxl/meson.build
+@@ -19,7 +19,9 @@ else
+ endif
+ 
+ filedeps = [
+-        '../copyright.txt',
++  '../copyright.txt',
++  'memdev-option.txt',
++  'labels-options.txt',
+ ]
+ 
+ cxl_manpages = [
+diff --git a/cxl/memdev.c b/cxl/memdev.c
+index 4cca8b8..ef5343a 100644
+--- a/cxl/memdev.c
++++ b/cxl/memdev.c
+@@ -24,12 +24,14 @@ static struct parameters {
+ 	unsigned len;
+ 	unsigned offset;
+ 	bool verbose;
++	bool serial;
+ } param;
+ 
+ static struct log_ctx ml;
+ 
+ #define BASE_OPTIONS() \
+-OPT_BOOLEAN('v',"verbose", &param.verbose, "turn on debug")
++OPT_BOOLEAN('v',"verbose", &param.verbose, "turn on debug"), \
++OPT_BOOLEAN('S', "serial", &param.serial, "user serials numbers to id memdevs")
+ 
+ #define READ_OPTIONS() \
+ OPT_STRING('o', "output", &param.outfile, "output-file", \
+@@ -172,8 +174,9 @@ out:
+ }
+ 
+ static int memdev_action(int argc, const char **argv, struct cxl_ctx *ctx,
+-		int (*action)(struct cxl_memdev *memdev, struct action_context *actx),
+-		const struct option *options, const char *usage)
++			 int (*action)(struct cxl_memdev *memdev,
++				       struct action_context *actx),
++			 const struct option *options, const char *usage)
+ {
+ 	struct cxl_memdev *memdev, *single = NULL;
+ 	struct action_context actx = { 0 };
+@@ -190,16 +193,25 @@ static int memdev_action(int argc, const char **argv, struct cxl_ctx *ctx,
+ 	if (argc == 0)
+ 		usage_with_options(u, options);
+ 	for (i = 0; i < argc; i++) {
+-		if (strcmp(argv[i], "all") == 0) {
+-			argc = 1;
+-			break;
++		if (param.serial) {
++			char *end;
++
++			strtoull(argv[i], &end, 0);
++			if (end[0] == 0)
++				continue;
++		} else {
++			if (strcmp(argv[i], "all") == 0) {
++				argc = 1;
++				break;
++			}
++			if (sscanf(argv[i], "mem%lu", &id) == 1)
++				continue;
++			if (sscanf(argv[i], "%lu", &id) == 1)
++				continue;
+ 		}
+-		if (sscanf(argv[i], "mem%lu", &id) == 1)
+-			continue;
+-		if (sscanf(argv[i], "%lu", &id) == 1)
+-			continue;
+ 
+-		log_err(&ml, "'%s' is not a valid memdev name\n", argv[i]);
++		log_err(&ml, "'%s' is not a valid memdev %s\n", argv[i],
++			param.serial ? "serial number" : "name");
+ 		err++;
+ 	}
+ 
+@@ -244,7 +256,16 @@ static int memdev_action(int argc, const char **argv, struct cxl_ctx *ctx,
+ 
+ 	for (i = 0; i < argc; i++) {
+ 		cxl_memdev_foreach(ctx, memdev) {
+-			if (!util_cxl_memdev_filter(memdev, argv[i], NULL))
++			const char *memdev_filter = NULL;
++			const char *serial_filter = NULL;
++
++			if (param.serial)
++				serial_filter = argv[i];
++			else
++				memdev_filter = argv[i];
++
++			if (!util_cxl_memdev_filter(memdev, memdev_filter,
++						    serial_filter))
+ 				continue;
+ 
+ 			if (action == action_write) {
+-- 
+2.27.0
+

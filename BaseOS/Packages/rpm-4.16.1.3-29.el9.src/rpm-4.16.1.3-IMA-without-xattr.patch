@@ -1,0 +1,41 @@
+Based on
+
+From 7db2efa95d859cebda2b095ffdffac42812bd6d9 Mon Sep 17 00:00:00 2001
+From: Darren Kenny <darren.kenny@oracle.com>
+Date: Tue, 22 Feb 2022 16:57:00 +0000
+Subject: [PATCH] ima: Install on filesystems without xattr support without
+ failing
+
+If an RPM contains IMA signed digests and rpm-plugin-ima is installed,
+then any attempt to install to a filesystem that doesn't support
+extended attributes will cause the RPM installation to fail.
+
+This can be seen, for example, if installing a file /boot, which is
+usually a vFAT filesystem.
+
+The rpm-plugin for selinux fixed this some time back, and that same
+logic can be applied to IMA too - where, if a failure to set an extended
+attribute results in an errno that is set to EOPNOTSUPP, then this
+should not cause a complete failure, but should instead just be logged
+at a debug level.
+
+Signed-off-by: Darren Kenny <darren.kenny@oracle.com>
+
+--- rpm-4.16.1.3/plugins/ima.c.orig	2023-05-02 18:19:25.095992859 +0200
++++ rpm-4.16.1.3/plugins/ima.c	2023-05-02 18:21:46.032941008 +0200
+@@ -69,10 +69,13 @@
+ 	fsig = rpmfiFSignature(fi, &len);
+ 	if (fsig && (check_zero_hdr(fsig, len) == 0)) {
+ 	    if (lsetxattr(path, XATTR_NAME_IMA, fsig, len, 0) < 0) {
+-	        rpmlog(RPMLOG_ERR,
++		int is_err = errno != EOPNOTSUPP; 
++	        rpmlog(is_err?RPMLOG_ERR:RPMLOG_DEBUG,
+ 			"ima: could not apply signature on '%s': %s\n",
+ 			path, strerror(errno));
+-	        rc = RPMRC_FAIL;
++		if (is_err) {
++		    rc = RPMRC_FAIL;
++		}
+ 	    }
+ 	}
+ 

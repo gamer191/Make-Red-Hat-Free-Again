@@ -1,0 +1,27 @@
+From 43f00a273beaf63778cb34c925489f0f003ebef7 Mon Sep 17 00:00:00 2001
+From: Josh Boyer <jwboyer@redhat.com>
+Date: Fri, 7 Apr 2023 13:02:37 -0400
+Subject: [PATCH 07/12] Don't leak the original value memory
+
+---
+ window-customize.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/window-customize.c b/window-customize.c
+index 34a13f73..50cfbdf7 100644
+--- a/window-customize.c
++++ b/window-customize.c
+@@ -806,6 +806,10 @@ window_customize_draw_option(struct window_customize_modedata *data,
+ 			break;
+ 		}
+ 	}
++
++	free(value);
++	value = NULL;
++
+ 	if (wo != NULL && options_owner(o) != wo) {
+ 		parent = options_get_only(wo, name);
+ 		if (parent != NULL) {
+-- 
+2.31.1
+

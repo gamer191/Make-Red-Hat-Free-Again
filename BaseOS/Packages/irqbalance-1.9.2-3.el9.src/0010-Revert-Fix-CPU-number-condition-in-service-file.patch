@@ -1,0 +1,25 @@
+From ea1e9a7a9105c834302ce7c72e9b4b1c90ec7866 Mon Sep 17 00:00:00 2001
+From: middlingphys <38708390+middlingphys@users.noreply.github.com>
+Date: Wed, 15 Mar 2023 22:33:22 +0900
+Subject: [PATCH 10/13] Revert "Fix CPU number condition in service file"
+
+---
+ misc/irqbalance.service | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/misc/irqbalance.service b/misc/irqbalance.service
+index a2d919c..8544f66 100644
+--- a/misc/irqbalance.service
++++ b/misc/irqbalance.service
+@@ -3,7 +3,7 @@ Description=irqbalance daemon
+ Documentation=man:irqbalance(1)
+ Documentation=https://github.com/Irqbalance/irqbalance
+ ConditionVirtualization=!container
+-ConditionCPUs>1
++ConditionCPUs=>1
+ 
+ [Service]
+ EnvironmentFile=-/usr/lib/irqbalance/defaults.env
+-- 
+2.33.1
+

@@ -1,0 +1,75 @@
+From ac46d00d7d4d555a238bb898e2ff4af0c444bebe Mon Sep 17 00:00:00 2001
+From: Vishal Verma <vishal.l.verma@intel.com>
+Date: Tue, 16 Nov 2021 17:51:31 -0700
+Subject: [PATCH 047/217] ndctl: install bash-completion symlinks
+
+Install symlinks for other utilities (daxctl, cxl-cli) in the
+completions directory so that the dynamic completion loader can pick up
+their respective names. Without this, completions for daxctl and cxl
+would only work after a prior invocation of ndctl's completion.
+
+Reported-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ Makefile.am   | 3 +++
+ configure.ac  | 1 +
+ ndctl.spec.in | 4 +++-
+ 3 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index fa2010a..bd0037e 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -49,6 +49,9 @@ sles/ndctl.spec: sles/header ndctl.spec.in Makefile.am version.m4
+ if ENABLE_BASH_COMPLETION
+ bashcompletiondir = $(BASH_COMPLETION_DIR)
+ dist_bashcompletion_DATA = contrib/ndctl
++install-data-hook:
++	$(LN_S) -f $(BASH_COMPLETION_DIR)/ndctl $(DESTDIR)/$(BASH_COMPLETION_DIR)/daxctl
++	$(LN_S) -f $(BASH_COMPLETION_DIR)/ndctl $(DESTDIR)/$(BASH_COMPLETION_DIR)/cxl
+ endif
+ 
+ modprobe_file = contrib/nvdimm-security.conf
+diff --git a/configure.ac b/configure.ac
+index 00497ae..9ac785f 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -31,6 +31,7 @@ AC_PREFIX_DEFAULT([/usr])
+ 
+ AC_PROG_SED
+ AC_PROG_MKDIR_P
++AC_PROG_LN_S
+ 
+ AC_ARG_ENABLE([docs],
+         AS_HELP_STRING([--disable-docs],
+diff --git a/ndctl.spec.in b/ndctl.spec.in
+index 4b08c05..27ca097 100644
+--- a/ndctl.spec.in
++++ b/ndctl.spec.in
+@@ -140,7 +140,7 @@ make check
+ %license LICENSES/preferred/GPL-2.0 LICENSES/other/MIT LICENSES/other/CC0-1.0
+ %{_bindir}/ndctl
+ %{_mandir}/man1/ndctl*
+-%{bashcompdir}/
++%{bashcompdir}/ndctl
+ %{_unitdir}/ndctl-monitor.service
+ %{_sysconfdir}/ndctl/keys/keys.readme
+ %{_sysconfdir}/modprobe.d/nvdimm-security.conf
+@@ -153,12 +153,14 @@ make check
+ %{_bindir}/daxctl
+ %{_mandir}/man1/daxctl*
+ %{_datadir}/daxctl/daxctl.conf
++%{bashcompdir}/daxctl
+ 
+ %files -n cxl-cli
+ %defattr(-,root,root)
+ %license LICENSES/preferred/GPL-2.0 LICENSES/other/MIT LICENSES/other/CC0-1.0
+ %{_bindir}/cxl
+ %{_mandir}/man1/cxl*
++%{bashcompdir}/cxl
+ 
+ %files -n LNAME
+ %defattr(-,root,root)
+-- 
+2.27.0
+

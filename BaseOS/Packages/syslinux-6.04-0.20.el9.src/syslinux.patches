@@ -1,0 +1,7 @@
+Patch0001: 0001-Add-install-all-target-to-top-side-of-HAVE_FIRMWARE.patch
+Patch0002: 0002-ext4-Fix-64bit-feature.patch
+Patch0003: 0003-extlinux-pull-in-sys-sysmacros.h-for-major-minor-mak.patch
+Patch0004: 0004-Add-RPMOPTFLAGS-to-CFLAGS-for-some-stuff.patch
+Patch0005: 0005-Workaround-multiple-definition-of-symbol-errors.patch
+Patch0006: 0006-Replace-builtin-strlen-that-appears-to-get-optimized.patch
+Patch0007: 0007-Fix-backspace-when-editing-a-multiline-cmdline.patch

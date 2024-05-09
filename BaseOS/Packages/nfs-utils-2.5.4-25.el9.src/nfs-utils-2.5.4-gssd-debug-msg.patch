@@ -1,0 +1,33 @@
+commit cfe41d6f06af0e7744c1ca30503f93d28aca4d8b
+Author: NeilBrown <neilb@suse.de>
+Date:   Tue Sep 21 12:47:10 2021 -0400
+
+    gssd: fix crash in debug message.
+    
+    A recent cleanup of debug messages added func and tid format specifiers
+    to a debug message (when full hostname was different), but the func name
+    and tid were NOT added as arguments.
+    
+    Consequently there weren't enough args, random bytes of the stack were
+    interpreted as a pointer, and rpc.gssd crashed (when -v was specified).
+    
+    Fixes: b538862a5135 ("gssd: Cleaned up debug messages")
+    Reviewed-by: Petr Vorel <pvorel@suse.cz>
+    Signed-off-by: NeilBrown <neilb@suse.de>
+    Signed-off-by: Steve Dickson <steved@redhat.com>
+
+diff --git a/utils/gssd/krb5_util.c b/utils/gssd/krb5_util.c
+index 6d059f33..e3f270e9 100644
+--- a/utils/gssd/krb5_util.c
++++ b/utils/gssd/krb5_util.c
+@@ -673,8 +673,8 @@ get_full_hostname(const char *inhost, char *outhost, int outhostlen)
+ 	    *c = tolower(*c);
+ 
+ 	if (get_verbosity() && strcmp(inhost, outhost))
+-		printerr(1, "%s(0x%0lx): inhost '%s' different than outhost'%s'\n", 
+-			inhost, outhost);
++		printerr(1, "%s(0x%0lx): inhost '%s' different than outhost '%s'\n", 
++			 __func__, tid, inhost, outhost);
+ 
+ 	retval = 0;
+ out:

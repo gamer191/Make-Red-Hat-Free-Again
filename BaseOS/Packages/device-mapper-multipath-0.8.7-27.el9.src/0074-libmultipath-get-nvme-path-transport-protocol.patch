@@ -1,0 +1,194 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Marzinski <bmarzins@redhat.com>
+Date: Fri, 7 Oct 2022 12:35:43 -0500
+Subject: [PATCH] libmultipath: get nvme path transport protocol
+
+Read the transport protocol from /sys/block/nvmeXnY/device/transport.
+Update protocol_name[] and bus_protocol_id() to store the nvme protocol
+names after the scsi protocol names.
+
+Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Reviewed-by: Martin Wilck <mwilck@suse.com>
+---
+ libmultipath/discovery.c   | 18 ++++++++++++++++--
+ libmultipath/structs.c     | 22 +++++++++++++++++-----
+ libmultipath/structs.h     | 33 +++++++++++++++++++++------------
+ multipath/multipath.conf.5 | 10 +++++++---
+ 4 files changed, 61 insertions(+), 22 deletions(-)
+
+diff --git a/libmultipath/discovery.c b/libmultipath/discovery.c
+index 7f2eb409..f593a7bf 100644
+--- a/libmultipath/discovery.c
++++ b/libmultipath/discovery.c
+@@ -1483,6 +1483,7 @@ nvme_sysfs_pathinfo (struct path *pp, const struct _vector *hwtable)
+ 	struct udev_device *parent;
+ 	const char *attr_path = NULL;
+ 	const char *attr;
++	int i;
+ 
+ 	if (pp->udev)
+ 		attr_path = udev_device_get_sysname(pp->udev);
+@@ -1505,6 +1506,18 @@ nvme_sysfs_pathinfo (struct path *pp, const struct _vector *hwtable)
+ 	attr = udev_device_get_sysattr_value(parent, "cntlid");
+ 	pp->sg_id.channel = attr ? atoi(attr) : 0;
+ 
++	attr = udev_device_get_sysattr_value(parent, "transport");
++	if (attr) {
++		for (i = 0; i < NVME_PROTOCOL_UNSPEC; i++){
++			if (protocol_name[SYSFS_BUS_NVME + i] &&
++			    !strcmp(attr,
++				    protocol_name[SYSFS_BUS_NVME + i] + 5)) {
++				pp->sg_id.proto_id = i;
++				break;
++			}
++		}
++	}
++
+ 	snprintf(pp->vendor_id, SCSI_VENDOR_SIZE, "NVME");
+ 	snprintf(pp->product_id, PATH_PRODUCT_SIZE, "%s",
+ 		 udev_device_get_sysattr_value(parent, "model"));
+@@ -1759,9 +1772,10 @@ sysfs_pathinfo(struct path *pp, const struct _vector *hwtable)
+ 		pp->bus = SYSFS_BUS_SCSI;
+ 		pp->sg_id.proto_id = SCSI_PROTOCOL_UNSPEC;
+ 	}
+-	if (!strncmp(pp->dev,"nvme", 4))
++	if (!strncmp(pp->dev,"nvme", 4)) {
+ 		pp->bus = SYSFS_BUS_NVME;
+-
++		pp->sg_id.proto_id = NVME_PROTOCOL_UNSPEC;
++	}
+ 	switch (pp->bus) {
+ 	case SYSFS_BUS_SCSI:
+ 		return scsi_sysfs_pathinfo(pp, hwtable);
+diff --git a/libmultipath/structs.c b/libmultipath/structs.c
+index be81a83c..a2e56890 100644
+--- a/libmultipath/structs.c
++++ b/libmultipath/structs.c
+@@ -25,7 +25,6 @@ const char * const protocol_name[LAST_BUS_PROTOCOL_ID + 1] = {
+ 	[SYSFS_BUS_UNDEF] = "undef",
+ 	[SYSFS_BUS_CCW] = "ccw",
+ 	[SYSFS_BUS_CCISS] = "cciss",
+-	[SYSFS_BUS_NVME] = "nvme",
+ 	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_FCP] = "scsi:fcp",
+ 	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SPI] = "scsi:spi",
+ 	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_SSA] = "scsi:ssa",
+@@ -37,6 +36,13 @@ const char * const protocol_name[LAST_BUS_PROTOCOL_ID + 1] = {
+ 	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_ATA] = "scsi:ata",
+ 	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_USB] = "scsi:usb",
+ 	[SYSFS_BUS_SCSI + SCSI_PROTOCOL_UNSPEC] = "scsi:unspec",
++	[SYSFS_BUS_NVME + NVME_PROTOCOL_PCIE] = "nvme:pcie",
++	[SYSFS_BUS_NVME + NVME_PROTOCOL_RDMA] = "nvme:rdma",
++	[SYSFS_BUS_NVME + NVME_PROTOCOL_FC] = "nvme:fc",
++	[SYSFS_BUS_NVME + NVME_PROTOCOL_TCP] = "nvme:tcp",
++	[SYSFS_BUS_NVME + NVME_PROTOCOL_LOOP] = "nvme:loop",
++	[SYSFS_BUS_NVME + NVME_PROTOCOL_APPLE_NVME] = "nvme:apple-nvme",
++	[SYSFS_BUS_NVME + NVME_PROTOCOL_UNSPEC] = "nvme:unspec",
+ };
+ 
+ struct adapter_group *
+@@ -752,11 +758,17 @@ out:
+ }
+ 
+ unsigned int bus_protocol_id(const struct path *pp) {
+-	if (!pp || pp->bus < 0 || pp->bus > SYSFS_BUS_SCSI)
++	if (!pp || pp->bus < 0 || pp->bus > SYSFS_BUS_NVME)
+ 		return SYSFS_BUS_UNDEF;
+-	if (pp->bus != SYSFS_BUS_SCSI)
++	if (pp->bus != SYSFS_BUS_SCSI && pp->bus != SYSFS_BUS_NVME)
+ 		return pp->bus;
+-	if ((int)pp->sg_id.proto_id < 0 || pp->sg_id.proto_id > SCSI_PROTOCOL_UNSPEC)
++	if (pp->sg_id.proto_id < 0)
+ 		return SYSFS_BUS_UNDEF;
+-	return SYSFS_BUS_SCSI + pp->sg_id.proto_id;
++	if (pp->bus == SYSFS_BUS_SCSI &&
++	    pp->sg_id.proto_id > SCSI_PROTOCOL_UNSPEC)
++		return SYSFS_BUS_UNDEF;
++	if (pp->bus == SYSFS_BUS_NVME &&
++	    pp->sg_id.proto_id > NVME_PROTOCOL_UNSPEC)
++		return SYSFS_BUS_UNDEF;
++	return pp->bus + pp->sg_id.proto_id;
+ }
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index 2525af17..0867b91d 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -56,15 +56,6 @@ enum failback_mode {
+ 	FAILBACK_FOLLOWOVER
+ };
+ 
+-/* SYSFS_BUS_SCSI should be last, see bus_protocol_id() */
+-enum sysfs_buses {
+-	SYSFS_BUS_UNDEF,
+-	SYSFS_BUS_CCW,
+-	SYSFS_BUS_CCISS,
+-	SYSFS_BUS_NVME,
+-	SYSFS_BUS_SCSI,
+-};
+-
+ enum pathstates {
+ 	PSTATE_UNDEF,
+ 	PSTATE_FAILED,
+@@ -190,14 +181,32 @@ enum scsi_protocol {
+ 	SCSI_PROTOCOL_ATA = 8,
+ 	SCSI_PROTOCOL_USB = 9,  /* USB Attached SCSI (UAS), and others */
+ 	SCSI_PROTOCOL_UNSPEC = 0xa, /* No specific protocol */
++	SCSI_PROTOCOL_END = 0xb, /* offset of the next sysfs_buses entry */
++};
++
++/* values from /sys/class/nvme/nvmeX */
++enum nvme_protocol {
++	NVME_PROTOCOL_PCIE = 0,
++	NVME_PROTOCOL_RDMA = 1,
++	NVME_PROTOCOL_FC = 2,
++	NVME_PROTOCOL_TCP = 3,
++	NVME_PROTOCOL_LOOP = 4,
++	NVME_PROTOCOL_APPLE_NVME = 5,
++	NVME_PROTOCOL_UNSPEC = 6, /* unknown protocol */
++};
++
++enum sysfs_buses {
++	SYSFS_BUS_UNDEF,
++	SYSFS_BUS_CCW,
++	SYSFS_BUS_CCISS,
++	SYSFS_BUS_SCSI,
++	SYSFS_BUS_NVME = SYSFS_BUS_SCSI + SCSI_PROTOCOL_END,
+ };
+ 
+ /*
+  * Linear ordering of bus/protocol
+- * This assumes that SYSFS_BUS_SCSI is last in enum sysfs_buses
+- * SCSI is the only bus type for which we distinguish protocols.
+  */
+-#define LAST_BUS_PROTOCOL_ID (SYSFS_BUS_SCSI + SCSI_PROTOCOL_UNSPEC)
++#define LAST_BUS_PROTOCOL_ID (SYSFS_BUS_NVME + NVME_PROTOCOL_UNSPEC)
+ unsigned int bus_protocol_id(const struct path *pp);
+ extern const char * const protocol_name[];
+ 
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index e1a787d4..7af53588 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -1395,7 +1395,9 @@ Regular expression for the protocol of a device to be excluded/included.
+ The protocol strings that multipath recognizes are \fIscsi:fcp\fR,
+ \fIscsi:spi\fR, \fIscsi:ssa\fR, \fIscsi:sbp\fR, \fIscsi:srp\fR,
+ \fIscsi:iscsi\fR, \fIscsi:sas\fR, \fIscsi:adt\fR, \fIscsi:ata\fR,
+-\fIscsi:unspec\fR, \fIccw\fR, \fIcciss\fR, \fInvme\fR, and \fIundef\fR.
++\fIscsi:unspec\fR, \fInvme:pcie\fR, \fInvme:rdma\fR, \fInvme:fc\fR,
++\fInvme:tcp\fR, \fInvme:loop\fR, \fInvme:apple-nvme\fR, \fInvme:unspec\fR,
++\fIccw\fR, \fIcciss\fR, and \fIundef\fR.
+ The protocol that a path is using can be viewed by running
+ \fBmultipathd show paths format "%d %P"\fR
+ .RE
+@@ -1783,8 +1785,10 @@ The protocol subsection recognizes the following mandatory attribute:
+ The protocol string of the path device. The possible values are \fIscsi:fcp\fR,
+ \fIscsi:spi\fR, \fIscsi:ssa\fR, \fIscsi:sbp\fR, \fIscsi:srp\fR,
+ \fIscsi:iscsi\fR, \fIscsi:sas\fR, \fIscsi:adt\fR, \fIscsi:ata\fR,
+-\fIscsi:unspec\fR, \fIccw\fR, \fIcciss\fR, \fInvme\fR, and \fIundef\fR. This is
+-\fBnot\fR a regular expression. the path device protcol string must match
++\fIscsi:unspec\fR, \fInvme:pcie\fR, \fInvme:rdma\fR, \fInvme:fc\fR,
++\fInvme:tcp\fR, \fInvme:loop\fR, \fInvme:apple-nvme\fR, \fInvme:unspec\fR,
++\fIccw\fR, \fIcciss\fR, and \fIundef\fR. This is
++\fBnot\fR a regular expression. the path device protocol string must match
+ exactly. The protocol that a path is using can be viewed by running
+ \fBmultipathd show paths format "%d %P"\fR
+ .LP

@@ -1,0 +1,152 @@
+autofs-5.1.8 - allow -null map in indirect maps
+
+From: Ian Kent <raven@themaw.net>
+
+We have had reports of GUI programs (such as Nautilus) probing for files
+such as .hidden in the parent directory of the directory being accessed.
+
+If using an indirect mount map with a wildcard map entry autofs is duty
+bound to try and mount these which usually results in a mount failure but
+can also cause lengthy delays in some cases.
+
+There are some challenges to modifying application code and even if it
+can be done it's always open to being broken later by developers that
+aren't aware of the reasoning behind the original changes.
+
+Now, there is a machanism in autofs that can be used to ignore certain
+map entries, the "builtin map -null", see auto.master(5). Currently it
+can be used only in the master map but this change extends it to be used
+in indirect mount maps as well. In this way it can be used to handle
+problematic entries by simply adding a map entry that uses the builtin
+-null map.
+
+For example:
+.hidden	-null
+*	someserver:/remote/home/&
+
+This mechanism is not standard so if one is using systems other than
+those with Linux autofs and central map storage, such as LDAP, then
+it would be necessary to configure nsswitch to ensure the files map
+source is consulted first followed by the remote map source. Then the
+-null map entries included in a local file map that uses plus map
+inclusion to move on the the central map source if there is no match.
+
+For example, in /etc/auto.home we can have:
+.hidden	-null
++auto.home
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG            |    1 +
+ daemon/indirect.c    |   12 +++++++++++-
+ daemon/lookup.c      |    4 ++++
+ include/parse_subs.h |    1 +
+ lib/parse_subs.c     |   13 +++++++++++++
+ man/auto.master.5.in |    9 +++++++--
+ 6 files changed, 37 insertions(+), 3 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -157,6 +157,7 @@
+ - fix some sss error return cases.
+ - fix incorrect matching of cached wildcard key.
+ - fix expire retry looping.
++- allow -null map in indirect maps.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/indirect.c
++++ autofs-5.1.7/daemon/indirect.c
+@@ -796,13 +796,23 @@ int handle_packet_missing_indirect(struc
+ 		return 0;
+ 	}
+ 
+-	/* Check if we recorded a mount fail for this key anywhere */
+ 	me = lookup_source_mapent(ap, pkt->name, LKP_DISTINCT);
+ 	if (me) {
++		/* Check if we recorded a mount fail for this key */
+ 		if (me->status >= monotonic_time(NULL)) {
+ 			ops->send_fail(ap->logopt, ap->ioctlfd,
+ 				       pkt->wait_queue_token, -ENOENT);
+ 			cache_unlock(me->mc);
++			master_mutex_unlock();
++			pthread_setcancelstate(state, NULL);
++			return 0;
++		}
++
++		/* Ignore nulled indirect map entries */
++		if (starts_with_null_opt(me->mapent)) {
++			ops->send_fail(ap->logopt, ap->ioctlfd,
++				       pkt->wait_queue_token, -ENOENT);
++			cache_unlock(me->mc);
+ 			master_mutex_unlock();
+ 			pthread_setcancelstate(state, NULL);
+ 			return 0;
+--- autofs-5.1.7.orig/daemon/lookup.c
++++ autofs-5.1.7/daemon/lookup.c
+@@ -772,6 +772,10 @@ int lookup_ghost(struct autofs_point *ap
+ 				goto next;
+ 			}
+ 
++			/* Ignore nulled indirect map entries */
++			if (starts_with_null_opt(me->mapent))
++				goto next;
++
+ 			fullpath = make_browse_path(ap->logopt,
+ 						    ap->path, me->key, ap->pref);
+ 			if (!fullpath)
+--- autofs-5.1.7.orig/include/parse_subs.h
++++ autofs-5.1.7/include/parse_subs.h
+@@ -122,6 +122,7 @@ int strmcmp(const char *, const char *,
+ char *dequote(const char *, int, unsigned int);
+ int span_space(const char *, unsigned int);
+ char *sanitize_path(const char *, int, unsigned int, unsigned int);
++int starts_with_null_opt(const char *);
+ char *merge_options(const char *, const char *);
+ int expandamdent(const char *, char *, const struct substvar *);
+ int expand_selectors(struct autofs_point *, const char *, char **, struct substvar *);
+--- autofs-5.1.7.orig/lib/parse_subs.c
++++ autofs-5.1.7/lib/parse_subs.c
+@@ -878,6 +878,19 @@ char *sanitize_path(const char *path, in
+ 	return s_path;
+ }
+ 
++int starts_with_null_opt(const char *str)
++{
++	if (str && strlen(str) >= 5 && *str == '-') {
++		char sep = *(str + 5);
++
++		if (sep == 0 || sep == ' ' || sep == ',') {
++			if (!strncmp(str, "-null", 5))
++				return 1;
++		}
++	}
++	return 0;
++}
++
+ static char *hasopt(const char *str, const char *opt)
+ {
+ 	const size_t optlen = strlen(opt);
+--- autofs-5.1.7.orig/man/auto.master.5.in
++++ autofs-5.1.7/man/auto.master.5.in
+@@ -269,13 +269,18 @@ master map entry.
+ If "\-null" is given as the map it is used to tell automount(8) to ignore a subsequent
+ master map entry with the given path.
+ .P
+-It can only be used for paths that appear in the master map (or in direct mount maps).
++It can be used for paths that appear in the master map or in direct mount maps (but
++not in direct mount maps themselves) or as a key in an indirect mount map.
++.P
++An indirect mount map key can be nulled. If so the map key is ignored and does not
++result in a mount attempt (essentially the key lookup is abandoned early on).
+ .P
+ An indirect mount map top level mount point path can be nulled. If so no mounts from
+ the nulled mount are performed (essentially it isn't mounted).
+ .P
+ Direct mount map path entries can be nulled. Since they must be present at startup
+-they are (notionally) part of the master map.
++they are (notionally) part of the master map so direct mount paths that use the -null
++map may be used in the master map to ignore subsequent direct mount map entries.
+ .P
+ A nulled master map entry path will ignore a single subsequent matching entry. Any
+ matching entry following that will be treated as it normally would be. An example

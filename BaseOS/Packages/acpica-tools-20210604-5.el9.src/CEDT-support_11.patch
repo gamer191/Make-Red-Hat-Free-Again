@@ -1,0 +1,18 @@
+commit 7021087eedb0d7156286e9e4f255e93c07816921
+Author: Robert Moore <Robert.Moore@intel.com>
+Date:   Fri Aug 26 12:20:07 2022 -0700
+
+    Remove a duplicate of ACPI_SIG_CEDT
+
+diff --git a/source/tools/acpisrc/astable.c b/source/tools/acpisrc/astable.c
+index b984e6a..9f84aea 100644
+--- a/source/tools/acpisrc/astable.c
++++ b/source/tools/acpisrc/astable.c
+@@ -541,7 +541,6 @@ ACPI_TYPED_IDENTIFIER_TABLE           AcpiIdentifiers[] = {
+     {"ACPI_TABLE_CSRT",                     SRC_TYPE_STRUCT},
+     {"ACPI_TABLE_DBG2",                     SRC_TYPE_STRUCT},
+     {"ACPI_TABLE_DBGP",                     SRC_TYPE_STRUCT},
+-    {"ACPI_TABLE_CEDT",                     SRC_TYPE_STRUCT},
+     {"ACPI_TABLE_DMAR",                     SRC_TYPE_STRUCT},
+     {"ACPI_TABLE_DRTM",                     SRC_TYPE_STRUCT},
+     {"ACPI_TABLE_ECDT",                     SRC_TYPE_STRUCT},

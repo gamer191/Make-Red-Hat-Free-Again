@@ -1,0 +1,27 @@
+From b72865d57bf129c058bdb4e7301b9cb7ce16938e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Dan=20Hor=C3=A1k?= <dan@danny.cz>
+Date: Fri, 13 Jan 2023 18:09:49 +0100
+Subject: [ibmca PATCH] warn the user when configuring the engine
+
+The engine feature is deprecated in OpenSSL 3.0 and will be removed.
+Thus warn the user and recommend using the provider instead.
+---
+ src/engine/ibmca-engine-opensslconfig.in | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/engine/ibmca-engine-opensslconfig.in b/src/engine/ibmca-engine-opensslconfig.in
+index e4b168b..ec7fbfc 100644
+--- a/src/engine/ibmca-engine-opensslconfig.in
++++ b/src/engine/ibmca-engine-opensslconfig.in
+@@ -140,4 +140,8 @@ this file.
+ |;
+ }
+ 
++print "WARNING: The OpenSSL engine feature is DEPRECATED since OpenSSL 3.0.\n";
++print "WARNING: It will be removed in the future.\n";
++print "WARNING: Please use the OpenSSL provider instead.\n";
++
+ generate();
+-- 
+2.39.0
+

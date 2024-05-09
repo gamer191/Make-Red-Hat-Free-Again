@@ -1,0 +1,13 @@
+diff --git a/csh.login b/csh.login
+index 18c5136..3a8e5ce 100644
+--- a/csh.login
++++ b/csh.login
+@@ -31,7 +31,7 @@ set history=1000
+ 
+ if ( -d /etc/profile.d ) then
+         set nonomatch
+-        foreach i ( /etc/profile.d/*.csh )
++        foreach i ( /etc/profile.d/*.csh /etc/profile.d/csh.local )
+                 if ( -r "$i" ) then
+ 	                        if ($?prompt) then
+ 	                              source "$i"

@@ -1,0 +1,24 @@
+diff -U0 smartmontools-7.2/ChangeLog.r5448 smartmontools-7.2/ChangeLog
+diff -up smartmontools-7.2/nvmecmds.cpp.r5448 smartmontools-7.2/nvmecmds.cpp
+--- smartmontools-7.2/nvmecmds.cpp.r5448	2020-12-04 21:40:43.000000000 +0100
++++ smartmontools-7.2/nvmecmds.cpp	2023-09-20 12:33:35.212784397 +0200
+@@ -230,8 +230,9 @@ unsigned nvme_read_error_log(nvme_device
+   unsigned n = nvme_read_log_page(device, 0xffffffff, 0x01, error_log,
+                                   num_entries * sizeof(*error_log), lpo_sup);
+ 
++  unsigned read_entries = n / sizeof(*error_log);
+   if (isbigendian()) {
+-    for (unsigned i = 0; i < n; i++) {
++    for (unsigned i = 0; i < read_entries; i++) {
+       swapx(&error_log[i].error_count);
+       swapx(&error_log[i].sqid);
+       swapx(&error_log[i].cmdid);
+@@ -242,7 +243,7 @@ unsigned nvme_read_error_log(nvme_device
+     }
+   }
+ 
+-  return n / sizeof(*error_log);
++  return read_entries;
+ }
+ 
+ // Read NVMe SMART/Health Information log.

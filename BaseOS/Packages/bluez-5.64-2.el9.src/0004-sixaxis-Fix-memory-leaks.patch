@@ -1,0 +1,43 @@
+From fc57aa92a4f32f7c0f38198e6d26b529b537a047 Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:08 +0530
+Subject: [PATCH BlueZ 04/12] sixaxis: Fix memory leaks
+
+While performing static tool analysis using coverity
+found following reports for resouse leak
+
+bluez-5.64/plugins/sixaxis.c:425: alloc_arg:
+"get_pairing_type_for_device" allocates memory that is
+stored into "sysfs_path".
+
+bluez-5.64/plugins/sixaxis.c:428: leaked_storage: Variable "sysfs_path"
+going out of scope leaks the storage it points to.
+---
+ plugins/sixaxis.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/plugins/sixaxis.c b/plugins/sixaxis.c
+index ddecbcccb..10cf15948 100644
+--- a/plugins/sixaxis.c
++++ b/plugins/sixaxis.c
+@@ -424,10 +424,15 @@ static void device_added(struct udev_device *udevice)
+ 
+ 	cp = get_pairing_type_for_device(udevice, &bus, &sysfs_path);
+ 	if (!cp || (cp->type != CABLE_PAIRING_SIXAXIS &&
+-				cp->type != CABLE_PAIRING_DS4))
++				cp->type != CABLE_PAIRING_DS4)) {
++		g_free(sysfs_path);
+ 		return;
+-	if (bus != BUS_USB)
++	}
++
++	if (bus != BUS_USB) {
++		g_free(sysfs_path);
+ 		return;
++	}
+ 
+ 	info("sixaxis: compatible device connected: %s (%04X:%04X %s)",
+ 				cp->name, cp->vid, cp->pid, sysfs_path);
+-- 
+2.26.2
+

@@ -1,0 +1,29 @@
+From 4334be027ae1ad50193025c90e77a76b64464b53 Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:11 +0530
+Subject: [PATCH BlueZ 07/12] l2cap-tester: Fix leaked_handle
+
+While performing static tool analysis using coverity found following
+reports for resouse leak
+
+bluez-5.64/tools/l2cap-tester.c:1712: leaked_handle: Handle variable
+"new_sk" going out of scope leaks the handle.
+---
+ tools/l2cap-tester.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/tools/l2cap-tester.c b/tools/l2cap-tester.c
+index d78b1e29c..3f0464013 100644
+--- a/tools/l2cap-tester.c
++++ b/tools/l2cap-tester.c
+@@ -1709,6 +1709,7 @@ static gboolean l2cap_listen_cb(GIOChannel *io, GIOCondition cond,
+ 
+ 	if (!check_mtu(data, new_sk)) {
+ 		tester_test_failed();
++		close(new_sk);
+ 		return FALSE;
+ 	}
+ 
+-- 
+2.26.2
+

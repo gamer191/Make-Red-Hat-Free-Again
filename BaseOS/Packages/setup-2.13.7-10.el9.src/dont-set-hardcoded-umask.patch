@@ -1,0 +1,43 @@
+diff --git a/bashrc b/bashrc
+index d462ac7..b0740cb 100644
+--- a/bashrc
++++ b/bashrc
+@@ -65,15 +65,8 @@ if [ -z "$BASHRCSOURCED" ]; then
+         esac
+     }
+ 
+-    # By default, we want umask to get set. This sets it for non-login shell.
+-    # Current threshold for system reserved uid/gids is 200
+-    # You could check uidgid reservation validity in
+-    # /usr/share/doc/setup-*/uidgid file
+-    if [ $UID -gt 199 ] && [ "`/usr/bin/id -gn`" = "`/usr/bin/id -un`" ]; then
+-       umask 002
+-    else
+-       umask 022
+-    fi
++    # Set default umask for non-login shell only if it is set to 0
++    [ `umask` -eq 0 ] && umask 022
+ 
+     SHELL=/bin/bash
+     # Only display echos from profile.d scripts if we are no login shell
+diff --git a/csh.cshrc b/csh.cshrc
+index eda4aa7..8f169a1 100644
+--- a/csh.cshrc
++++ b/csh.cshrc
+@@ -2,14 +2,8 @@
+ #
+ # csh configuration for all shell invocations.
+ 
+-# By default, we want this to get set.
+-# Even for non-interactive, non-login shells.
+-# Current threshold for system reserved uid/gids is 200
+-# You could check uidgid reservation validity in
+-# /usr/share/doc/setup-*/uidgid file
+-if ($uid > 199 && "`/usr/bin/id -gn`" == "`/usr/bin/id -un`") then
+-    umask 002
+-else
++# Set default umask for non-login shell only if it is set to 0
++if ( `umask` == 0 ) then
+     umask 022
+ endif
+ 

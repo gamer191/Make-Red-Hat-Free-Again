@@ -1,0 +1,35 @@
+From cfb18410e8f706646adce2bd9f6cffecbd363d2b Mon Sep 17 00:00:00 2001
+From: Imran Desai <imran.desai@intel.com>
+Date: Thu, 21 Jul 2022 15:19:36 -0700
+Subject: [PATCH 08/17] lib/tpm2_alg_util.c: Fix potential null pointer
+ dereference
+
+Must test ext_alg_str before dereferencing in
+tpm2_alg_util_handle_rsa_ext_alg
+
+char *ext_alg_str = calloc(1, strlen(alg_spec) + strlen("rsa") +
+        RSA_KEYBITS_STRLEN)
+
+Signed-off-by: Imran Desai <imran.desai@intel.com>
+---
+ lib/tpm2_alg_util.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/lib/tpm2_alg_util.c b/lib/tpm2_alg_util.c
+index 1e984d74..580f41cb 100644
+--- a/lib/tpm2_alg_util.c
++++ b/lib/tpm2_alg_util.c
+@@ -601,6 +601,10 @@ tool_rc tpm2_alg_util_handle_rsa_ext_alg(const char *alg_spec,
+     #define RSA_KEYBITS_STRLEN 6
+     char *ext_alg_str = calloc(1, strlen(alg_spec) + strlen("rsa") +
+         RSA_KEYBITS_STRLEN);
++    if (ext_alg_str == NULL) {
++        LOG_ERR("oom");
++        return tool_rc_general_error;
++    }
+ 
+     strcat(ext_alg_str, "rsa");
+     switch(public->publicArea.parameters.rsaDetail.keyBits) {
+-- 
+2.40.1
+

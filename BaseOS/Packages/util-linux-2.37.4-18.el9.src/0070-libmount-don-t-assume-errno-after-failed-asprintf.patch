@@ -1,0 +1,60 @@
+From 6a25b1d1d819bc215bff2ce7677a1976fca9d55a Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Mon, 8 Jan 2024 10:32:54 +0100
+Subject: libmount: don't assume errno after failed asprintf()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Addresses: https://issues.redhat.com/browse/RHEL-14612
+Upstream: http://github.com/util-linux/util-linux/commit/a002df07ac15c370381cb44f06afeaa333685780
+Reported-by: Thomas Weißschuh <thomas@t-8ch.de>
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libmount/src/monitor.c    | 2 +-
+ libmount/src/tab_update.c | 2 +-
+ libmount/src/utils.c      | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/libmount/src/monitor.c b/libmount/src/monitor.c
+index 4db56c2e0..040a5ee11 100644
+--- a/libmount/src/monitor.c
++++ b/libmount/src/monitor.c
+@@ -227,7 +227,7 @@ static int userspace_add_watch(struct monitor_entry *me, int *final, int *fd)
+ 	 * libmount uses utab.event file to monitor and control utab updates
+ 	 */
+ 	if (asprintf(&filename, "%s.event", me->path) <= 0) {
+-		rc = -errno;
++		rc = -ENOMEM;
+ 		goto done;
+ 	}
+ 
+diff --git a/libmount/src/tab_update.c b/libmount/src/tab_update.c
+index 5ae369b74..70013a205 100644
+--- a/libmount/src/tab_update.c
++++ b/libmount/src/tab_update.c
+@@ -1012,7 +1012,7 @@ int mnt_update_emit_event(struct libmnt_update *upd)
+ 		return -EINVAL;
+ 
+ 	if (asprintf(&filename, "%s.event", upd->filename) <= 0)
+-		return -errno;
++		return -ENOMEM;
+ 
+ 	fd = open(filename, O_WRONLY|O_CREAT|O_CLOEXEC,
+ 			    S_IWUSR|S_IRUSR|S_IRGRP|S_IROTH);
+diff --git a/libmount/src/utils.c b/libmount/src/utils.c
+index 35afce32c..897c42bf5 100644
+--- a/libmount/src/utils.c
++++ b/libmount/src/utils.c
+@@ -915,7 +915,7 @@ int mnt_open_uniq_filename(const char *filename, char **name)
+ 
+ 	rc = asprintf(&n, "%s.XXXXXX", filename);
+ 	if (rc <= 0)
+-		return -errno;
++		return -ENOMEM;
+ 
+ 	/* This is for very old glibc and for compatibility with Posix, which says
+ 	 * nothing about mkstemp() mode. All sane glibc use secure mode (0600).
+-- 
+2.43.0
+

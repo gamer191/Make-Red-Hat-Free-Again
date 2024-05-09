@@ -1,0 +1,54 @@
+autofs-5.1.7 - fix nonstrict offset mount fail handling
+
+From: Ian Kent <raven@themaw.net>
+
+If a triggered offset mount fails automount is not handling nonstrict
+mount failure correctly.
+
+The nonstrict mount failure handling needs to convert an offset mount
+failure to a success if the offset subtree below the failed mount is not
+empty otherwise it must return the failure. The previous implementation
+used -1 to indicate the subtree was empty and that was used to detect
+when the mount should fail instead of converting the fail to a success.
+
+Make the new implementation do the same.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG           |    1 +
+ lib/mounts.c        |    2 +-
+ modules/parse_sun.c |    2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -76,6 +76,7 @@
+ - fix direct mount deadlock.
+ - fix lookup_prune_one_cache() refactoring change.
+ - add missing description of null map option.
++- fix nonstrict offset mount fail handling.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/lib/mounts.c
++++ autofs-5.1.7/lib/mounts.c
+@@ -1616,7 +1616,7 @@ static int tree_mapent_traverse_subtree(
+ {
+ 	struct traverse_subtree_context *ctxt = ptr;
+ 	struct mapent *oe = MAPENT(n);
+-	int ret = 1;
++	int ret = -1;
+ 
+ 	if (n->left) {
+ 		ret = tree_mapent_traverse_subtree(n->left, work, ctxt);
+--- autofs-5.1.7.orig/modules/parse_sun.c
++++ autofs-5.1.7/modules/parse_sun.c
+@@ -1181,7 +1181,7 @@ static int mount_subtree(struct autofs_p
+ 		 * offsets to be mounted.
+ 		 */
+ 		rv = sun_mount(ap, name, name, namelen, loc, loclen, options, ctxt);
+-		if (rv == 0) {
++		if (rv <= 0) {
+ 			ret = tree_mapent_mount_offsets(me, 1);
+ 			if (!ret) {
+ 				tree_mapent_cleanup_offsets(me);

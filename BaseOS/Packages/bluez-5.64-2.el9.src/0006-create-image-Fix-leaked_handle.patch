@@ -1,0 +1,47 @@
+From 4ae130455b173650f564d92f7908a7ca4f7b1ee6 Mon Sep 17 00:00:00 2001
+From: Gopal Tiwari <gtiwari@redhat.com>
+Date: Tue, 31 May 2022 13:11:10 +0530
+Subject: [PATCH BlueZ 06/12] create-image: Fix leaked_handle
+
+While performing static tool analysis using coverity found following
+reports for resouse leak
+
+bluez-5.64/tools/create-image.c:124: leaked_storage: Variable "map"
+going out of scope leaks the storage it points to.
+---
+ tools/create-image.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/tools/create-image.c b/tools/create-image.c
+index aba940da7..90cd87315 100644
+--- a/tools/create-image.c
++++ b/tools/create-image.c
+@@ -97,12 +97,13 @@ static void write_block(FILE *fp, const char *pathname, unsigned int ino,
+ 
+ 	map = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+ 	if (!map || map == MAP_FAILED) {
+-		close(fd);
+-		fd = -1;
+ 		map = NULL;
+ 		st.st_size = 0;
+         }
+ 
++	close(fd);
++	fd = -1;
++
+ done:
+ 	fprintf(fp, HDR_FMT, HDR_MAGIC, ino, mode, 0, 0, 1, 0,
+ 		(uintmax_t) st.st_size, 0, 0, 0, 0, namelen + 1, 0, name);
+@@ -117,9 +118,7 @@ done:
+ 		pad = 3 - ((st.st_size + 3) % 4);
+ 		for (i = 0; i < pad; i++)
+ 			fputc(0, fp);
+-
+ 		munmap(map, st.st_size);
+-		close(fd);
+ 	}
+ }
+ 
+-- 
+2.26.2
+

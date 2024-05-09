@@ -1,0 +1,63 @@
+From 0f979bd00d22d52f4970897207bd43a74db90bcc Mon Sep 17 00:00:00 2001
+From: Evan Goode <mail@evangoo.de>
+Date: Tue, 30 May 2023 20:48:54 +0000
+Subject: [PATCH] Document symbols in `dnf history list` output
+
+This patch adds documentation for the symbols shown in the "Action(s)"
+and "Altered" columns of `dnf history list`
+
+The "Action(s)" column abbreviates the names of transaction actions when
+there was more than one action, e.g. a transaction that both installs
+and upgrades packages would be displayed as "I, U".
+
+The "Altered" column prints some extra symbols when something unusual
+happened with the transaction, like if any warnings were printed or if
+it completed with a non-zero status.
+
+Some language was taken from the yum man pages:
+https://github.com/rpm-software-management/yum/blob/master/docs/yum.8.
+It appears we no longer use the "P" or "s" symbols.
+
+Resolves https://bugzilla.redhat.com/show_bug.cgi?id=2172067
+(RhBug:2172067)
+
+= changelog =
+msg: Document the symbols in the output of `dnf history list`
+type: bugfix
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2172067
+---
+ doc/command_ref.rst | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/doc/command_ref.rst b/doc/command_ref.rst
+index 3ee66bac..0e6cea01 100644
+--- a/doc/command_ref.rst
++++ b/doc/command_ref.rst
+@@ -710,6 +710,24 @@ transactions and act according to this information (assuming the
+     which specifies a transaction by a package which it manipulated. When no
+     transaction is specified, list all known transactions.
+ 
++    The "Action(s)" column lists each type of action taken in the transaction. The possible values are:
++
++    * Install (I): a new package was installed on the system
++    * Downgrade (D): an older version of a package replaced the previously-installed version
++    * Obsolete (O): an obsolete package was replaced by a new package
++    * Upgrade (U): a newer version of the package replaced the previously-installed version
++    * Remove (E): a package was removed from the system
++    * Reinstall (R): a package was reinstalled with the same version
++    * Reason change (C): a package was kept in the system but its reason for being installed changed
++
++    The "Altered" column lists the number of actions taken in each transaction, possibly followed by one or two the following symbols:
++
++    * ``>``: The RPM database was changed, outside DNF, after the transaction
++    * ``<``: The RPM database was changed, outside DNF, before the transaction
++    * ``*``: The transaction aborted before completion
++    * ``#``: The transaction completed, but with a non-zero status
++    * ``E``: The transaction completed successfully, but had warning/error output
++
+     ``--reverse``
+         The order of ``history list`` output is printed in reverse order.
+ 
+-- 
+2.40.1
+

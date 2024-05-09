@@ -1,0 +1,34 @@
+autofs-5.1.8 - fix fix root offset error handling
+
+From: Ian Kent <raven@themaw.net>
+
+The change to fix root offset error handlling is missing a cache read
+lock prior to the key lookup, the following unmatched unlock then
+causes a hang.
+
+Signed-off-by: Ian Kent <raven@themaw.net>
+---
+ CHANGELOG       |    1 +
+ daemon/direct.c |    1 +
+ 2 files changed, 2 insertions(+)
+
+--- autofs-5.1.7.orig/CHANGELOG
++++ autofs-5.1.7/CHANGELOG
+@@ -85,6 +85,7 @@
+ - fix set open file limit.
+ - improve descriptor open error reporting.
+ - fix root offset error handling.
++- fix fix root offset error handling.
+ 
+ 25/01/2021 autofs-5.1.7
+ - make bind mounts propagation slave by default.
+--- autofs-5.1.7.orig/daemon/direct.c
++++ autofs-5.1.7/daemon/direct.c
+@@ -1271,6 +1271,7 @@ static void *do_mount_direct(void *arg)
+ 		/* If this is a multi-mount subtree mount failure
+ 		 * ensure the tree continues to expire.
+ 		 */
++		cache_readlock(mt.mc);
+ 		me = cache_lookup_distinct(mt.mc, mt.name);
+ 		if (me && IS_MM(me) && !IS_MM_ROOT(me))
+ 			conditional_alarm_add(ap, ap->exp_runfreq);

@@ -1,0 +1,158 @@
+From ac7b0dbd5a18d2c57a942ca14ac856b8047425ff Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Tue, 15 Feb 2022 10:43:13 +0200
+Subject: [PATCH] Pass file descriptor to file prepare plugin hook, use when
+ possible
+
+Sadly the thing that allegedly makes things better mostly just makes
+things more complicated as symlinks can't be opened, so we'll now have
+to deal with both cases in plugins too. To make matters worse, most
+APIs out there support either an fd or a path, but very few support
+the *at() style dirfd + basename approach so plugins are stuck with
+absolute paths for now.
+
+This is of course a plugin API/ABI change too.
+---
+ lib/rpmplugin.h   |  2 +-
+ lib/rpmplugins.c  |  4 ++--
+ lib/rpmplugins.h  |  3 ++-
+ plugins/ima.c     |  9 +++++++--
+ plugins/selinux.c | 13 ++++++++-----
+ 5 files changed, 20 insertions(+), 11 deletions(-)
+
+diff --git a/lib/rpmplugin.h b/lib/rpmplugin.h
+index fd81aec8d..fab4b3e83 100644
+--- a/lib/rpmplugin.h
++++ b/lib/rpmplugin.h
+@@ -57,7 +57,7 @@ typedef rpmRC (*plugin_fsm_file_post_func)(rpmPlugin plugin, rpmfi fi,
+ 					   const char* path, mode_t file_mode,
+ 					   rpmFsmOp op, int res);
+ typedef rpmRC (*plugin_fsm_file_prepare_func)(rpmPlugin plugin, rpmfi fi,
+-					      const char* path,
++					      int fd, const char* path,
+ 					      const char *dest,
+ 					      mode_t file_mode, rpmFsmOp op);
+ 
+diff --git a/lib/rpmplugins.c b/lib/rpmplugins.c
+index 65e684e84..923084b78 100644
+--- a/lib/rpmplugins.c
++++ b/lib/rpmplugins.c
+@@ -384,7 +384,7 @@ rpmRC rpmpluginsCallFsmFilePost(rpmPlugins plugins, rpmfi fi, const char *path,
+ }
+ 
+ rpmRC rpmpluginsCallFsmFilePrepare(rpmPlugins plugins, rpmfi fi,
+-				   const char *path, const char *dest,
++				   int fd, const char *path, const char *dest,
+ 				   mode_t file_mode, rpmFsmOp op)
+ {
+     plugin_fsm_file_prepare_func hookFunc;
+@@ -394,7 +394,7 @@ rpmRC rpmpluginsCallFsmFilePrepare(rpmPlugins plugins, rpmfi fi,
+     for (i = 0; i < plugins->count; i++) {
+ 	rpmPlugin plugin = plugins->plugins[i];
+ 	RPMPLUGINS_SET_HOOK_FUNC(fsm_file_prepare);
+-	if (hookFunc && hookFunc(plugin, fi, path, dest, file_mode, op) == RPMRC_FAIL) {
++	if (hookFunc && hookFunc(plugin, fi, fd, path, dest, file_mode, op) == RPMRC_FAIL) {
+ 	    rpmlog(RPMLOG_ERR, "Plugin %s: hook fsm_file_prepare failed\n", plugin->name);
+ 	    rc = RPMRC_FAIL;
+ 	}
+diff --git a/lib/rpmplugins.h b/lib/rpmplugins.h
+index 39762c376..ddf5d7048 100644
+--- a/lib/rpmplugins.h
++++ b/lib/rpmplugins.h
+@@ -156,6 +156,7 @@ rpmRC rpmpluginsCallFsmFilePost(rpmPlugins plugins, rpmfi fi, const char* path,
+  * permissions etc, but before committing file to destination path.
+  * @param plugins	plugins structure
+  * @param fi		file info iterator (or NULL)
++ * @param fd		file descriptor (or -1 if not available)
+  * @param path		file object current path
+  * @param dest		file object destination path
+  * @param mode		file object mode
+@@ -164,7 +165,7 @@ rpmRC rpmpluginsCallFsmFilePost(rpmPlugins plugins, rpmfi fi, const char* path,
+  */
+ RPM_GNUC_INTERNAL
+ rpmRC rpmpluginsCallFsmFilePrepare(rpmPlugins plugins, rpmfi fi,
+-                                   const char *path, const char *dest,
++                                   int fd, const char *path, const char *dest,
+                                    mode_t mode, rpmFsmOp op);
+ 
+ #ifdef __cplusplus
+diff --git a/plugins/ima.c b/plugins/ima.c
+index fe6d3ad7f..9c28a41a3 100644
+--- a/plugins/ima.c
++++ b/plugins/ima.c
+@@ -39,7 +39,7 @@ static int check_zero_hdr(const unsigned char *fsig, size_t siglen)
+ 	return (memcmp(fsig, &zero_hdr, sizeof(zero_hdr)) == 0);
+ }
+ 
+-static rpmRC ima_fsm_file_prepare(rpmPlugin plugin, rpmfi fi,
++static rpmRC ima_fsm_file_prepare(rpmPlugin plugin, rpmfi fi, int fd,
+                                   const char *path,
+                                   const char *dest,
+                                   mode_t file_mode, rpmFsmOp op)
+@@ -68,8 +68,13 @@
+ 
+ 	fsig = rpmfiFSignature(fi, &len);
+ 	if (fsig && (check_zero_hdr(fsig, len) == 0)) {
+-	    if (lsetxattr(path, XATTR_NAME_IMA, fsig, len, 0) < 0) {
+-		int is_err = errno != EOPNOTSUPP; 
++	    int xx;
++	    if (fd >= 0)
++		xx = fsetxattr(fd, XATTR_NAME_IMA, fsig, len, 0);
++	    else
++		xx = lsetxattr(path, XATTR_NAME_IMA, fsig, len, 0);
++	    if (xx < 0) {
++		int is_err = errno != EOPNOTSUPP;
+ 	        rpmlog(is_err?RPMLOG_ERR:RPMLOG_DEBUG,
+ 			"ima: could not apply signature on '%s': %s\n",
+ 			path, strerror(errno));
+diff --git a/plugins/fapolicyd.c b/plugins/fapolicyd.c
+index 7ac44f0d0..1ff50c30f 100644
+--- a/plugins/fapolicyd.c
++++ b/plugins/fapolicyd.c
+@@ -145,7 +145,8 @@ static rpmRC fapolicyd_scriptlet_pre(rpmPlugin plugin, const char *s_name,
+ }
+ 
+ static rpmRC fapolicyd_fsm_file_prepare(rpmPlugin plugin, rpmfi fi,
+-                                        const char *path, const char *dest,
++                                        int fd, const char *path,
++					const char *dest,
+                                         mode_t file_mode, rpmFsmOp op)
+ {
+     /* not ready  */
+diff --git a/plugins/selinux.c b/plugins/selinux.c
+index 32c3b7529..a7f20aeca 100644
+--- a/plugins/selinux.c
++++ b/plugins/selinux.c
+@@ -149,7 +149,7 @@ static rpmRC selinux_scriptlet_fork_post(rpmPlugin plugin,
+     return rc;
+ }
+ 
+-static rpmRC selinux_fsm_file_prepare(rpmPlugin plugin, rpmfi fi,
++static rpmRC selinux_fsm_file_prepare(rpmPlugin plugin, rpmfi fi, int fd,
+ 					const char *path, const char *dest,
+ 				        mode_t file_mode, rpmFsmOp op)
+ {
+@@ -194,13 +194,17 @@
+     if (sehandle && !XFA_SKIPPING(action)) {
+ 	char *scon = NULL;
+ 	if (selabel_lookup_raw(sehandle, &scon, dest, file_mode) == 0) {
+-	    int conrc = lsetfilecon(path, scon);
++	    int conrc;
++	    if (fd >= 0)
++		conrc = fsetfilecon(fd, scon);
++	    else
++		conrc = lsetfilecon(path, scon);
+ 
+ 	    if (conrc == 0 || (conrc < 0 && errno == EOPNOTSUPP))
+ 		rc = RPMRC_OK;
+ 
+-	    rpmlog(loglvl(rc != RPMRC_OK), "lsetfilecon: (%s, %s) %s\n",
+-		       path, scon, (conrc < 0 ? strerror(errno) : ""));
++	    rpmlog(loglvl(rc != RPMRC_OK), "lsetfilecon: (%d %s, %s) %s\n",
++		   fd, path, scon, (conrc < 0 ? strerror(errno) : ""));
+ 
+ 	    freecon(scon);
+ 	} else {
+-- 
+2.41.0
+

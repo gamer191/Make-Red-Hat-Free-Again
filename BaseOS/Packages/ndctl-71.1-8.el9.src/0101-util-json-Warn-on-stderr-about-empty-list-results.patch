@@ -1,0 +1,44 @@
+From 91f78bbcda7fc644041dfabfa679c6a627f90e76 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Sun, 23 Jan 2022 16:53:08 -0800
+Subject: [PATCH 101/217] util/json: Warn on stderr about empty list results
+
+Help interactive users notice something is wrong with the list parameters
+by warning that no devices matched the specified filter settings.
+
+Link: https://lore.kernel.org/r/164298558814.3021641.13051269428355986099.stgit@dwillia2-desk3.amr.corp.intel.com
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ util/json.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/util/json.c b/util/json.c
+index bd5f8fc..f8cc81f 100644
+--- a/util/json.c
++++ b/util/json.c
+@@ -3,6 +3,7 @@
+ #include <limits.h>
+ #include <string.h>
+ #include <stdio.h>
++#include <util/util.h>
+ #include <util/json.h>
+ #include <json-c/json.h>
+ #include <json-c/printbuf.h>
+@@ -95,9 +96,11 @@ void util_display_json_array(FILE *f_out, struct json_object *jarray,
+ 	int len = json_object_array_length(jarray);
+ 	int jflag = JSON_C_TO_STRING_PRETTY;
+ 
+-	if (json_object_array_length(jarray) > 1 || !(flags & UTIL_JSON_HUMAN))
++	if (len > 1 || !(flags & UTIL_JSON_HUMAN)) {
++		if (len == 0)
++			warning("no matching devices found\n");
+ 		fprintf(f_out, "%s\n", json_object_to_json_string_ext(jarray, jflag));
+-	else if (len) {
++	} else if (len) {
+ 		struct json_object *jobj;
+ 
+ 		jobj = json_object_array_get_idx(jarray, 0);
+-- 
+2.27.0
+

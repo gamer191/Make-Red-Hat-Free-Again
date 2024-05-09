@@ -1,0 +1,26 @@
+From 03525592c944957f3b7b200b7daeb9f615cdcde7 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Tue, 23 May 2023 12:46:22 +0300
+Subject: [PATCH] Fix a copy-paste --help description of --whatconflicts
+ (RhBug:2208661)
+
+---
+ lib/poptQV.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/poptQV.c b/lib/poptQV.c
+index ac8e8975d..8bd91c652 100644
+--- a/lib/poptQV.c
++++ b/lib/poptQV.c
+@@ -108,7 +108,7 @@ struct poptOption rpmQVSourcePoptTable[] = {
+  { "verify", 'V', POPT_ARGFLAG_DOC_HIDDEN, NULL, 'V',
+ 	N_("rpm verify mode"), NULL },
+  { "whatconflicts", '\0', 0, 0, POPT_WHATCONFLICTS, 
+-	N_("query/verify the package(s) which require a dependency"), "CAPABILITY" },
++	N_("query/verify the package(s) which conflict with a dependency"), "CAPABILITY" },
+  { "whatrequires", '\0', 0, 0, POPT_WHATREQUIRES, 
+ 	N_("query/verify the package(s) which require a dependency"), "CAPABILITY" },
+  { "whatobsoletes", '\0', 0, 0, POPT_WHATOBSOLETES,
+-- 
+2.41.0
+

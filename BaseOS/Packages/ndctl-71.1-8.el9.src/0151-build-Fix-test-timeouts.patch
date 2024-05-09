@@ -1,0 +1,33 @@
+From 900cfd8e062975215fb522ca47cc6239a5269628 Mon Sep 17 00:00:00 2001
+From: Dan Williams <dan.j.williams@intel.com>
+Date: Thu, 10 Mar 2022 19:35:19 -0800
+Subject: [PATCH 151/217] build: Fix test timeouts
+
+Older versions of meson, like the version that ships in CentOS Stream
+interpret a timeout of 0 as immediately fail, rather than infinite test
+run. Specify a 10 minute timeout by default instead.
+
+Link: https://lore.kernel.org/r/164696971934.3344888.14976446737826853353.stgit@dwillia2-desk3.amr.corp.intel.com
+Fixes: 4e5faa1726d2 ("build: Add meson build infrastructure")
+Signed-off-by: Dan Williams <dan.j.williams@intel.com>
+Signed-off-by: Vishal Verma <vishal.l.verma@intel.com>
+---
+ test/meson.build | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/test/meson.build b/test/meson.build
+index 07a5bb6..7ccd451 100644
+--- a/test/meson.build
++++ b/test/meson.build
+@@ -227,7 +227,7 @@ foreach t : tests
+       mmap,
+     ],
+     suite: t[2],
+-    timeout : 0,
++    timeout : 600,
+     env : [
+       'NDCTL=@0@'.format(ndctl_tool.full_path()),
+       'DAXCTL=@0@'.format(daxctl_tool.full_path()),
+-- 
+2.27.0
+

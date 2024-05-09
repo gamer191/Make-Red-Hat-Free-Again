@@ -1,0 +1,39 @@
+From c771ae28e28b2971869b7801ffc7961f4dcb6544 Mon Sep 17 00:00:00 2001
+From: Panu Matilainen <pmatilai@redhat.com>
+Date: Thu, 10 Jun 2021 10:32:12 +0300
+Subject: [PATCH] Support hash v8 databases from BDB < 4.6 in bdb_ro
+
+In Hash v8 databases page type differs from newer ones to denote
+the difference between sorted and unsorted pages.
+
+Fixes reading rpm databases from older distros like SLES 11 and RHEL 5
+(RhBug:1965147)
+---
+ lib/backend/bdb_ro.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/backend/bdb_ro.c b/lib/backend/bdb_ro.c
+index 2667ec845..695ef78e3 100644
+--- a/lib/backend/bdb_ro.c
++++ b/lib/backend/bdb_ro.c
+@@ -276,7 +276,7 @@ static int hash_lookup(struct bdb_cur *cur, const unsigned char *key, unsigned i
+     pg = hash_bucket_to_page(cur->db, bucket);
+     if (bdb_getpage(cur->db, cur->page, pg))
+ 	return -1;
+-    if (cur->page[25] != 8 && cur->page[25] != 13)
++    if (cur->page[25] != 8 && cur->page[25] != 13 && cur->page[25] != 2)
+ 	return -1;
+     cur->idx = (unsigned int)-2;
+     cur->numidx = *(uint16_t *)(cur->page + 20);
+@@ -323,7 +323,7 @@ static int hash_next(struct bdb_cur *cur)
+ 	    }
+ 	    if (bdb_getpage(cur->db, cur->page, pg))
+ 		return -1;
+-	    if (cur->page[25] != 8 && cur->page[25] != 13)
++	    if (cur->page[25] != 8 && cur->page[25] != 13 && cur->page[25] != 2)
+ 		return -1;
+ 	    cur->numidx = *(uint16_t *)(cur->page + 20);
+ 	    continue;
+-- 
+2.33.1
+
