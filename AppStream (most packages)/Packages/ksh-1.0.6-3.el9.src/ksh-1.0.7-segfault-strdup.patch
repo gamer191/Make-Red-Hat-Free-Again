@@ -1,0 +1,58 @@
+From 9eb8532ccacf1cfdb7ba18f51eba68776852ef7c Mon Sep 17 00:00:00 2001
+From: Vincent Mihalkovic <vmihalko@redhat.com>
+Date: Thu, 8 Feb 2024 22:10:58 +0100
+Subject: [PATCH] Re-fix use of strdup on a NULL pointer (re: 9a9da2c2) (#718)
+
+Thank you @lzaoral for debugging this issue and creating this
+reproducer:
+
+$ tty   # check that the shell is connected to a pseudoterminal
+/dev/pts/4
+$ mkdir /var/tmp/chroottest
+$ dnf --releasever=39 --installroot=/var/tmp/chroottest install ksh
+$ echo "/dev/udp/127.0.0.1/514;0;104" |
+        sudo tee /var/tmp/chroottest/etc/ksh_audit
+$ sudo chroot /var/tmp/chroottest /bin/ksh -lic 'exit 0'
+(ksh segfaults)
+
+Analysis: On Linux, ttyname(3)[*] may fail if:
+
+* EBADF  Bad file descriptor.
+* ENODEV fd refers to a slave pseudoterminal device but the
+         corresponding pathname could not be found [...].
+* ENOTTY fd does not refer to a terminal device.
+
+Calling isatty(3) before ttyname(3) only prevents the first and
+third cases.
+
+src/cmd/ksh93/edit/history.c: sh_histinit():
+- To catch the second case, let's call ttyname(2) directly, check
+  for NULL and remove the redundant isatty() call.
+
+[*] https://man7.org/linux/man-pages/man3/ttyname.3.html
+---
+ src/cmd/ksh93/edit/history.c    | 4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/src/cmd/ksh93/edit/history.c b/src/cmd/ksh93/edit/history.c
+index a7b084e5c16f..25832a59265b 100644
+--- a/src/cmd/ksh93/edit/history.c
++++ b/src/cmd/ksh93/edit/history.c
+@@ -15,6 +15,7 @@
+ *            Johnothan King <johnothanking@protonmail.com>             *
+ *         hyenias <58673227+hyenias@users.noreply.github.com>          *
+ *                Govind Kamat <govind_kamat@yahoo.com>                 *
++*               Vincent Mihalkovic <vmihalko@redhat.com>               *
+ *                                                                      *
+ ***********************************************************************/
+ /*
+@@ -353,7 +354,8 @@ int  sh_histinit(void)
+ 			if(fd>=0)
+ 			{
+ 				fcntl(fd,F_SETFD,FD_CLOEXEC);
+-				hp->tty = sh_strdup(isatty(2)?ttyname(2):"notty");
++				const char* tty = ttyname(2);
++				hp->tty = sh_strdup(tty?tty:"notty");
+ 				hp->auditfp = sfnew(NULL,NULL,-1,fd,SF_WRITE);
+ 			}
+ 		}

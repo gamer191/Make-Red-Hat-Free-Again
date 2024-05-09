@@ -1,0 +1,35 @@
+--- kabi-dw-973fee0f575cc530347bac7f906e7967d4399735.orig/ksymtab.c	2022-01-10 16:09:27.000000000 +0100
++++ kabi-dw-973fee0f575cc530347bac7f906e7967d4399735.new/ksymtab.c	2022-01-31 17:34:13.122000000 +0100
+@@ -155,6 +155,20 @@
+ 		goto out;
+ 	}
+ 
++	switch (ehdr->e_type) {
++	case ET_EXEC:
++	case ET_DYN:
++	case ET_REL:
++		break;
++	default:
++		printf("Unsupported object filetype of %s: %d\n", filename,
++		       ehdr->e_type);
++		free(ehdr);
++		(void) elf_end(elf);
++		(void) close(fd);
++		goto out;
++	}
++
+ 	/*
+ 	 * Get section index of the string table associated with the section
+ 	 * headers in the ELF file.
+@@ -427,7 +441,10 @@
+ 
+ 	name += strlen(STRTAB_NS_PREFIX);
+ 	ns = (char *) ctx->ksymtab_raw;
+-	ns += (ctx->e_type == ET_EXEC) ? value - ctx->sh_addr : value;
++	if (ctx->e_type == ET_EXEC || ctx->e_type == ET_DYN)
++		ns += value - ctx->sh_addr;
++	else if (ctx->e_type == ET_REL)
++		ns += value;
+ 
+ 	if (!strlen(ns))
+ 		return;

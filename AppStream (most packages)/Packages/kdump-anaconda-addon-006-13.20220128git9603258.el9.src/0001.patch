@@ -1,0 +1,29 @@
+From aa335261b2c4771442d82ee1622f189603d4a43d Mon Sep 17 00:00:00 2001
+From: Kairui Song <kasong@redhat.com>
+Date: Wed, 2 Jun 2021 16:44:08 +0800
+Subject: [PATCH 1/2] Make kdump options visible by default
+
+Currently this addon is completely hidden unless kdump_addon=on
+is set, make it visible by default. Kdump is still disabled by default,
+just show the kdump tab.
+
+Signed-off-by: Kairui Song <kasong@redhat.com>
+---
+ com_redhat_kdump/service/initialization.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/com_redhat_kdump/service/initialization.py b/com_redhat_kdump/service/initialization.py
+index 2bdbe6e..0e247df 100644
+--- a/com_redhat_kdump/service/initialization.py
++++ b/com_redhat_kdump/service/initialization.py
+@@ -27,6 +27,6 @@ __all__ = ["check_initial_conditions"]
+ 
+ def check_initial_conditions():
+     """Can the Kdump service run?"""
+-    if not kernel_arguments.is_enabled("kdump_addon"):
++    if kernel_arguments.get("kdump_addon", 1) in ["0", "off", False]:
+         log.debug("The kdump add-on is disabled. Quit.")
+         sys.exit(1)
+-- 
+2.31.1
+

@@ -1,0 +1,13 @@
+diff --git a/scripts/services/systemd b/scripts/services/systemd
+index f1da2ac..44cc7a9 100644
+--- a/scripts/services/systemd
++++ b/scripts/services/systemd
+@@ -70,7 +70,7 @@ while (defined(my $ThisLine = <STDIN>)) {
+        # crond will never restart process when it is restarted
+        $ThisLine =~ /^crond\.service: Found left-over process \d+ \(.*\) in control group while starting unit\. Ignoring\.$/ or
+        $ThisLine =~ /^Received SIGINT\./ or
+-       $ThisLine =~ /^Deactivated / or
++       $ThisLine =~ /: Deactivated / or
+        $ThisLine =~ /^Detected (architecture|virtualization) / or
+        $ThisLine =~ /^Found device / or
+        $ThisLine =~ /Got automount request for \/proc\// or

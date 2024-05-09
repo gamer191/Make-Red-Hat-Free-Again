@@ -1,0 +1,60 @@
+From fd7b5edbb777d216ba9f94e5023f793fb01583cd Mon Sep 17 00:00:00 2001
+From: Kairui Song <kasong@redhat.com>
+Date: Wed, 21 Jul 2021 02:06:36 +0800
+Subject: [PATCH 2/2] Enable kdump by default
+
+Signed-off-by: Kairui Song <kasong@redhat.com>
+---
+ com_redhat_kdump/service/kdump.py     | 2 +-
+ com_redhat_kdump/service/kickstart.py | 2 +-
+ test/unit_tests/test_kickstart.py      | 4 ++--
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/com_redhat_kdump/service/kdump.py b/com_redhat_kdump/service/kdump.py
+index 46e7242..4f4cdd1 100755
+--- a/com_redhat_kdump/service/kdump.py
++++ b/com_redhat_kdump/service/kdump.py
+@@ -41,7 +41,7 @@ class KdumpService(KickstartService):
+     def __init__(self):
+         """Create a service."""
+         super().__init__()
+-        self._kdump_enabled = False
++        self._kdump_enabled = True
+         self.kdump_enabled_changed = Signal()
+ 
+         self._fadump_enabled = False
+diff --git a/com_redhat_kdump/service/kickstart.py b/com_redhat_kdump/service/kickstart.py
+index c2455a4..32c532f 100644
+--- a/com_redhat_kdump/service/kickstart.py
++++ b/com_redhat_kdump/service/kickstart.py
+@@ -36,7 +36,7 @@ class KdumpKickstartData(AddonData):
+ 
+     def __init__(self):
+         super().__init__()
+-        self.enabled = False
++        self.enabled = True
+         self.reserve_mb = "auto"
+         self.enablefadump = False
+ 
+diff --git a/test/unit_tests/test_kickstart.py b/test/unit_tests/test_kickstart.py
+index 49d73d2..f833504 100644
+--- a/test/unit_tests/test_kickstart.py
++++ b/test/unit_tests/test_kickstart.py
+@@ -26,12 +26,12 @@ class KdumpKickstartTestCase(TestCase):
+         self.assertEqual(output.strip(), dedent(ks_out).strip())
+ 
+     def test_ks_default(self):
+-        self.assertEqual(self._service.kdump_enabled, False)
++        self.assertEqual(self._service.kdump_enabled, True)
+         self.assertEqual(self._service.fadump_enabled, False)
+         self.assertEqual(self._service.reserved_memory, "auto")
+ 
+         self._check_ks_output("""
+-        %addon com_redhat_kdump --disable
++        %addon com_redhat_kdump --enable --reserve-mb='auto'
+ 
+         %end
+         """)
+-- 
+2.31.1
+

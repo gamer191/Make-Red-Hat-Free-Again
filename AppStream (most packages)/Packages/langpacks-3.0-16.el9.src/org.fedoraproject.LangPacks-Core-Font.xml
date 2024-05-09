@@ -1,0 +1,961 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2020 Parag Nemade <pnemade@fedoraproject.org> -->
+<components origin="langpacks">
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-af</id>
+    <name>Afrikaans</name>
+    <summary>Localization Font support for Afrikaans</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-am</id>
+    <name>Amharic</name>
+    <summary>Localization Font support for Amharic</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ar</id>
+    <name>Arabic</name>
+    <summary>Localization Font support for Arabic</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-as</id>
+    <name>Assamese</name>
+    <summary>Localization Font support for Assamese</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ast</id>
+    <name>Asturian</name>
+    <summary>Localization Font support for Asturian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-be</id>
+    <name>Belarusian</name>
+    <summary>Localization Font support for Belarusian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-bg</id>
+    <name>Bulgarian</name>
+    <summary>Localization Font support for Bulgarian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-bn</id>
+    <name>Bengali</name>
+    <summary>Localization Font support for Bengali</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-bo</id>
+    <name>Tibetan</name>
+    <summary>Localization Font support for Tibetan</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-br</id>
+    <name>Breton</name>
+    <summary>Localization Font support for Breton</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-bs</id>
+    <name>Bosnian</name>
+    <summary>Localization Font support for Bosnian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ca</id>
+    <name>Catalan</name>
+    <summary>Localization Font support for Catalan</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-cs</id>
+    <name>Czech</name>
+    <summary>Localization Font support for Czech</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-cy</id>
+    <name>Welsh</name>
+    <summary>Localization Font support for Welsh</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-da</id>
+    <name>Danish</name>
+    <summary>Localization Font support for Danish</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-de</id>
+    <name>German</name>
+    <summary>Localization Font support for German</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-dz</id>
+    <name>Bhutanese</name>
+    <summary>Localization Font support for Bhutanese</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-el</id>
+    <name>Greek</name>
+    <summary>Localization Font support for Greek</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-en</id>
+    <name>English</name>
+    <summary>Localization Font support for English</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-eo</id>
+    <name>Esperanto</name>
+    <summary>Localization Font support for Esperanto</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-es</id>
+    <name>Spanish</name>
+    <summary>Localization Font support for Spanish</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-et</id>
+    <name>Estonian</name>
+    <summary>Localization Font support for Estonian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-eu</id>
+    <name>Basque</name>
+    <summary>Localization Font support for Basque</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-fa</id>
+    <name>Persian</name>
+    <summary>Localization Font support for Persian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-fi</id>
+    <name>Finnish</name>
+    <summary>Localization Font support for Finnish</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-fr</id>
+    <name>French</name>
+    <summary>Localization Font support for French</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ga</id>
+    <name>Irish</name>
+    <summary>Localization Font support for Irish</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-gl</id>
+    <name>Galician</name>
+    <summary>Localization Font support for Galician</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-gu</id>
+    <name>Gujarati</name>
+    <summary>Localization Font support for Gujarati</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-he</id>
+    <name>Hebrew</name>
+    <summary>Localization Font support for Hebrew</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-hi</id>
+    <name>Hindi</name>
+    <summary>Localization Font support for Hindi</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-hr</id>
+    <name>Croatian</name>
+    <summary>Localization Font support for Croatian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-hu</id>
+    <name>Hungarian</name>
+    <summary>Localization Font support for Hungarian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ia</id>
+    <name>Interlingua</name>
+    <summary>Localization Font support for Interlingua</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-id</id>
+    <name>Indonesian</name>
+    <summary>Localization Font support for Indonesian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-is</id>
+    <name>Icelandic</name>
+    <summary>Localization Font support for Icelandic</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-it</id>
+    <name>Italian</name>
+    <summary>Localization Font support for Italian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ja</id>
+    <name>Japanese</name>
+    <summary>Localization Font support for Japanese</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ka</id>
+    <name>Georgian</name>
+    <summary>Localization Font support for Georgian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-kk</id>
+    <name>Kazakh</name>
+    <summary>Localization Font support for Kazakh</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-km</id>
+    <name>Khmer</name>
+    <summary>Localization Font support for Khmer</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-kn</id>
+    <name>Kannada</name>
+    <summary>Localization Font support for Kannada</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ko</id>
+    <name>Korean</name>
+    <summary>Localization Font support for Korean</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ku</id>
+    <name>Kurdish</name>
+    <summary>Localization Font support for Kurdish</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-lt</id>
+    <name>Lithuanian</name>
+    <summary>Localization Font support for Lithuanian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-lv</id>
+    <name>Latvian</name>
+    <summary>Localization Font support for Latvian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-mai</id>
+    <name>Maithili</name>
+    <summary>Localization Font support for Maithili</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-mk</id>
+    <name>Macedonian</name>
+    <summary>Localization Font support for Macedonian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ml</id>
+    <name>Malayalam</name>
+    <summary>Localization Font support for Malayalam</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-mr</id>
+    <name>Marathi</name>
+    <summary>Localization Font support for Marathi</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ms</id>
+    <name>Malay</name>
+    <summary>Localization Font support for Malay</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-my</id>
+    <name>Burmese</name>
+    <summary>Localization Font support for Burmese</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-nb</id>
+    <name>Norwegian Bokmål</name>
+    <summary>Localization Font support for Norwegian Bokmål</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ne</id>
+    <name>Nepali</name>
+    <summary>Localization Font support for Nepali</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-nl</id>
+    <name>Dutch</name>
+    <summary>Localization Font support for Dutch</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-nn</id>
+    <name>Nynorsk</name>
+    <summary>Localization Font support for Nynorsk</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-nr</id>
+    <name>Southern Ndebele</name>
+    <summary>Localization Font support for Southern Ndebele</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-nso</id>
+    <name>Northern Sotho</name>
+    <summary>Localization Font support for Northern Sotho</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-or</id>
+    <name>Oriya</name>
+    <summary>Localization Font support for Oriya</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-pa</id>
+    <name>Punjabi</name>
+    <summary>Localization Font support for Punjabi</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-pl</id>
+    <name>Polish</name>
+    <summary>Localization Font support for Polish</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-pt</id>
+    <name>Portuguese</name>
+    <summary>Localization Font support for Portuguese</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ro</id>
+    <name>Romanian</name>
+    <summary>Localization Font support for Romanian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ru</id>
+    <name>Russian</name>
+    <summary>Localization Font support for Russian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-si</id>
+    <name>Sinhala</name>
+    <summary>Localization Font support for Sinhala</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-sk</id>
+    <name>Slovak</name>
+    <summary>Localization Font support for Slovak</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-sl</id>
+    <name>Slovenian</name>
+    <summary>Localization Font support for Slovenian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-sq</id>
+    <name>Albanian</name>
+    <summary>Localization Font support for Albanian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ss</id>
+    <name>Swati</name>
+    <summary>Localization Font support for Swati</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-sr</id>
+    <name>Serbian</name>
+    <summary>Localization Font support for Serbian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-sv</id>
+    <name>Swedish</name>
+    <summary>Localization Font support for Swedish</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ta</id>
+    <name>Tamil</name>
+    <summary>Localization Font support for Tamil</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-te</id>
+    <name>Telugu</name>
+    <summary>Localization Font support for Telugu</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-th</id>
+    <name>Thai</name>
+    <summary>Localization Font support for Thai</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-tn</id>
+    <name>Tswana</name>
+    <summary>Localization Font support for Tswana</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-tr</id>
+    <name>Turkish</name>
+    <summary>Localization Font support for Turkish</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ts</id>
+    <name>Tsonga</name>
+    <summary>Localization Font support for Tsonga</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-uk</id>
+    <name>Ukrainian</name>
+    <summary>Localization Font support for Ukrainian</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ur</id>
+    <name>Urdu</name>
+    <summary>Localization Font support for Urdu</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-ve</id>
+    <name>Venda</name>
+    <summary>Localization Font support for Venda</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-vi</id>
+    <name>Vietnamese</name>
+    <summary>Localization Font support for Vietnamese</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-xh</id>
+    <name>Xhosa</name>
+    <summary>Localization Font support for Xhosa</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-yi</id>
+    <name>Yiddish</name>
+    <summary>Localization Font support for Yiddish</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-zh_CN</id>
+    <name>Simplified Chinese</name>
+    <summary>Localization Font support for Simplified Chinese</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-zh_HK</id>
+    <name>Hong Kong Traditional Chinese</name>
+    <summary>Localization Font support for Hong Kong Traditional Chinese</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-zh_TW</id>
+    <name>Taiwan Traditional Chinese</name>
+    <summary>Localization Font support for Taiwan Traditional Chinese</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+  <component type="font">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-Font-zu</id>
+    <name>Zulu</name>
+    <summary>Localization Font support for Zulu</summary>
+    <description>
+      <p>
+        Core font package to install default font.
+      </p>
+    </description>
+  </component>
+</components>

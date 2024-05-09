@@ -1,0 +1,57 @@
+commit b2ceafdd8e4cde6c0cef67373006049b12f45c4a
+Author: Miroslav Lichvar <mlichvar@redhat.com>
+Date:   Thu Apr 28 14:23:57 2022 +0200
+
+    timemaster: Check for RH-specific kernel with vclock support.
+
+diff --git a/timemaster.8 b/timemaster.8
+index bc0b5b6..50699d6 100644
+--- a/timemaster.8
++++ b/timemaster.8
+@@ -104,7 +104,7 @@ Enable or disable synchronization with virtual clocks. If enabled,
+ needed by configured PTP domains. This enables hardware time stamping for
+ multiple \fBptp4l\fR instances using the same network interface. The default
+ value is -1, which enables the virtual clocks if running on Linux 5.18 or
+-later.
++later, or the EL9-specific kernel-5.14.0-106 or later release.
+ 
+ .SS [ntp_server address]
+ 
+diff --git a/timemaster.c b/timemaster.c
+index fab71fc..05f0af4 100644
+--- a/timemaster.c
++++ b/timemaster.c
+@@ -546,6 +546,23 @@ static int check_kernel_version(int version, int patch)
+ 	return 0;
+ }
+ 
++static int check_rh_kernel_version(const char *el, int version, int patch,
++				   int sub, int release)
++{
++	struct utsname uts;
++	int v, p, sp, r;
++
++	if (uname(&uts) < 0)
++		return 1;
++	if (!strstr(uts.release, el))
++		return 1;
++	if (sscanf(uts.release, "%d.%d.%d-%d", &v, &p, &sp, &r) < 4)
++		return 1;
++	if (version != v || patch != p || sub != sp || release > r)
++		return 1;
++	return 0;
++}
++
+ static struct timemaster_config *config_parse(char *path)
+ {
+ 	struct timemaster_config *config = xcalloc(1, sizeof(*config));
+@@ -621,7 +638,8 @@ static struct timemaster_config *config_parse(char *path)
+ 	fclose(f);
+ 
+ 	if (config->use_vclocks < 0)
+-		config->use_vclocks = !check_kernel_version(5, 18);
++		config->use_vclocks = !check_kernel_version(5, 18) ||
++			!check_rh_kernel_version(".el9.", 5, 14, 0, 106);
+ 
+ 	if (section_name)
+ 		free(section_name);

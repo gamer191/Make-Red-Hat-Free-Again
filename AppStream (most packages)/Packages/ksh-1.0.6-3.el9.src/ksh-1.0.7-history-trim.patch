@@ -1,0 +1,99 @@
+From 2075b2b96208ac8b989ca316dcdd674c3f488e2b Mon Sep 17 00:00:00 2001
+From: Martijn Dekker <martijn@inlv.org>
+Date: Thu, 28 Dec 2023 04:02:28 +0000
+Subject: [PATCH] Fix crash on failure to trim ~/.sh_history
+
+@vmihalko writes:
+> We were able to reproduce an old issue mentioned in
+> https://bugzilla.redhat.com/show_bug.cgi?id=1885399 using the
+> latest version of ksh. The corresponding code has not changed
+> much in the past few years.
+>
+> To provide further explanation, the problem arises when a user's
+> .sh_history file grows to a size that triggers the hist_trim
+> function, but the user lacks (after the creation of .sh_history)
+> the necessary write permissions to their $HOME directory. As a
+> result, ksh becomes stuck in a recursive loop between the
+> sh_histinit(src/cmd/ksh93/edit/history.c#L203) function and the
+> hist_trim(src/cmd/ksh93/edit/history.c#L417) function.
+>
+> Conditions for reproduction:
+>
+> 1. The size of the .sh_history file is larger than the HIST_MAX
+>    limit. (src/cmd/ksh93/edit/history.c, line 325)
+> 2. .sh_history file has not been changed in the HIST_RECENT
+>    seconds (src/cmd/ksh93/edit/history.c, line 406)
+> 3. The user does not have permission to write to the $HOME
+>    directory.
+
+src/cmd/ksh93/edit/history.c: hist_trim():
+- Print a warning and return if unlink(2) fails. The warning tells
+  the user to check the history file's parent directory is
+  writable. This is the best I realistically do for now, because
+  this function's basic method assumes a writable parent directory.
+- The temp file fallback is deleted because it's fundamentally
+  flawed: it assumes the temp file is made on the same volume as
+  the history file and can simply be rename(2)'d in place. Even
+  on systems where this is the case, it doesn't appear to be
+  working correctly, but this is not worth looking into.
+
+Resolves: https://github.com/ksh93/ksh/issues/695
+---
+ src/cmd/ksh93/edit/history.c | 34 ++++------------------------------
+ 1 files changed, 4 insertions(+), 30 deletions(-)
+
+diff --git a/src/cmd/ksh93/edit/history.c b/src/cmd/ksh93/edit/history.c
+index c49c23244d00..f3672bf6e220 100644
+--- a/src/cmd/ksh93/edit/history.c
++++ b/src/cmd/ksh93/edit/history.c
+@@ -419,34 +419,13 @@ static History_t* hist_trim(History_t *hp, int n)
+ 	char *cp;
+ 	int incmd=1, c=0;
+ 	History_t *hist_new, *hist_old = hp;
+-	char *buff, *endbuff, *tmpname=0;
++	char *buff, *endbuff;
+ 	off_t oldp,newp;
+ 	struct stat statb;
+-	unlink(hist_old->histname);
+-	if(access(hist_old->histname,F_OK) >= 0)
++	if(unlink(hist_old->histname) < 0)
+ 	{
+-		/* The unlink can fail on Windows 95 */
+-		int fd;
+-		char *last, *name=hist_old->histname;
+-		sh_close(sffileno(hist_old->histfp));
+-		tmpname = (char*)sh_malloc(strlen(name)+14);
+-		if(last = strrchr(name,'/'))
+-		{
+-			*last = 0;
+-			pathtmp(tmpname,name,"hist",NULL);
+-			*last = '/';
+-		}
+-		else
+-			pathtmp(tmpname,e_dot,"hist",NULL);
+-		if(rename(name,tmpname) < 0)
+-		{
+-			free(tmpname);
+-			tmpname = name;
+-		}
+-		fd = open(tmpname,O_RDONLY|O_cloexec);
+-		sfsetfd(hist_old->histfp,fd);
+-		if(tmpname==name)
+-			tmpname = 0;
++		errormsg(SH_DICT,ERROR_warn(0),"cannot trim history file %s; make sure parent directory is writable",hist_old->histname);
++		return hist_ptr = hist_old;
+ 	}
+ 	hist_ptr = 0;
+ 	if(fstat(sffileno(hist_old->histfp),&statb)>=0)
+@@ -501,11 +480,6 @@ static History_t* hist_trim(History_t *hp, int n)
+ 	}
+ 	hist_cancel(hist_new);
+ 	sfclose(hist_old->histfp);
+-	if(tmpname)
+-	{
+-		unlink(tmpname);
+-		free(tmpname);
+-	}
+ 	free((char*)hist_old);
+ 	return hist_ptr = hist_new;
+ }

@@ -1,0 +1,162 @@
+diff --git a/src/cmd/ksh93/Mamfile b/src/cmd/ksh93/Mamfile
+index abc9ee1a5..d266f2178 100644
+--- a/src/cmd/ksh93/Mamfile
++++ b/src/cmd/ksh93/Mamfile
+@@ -222,6 +222,10 @@ make install
+ 			prev shell.req
+ 			make alarm.o
+ 				make bltins/alarm.c
++					make include/io.h implicit
++						prev ${PACKAGE_ast_INCLUDE}/sfio.h
++						prev ${PACKAGE_ast_INCLUDE}/ast.h
++					done include/io.h
+ 					make FEATURE/time implicit
+ 						prev features/time
+ 						exec - iffe ${IFFEFLAGS} -v -c "${CC} ${mam_cc_FLAGS} ${CCFLAGS} ${LDFLAGS}" ref ${mam_cc_L+-L.} ${mam_cc_L+-L${INSTALLROOT}/lib} -I${PACKAGE_ast_INCLUDE} -I${INSTALLROOT}/include ${mam_libdll} ${mam_libcmd} ${mam_libast} ${mam_libm} ${mam_libnsl} : run features/time
+@@ -239,6 +243,22 @@ make install
+ 						done FEATURE/dynamic generated
+ 						prev ${PACKAGE_ast_INCLUDE}/option.h
+ 					done include/builtins.h
++					make include/shlex.h implicit
++						make include/lexstates.h implicit
++							prev ${PACKAGE_ast_INCLUDE}/wctype.h
++							prev ${PACKAGE_ast_INCLUDE}/wchar.h
++							make FEATURE/locale implicit
++								prev features/locale
++								exec - iffe ${IFFEFLAGS} -v -c "${CC} ${mam_cc_FLAGS} ${CCFLAGS} ${LDFLAGS}" ref ${mam_cc_L+-L.} ${mam_cc_L+-L${INSTALLROOT}/lib} -I${PACKAGE_ast_INCLUDE} -I${INSTALLROOT}/include ${mam_libdll} ${mam_libcmd} ${mam_libast} ${mam_libm} ${mam_libnsl} : run features/locale
++							done FEATURE/locale generated
++						done include/lexstates.h
++						prev include/shtable.h
++						make include/shnodes.h implicit
++							prev include/argnod.h implicit
++							prev ${PACKAGE_ast_INCLUDE}/ast.h
++						done include/shnodes.h
++						prev ${PACKAGE_ast_INCLUDE}/cdt.h
++					done include/shlex.h
+ 					prev ${PACKAGE_ast_INCLUDE}/error.h
+ 					make include/defs.h implicit
+ 						prev include/regress.h implicit
+@@ -246,7 +266,7 @@ make install
+ 						prev include/shell.h
+ 						prev ${PACKAGE_ast_INCLUDE}/endian.h
+ 						prev include/name.h
+-						prev include/argnod.h implicit
++						prev include/argnod.h
+ 						prev ${PACKAGE_ast_INCLUDE}/cdt.h
+ 						prev FEATURE/externs
+ 						prev ${PACKAGE_ast_INCLUDE}/error.h
+@@ -292,10 +312,7 @@ make install
+ 			make cflow.o
+ 				make bltins/cflow.c
+ 					prev include/builtins.h
+-					make include/shnodes.h implicit
+-						prev include/argnod.h
+-						prev ${PACKAGE_ast_INCLUDE}/ast.h
+-					done include/shnodes.h
++					prev include/shnodes.h
+ 					prev ${PACKAGE_ast_INCLUDE}/error.h
+ 					prev ${PACKAGE_ast_INCLUDE}/ast.h
+ 					prev include/defs.h
+@@ -341,10 +358,7 @@ make install
+ 							done FEATURE/ttys generated
+ 						done include/terminal.h
+ 						prev ${PACKAGE_ast_INCLUDE}/sig.h
+-						make FEATURE/locale implicit
+-							prev features/locale
+-							exec - iffe ${IFFEFLAGS} -v -c "${CC} ${mam_cc_FLAGS} ${CCFLAGS} ${LDFLAGS}" ref ${mam_cc_L+-L.} ${mam_cc_L+-L${INSTALLROOT}/lib} -I${PACKAGE_ast_INCLUDE} -I${INSTALLROOT}/include ${mam_libdll} ${mam_libcmd} ${mam_libast} ${mam_libm} ${mam_libnsl} : run features/locale
+-						done FEATURE/locale generated
++						prev FEATURE/locale
+ 						make FEATURE/cmds implicit
+ 							prev features/cmds
+ 							exec - iffe ${IFFEFLAGS} -v -c "${CC} ${mam_cc_FLAGS} ${CCFLAGS} ${LDFLAGS}" ref ${mam_cc_L+-L.} ${mam_cc_L+-L${INSTALLROOT}/lib} -I${PACKAGE_ast_INCLUDE} -I${INSTALLROOT}/include ${mam_libdll} ${mam_libcmd} ${mam_libast} ${mam_libm} ${mam_libnsl} : run features/cmds
+@@ -353,6 +367,7 @@ make install
+ 					prev include/builtins.h
+ 					prev include/history.h
+ 					prev include/name.h
++					prev include/io.h
+ 					make include/io.h implicit
+ 						prev ${PACKAGE_ast_INCLUDE}/sfio.h
+ 						prev ${PACKAGE_ast_INCLUDE}/ast.h
+@@ -443,11 +458,7 @@ make install
+ 					prev include/builtins.h
+ 					prev include/name.h
+ 					prev include/io.h
+-					make include/lexstates.h implicit
+-						prev ${PACKAGE_ast_INCLUDE}/wctype.h
+-						prev ${PACKAGE_ast_INCLUDE}/wchar.h
+-						prev FEATURE/locale
+-					done include/lexstates.h
++					prev include/lexstates.h
+ 					prev include/variables.h
+ 					prev include/defs.h
+ 					prev ${PACKAGE_ast_INCLUDE}/error.h
+@@ -545,12 +556,7 @@ make install
+ 			make whence.o
+ 				make bltins/whence.c
+ 					prev include/builtins.h
+-					make include/shlex.h implicit
+-						prev include/lexstates.h
+-						prev include/shtable.h
+-						prev include/shnodes.h
+-						prev ${PACKAGE_ast_INCLUDE}/cdt.h
+-					done include/shlex.h
++					prev include/shlex.h
+ 					prev include/path.h
+ 					prev include/name.h
+ 					prev include/shtable.h
+diff --git a/src/cmd/ksh93/bltins/alarm.c b/src/cmd/ksh93/bltins/alarm.c
+index f31bed711..63d4d6cbf 100644
+--- a/src/cmd/ksh93/bltins/alarm.c
++++ b/src/cmd/ksh93/bltins/alarm.c
+@@ -23,21 +23,13 @@
+  *
+  */
+ 
+-/*
+- * TODO: 2014 email from David Korn cited at <https://bugzilla.redhat.com/1176670>:
+- *
+- * > I never documented the alarm builtin because it is problematic.  The
+- * > problem is that traps can't safely be handled asynchronously.  What should
+- * > happen is that the trap is marked for execution (sh.trapnote) and run after
+- * > the current command completes.  The time trap should wake up the shell if
+- * > it is blocked and it should return and then handle the trap.
+- */
+-
+ #include	"shopt.h"
+ #include	"defs.h"
+ #include	<error.h>
++#include	<shlex.h>
+ #include	"builtins.h"
+ #include	"FEATURE/time"
++#include	"io.h"
+ 
+ #define R_FLAG	1
+ #define L_FLAG	2
+@@ -147,7 +139,26 @@ void	sh_timetraps(void)
+ 			{
+ 				tp->flags &= ~L_FLAG;
+ 				if(tp->action)
+-					sh_fun(tp->action,tp->node,NULL);
++				{
++					/* Call the alarm discipline function. This may occur at any time including parse time,
++					 * so save the lexer state and push/pop context to make sure we can restore it. */
++					struct checkpt	checkpoint;
++					int		jmpval;
++					int		savexit = sh.savexit;
++					Lex_t		*lexp = (Lex_t*)sh.lex_context, savelex = *lexp;
++					sh_lexopen(lexp, 0);   /* needs full init (0), not what it calls reinit (1) */
++					sh_pushcontext(&checkpoint, 1);
++					jmpval = sigsetjmp(checkpoint.buff,0);
++					if(!jmpval)
++						sh_fun(tp->action,tp->node,NULL);
++					sh_popcontext(&checkpoint);
++					if(sh.topfd != checkpoint.topfd)
++						sh_iorestore(checkpoint.topfd,jmpval);
++					*lexp = savelex;
++					sh.savexit = savexit;	/* avoid influencing $? */
++					if(jmpval)
++						siglongjmp(*sh.jmplist,jmpval);
++				}
+ 				tp->flags &= ~L_FLAG;
+ 				if(!tp->flags)
+ 					nv_unset(tp->node);

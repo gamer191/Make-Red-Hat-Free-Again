@@ -1,0 +1,143 @@
+From 6c764e123c86ccce03d4ffaee11085b9badd6765 Mon Sep 17 00:00:00 2001
+From: "Thomas E. Dickey" <dickey@invisible-island.net>
+Date: Thu, 29 Jul 2021 21:15:21 +0000
+Subject: [PATCH] snapshot of project "lynx", label v2-9-0dev_7b
+
+Upstream-commit: 6c764e123c86ccce03d4ffaee11085b9badd6765
+Cherry-picked-by: Lukáš Zaoral <lzaoral@redhat.com>
+
+---
+ src/LYDownload.c |  6 +++---
+ src/LYLocal.c    |  2 +-
+ src/LYMainLoop.c |  2 +-
+ src/LYPrint.c    | 16 ++++++++--------
+ src/LYUpload.c   | 8 ++++----
+ 5 files changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/src/LYDownload.c b/src/LYDownload.c
+index fcaba027..afd6638e 100644
+--- a/src/LYDownload.c
++++ b/src/LYDownload.c
+@ -63,7 +63,7 @@ void LYDownload(char *line)
+     /*
+      * Parse out the File, sug_file, and the Method.
+      */
+-    if ((file = strstr(Line, "/File=")) == NULL)
++    if ((file = LYstrstr(Line, "/File=")) == NULL)
+ 	goto failed;
+     *file = '\0';
+     /*
+@@ -71,7 +71,7 @@ void LYDownload(char *line)
+      */
+     file += 6;
+ 
+-    if ((sug_file = strstr(file + 1, "/SugFile=")) != NULL) {
++    if ((sug_file = LYstrstr(file + 1, "/SugFile=")) != NULL) {
+ 	*sug_file = '\0';
+ 	/*
+ 	 * Go past "SugFile=".
+@@ -113,7 +113,7 @@ void LYDownload(char *line)
+ #endif /* _WINDOWS */
+ #endif /* DIRED_SUPPORT */
+ 
+-    if ((method = strstr(Line, "Method=")) == NULL)
++    if ((method = LYstrstr(Line, "Method=")) == NULL)
+ 	goto failed;
+     /*
+      * Go past "Method=".
+diff --git a/src/LYLocal.c b/src/LYLocal.c
+index 2e14a526..bb9ba29f 100644
+--- a/src/LYLocal.c
++++ b/src/LYLocal.c
+@@ -1700,7 +1700,7 @@ static char *match_op(const char *prefix,
+     size_t len = strlen(prefix);
+ 
+     if (!StrNCmp("LYNXDIRED://", data, 12)
+-	&& !StrNCmp(prefix, data + 12, len)) {
++	&& !strncasecomp(prefix, data + 12, len)) {
+ 	len += 12;
+ #if defined(USE_DOS_DRIVES)
+ 	if (data[len] == '/') {	/* this is normal */
+diff --git a/src/LYMainLoop.c b/src/LYMainLoop.c
+index 6f96d63c..7a3df1c4 100644
+--- a/src/LYMainLoop.c
++++ b/src/LYMainLoop.c
+@@ -2207,7 +2207,7 @@ static int handle_LYK_DOWNLOAD(int *cmd,
+ 	    }
+ 
+ 	} else if (lynx_edit_mode && !no_dired_support &&
+-		   !strstr(links[curdoc.link].lname, "/SugFile=")) {
++		   !LYstrstr(links[curdoc.link].lname, "/SugFile=")) {
+ 	    /*
+ 	     * Don't bother making a /tmp copy of the local file.
+ 	     */
+diff --git a/src/LYPrint.c b/src/LYPrint.c
+index 6ac1f4b2..58b81a6f 100644
+--- a/src/LYPrint.c
++++ b/src/LYPrint.c
+@@ -1111,7 +1111,7 @@ int printfile(DocInfo *newdoc)
+     /*
+      * Get the number of lines in the file.
+      */
+-    if ((cp = strstr(link_info, "lines=")) != NULL) {
++    if ((cp = LYstrstr(link_info, "lines=")) != NULL) {
+ 	/*
+ 	 * Terminate prev string here.
+ 	 */
+@@ -1127,24 +1127,24 @@ int printfile(DocInfo *newdoc)
+     /*
+      * Determine the type.
+      */
+-    if (strstr(link_info, "LOCAL_FILE")) {
++    if (LYstrstr(link_info, "LOCAL_FILE")) {
+ 	type = TO_FILE;
+-    } else if (strstr(link_info, "TO_SCREEN")) {
++    } else if (LYstrstr(link_info, "TO_SCREEN")) {
+ 	type = TO_SCREEN;
+-    } else if (strstr(link_info, "LPANSI")) {
++    } else if (LYstrstr(link_info, "LPANSI")) {
+ 	Lpansi = TRUE;
+ 	type = TO_SCREEN;
+-    } else if (strstr(link_info, "MAIL_FILE")) {
++    } else if (LYstrstr(link_info, "MAIL_FILE")) {
+ 	type = MAIL;
+-    } else if (strstr(link_info, "PRINTER")) {
++    } else if (LYstrstr(link_info, "PRINTER")) {
+ 	type = PRINTER;
+ 
+-	if ((cp = strstr(link_info, "number=")) != NULL) {
++	if ((cp = LYstrstr(link_info, "number=")) != NULL) {
+ 	    /* number of characters in "number=" */
+ 	    cp += 7;
+ 	    printer_number = atoi(cp);
+ 	}
+-	if ((cp = strstr(link_info, "pagelen=")) != NULL) {
++	if ((cp = LYstrstr(link_info, "pagelen=")) != NULL) {
+ 	    /* number of characters in "pagelen=" */
+ 	    cp += 8;
+ 	    pagelen = atoi(cp);
+diff --git a/src/LYUpload.c b/src/LYUpload.c
+index 20cfd5a3..a83a1037 100644
+--- a/src/LYUpload.c
++++ b/src/LYUpload.c
+@@ -53,16 +53,16 @@ int LYUpload(char *line)
+     /*
+      * Use configured upload commands.
+      */
+-    if ((directory = strstr(line, "TO=")) == NULL)
++    if ((directory = LYstrstr(line, "TO=")) == NULL)
+ 	goto failed;
+     *(directory - 1) = '\0';
+-    /* go past "Directory=" */
++    /* go past "TO=" */
+     directory += 3;
+ 
+-    if ((method = strstr(line, "UPLOAD=")) == NULL)
++    if ((method = LYstrstr(line, "UPLOAD=")) == NULL)
+ 	goto failed;
+     /*
+-     * Go past "Method=".
++     * Go past "UPLOAD=".
+      */
+     method += 7;
+     method_number = atoi(method);

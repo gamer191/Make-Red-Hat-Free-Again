@@ -1,0 +1,25 @@
+diff -rup lohit-bengali-2.5.3/65-0-lohit-bengali.conf lohit-bengali-2.5.3_mod/65-0-lohit-bengali.conf
+--- lohit-bengali-2.5.3/65-0-lohit-bengali.conf	2013-01-30 17:31:46.000000000 +0530
++++ lohit-bengali-2.5.3_mod/65-0-lohit-bengali.conf	2013-05-29 14:28:53.239651293 +0530
+@@ -22,6 +22,21 @@
+   </edit>
+ </match>
+ 
++ <match target="scan">
++    <test name="family">
++      <string>Lohit Bengali</string>
++    </test>
++    <edit name="lang" mode="assign">
++      <minus>
++        <name>lang</name>
++        <langset>
++          <string>as</string>
++        </langset>
++      </minus>
++    </edit>
++  </match>
++
++
+ <alias>
+   <family>Lohit Bengali</family>
+   <default>

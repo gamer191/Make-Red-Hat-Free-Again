@@ -1,0 +1,983 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2020 Parag Nemade <pnemade@fedoraproject.org> -->
+<components origin="langpacks">
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-af</id>
+    <name>Afrikaans</name>
+    <summary>Core Localization support for Afrikaans</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-am</id>
+    <name>Amharic</name>
+    <summary>Core Localization support for Amharic</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ar</id>
+    <name>Arabic</name>
+    <summary>Core Localization support for Arabic</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-as</id>
+    <name>Assamese</name>
+    <summary>Core Localization support for Assamese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ast</id>
+    <name>Asturian</name>
+    <summary>Core Localization support for Asturian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-be</id>
+    <name>Belarusian</name>
+    <summary>Core Localization support for Belarusian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-bg</id>
+    <name>Bulgarian</name>
+    <summary>Core Localization support for Bulgarian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-bn</id>
+    <name>Bengali</name>
+    <summary>Core Localization support for Bengali</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-bo</id>
+    <name>Tibetan</name>
+    <summary>Core Localization support for Tibetan</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-br</id>
+    <name>Breton</name>
+    <summary>Core Localization support for Breton</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-bs</id>
+    <name>Bosnian</name>
+    <summary>Core Localization support for Bosnian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ca</id>
+    <name>Catalan</name>
+    <summary>Core Localization support for Catalan</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-cs</id>
+    <name>Czech</name>
+    <summary>Core Localization support for Czech</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-cy</id>
+    <name>Welsh</name>
+    <summary>Core Localization support for Welsh</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-da</id>
+    <name>Danish</name>
+    <summary>Core Localization support for Danish</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-de</id>
+    <name>German</name>
+    <summary>Core Localization support for German</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-dz</id>
+    <name>Bhutanese</name>
+    <summary>Core Localization support for Bhutanese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-el</id>
+    <name>Greek</name>
+    <summary>Core Localization support for Greek</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-en</id>
+    <name>English</name>
+    <summary>Core Localization support for English</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-en_GB</id>
+    <name>British English</name>
+    <summary>Core Localization support for English</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-eo</id>
+    <name>Esperanto</name>
+    <summary>Core Localization support for Esperanto</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-es</id>
+    <name>Spanish</name>
+    <summary>Core Localization support for Spanish</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-et</id>
+    <name>Estonian</name>
+    <summary>Core Localization support for Estonian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-eu</id>
+    <name>Basque</name>
+    <summary>Core Localization support for Basque</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-fa</id>
+    <name>Persian</name>
+    <summary>Core Localization support for Persian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-fi</id>
+    <name>Finnish</name>
+    <summary>Core Localization support for Finnish</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-fr</id>
+    <name>French</name>
+    <summary>Core Localization support for French</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ga</id>
+    <name>Irish</name>
+    <summary>Core Localization support for Irish</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-gl</id>
+    <name>Galician</name>
+    <summary>Core Localization support for Galician</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-gu</id>
+    <name>Gujarati</name>
+    <summary>Core Localization support for Gujarati</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-he</id>
+    <name>Hebrew</name>
+    <summary>Core Localization support for Hebrew</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-hi</id>
+    <name>Hindi</name>
+    <summary>Core Localization support for Hindi</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-hr</id>
+    <name>Croatian</name>
+    <summary>Core Localization support for Croatian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-hu</id>
+    <name>Hungarian</name>
+    <summary>Core Localization support for Hungarian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ia</id>
+    <name>Interlingua</name>
+    <summary>Core Localization support for Interlingua</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-id</id>
+    <name>Indonesian</name>
+    <summary>Core Localization support for Indonesian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-is</id>
+    <name>Icelandic</name>
+    <summary>Core Localization support for Icelandic</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-it</id>
+    <name>Italian</name>
+    <summary>Core Localization support for Italian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ja</id>
+    <name>Japanese</name>
+    <summary>Core Localization support for Japanese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ka</id>
+    <name>Georgian</name>
+    <summary>Core Localization support for Georgian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-kk</id>
+    <name>Kazakh</name>
+    <summary>Core Localization support for Kazakh</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-km</id>
+    <name>Khmer</name>
+    <summary>Core Localization support for Khmer</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-kn</id>
+    <name>Kannada</name>
+    <summary>Core Localization support for Kannada</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ko</id>
+    <name>Korean</name>
+    <summary>Core Localization support for Korean</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ku</id>
+    <name>Kurdish</name>
+    <summary>Core Localization support for Kurdish</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-lt</id>
+    <name>Lithuanian</name>
+    <summary>Core Localization support for Lithuanian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-lv</id>
+    <name>Latvian</name>
+    <summary>Core Localization support for Latvian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-mai</id>
+    <name>Maithili</name>
+    <summary>Core Localization support for Maithili</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-mk</id>
+    <name>Macedonian</name>
+    <summary>Core Localization support for Macedonian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ml</id>
+    <name>Malayalam</name>
+    <summary>Core Localization support for Malayalam</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-mr</id>
+    <name>Marathi</name>
+    <summary>Core Localization support for Marathi</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ms</id>
+    <name>Malay</name>
+    <summary>Core Localization support for Malay</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-my</id>
+    <name>Burmese</name>
+    <summary>Core Localization support for Burmese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-nb</id>
+    <name>Norwegian Bokmål</name>
+    <summary>Core Localization support for Norwegian Bokmål</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ne</id>
+    <name>Nepali</name>
+    <summary>Core Localization support for Nepali</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-nl</id>
+    <name>Dutch</name>
+    <summary>Core Localization support for Dutch</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-nn</id>
+    <name>Nynorsk</name>
+    <summary>Core Localization support for Nynorsk</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-nr</id>
+    <name>Southern Ndebele</name>
+    <summary>Core Localization support for Southern Ndebele</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-nso</id>
+    <name>Northern Sotho</name>
+    <summary>Core Localization support for Northern Sotho</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-or</id>
+    <name>Oriya</name>
+    <summary>Core Localization support for Oriya</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-pa</id>
+    <name>Punjabi</name>
+    <summary>Core Localization support for Punjabi</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-pl</id>
+    <name>Polish</name>
+    <summary>Core Localization support for Polish</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-pt</id>
+    <name>Portuguese</name>
+    <summary>Core Localization support for Portuguese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-pt_BR</id>
+    <name>Brazilian Portuguese</name>
+    <summary>Core Localization support for Brazilian Portuguese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ro</id>
+    <name>Romanian</name>
+    <summary>Core Localization support for Romanian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ru</id>
+    <name>Russian</name>
+    <summary>Core Localization support for Russian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-si</id>
+    <name>Sinhala</name>
+    <summary>Core Localization support for Sinhala</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-sk</id>
+    <name>Slovak</name>
+    <summary>Core Localization support for Slovak</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-sl</id>
+    <name>Slovenian</name>
+    <summary>Core Localization support for Slovenian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-sq</id>
+    <name>Albanian</name>
+    <summary>Core Localization support for Albanian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ss</id>
+    <name>Swati</name>
+    <summary>Core Localization support for Swati</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-sr</id>
+    <name>Serbian</name>
+    <summary>Core Localization support for Serbian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-sv</id>
+    <name>Swedish</name>
+    <summary>Core Localization support for Swedish</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ta</id>
+    <name>Tamil</name>
+    <summary>Core Localization support for Tamil</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-te</id>
+    <name>Telugu</name>
+    <summary>Core Localization support for Telugu</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-th</id>
+    <name>Thai</name>
+    <summary>Core Localization support for Thai</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-tn</id>
+    <name>Tswana</name>
+    <summary>Core Localization support for Tswana</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-tr</id>
+    <name>Turkish</name>
+    <summary>Core Localization support for Turkish</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ts</id>
+    <name>Tsonga</name>
+    <summary>Core Localization support for Tsonga</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-uk</id>
+    <name>Ukrainian</name>
+    <summary>Core Localization support for Ukrainian</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ur</id>
+    <name>Urdu</name>
+    <summary>Core Localization support for Urdu</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-ve</id>
+    <name>Venda</name>
+    <summary>Core Localization support for Venda</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-vi</id>
+    <name>Vietnamese</name>
+    <summary>Core Localization support for Vietnamese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-xh</id>
+    <name>Xhosa</name>
+    <summary>Core Localization support for Xhosa</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-yi</id>
+    <name>Yiddish</name>
+    <summary>Core Localization support for Yiddish</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-zh_CN</id>
+    <name>Simplified Chinese</name>
+    <summary>Core Localization support for Simplified Chinese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-zh_HK</id>
+    <name>Hong Kong Traditional Chinese</name>
+    <summary>Core Localization support for Hong Kong Traditional Chinese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-zh_TW</id>
+    <name>Taiwan Traditional Chinese</name>
+    <summary>Core Localization support for Taiwan Traditional Chinese</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-Core-zu</id>
+    <name>Zulu</name>
+    <summary>Core Localization support for Zulu</summary>
+    <description>
+      <p>
+        Core Meta-package to install default font, glibc locale and input-method if available.
+      </p>
+    </description>
+  </component>
+</components>

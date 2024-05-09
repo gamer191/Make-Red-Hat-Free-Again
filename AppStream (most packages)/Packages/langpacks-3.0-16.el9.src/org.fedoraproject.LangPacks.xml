@@ -1,0 +1,983 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2016 Richard Hughes <richard@hughsie.com> -->
+<components origin="langpacks">
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-af</id>
+    <name>Afrikaans</name>
+    <summary>Localization support for Afrikaans</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-am</id>
+    <name>Amharic</name>
+    <summary>Localization support for Amharic</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ar</id>
+    <name>Arabic</name>
+    <summary>Localization support for Arabic</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-as</id>
+    <name>Assamese</name>
+    <summary>Localization support for Assamese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ast</id>
+    <name>Asturian</name>
+    <summary>Localization support for Asturian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-be</id>
+    <name>Belarusian</name>
+    <summary>Localization support for Belarusian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-bg</id>
+    <name>Bulgarian</name>
+    <summary>Localization support for Bulgarian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-bn</id>
+    <name>Bengali</name>
+    <summary>Localization support for Bengali</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-bo</id>
+    <name>Tibetan</name>
+    <summary>Localization support for Tibetan</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-br</id>
+    <name>Breton</name>
+    <summary>Localization support for Breton</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-bs</id>
+    <name>Bosnian</name>
+    <summary>Localization support for Bosnian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ca</id>
+    <name>Catalan</name>
+    <summary>Localization support for Catalan</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-cs</id>
+    <name>Czech</name>
+    <summary>Localization support for Czech</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-cy</id>
+    <name>Welsh</name>
+    <summary>Localization support for Welsh</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-da</id>
+    <name>Danish</name>
+    <summary>Localization support for Danish</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-de</id>
+    <name>German</name>
+    <summary>Localization support for German</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-dz</id>
+    <name>Bhutanese</name>
+    <summary>Localization support for Bhutanese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-el</id>
+    <name>Greek</name>
+    <summary>Localization support for Greek</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-en</id>
+    <name>English</name>
+    <summary>Localization support for English</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-en_GB</id>
+    <name>British English</name>
+    <summary>Localization support for English</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-eo</id>
+    <name>Esperanto</name>
+    <summary>Localization support for Esperanto</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-es</id>
+    <name>Spanish</name>
+    <summary>Localization support for Spanish</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-et</id>
+    <name>Estonian</name>
+    <summary>Localization support for Estonian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-eu</id>
+    <name>Basque</name>
+    <summary>Localization support for Basque</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-fa</id>
+    <name>Persian</name>
+    <summary>Localization support for Persian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-fi</id>
+    <name>Finnish</name>
+    <summary>Localization support for Finnish</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-fr</id>
+    <name>French</name>
+    <summary>Localization support for French</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ga</id>
+    <name>Irish</name>
+    <summary>Localization support for Irish</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-gl</id>
+    <name>Galician</name>
+    <summary>Localization support for Galician</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-gu</id>
+    <name>Gujarati</name>
+    <summary>Localization support for Gujarati</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-he</id>
+    <name>Hebrew</name>
+    <summary>Localization support for Hebrew</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-hi</id>
+    <name>Hindi</name>
+    <summary>Localization support for Hindi</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-hr</id>
+    <name>Croatian</name>
+    <summary>Localization support for Croatian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-hu</id>
+    <name>Hungarian</name>
+    <summary>Localization support for Hungarian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ia</id>
+    <name>Interlingua</name>
+    <summary>Localization support for Interlingua</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-id</id>
+    <name>Indonesian</name>
+    <summary>Localization support for Indonesian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-is</id>
+    <name>Icelandic</name>
+    <summary>Localization support for Icelandic</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-it</id>
+    <name>Italian</name>
+    <summary>Localization support for Italian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ja</id>
+    <name>Japanese</name>
+    <summary>Localization support for Japanese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ka</id>
+    <name>Georgian</name>
+    <summary>Localization support for Georgian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-kk</id>
+    <name>Kazakh</name>
+    <summary>Localization support for Kazakh</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-km</id>
+    <name>Khmer</name>
+    <summary>Localization support for Khmer</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-kn</id>
+    <name>Kannada</name>
+    <summary>Localization support for Kannada</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ko</id>
+    <name>Korean</name>
+    <summary>Localization support for Korean</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ku</id>
+    <name>Kurdish</name>
+    <summary>Localization support for Kurdish</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-lt</id>
+    <name>Lithuanian</name>
+    <summary>Localization support for Lithuanian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-lv</id>
+    <name>Latvian</name>
+    <summary>Localization support for Latvian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-mai</id>
+    <name>Maithili</name>
+    <summary>Localization support for Maithili</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-mk</id>
+    <name>Macedonian</name>
+    <summary>Localization support for Macedonian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ml</id>
+    <name>Malayalam</name>
+    <summary>Localization support for Malayalam</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-mr</id>
+    <name>Marathi</name>
+    <summary>Localization support for Marathi</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ms</id>
+    <name>Malay</name>
+    <summary>Localization support for Malay</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-my</id>
+    <name>Burmese</name>
+    <summary>Localization support for Burmese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-nb</id>
+    <name>Norwegian Bokmål</name>
+    <summary>Localization support for Norwegian Bokmål</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ne</id>
+    <name>Nepali</name>
+    <summary>Localization support for Nepali</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-nl</id>
+    <name>Dutch</name>
+    <summary>Localization support for Dutch</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-nn</id>
+    <name>Nynorsk</name>
+    <summary>Localization support for Nynorsk</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-nr</id>
+    <name>Southern Ndebele</name>
+    <summary>Localization support for Southern Ndebele</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-nso</id>
+    <name>Northern Sotho</name>
+    <summary>Localization support for Northern Sotho</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-or</id>
+    <name>Oriya</name>
+    <summary>Localization support for Oriya</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-pa</id>
+    <name>Punjabi</name>
+    <summary>Localization support for Punjabi</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-pl</id>
+    <name>Polish</name>
+    <summary>Localization support for Polish</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-pt</id>
+    <name>Portuguese</name>
+    <summary>Localization support for Portuguese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-pt_BR</id>
+    <name>Brazilian Portuguese</name>
+    <summary>Localization support for Brazilian Portuguese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ro</id>
+    <name>Romanian</name>
+    <summary>Localization support for Romanian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ru</id>
+    <name>Russian</name>
+    <summary>Localization support for Russian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-si</id>
+    <name>Sinhala</name>
+    <summary>Localization support for Sinhala</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-sk</id>
+    <name>Slovak</name>
+    <summary>Localization support for Slovak</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-sl</id>
+    <name>Slovenian</name>
+    <summary>Localization support for Slovenian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-sq</id>
+    <name>Albanian</name>
+    <summary>Localization support for Albanian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ss</id>
+    <name>Swati</name>
+    <summary>Localization support for Swati</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-sr</id>
+    <name>Serbian</name>
+    <summary>Localization support for Serbian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-sv</id>
+    <name>Swedish</name>
+    <summary>Localization support for Swedish</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ta</id>
+    <name>Tamil</name>
+    <summary>Localization support for Tamil</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-te</id>
+    <name>Telugu</name>
+    <summary>Localization support for Telugu</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-th</id>
+    <name>Thai</name>
+    <summary>Localization support for Thai</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-tn</id>
+    <name>Tswana</name>
+    <summary>Localization support for Tswana</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-tr</id>
+    <name>Turkish</name>
+    <summary>Localization support for Turkish</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ts</id>
+    <name>Tsonga</name>
+    <summary>Localization support for Tsonga</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-uk</id>
+    <name>Ukrainian</name>
+    <summary>Localization support for Ukrainian</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ur</id>
+    <name>Urdu</name>
+    <summary>Localization support for Urdu</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-ve</id>
+    <name>Venda</name>
+    <summary>Localization support for Venda</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-vi</id>
+    <name>Vietnamese</name>
+    <summary>Localization support for Vietnamese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-xh</id>
+    <name>Xhosa</name>
+    <summary>Localization support for Xhosa</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-yi</id>
+    <name>Yiddish</name>
+    <summary>Localization support for Yiddish</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-zh_CN</id>
+    <name>Simplified Chinese</name>
+    <summary>Localization support for Simplified Chinese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-zh_HK</id>
+    <name>Hong Kong Traditional Chinese</name>
+    <summary>Localization support for Hong Kong Traditional Chinese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-zh_TW</id>
+    <name>Taiwan Traditional Chinese</name>
+    <summary>Localization support for Taiwan Traditional Chinese</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+  <component type="localization">
+    <metadata_license>CC0-1.0</metadata_license>
+    <id>org.fedoraproject.LangPack-zu</id>
+    <name>Zulu</name>
+    <summary>Localization support for Zulu</summary>
+    <description>
+      <p>
+        Meta-package to install available langpacks for the language available for the installed packages.
+      </p>
+    </description>
+  </component>
+</components>

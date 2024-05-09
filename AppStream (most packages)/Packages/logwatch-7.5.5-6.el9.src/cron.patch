@@ -1,0 +1,14 @@
+diff --git a/scripts/services/cron b/scripts/services/cron
+index 869b515..45b857f 100644
+--- a/scripts/services/cron
++++ b/scripts/services/cron
+@@ -63,6 +63,9 @@ while (defined($ThisLine = <STDIN>)) {
+       if ($ThisLine =~ s/^CMD \((.+)\)\s*$/$1/) {
+          $Runs->{$User}->{$ThisLine}++;
+          $ExecutedCommand{$PID} = {command=>$ThisLine, user=>$User};
++      } elsif ($ThisLine =~ /^CMDEND/) {
++         # Ignore - already counted above
++         next;
+       } elsif ($ThisLine =~ s/^CMD FINISH \((.+)\)\s*$/$1/) {
+          $Runs->{$User}->{$ThisLine}++;
+       } elsif ($ThisLine =~ s/^(END|CMD START) \((.+)\)\s*$/$1/) {

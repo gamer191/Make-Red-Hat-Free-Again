@@ -1,0 +1,541 @@
+diff --git a/src/cmd/ksh93/Mamfile b/src/cmd/ksh93/Mamfile
+index f6e6ac8..9d72d87 100644
+--- a/src/cmd/ksh93/Mamfile
++++ b/src/cmd/ksh93/Mamfile
+@@ -220,30 +220,18 @@ make install
+ 		done pmain.o generated
+ 		make libshell.a archive
+ 			prev shell.req
+-			make cd_pwd.o
+-				make bltins/cd_pwd.c
+-					make include/test.h implicit
+-						prev include/shtable.h implicit
+-						make include/defs.h implicit
+-							prev include/regress.h implicit dontcare
+-							prev include/shtable.h
+-							prev include/shell.h
+-							prev ${PACKAGE_ast_INCLUDE}/endian.h
+-							prev include/name.h
+-							prev include/argnod.h implicit
+-							prev ${PACKAGE_ast_INCLUDE}/cdt.h
+-							prev ${PACKAGE_ast_INCLUDE}/error.h
+-							prev ${PACKAGE_ast_INCLUDE}/sfio.h
++			make alarm.o
++				make bltins/alarm.c
++					make FEATURE/time implicit
++						prev features/time
++						exec - iffe ${IFFEFLAGS} -v -c "${CC} ${mam_cc_FLAGS} ${CCFLAGS} ${LDFLAGS}" ref ${mam_cc_L+-L.} ${mam_cc_L+-L${INSTALLROOT}/lib} -I${PACKAGE_ast_INCLUDE} -I${INSTALLROOT}/include ${mam_libdll} ${mam_libcmd} ${mam_libast} ${mam_libm} ${mam_libnsl} : run features/time
++						make ${PACKAGE_ast_INCLUDE}/times.h implicit
++							prev ${PACKAGE_ast_INCLUDE}/ast_time.h implicit
+ 							prev ${PACKAGE_ast_INCLUDE}/ast.h
+-						done include/defs.h
+-					done include/test.h
+-					make ${PACKAGE_ast_INCLUDE}/ls.h implicit
+-						prev ${PACKAGE_ast_INCLUDE}/ast_mode.h implicit dontcare
+-						prev ${PACKAGE_ast_INCLUDE}/ast_fs.h
+-						prev ${PACKAGE_ast_INCLUDE}/ast_std.h
+-					done ${PACKAGE_ast_INCLUDE}/ls.h
++						done ${PACKAGE_ast_INCLUDE}/times.h
++					done FEATURE/time generated
+ 					make include/builtins.h implicit
+-						prev include/shtable.h
++						prev include/shtable.h implicit
+ 						make FEATURE/dynamic implicit
+ 							prev features/dynamic
+ 							exec - iffe ${IFFEFLAGS} -v -c "${CC} ${mam_cc_FLAGS} ${CCFLAGS} ${LDFLAGS}" ref ${mam_cc_L+-L.} ${mam_cc_L+-L${INSTALLROOT}/lib} -I${PACKAGE_ast_INCLUDE} -I${INSTALLROOT}/include ${mam_libdll} ${mam_libcmd} ${mam_libast} ${mam_libm} ${mam_libnsl} : run features/dynamic
+@@ -251,6 +239,36 @@ make install
+ 						done FEATURE/dynamic generated
+ 						prev ${PACKAGE_ast_INCLUDE}/option.h
+ 					done include/builtins.h
++					prev ${PACKAGE_ast_INCLUDE}/error.h
++					make include/defs.h implicit
++						prev include/regress.h implicit
++						prev include/shtable.h
++						prev include/shell.h
++						prev ${PACKAGE_ast_INCLUDE}/endian.h
++						prev include/name.h
++						prev include/argnod.h implicit
++						prev ${PACKAGE_ast_INCLUDE}/cdt.h
++						prev FEATURE/externs
++						prev ${PACKAGE_ast_INCLUDE}/error.h
++						prev ${PACKAGE_ast_INCLUDE}/sfio.h
++						prev ${PACKAGE_ast_INCLUDE}/ast.h
++					done include/defs.h
++					prev shopt.h
++				done bltins/alarm.c
++				exec - ${CC} ${mam_cc_FLAGS} ${CCFLAGS} -I. -Iinclude -I${PACKAGE_ast_INCLUDE} -D_API_ast=20100309 -DERROR_CONTEXT_T=Error_context_t -c bltins/alarm.c
++			done alarm.o generated
++			make cd_pwd.o
++				make bltins/cd_pwd.c
++					make include/test.h implicit
++						prev include/shtable.h
++						prev include/defs.h
++					done include/test.h
++					make ${PACKAGE_ast_INCLUDE}/ls.h implicit
++						prev ${PACKAGE_ast_INCLUDE}/ast_mode.h implicit
++						prev ${PACKAGE_ast_INCLUDE}/ast_fs.h
++						prev ${PACKAGE_ast_INCLUDE}/ast_std.h
++					done ${PACKAGE_ast_INCLUDE}/ls.h
++					prev include/builtins.h
+ 					prev include/name.h
+ 					make include/path.h implicit
+ 						make FEATURE/acct implicit
+@@ -341,14 +359,7 @@ make install
+ 			make misc.o
+ 				make bltins/misc.c
+ 					prev ${PACKAGE_ast_INCLUDE}/times.h
+-					make FEATURE/time implicit
+-						prev features/time
+-						exec - iffe ${IFFEFLAGS} -v -c "${CC} ${mam_cc_FLAGS} ${CCFLAGS} ${LDFLAGS}" ref ${mam_cc_L+-L.} ${mam_cc_L+-L${INSTALLROOT}/lib} -I${PACKAGE_ast_INCLUDE} -I${INSTALLROOT}/include ${mam_libdll} ${mam_libcmd} ${mam_libast} ${mam_libm} ${mam_libnsl} : run features/time
+-						make ${PACKAGE_ast_INCLUDE}/times.h implicit
+-							prev ${PACKAGE_ast_INCLUDE}/ast_time.h implicit dontcare
+-							prev ${PACKAGE_ast_INCLUDE}/ast.h
+-						done ${PACKAGE_ast_INCLUDE}/times.h dontcare
+-					done FEATURE/time generated
++					prev FEATURE/time
+ 					prev FEATURE/locale
+ 					make include/jobs.h implicit
+ 						prev ${PACKAGE_ast_INCLUDE}/vmalloc.h
+@@ -1175,7 +1186,7 @@ make install
+ 				done edit/hexpand.c
+ 				exec - ${CC} ${mam_cc_FLAGS} ${CCFLAGS} -I. -Iinclude -I${PACKAGE_ast_INCLUDE} -D_API_ast=20100309 -DERROR_CONTEXT_T=Error_context_t -c edit/hexpand.c
+ 			done hexpand.o generated
+-			exec - ${AR} rc libshell.a cd_pwd.o cflow.o enum.o getopts.o hist.o misc.o mkservice.o print.o read.o sleep.o trap.o test.o typeset.o ulimit.o umask.o whence.o main.o nvdisc.o nvtype.o arith.o args.o array.o completion.o defs.o edit.o expand.o regress.o fault.o fcin.o
++			exec - ${AR} rc libshell.a alarm.o cd_pwd.o cflow.o enum.o getopts.o hist.o misc.o mkservice.o print.o read.o sleep.o trap.o test.o typeset.o ulimit.o umask.o whence.o main.o nvdisc.o nvtype.o arith.o args.o array.o completion.o defs.o edit.o expand.o regress.o fault.o fcin.o
+ 			exec - ${AR} rc libshell.a history.o init.o io.o jobs.o lex.o macro.o name.o nvtree.o parse.o path.o string.o streval.o subshell.o tdump.o timers.o trestore.o waitevent.o xec.o limits.o msg.o strdata.o testops.o keywords.o options.o signals.o aliases.o builtins.o variables.o lexstates.o emacs.o vi.o hexpand.o
+ 			exec - (ranlib libshell.a) >/dev/null 2>&1 || true
+ 		done libshell.a generated
+diff --git a/src/cmd/ksh93/bltins/alarm.c b/src/cmd/ksh93/bltins/alarm.c
+new file mode 100644
+index 0000000..f31bed7
+--- /dev/null
++++ b/src/cmd/ksh93/bltins/alarm.c
+@@ -0,0 +1,277 @@
++/***********************************************************************
++*                                                                      *
++*               This software is part of the ast package               *
++*          Copyright (c) 1982-2012 AT&T Intellectual Property          *
++*          Copyright (c) 2020-2023 Contributors to ksh 93u+m           *
++*                      and is licensed under the                       *
++*                 Eclipse Public License, Version 2.0                  *
++*                                                                      *
++*                A copy of the License is available at                 *
++*      https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html      *
++*         (with md5 checksum 84283fa8859daf213bdda5a9f8d1be1d)         *
++*                                                                      *
++*                  David Korn <dgk@research.att.com>                   *
++*                  Martijn Dekker <martijn@inlv.org>                   *
++*            Johnothan King <johnothanking@protonmail.com>             *
++*                                                                      *
++***********************************************************************/
++/*
++ * alarm [-r] [varname [+]when]
++ *
++ *   David Korn
++ *   AT&T Labs
++ *
++ */
++
++/*
++ * TODO: 2014 email from David Korn cited at <https://bugzilla.redhat.com/1176670>:
++ *
++ * > I never documented the alarm builtin because it is problematic.  The
++ * > problem is that traps can't safely be handled asynchronously.  What should
++ * > happen is that the trap is marked for execution (sh.trapnote) and run after
++ * > the current command completes.  The time trap should wake up the shell if
++ * > it is blocked and it should return and then handle the trap.
++ */
++
++#include	"shopt.h"
++#include	"defs.h"
++#include	<error.h>
++#include	"builtins.h"
++#include	"FEATURE/time"
++
++#define R_FLAG	1
++#define L_FLAG	2
++
++struct	tevent
++{
++	Namfun_t	fun;
++	Namval_t	*node;
++	Namval_t	*action;
++	struct tevent	*next;
++	long		milli;
++	int		flags;
++	void            *timeout;
++};
++
++static const char ALARM[] = "alarm";
++
++static void	trap_timeout(void*);
++
++/*
++ * insert timeout item on current given list in sorted order
++ */
++static void *time_add(struct tevent *item, void *list)
++{
++	struct tevent *tp = (struct tevent*)list;
++	if(!tp || item->milli < tp->milli)
++	{
++		item->next = tp;
++		list = item;
++	}
++	else
++	{
++		while(tp->next && item->milli > tp->next->milli)
++			tp = tp->next;
++		item->next = tp->next;
++		tp->next = item;
++	}
++	tp = item;
++	tp->timeout = sh_timeradd(tp->milli,tp->flags&R_FLAG,trap_timeout,tp);
++	return list;
++}
++
++/*
++ * delete timeout item from current given list, delete timer
++ */
++static 	void *time_delete(struct tevent *item, void *list)
++{
++	struct tevent *tp = (struct tevent*)list;
++	if(item==tp)
++		list = tp->next;
++	else
++	{
++		while(tp && tp->next != item)
++			tp = tp->next;
++		if(tp)
++			tp->next = item->next;
++	}
++	if(item->timeout)
++		sh_timerdel(item->timeout);
++	return list;
++}
++
++static void	print_alarms(void *list)
++{
++	struct tevent *tp = (struct tevent*)list;
++	while(tp)
++	{
++		if(tp->timeout)
++		{
++			char *name = nv_name(tp->node);
++			if(tp->flags&R_FLAG)
++			{
++				double d = tp->milli;
++				sfprintf(sfstdout,e_alrm1,name,d/1000.);
++			}
++			else
++				sfprintf(sfstdout,e_alrm2,name,nv_getnum(tp->node));
++		}
++		tp = tp->next;
++	}
++}
++
++static void	trap_timeout(void* handle)
++{
++	struct tevent *tp = (struct tevent*)handle;
++	sh.trapnote |= SH_SIGALRM;
++	if(!(tp->flags&R_FLAG))
++		tp->timeout = 0;
++	tp->flags |= L_FLAG;
++	sh.sigflag[SIGALRM] |= SH_SIGALRM;
++	if(sh_isstate(SH_TTYWAIT))
++		sh_timetraps();
++}
++
++void	sh_timetraps(void)
++{
++	struct tevent *tp, *tpnext;
++	struct tevent *tptop;
++	while(1)
++	{
++		sh.sigflag[SIGALRM] &= ~SH_SIGALRM;
++		tptop= (struct tevent*)sh.st.timetrap;
++		for(tp=tptop;tp;tp=tpnext)
++		{
++			tpnext = tp->next;
++			if(tp->flags&L_FLAG)
++			{
++				tp->flags &= ~L_FLAG;
++				if(tp->action)
++					sh_fun(tp->action,tp->node,NULL);
++				tp->flags &= ~L_FLAG;
++				if(!tp->flags)
++					nv_unset(tp->node);
++			}
++		}
++		if(!(sh.sigflag[SIGALRM]&SH_SIGALRM))
++			break;
++	}
++}
++
++
++/*
++ * This trap function catches "alarm" actions only
++ */
++static char *setdisc(Namval_t *np, const char *event, Namval_t* action, Namfun_t *fp)
++{
++        struct tevent *tp = (struct tevent*)fp;
++	if(!event)
++		return action ? Empty : (char*)ALARM;
++	if(strcmp(event,ALARM)!=0)
++	{
++		/* try the next level */
++		return nv_setdisc(np, event, action, fp);
++	}
++	if(action==np)
++		action = tp->action;
++	else
++		tp->action = action;
++	return action ? (char*)action : Empty;
++}
++
++/*
++ * catch assignments and set alarm traps
++ */
++static void putval(Namval_t* np, const char* val, int flag, Namfun_t* fp)
++{
++	struct tevent	*tp = (struct tevent*)fp;
++	double d;
++	if(val)
++	{
++		double now;
++#ifdef timeofday
++		struct timeval tmp;
++		timeofday(&tmp);
++		now = tmp.tv_sec + 1.e-6*tmp.tv_usec;
++#else
++		now = (double)time(NULL);
++#endif /* timeofday */
++		nv_putv(np,val,flag,fp);
++		d = nv_getnum(np);
++		if(*val=='+')
++		{
++			double x = d + now;
++			nv_putv(np,(char*)&x,NV_INTEGER|NV_DOUBLE,fp);
++		}
++		else
++			d -= now;
++		tp->milli = 1000*(d+.0005);
++		if(tp->timeout)
++			sh.st.timetrap = time_delete(tp,sh.st.timetrap);
++		if(tp->milli > 0)
++			sh.st.timetrap = time_add(tp,sh.st.timetrap);
++	}
++	else
++	{
++		tp = (struct tevent*)nv_stack(np, NULL);
++		sh.st.timetrap = time_delete(tp,sh.st.timetrap);
++		nv_unset(np);
++		free(fp);
++	}
++}
++
++static const Namdisc_t alarmdisc =
++{
++	sizeof(struct tevent),
++	putval,
++	0,
++	0,
++	setdisc,
++};
++
++int	b_alarm(int argc,char *argv[],Shbltin_t *context)
++{
++	int n,rflag=0;
++	Namval_t *np;
++	struct tevent *tp;
++	while (n = optget(argv, sh_optalarm)) switch (n)
++	{
++	    case 'r':
++		rflag = R_FLAG;
++		break;
++	    case ':':
++		errormsg(SH_DICT,2, "%s", opt_info.arg);
++		break;
++	    case '?':
++		errormsg(SH_DICT,ERROR_usage(2), "%s", opt_info.arg);
++		UNREACHABLE();
++	}
++	argc -= opt_info.index;
++	argv += opt_info.index;
++	if(error_info.errors)
++	{
++		errormsg(SH_DICT,ERROR_usage(2),optusage(NULL));
++		UNREACHABLE();
++	}
++	if(argc==0)
++	{
++		print_alarms(sh.st.timetrap);
++		return 0;
++	}
++	if(argc!=2)
++	{
++		errormsg(SH_DICT,ERROR_usage(2),optusage(NULL));
++		UNREACHABLE();
++	}
++	np = nv_open(argv[0],sh.var_tree,NV_NOARRAY|NV_VARNAME);
++	if(!nv_isnull(np))
++		nv_unset(np);
++	nv_setattr(np, NV_DOUBLE);
++	tp = sh_newof(NULL,struct tevent,1,0);
++	tp->fun.disc = &alarmdisc;
++	tp->flags = rflag;
++	tp->node = np;
++	nv_stack(np,(Namfun_t*)tp);
++	nv_putval(np, argv[1], 0);
++	return 0;
++}
+diff --git a/src/cmd/ksh93/bltins/sleep.c b/src/cmd/ksh93/bltins/sleep.c
+index b34e62d..3bb55b1 100644
+--- a/src/cmd/ksh93/bltins/sleep.c
++++ b/src/cmd/ksh93/bltins/sleep.c
+@@ -127,6 +127,8 @@ skip:
+ 		if(tloc < (now=time(NULL)))
+ 			break;
+ 		d = (double)(tloc-now);
++                if(sh.sigflag[SIGALRM]&SH_SIGTRAP)
++                        sh_timetraps();
+ 	}
+ 	return 0;
+ }
+diff --git a/src/cmd/ksh93/data/builtins.c b/src/cmd/ksh93/data/builtins.c
+index 760b7ce..22ea156 100644
+--- a/src/cmd/ksh93/data/builtins.c
++++ b/src/cmd/ksh93/data/builtins.c
+@@ -116,6 +116,7 @@ const struct shtable3 shtab_builtins[] =
+ 	"pwd",		NV_BLTIN|BLT_ENV,		bltin(pwd),
+ 	"read",		NV_BLTIN|BLT_ENV,		bltin(read),
+ 	"sleep",	NV_BLTIN,			bltin(sleep),
++        "alarm",	NV_BLTIN|BLT_ENV,		bltin(alarm),
+ 	"times",	NV_BLTIN|BLT_ENV|BLT_SPC,	bltin(times),
+ 	"ulimit",	NV_BLTIN|BLT_ENV,		bltin(ulimit),
+ 	"umask",	NV_BLTIN|BLT_ENV,		bltin(umask),
+@@ -2170,6 +2171,8 @@ const char sh_optwhence[] =
+ ;
+ 
+ 
++const char e_alrm1[]            = "alarm -r %s +%.3g\n";
++const char e_alrm2[]            = "alarm %s %.3f\n";
+ const char e_baddisc[]		= "%s: invalid discipline function";
+ const char e_nofork[]		= "cannot fork";
+ const char e_nosignal[]		= "%s: unknown signal name";
+diff --git a/src/cmd/ksh93/include/builtins.h b/src/cmd/ksh93/include/builtins.h
+index 34c697c..f6b3f59 100644
+--- a/src/cmd/ksh93/include/builtins.h
++++ b/src/cmd/ksh93/include/builtins.h
+@@ -115,6 +115,8 @@ extern int b_times(int, char*[],Shbltin_t*);
+ 
+ extern short		b_enum_nelem(Namfun_t*);
+ 
++extern const char	e_alrm1[];
++extern const char	e_alrm2[];
+ extern const char	e_badfun[];
+ extern const char	e_baddisc[];
+ extern const char	e_nofork[];
+diff --git a/src/cmd/ksh93/include/defs.h b/src/cmd/ksh93/include/defs.h
+index 306ea7e..b5bfb67 100644
+--- a/src/cmd/ksh93/include/defs.h
++++ b/src/cmd/ksh93/include/defs.h
+@@ -143,6 +143,7 @@ extern void		sh_subjobcheck(pid_t);
+ extern int		sh_subsavefd(int);
+ extern void		sh_subtmpfile(void);
+ extern char 		*sh_substitute(const char*,const char*,char*);
++extern void		sh_timetraps(void);
+ extern const char	*_sh_translate(const char*);
+ extern int		sh_trace(char*[],int);
+ extern void		sh_trim(char*);
+diff --git a/src/cmd/ksh93/include/fault.h b/src/cmd/ksh93/include/fault.h
+index b57a0ab..7750f80 100644
+--- a/src/cmd/ksh93/include/fault.h
++++ b/src/cmd/ksh93/include/fault.h
+@@ -58,6 +58,7 @@ typedef void (*SH_SIGTYPE)(int,void(*)(int));
+ #define SH_SIGIGNORE		040	/* default is ignore signal */
+ #define SH_SIGINTERACTIVE	0100	/* handle interactive specially */
+ #define SH_SIGTSTP		0200	/* tstp signal received */
++#define SH_SIGALRM		0200	/* timer alarm received */
+ #define SH_SIGTERM		SH_SIGOFF /* term signal received */
+ #define SH_SIGRUNTIME		0400	/* runtime value */
+ 
+diff --git a/src/cmd/ksh93/include/shell.h b/src/cmd/ksh93/include/shell.h
+index 57c402d..9794995 100644
+--- a/src/cmd/ksh93/include/shell.h
++++ b/src/cmd/ksh93/include/shell.h
+@@ -211,6 +211,7 @@ struct sh_scoped
+ 	char		**otrap;	/* save parent pseudosignals for v=$(trap) */
+ 	char		**trapcom;	/* EXIT and signals */
+ 	char		**otrapcom;	/* save parent EXIT and signals for v=$(trap) */
++        void            *timetrap;
+ 	struct Ufunction *real_fun;	/* current 'function name' function */
+ 	int             repl_index;
+ 	char            *repl_arg;
+diff --git a/src/cmd/ksh93/sh/fault.c b/src/cmd/ksh93/sh/fault.c
+index 3409a6c..510bf56 100644
+--- a/src/cmd/ksh93/sh/fault.c
++++ b/src/cmd/ksh93/sh/fault.c
+@@ -447,6 +447,8 @@ void	sh_chktrap(void)
+ 			sh_exit(sh.exitval);
+ 		}
+ 	}
++        if(sh.sigflag[SIGALRM]&SH_SIGALRM)
++                sh_timetraps();
+ #if SHOPT_BGX
+ 	if((sh.sigflag[SIGCHLD]&SH_SIGTRAP) && sh.st.trapcom[SIGCHLD])
+ 		job_chldtrap(1);
+diff --git a/src/cmd/ksh93/sh/jobs.c b/src/cmd/ksh93/sh/jobs.c
+index 116ae3b..be333b2 100644
+--- a/src/cmd/ksh93/sh/jobs.c
++++ b/src/cmd/ksh93/sh/jobs.c
+@@ -1466,6 +1466,8 @@ int	job_wait(pid_t pid)
+ 			continue;
+ 		if(nochild)
+ 			break;
++                if(sh.sigflag[SIGALRM]&SH_SIGTRAP)
++                        sh_timetraps();
+ 		if((intr && sh.trapnote) || (pid==1 && !intr))
+ 			break;
+ 	}
+diff --git a/src/cmd/ksh93/tests/builtins.sh b/src/cmd/ksh93/tests/builtins.sh
+index 83b4086..92d2708 100755
+--- a/src/cmd/ksh93/tests/builtins.sh
++++ b/src/cmd/ksh93/tests/builtins.sh
+@@ -1222,6 +1222,28 @@ function test_usage
+ 	done 3< <(builtin)
+ }; test_usage
+ 
++# ======
++# The 'alarm' builtin could make 'read' crash due to IFS table corruption caused by unsafe asynchronous execution.
++# https://bugzilla.redhat.com/1176670
++if	(builtin alarm) 2>/dev/null
++then	got=$( { "$SHELL" -c '
++		builtin alarm
++		alarm -r alarm_handler +.005
++		i=0
++		function alarm_handler.alarm
++		{
++			let "(++i) > 20" && exit
++		}
++		while :; do
++			echo cargo,odds and ends,jetsam,junk,wreckage,castoffs,sea-drift
++		done | while IFS="," read arg1 arg2 arg3 arg4 junk; do
++			:
++		done
++	'; } 2>&1)
++	((!(e = $?))) || err_exit 'crash with alarm and IFS' \
++		"(got status $e$( ((e>128)) && print -n /SIG && kill -l "$e"), $(printf %q "$got"))"
++fi
++
+ # ======
+ # Verify that the POSIX 'test' builtin exits with status 2 when given an invalid binary operator.
+ for operator in '===' ']]'
+@@ -1581,7 +1603,7 @@ let Errors+=$?
+ # Most built-ins should handle --version
+ while IFS= read -r bltin <&3
+ do	case $bltin in
+-	echo | test | true | false | \[ | : | catclose | catgets | catopen | Dt* | _Dt* | X* | login | newgrp )
++	alarm | echo | test | true | false | \[ | : | catclose | catgets | catopen | Dt* | _Dt* | X* | login | newgrp )
+ 		continue ;;
+ 	fc | hist )
+ 		((SHOPT_SCRIPTONLY)) && continue ;;
