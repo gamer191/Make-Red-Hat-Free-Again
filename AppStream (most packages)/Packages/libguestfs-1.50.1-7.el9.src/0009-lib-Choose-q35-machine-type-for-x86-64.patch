@@ -1,0 +1,32 @@
+From e712c4b81cbd2cf0e990d01cb4d1f54734e62de6 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 9 Feb 2023 13:38:50 +0000
+Subject: [PATCH] lib: Choose q35 machine type for x86-64
+
+This machine type is more modern than the older 'pc' type and as most
+qemu development is now focused there we expect it will perform and
+behave better.  In almost all respects this change should make no
+difference.
+
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2168578
+Acked-by: Laszlo Ersek <lersek@redhat.com>
+See-also: https://listman.redhat.com/archives/libguestfs/2023-February/030645.html
+(cherry picked from commit f0f8e6c5fe0c3f6d5d90534d263bded3a4dc7e8d)
+---
+ lib/guestfs-internal.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/lib/guestfs-internal.h b/lib/guestfs-internal.h
+index 306f2a2e..fb55e026 100644
+--- a/lib/guestfs-internal.h
++++ b/lib/guestfs-internal.h
+@@ -113,6 +113,9 @@ cleanup_mutex_unlock (pthread_mutex_t **ptr)
+ #define MAX_WINDOWS_EXPLORER_SIZE (4 * 1000 * 1000)
+ 
+ /* Machine types. */
++#if defined(__x86_64__)
++#define MACHINE_TYPE "q35"
++#endif
+ #ifdef __arm__
+ #define MACHINE_TYPE "virt"
+ #endif

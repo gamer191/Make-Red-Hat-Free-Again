@@ -1,0 +1,143 @@
+From 6de192ad5ffe9ec04328bfd178050cb8a33e1cbb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Wed, 15 Dec 2021 12:46:24 +0000
+Subject: [PATCH] annocheck warning about missing .note.gnu.property section
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+copy and paste recommendation from:
+https://sourceware.org/annobin/annobin.html/Test-cf-protection.html
+
+and adapt like:
+https://github.com/openssl/openssl/commit/51994e505dbb1cd0dd76869ec962e2948b77b585
+where https://bugs.ruby-lang.org/attachments/8962 is similar
+
+Intel docs have "The ENDBR32 and ENDBR64 (collectively ENDBRANCH) are
+two new instructions that are used to mark valid indirect CALL/JMP
+target locations in the program."
+
+Change-Id: Ie867c263a888763db4478720ba189c9ec6cc974d
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/126859
+Tested-by: Jenkins
+Tested-by: Caolán McNamara <caolanm@redhat.com>
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit af55dc3891f7950d392175004b2090cb0e54828e)
+---
+ .../source/cpp_uno/gcc3_linux_intel/call.s    | 16 ++++++++++++++++
+ .../source/cpp_uno/gcc3_linux_x86-64/call.s   | 19 +++++++++++++++++++
+ config_host.mk.in                             |  1 +
+ configure.ac                                  | 14 ++++++++++++++
+ solenv/gbuild/platform/com_GCC_class.mk       |  1 +
+ 5 files changed, 51 insertions(+)
+
+diff --git a/bridges/source/cpp_uno/gcc3_linux_intel/call.s b/bridges/source/cpp_uno/gcc3_linux_intel/call.s
+index 6be583247733..0a5870defcf3 100644
+--- a/bridges/source/cpp_uno/gcc3_linux_intel/call.s
++++ b/bridges/source/cpp_uno/gcc3_linux_intel/call.s
+@@ -290,3 +290,19 @@ privateSnippetExecutorClass:
+     .align 4
+ .LEFDEc:
+     .section .note.GNU-stack,"",@progbits
++    .section .note.gnu.property,"a"
++    .p2align 2
++    .long     1f - 0f
++    .long     4f - 1f
++    .long     5
++0:
++    .string     "GNU"
++1:
++    .p2align 2
++    .long     0xc0000002
++    .long     3f - 2f
++2:
++    .long     0x3
++3:
++    .p2align 2
++4:
+diff --git a/bridges/source/cpp_uno/gcc3_linux_x86-64/call.s b/bridges/source/cpp_uno/gcc3_linux_x86-64/call.s
+index 447ac0cecfdd..2e9346dff8a0 100644
+--- a/bridges/source/cpp_uno/gcc3_linux_x86-64/call.s
++++ b/bridges/source/cpp_uno/gcc3_linux_x86-64/call.s
+@@ -22,6 +22,9 @@
+ 	.type	privateSnippetExecutor, @function
+ privateSnippetExecutor:
+ .LFB3:
++#if defined(END_BRANCH_INS_SUPPORT)
++	endbr64
++#endif
+ 	pushq	%rbp
+ .LCFI0:
+ 	movq	%rsp, %rbp
+@@ -115,3 +118,19 @@ privateSnippetExecutor:
+ 	.align 8
+ .LEFDE1:
+ 	.section	.note.GNU-stack,"",@progbits
++	.section	.note.gnu.property,"a"
++	.p2align 3
++	.long	 1f - 0f
++	.long	 4f - 1f
++	.long	 5
++0:
++	.string	 "GNU"
++1:
++	.p2align 3
++	.long	 0xc0000002
++	.long	 3f - 2f
++2:
++	.long	 0x3
++3:
++	.p2align 3
++4:
+diff --git a/config_host.mk.in b/config_host.mk.in
+index d6edba704b21..6ac2a90695e2 100644
+--- a/config_host.mk.in
++++ b/config_host.mk.in
+@@ -260,6 +260,7 @@ export GTK3_CFLAGS=$(gb_SPACE)@GTK3_CFLAGS@
+ export GTK3_LIBS=$(gb_SPACE)@GTK3_LIBS@
+ export USING_X11=@USING_X11@
+ export HAMCREST_JAR=@HAMCREST_JAR@
++export HAVE_ASM_END_BRANCH_INS_SUPPORT=@HAVE_ASM_END_BRANCH_INS_SUPPORT@
+ export HAVE_BROKEN_GCC_WMAYBE_UNINITIALIZED=@HAVE_BROKEN_GCC_WMAYBE_UNINITIALIZED@
+ export HAVE_CLANG_DEBUG_INFO_KIND_CONSTRUCTOR=@HAVE_CLANG_DEBUG_INFO_KIND_CONSTRUCTOR@
+ export HAVE_LO_CLANG_DLLEXPORTINLINES=@HAVE_LO_CLANG_DLLEXPORTINLINES@
+diff --git a/configure.ac b/configure.ac
+index bd28bc6eb38e..ef03408e8e98 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -7730,6 +7730,20 @@ _ACEOF
+ 
+     CPPFLAGS="$save_CPPFLAGS"
+ 
++    AC_MSG_CHECKING([if CET endbranch is recognized])
++cat > endbr.s <<_ACEOF
++endbr32
++_ACEOF
++    HAVE_ASM_END_BRANCH_INS_SUPPORT=
++    if $CXX -c endbr.s -o endbr.o >/dev/null 2>&5; then
++        AC_MSG_RESULT([yes])
++        HAVE_ASM_END_BRANCH_INS_SUPPORT=TRUE
++    else
++        AC_MSG_RESULT([no])
++    fi
++    rm -f endbr.s endbr.o
++    AC_SUBST(HAVE_ASM_END_BRANCH_INS_SUPPORT)
++
+     AC_LANG_POP([C++])
+ fi
+ 
+diff --git a/solenv/gbuild/platform/com_GCC_class.mk b/solenv/gbuild/platform/com_GCC_class.mk
+index c29e2a979fd9..e2056abf9682 100644
+--- a/solenv/gbuild/platform/com_GCC_class.mk
++++ b/solenv/gbuild/platform/com_GCC_class.mk
+@@ -44,6 +44,7 @@ $(call gb_Helper_abbreviate_dirs,\
+ 		-x assembler-with-cpp \
+ 		$(gb_LTOFLAGS) \
+ 		$(gb_AFLAGS) \
++		$(if $(HAVE_ASM_END_BRANCH_INS_SUPPORT),-DEND_BRANCH_INS_SUPPORT) \
+ 		-c $(3) \
+ 		-o $(1)) \
+ 		$(INCLUDE) && \
+-- 
+2.33.1
+

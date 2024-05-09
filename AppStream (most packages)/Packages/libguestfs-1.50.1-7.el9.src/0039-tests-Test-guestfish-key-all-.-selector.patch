@@ -1,0 +1,35 @@
+From 335642539772cfee442989f56f1b5d7803e4111c Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 14 Dec 2023 09:15:08 +0000
+Subject: [PATCH] tests: Test guestfish --key all:... selector
+
+(cherry picked from commit 40f43cc8ea6bd556749ee7ba280971aa8b043d27)
+---
+ .../luks/test-key-option-inspect-luks-on-lvm.sh | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/tests/luks/test-key-option-inspect-luks-on-lvm.sh b/tests/luks/test-key-option-inspect-luks-on-lvm.sh
+index 932862b1..2b60c797 100755
+--- a/tests/luks/test-key-option-inspect-luks-on-lvm.sh
++++ b/tests/luks/test-key-option-inspect-luks-on-lvm.sh
+@@ -119,3 +119,20 @@ eval "$fish_ref"
+ 
+ # Repeat the test.
+ check_filesystems
++
++# Exit the current guestfish background process.
++guestfish --remote -- exit
++GUESTFISH_PID=
++
++# Test the --key all:... selector.
++keys_by_mapper_lvname=(
++  --key all:key:FEDORA-Root
++  --key all:key:FEDORA-LV1
++  --key all:key:FEDORA-LV2
++  --key all:key:FEDORA-LV3
++)
++fish_ref=$("${guestfish[@]}" "${keys_by_mapper_lvname[@]}")
++eval "$fish_ref"
++
++# Repeat the test.
++check_filesystems

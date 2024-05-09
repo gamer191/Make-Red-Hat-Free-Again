@@ -1,0 +1,70 @@
+From dd58abc40175f735f6fe2669c34c67e6190e557d Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 27 Jun 2023 10:17:58 +0100
+Subject: [PATCH] ocaml: Replace old enter/leave_blocking_section calls
+
+Since OCaml 4 the old and confusing caml_enter_blocking_section and
+caml_leave_blocking_section calls have been replaced with
+caml_release_runtime_system and caml_acquire_runtime_system (in that
+order).  Use the new names.
+
+(cherry picked from commit 7e1d7c1330185a1f3da2ce2100f59637518c3302)
+---
+ generator/OCaml.ml | 5 +++--
+ ocaml/guestfs-c.c  | 5 +++--
+ 2 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/generator/OCaml.ml b/generator/OCaml.ml
+index 02d9ee2e..07ccd269 100644
+--- a/generator/OCaml.ml
++++ b/generator/OCaml.ml
+@@ -429,6 +429,7 @@ and generate_ocaml_c () =
+ #include <caml/memory.h>
+ #include <caml/mlvalues.h>
+ #include <caml/signals.h>
++#include <caml/threads.h>
+ 
+ #include <guestfs.h>
+ #include \"guestfs-utils.h\"
+@@ -689,12 +690,12 @@ copy_table (char * const * argv)
+       pr "\n";
+ 
+       if blocking then
+-        pr "  caml_enter_blocking_section ();\n";
++        pr "  caml_release_runtime_system ();\n";
+       pr "  r = %s " c_function;
+       generate_c_call_args ~handle:"g" style;
+       pr ";\n";
+       if blocking then
+-        pr "  caml_leave_blocking_section ();\n";
++        pr "  caml_acquire_runtime_system ();\n";
+ 
+       (* Free strings if we copied them above. *)
+       List.iter (
+diff --git a/ocaml/guestfs-c.c b/ocaml/guestfs-c.c
+index 3888c945..8c8aa460 100644
+--- a/ocaml/guestfs-c.c
++++ b/ocaml/guestfs-c.c
+@@ -34,6 +34,7 @@
+ #include <caml/mlvalues.h>
+ #include <caml/printexc.h>
+ #include <caml/signals.h>
++#include <caml/threads.h>
+ #include <caml/unixsupport.h>
+ 
+ #include "guestfs-c.h"
+@@ -395,12 +396,12 @@ event_callback_wrapper (guestfs_h *g,
+   /* Ensure we are holding the GC lock before any GC operations are
+    * possible. (RHBZ#725824)
+    */
+-  caml_leave_blocking_section ();
++  caml_acquire_runtime_system ();
+ 
+   event_callback_wrapper_locked (g, data, event, event_handle, flags,
+                                  buf, buf_len, array, array_len);
+ 
+-  caml_enter_blocking_section ();
++  caml_release_runtime_system ();
+ }
+ 
+ value

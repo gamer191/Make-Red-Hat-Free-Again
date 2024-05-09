@@ -1,0 +1,25 @@
+From d4fabae17001702894526084bf0ab516de3599d5 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 27 Jun 2023 16:31:55 +0100
+Subject: [PATCH] ocaml: Use Caml_state_opt in preference to caml_state
+
+Link: https://discuss.ocaml.org/t/test-caml-state-and-conditionally-caml-acquire-runtime-system-good-or-bad/12489/7
+Thanks: Guillaume Munch-Maccagnoni
+(cherry picked from commit cade0b1aeb828d294a7c4e323f8131322d30fb73)
+---
+ ocaml/guestfs-c.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ocaml/guestfs-c.c b/ocaml/guestfs-c.c
+index 67dc3547..8a8761e8 100644
+--- a/ocaml/guestfs-c.c
++++ b/ocaml/guestfs-c.c
+@@ -412,7 +412,7 @@ event_callback_wrapper (guestfs_h *g,
+    * https://discuss.ocaml.org/t/test-caml-state-and-conditionally-caml-acquire-runtime-system-good-or-bad/12489
+    */
+ #if OCAML_VERSION_MAJOR >= 5
+-  bool acquired = caml_state != NULL;
++  bool acquired = Caml_state_opt != NULL;
+ #else
+   const bool acquired = false;
+ #endif

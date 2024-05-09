@@ -1,0 +1,59 @@
+diff -ru libcanberra-0.30/src/canberra-gtk-play.c libcanberra-0.30.new/src/canberra-gtk-play.c
+--- libcanberra-0.30/src/canberra-gtk-play.c	2012-09-25 02:21:07.000000000 +0200
++++ libcanberra-0.30.new/src/canberra-gtk-play.c	2019-01-03 10:01:13.090177362 +0100
+@@ -33,6 +33,7 @@
+ static int ret = 0;
+ static ca_proplist *proplist = NULL;
+ static int n_loops = 1;
++static gboolean quiet = FALSE;
+ 
+ static void callback(ca_context *c, uint32_t id, int error, void *userdata);
+ 
+@@ -51,7 +52,8 @@
+         r = ca_context_play_full(ca_gtk_context_get(), 1, proplist, callback, NULL);
+ 
+         if (r < 0) {
+-                g_printerr("Failed to play sound: %s\n", ca_strerror(r));
++                if (!quiet)
++                        g_printerr("Failed to play sound: %s\n", ca_strerror(r));
+                 ret = 1;
+                 gtk_main_quit();
+         }
+@@ -62,7 +64,8 @@
+ static void callback(ca_context *c, uint32_t id, int error, void *userdata) {
+ 
+         if (error < 0) {
+-                g_printerr("Failed to play sound (callback): %s\n", ca_strerror(error));
++                if (!quiet)
++                        g_printerr("Failed to play sound (callback): %s\n", ca_strerror(error));
+                 ret = 1;
+ 
+         } else if (n_loops > 1) {
+@@ -128,6 +131,7 @@
+                 { "loop",          'l', 0, G_OPTION_ARG_INT,      &n_loops,                  "Loop how many times (detault: 1)", "INTEGER" },
+                 { "volume",        'V', 0, G_OPTION_ARG_STRING,   &volume,                   "A floating point dB value for the sample volume (ex: 0.0)", "STRING" },
+                 { "property",      0,   0, G_OPTION_ARG_CALLBACK, (void*) property_callback, "An arbitrary property", "STRING" },
++                { "quiet",         'q', 0, G_OPTION_ARG_NONE,     &quiet,                    "Don't print error messages", NULL },
+                 { NULL, 0, 0, 0, NULL, NULL, NULL }
+         };
+ 
+@@ -154,7 +158,8 @@
+         }
+ 
+         if (!event_id && !filename) {
+-                g_printerr("No event id or file specified.\n");
++                if (!quiet)
++                        g_printerr("No event id or file specified.\n");
+                 return 1;
+         }
+ 
+@@ -182,7 +187,8 @@
+         r = ca_context_play_full(ca_gtk_context_get(), 1, proplist, callback, NULL);
+ 
+         if (r < 0) {
+-                g_printerr("Failed to play sound: %s\n", ca_strerror(r));
++                if (!quiet)
++                        g_printerr("Failed to play sound: %s\n", ca_strerror(r));
+                 ret = 1;
+                 goto finish;
+         }

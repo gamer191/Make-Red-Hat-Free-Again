@@ -1,0 +1,271 @@
+From 0c1d7af8fdbf272f33ccd572ed34923ab094d695 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 16 Nov 2023 10:38:59 +0000
+Subject: [PATCH] New mailing list email address
+
+(cherry picked from commit 0b8b1e4b2d70cf4ed59775c3c2d1aa42d3c29ca2)
+---
+ .gitpublish                 | 2 +-
+ appliance/Makefile.am       | 2 +-
+ po-docs/Makefile.am         | 2 +-
+ po-docs/cs.po               | 2 +-
+ po-docs/de.po               | 2 +-
+ po-docs/en_GB.po            | 2 +-
+ po-docs/es.po               | 2 +-
+ po-docs/eu.po               | 2 +-
+ po-docs/fi.po               | 2 +-
+ po-docs/fr.po               | 2 +-
+ po-docs/ja.po               | 2 +-
+ po-docs/libguestfs-docs.pot | 2 +-
+ po-docs/nl.po               | 2 +-
+ po-docs/pt_BR.po            | 2 +-
+ po-docs/si.po               | 2 +-
+ po-docs/tg.po               | 2 +-
+ po-docs/uk.po               | 2 +-
+ po-docs/zh_CN.po            | 2 +-
+ python/setup.py.in          | 2 +-
+ 19 files changed, 19 insertions(+), 19 deletions(-)
+
+diff --git a/.gitpublish b/.gitpublish
+index 9775dd23..2aae0c09 100644
+--- a/.gitpublish
++++ b/.gitpublish
+@@ -1,3 +1,3 @@
+ [gitpublishprofile "default"]
+ base = master
+-to = libguestfs@redhat.com
++to = guestfs@lists.libguestfs.org
+diff --git a/appliance/Makefile.am b/appliance/Makefile.am
+index 063c19f6..8cb9bd1f 100644
+--- a/appliance/Makefile.am
++++ b/appliance/Makefile.am
+@@ -88,7 +88,7 @@ else
+ if HAVE_PACMAN
+ QUERY_FILES_CMD := xargs pacman -Qo | sed -r 's/.* is owned by ([^ ]+) .*/\1/'
+ else
+-$(error Error: Unknown Linux distribution "$(DISTRO)".  Please add support to m4/guestfs-appliance.m4 and appliance/Makefile.am and send a patch upstream to libguestfs@redhat.com)
++$(error Error: Unknown Linux distribution "$(DISTRO)".  Please add support to m4/guestfs-appliance.m4 and appliance/Makefile.am and send a patch upstream to guestfs@lists.libguestfs.org)
+ endif !HAVE_PACMAN
+ endif !HAVE_DPKG
+ endif !HAVE_RPM
+diff --git a/po-docs/Makefile.am b/po-docs/Makefile.am
+index 61c1b1c9..330b673f 100644
+--- a/po-docs/Makefile.am
++++ b/po-docs/Makefile.am
+@@ -46,7 +46,7 @@ libguestfs-docs.pot:
+ 	  -M utf-8 -L utf-8 \
+ 	  --package-name $(PACKAGE_NAME) \
+ 	  --package-version $(PACKAGE_VERSION) \
+-	  --msgid-bugs-address libguestfs@redhat.com \
++	  --msgid-bugs-address guestfs@lists.libguestfs.org \
+ 	  --copyright-holder "Red Hat Inc." \
+ 	  -p $(abs_srcdir)/$@ \
+ 	  $(patsubst %,-m %,$(shell cat $(srcdir)/podfiles))
+diff --git a/po-docs/cs.po b/po-docs/cs.po
+index 5618cb0f..d50e53bf 100644
+--- a/po-docs/cs.po
++++ b/po-docs/cs.po
+@@ -3,7 +3,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2017-09-11 04:54+0000\n"
+ "Last-Translator: Zdenek <chmelarz@gmail.com>\n"
+diff --git a/po-docs/de.po b/po-docs/de.po
+index da449e9f..76abc8d3 100644
+--- a/po-docs/de.po
++++ b/po-docs/de.po
+@@ -7,7 +7,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2021-11-18 23:16+0000\n"
+ "Last-Translator: Ettore Atalan <atalanttore@googlemail.com>\n"
+diff --git a/po-docs/en_GB.po b/po-docs/en_GB.po
+index 283402a6..75610b9e 100644
+--- a/po-docs/en_GB.po
++++ b/po-docs/en_GB.po
+@@ -6,7 +6,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2015-02-21 10:15+0000\n"
+ "Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+diff --git a/po-docs/es.po b/po-docs/es.po
+index a163e26d..defbd61d 100644
+--- a/po-docs/es.po
++++ b/po-docs/es.po
+@@ -9,7 +9,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2023-02-05 15:20+0000\n"
+ "Last-Translator: Emilio Herrera <ehespinosa57@gmail.com>\n"
+diff --git a/po-docs/eu.po b/po-docs/eu.po
+index 7f1f634b..63653271 100644
+--- a/po-docs/eu.po
++++ b/po-docs/eu.po
+@@ -7,7 +7,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2015-02-21 10:17+0000\n"
+ "Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+diff --git a/po-docs/fi.po b/po-docs/fi.po
+index d96bfd38..361de115 100644
+--- a/po-docs/fi.po
++++ b/po-docs/fi.po
+@@ -6,7 +6,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.43.1\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-08-12 15:34+0200\n"
+ "PO-Revision-Date: 2022-12-23 18:20+0000\n"
+ "Last-Translator: Jan Kuparinen <copper_fin@hotmail.com>\n"
+diff --git a/po-docs/fr.po b/po-docs/fr.po
+index f411d189..cd903c0e 100644
+--- a/po-docs/fr.po
++++ b/po-docs/fr.po
+@@ -8,7 +8,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2015-02-21 10:19+0000\n"
+ "Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+diff --git a/po-docs/ja.po b/po-docs/ja.po
+index 4120b2de..d90437dc 100644
+--- a/po-docs/ja.po
++++ b/po-docs/ja.po
+@@ -12,7 +12,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2017-02-24 07:33+0000\n"
+ "Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+diff --git a/po-docs/libguestfs-docs.pot b/po-docs/libguestfs-docs.pot
+index 8e33712f..3954a51e 100644
+--- a/po-docs/libguestfs-docs.pot
++++ b/po-docs/libguestfs-docs.pot
+@@ -7,7 +7,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.43.1\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-08-12 15:34+0200\n"
+ "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+ "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+diff --git a/po-docs/nl.po b/po-docs/nl.po
+index 571f3523..0cf147ee 100644
+--- a/po-docs/nl.po
++++ b/po-docs/nl.po
+@@ -7,7 +7,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2015-02-21 10:33+0000\n"
+ "Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+diff --git a/po-docs/pt_BR.po b/po-docs/pt_BR.po
+index 87c0059f..229f49c3 100644
+--- a/po-docs/pt_BR.po
++++ b/po-docs/pt_BR.po
+@@ -3,7 +3,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2017-01-29 09:50+0000\n"
+ "Last-Translator: Rodrigo de Araujo Sousa Fonseca "
+diff --git a/po-docs/si.po b/po-docs/si.po
+index e7327945..aa7f5f97 100644
+--- a/po-docs/si.po
++++ b/po-docs/si.po
+@@ -6,7 +6,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.43.1\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-08-12 15:34+0200\n"
+ "PO-Revision-Date: 2021-08-19 07:04+0000\n"
+ "Last-Translator: Hela Basa <r45xveza@pm.me>\n"
+diff --git a/po-docs/tg.po b/po-docs/tg.po
+index 446653ab..9e6fa072 100644
+--- a/po-docs/tg.po
++++ b/po-docs/tg.po
+@@ -6,7 +6,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2015-02-21 10:34+0000\n"
+ "Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
+diff --git a/po-docs/uk.po b/po-docs/uk.po
+index 52b5ce56..960ea8f8 100644
+--- a/po-docs/uk.po
++++ b/po-docs/uk.po
+@@ -15,7 +15,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2020-08-16 15:29+0000\n"
+ "Last-Translator: Yuri Chornoivan <yurchor@ukr.net>\n"
+diff --git a/po-docs/zh_CN.po b/po-docs/zh_CN.po
+index 7c546775..0c15c1c1 100644
+--- a/po-docs/zh_CN.po
++++ b/po-docs/zh_CN.po
+@@ -8,7 +8,7 @@
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: libguestfs 1.39.12\n"
+-"Report-Msgid-Bugs-To: libguestfs@redhat.com\n"
++"Report-Msgid-Bugs-To: guestfs@lists.libguestfs.org\n"
+ "POT-Creation-Date: 2020-07-06 15:46+0100\n"
+ "PO-Revision-Date: 2017-07-24 08:04+0000\n"
+ "Last-Translator: cheng ye <18969068329@163.com>\n"
+diff --git a/python/setup.py.in b/python/setup.py.in
+index aa9fb7ad..17571944 100644
+--- a/python/setup.py.in
++++ b/python/setup.py.in
+@@ -30,7 +30,7 @@ This package contains the Python bindings for libguestfs.
+ """,
+ 
+       author='The @PACKAGE_NAME@ team',
+-      author_email='libguestfs@redhat.com',
++      author_email='guestfs@lists.libguestfs.org',
+       url='http://libguestfs.org',
+ 
+       license='LGPLv2+',

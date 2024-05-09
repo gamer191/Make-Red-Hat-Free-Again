@@ -1,0 +1,34 @@
+From f8e8aef7e9e8334db19529aa46bd28a209436b50 Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Fri, 14 Jul 2023 15:22:09 +0200
+Subject: [PATCH] docs: fix broken link in the guestfs manual
+
+Commit 55202a4d49a1 ("New API: get-sockdir", 2016-02-03) added identical
+language to "fish/guestfish.pod" and "src/guestfs.pod", including an
+internal link L</get-sockdir>. That's appropriate for
+"fish/guestfish.pod", but the same API description is generated with a
+different anchor for "src/guestfs.pod". Adapt the reference.
+
+Fixes: 55202a4d49a101392148d79cb2e1591428db2681
+Bugzilla: https://bugzilla.redhat.com/show_bug.cgi?id=2184967
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+Reviewed-by: Richard W.M. Jones <rjones@redhat.com>
+Message-Id: <20230714132213.96616-4-lersek@redhat.com>
+(cherry picked from commit b4a4b754c6161b95ddee05e398e0200e6b73b840)
+---
+ lib/guestfs.pod | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/guestfs.pod b/lib/guestfs.pod
+index 866a4638..5db6dd91 100644
+--- a/lib/guestfs.pod
++++ b/lib/guestfs.pod
+@@ -3123,7 +3123,7 @@ non-essential runtime files.
+ If it is set, then is used to store temporary sockets.  Otherwise,
+ F</tmp> is used.
+ 
+-See also L</get-sockdir>,
++See also L</guestfs_get_sockdir>,
+ L<http://www.freedesktop.org/wiki/Specifications/basedir-spec/>.
+ 
+ =back

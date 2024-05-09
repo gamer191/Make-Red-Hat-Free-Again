@@ -1,0 +1,72 @@
+From bced744fea67d50242701ed55271d40e803ac14e Mon Sep 17 00:00:00 2001
+From: Michael Stahl <michael.stahl@allotropia.de>
+Date: Mon, 15 Nov 2021 17:29:59 +0100
+Subject: [PATCH] tdf#121546 sw: don't use undo array's m_pOutlineNodes
+
+It's pointless.
+
+Change-Id: I304c123bffc16e6133d2953bc9a4f7a3afad14ef
+---
+ sw/source/core/docnode/ndnum.cxx |  2 ++
+ sw/source/core/docnode/nodes.cxx | 18 ++++++++++++------
+ 2 files changed, 14 insertions(+), 6 deletions(-)
+
+diff --git a/sw/source/core/docnode/ndnum.cxx b/sw/source/core/docnode/ndnum.cxx
+index b3d66affa66e..a7b898ee5f0a 100644
+--- a/sw/source/core/docnode/ndnum.cxx
++++ b/sw/source/core/docnode/ndnum.cxx
+@@ -38,6 +38,8 @@ bool SwOutlineNodes::Seek_Entry(SwNode* rP, size_type* pnPos) const
+ 
+ void SwNodes::UpdateOutlineNode(SwNode & rNd)
+ {
++    assert(IsDocNodes()); // no point in m_pOutlineNodes for undo nodes
++
+     SwTextNode * pTextNd = rNd.GetTextNode();
+ 
+     if (!(pTextNd && pTextNd->IsOutlineStateChanged()))
+diff --git a/sw/source/core/docnode/nodes.cxx b/sw/source/core/docnode/nodes.cxx
+index a7a2078b2091..ab3eb62ac9f2 100644
+--- a/sw/source/core/docnode/nodes.cxx
++++ b/sw/source/core/docnode/nodes.cxx
+@@ -109,6 +109,16 @@ SwNodes::~SwNodes()
+     m_pEndOfContent.reset();
+ }
+ 
++static bool IsInsertOutline(SwNodes const& rNodes, sal_uLong const nIndex)
++{
++    if (!rNodes.IsDocNodes())
++    {
++        return false;
++    }
++    return nIndex < rNodes.GetEndOfRedlines().StartOfSectionNode()->GetIndex()
++        || rNodes.GetEndOfRedlines().GetIndex() < nIndex;
++}
++
+ void SwNodes::ChgNode( SwNodeIndex const & rDelPos, sal_uLong nSz,
+                         SwNodeIndex& rInsPos, bool bNewFrames )
+ {
+@@ -124,9 +134,7 @@ void SwNodes::ChgNode( SwNodeIndex const & rDelPos, sal_uLong nSz,
+ 
+     // NEVER include nodes from the RedLineArea
+     sal_uLong nNd = rInsPos.GetIndex();
+-    bool bInsOutlineIdx = (
+-            rNds.GetEndOfRedlines().StartOfSectionNode()->GetIndex() >= nNd ||
+-            nNd >= rNds.GetEndOfRedlines().GetIndex() );
++    bool const bInsOutlineIdx = IsInsertOutline(rNds, nNd);
+ 
+     if( &rNds == this ) // if in the same node array -> move
+     {
+@@ -478,9 +486,7 @@ bool SwNodes::MoveNodes( const SwNodeRange& aRange, SwNodes & rNodes,
+ 
+                     // NEVER include nodes from the RedLineArea
+                     sal_uLong nNd = aIdx.GetIndex();
+-                    bool bInsOutlineIdx = ( rNodes.GetEndOfRedlines().
+-                            StartOfSectionNode()->GetIndex() >= nNd ||
+-                            nNd >= rNodes.GetEndOfRedlines().GetIndex() );
++                    bool const bInsOutlineIdx = IsInsertOutline(rNodes, nNd);
+ 
+                     if( bNewFrames )
+                         // delete all frames
+-- 
+2.33.1
+

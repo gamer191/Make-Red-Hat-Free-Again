@@ -1,0 +1,73 @@
+From e42cd859265c34d2013a45b742d4c36bb7617445 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 27 Jun 2023 12:09:12 +0100
+Subject: [PATCH] ocaml: Conditionally acquire the lock in callbacks
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This fix was originally suggested by Jürgen Hötzel (link below) which
+I have lightly modified so it works with OCaml <= 4 too.
+
+Link: https://listman.redhat.com/archives/libguestfs/2023-May/031640.html
+Link: https://discuss.ocaml.org/t/test-caml-state-and-conditionally-caml-acquire-runtime-system-good-or-bad/12489
+(cherry picked from commit 16464878cf980ffab1c1aeada2e438b0281ad1bc)
+---
+ ocaml/guestfs-c.c | 25 +++++++++++++++++++++++--
+ 1 file changed, 23 insertions(+), 2 deletions(-)
+
+diff --git a/ocaml/guestfs-c.c b/ocaml/guestfs-c.c
+index a1865a72..67dc3547 100644
+--- a/ocaml/guestfs-c.c
++++ b/ocaml/guestfs-c.c
+@@ -19,6 +19,7 @@
+ #include <config.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <stdbool.h>
+ #include <string.h>
+ #include <errno.h>
+ 
+@@ -36,6 +37,7 @@
+ #include <caml/signals.h>
+ #include <caml/threads.h>
+ #include <caml/unixsupport.h>
++#include <caml/version.h>
+ 
+ #include "guestfs-c.h"
+ 
+@@ -397,13 +399,32 @@ event_callback_wrapper (guestfs_h *g,
+ {
+   /* Ensure we are holding the GC lock before any GC operations are
+    * possible. (RHBZ#725824)
++   *
++   * There are many paths where we already hold the OCaml lock before
++   * this function, for example "non-blocking" calls, and the
++   * libguestfs global atexit path (which calls guestfs_close).  To
++   * avoid double acquisition we need to check if we already hold the
++   * lock.  OCaml 5 is strict about this.  In earlier OCaml versions
++   * there is no way to check, but they did not implement the lock as
++   * a mutex and so it didn't cause problems.
++   *
++   * See also:
++   * https://discuss.ocaml.org/t/test-caml-state-and-conditionally-caml-acquire-runtime-system-good-or-bad/12489
+    */
+-  caml_acquire_runtime_system ();
++#if OCAML_VERSION_MAJOR >= 5
++  bool acquired = caml_state != NULL;
++#else
++  const bool acquired = false;
++#endif
++
++  if (!acquired)
++    caml_acquire_runtime_system ();
+ 
+   event_callback_wrapper_locked (g, data, event, event_handle, flags,
+                                  buf, buf_len, array, array_len);
+ 
+-  caml_release_runtime_system ();
++  if (!acquired)
++    caml_release_runtime_system ();
+ }
+ 
+ value

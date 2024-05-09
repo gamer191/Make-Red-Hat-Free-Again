@@ -1,0 +1,53 @@
+From 3925cf39742ebee935498b14571f13f3e8b64b49 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Sat, 19 Feb 2022 20:43:33 +0000
+Subject: [PATCH] EditTextObjectImpl copy ctor doesn't exactly copy
+ EditTextObjectImpl
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+and this is apparently relied on, so eliding the copy gives unexpected
+results.
+
+EditTextObjectImpl::Clone returns a copy of *this, but the
+EditTextObjectImpl copy ctor explicitly does not copy the "PortionInfo"
+member, so in:
+
+commit fb8973f31f111229be5184f4e4223e963ced2c7b
+Author: Caolán McNamara <caolanm@redhat.com>
+Date:   Sat Oct 10 19:21:38 2020 +0100
+
+    ofz#23492 the only user of this ctor throws away the original of the clone
+
+    so we can take ownership of the original instead
+
+where the copy was optimized away we want from a state where there was a
+new EditTextObjectImpl with an empty PortionInfo member to one where the
+PortionInfo of the EditTextObjectImpl was retained.
+
+So explicitly clear this unwanted info.
+
+It's very hard to make rational judgements about code if a copy behaves
+differently than the orignal :-(
+
+Change-Id: I642d60841d6bdccbf830f8a2ccdbd9f542a8aa18
+---
+ editeng/source/outliner/outliner.cxx | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/editeng/source/outliner/outliner.cxx b/editeng/source/outliner/outliner.cxx
+index 9c474131352c..d48e4a542723 100644
+--- a/editeng/source/outliner/outliner.cxx
++++ b/editeng/source/outliner/outliner.cxx
+@@ -383,6 +383,7 @@ std::unique_ptr<OutlinerParaObject> Outliner::CreateParaObject( sal_Int32 nStart
+         aParagraphDataVector[nPara-nStartPara] = *GetParagraph(nPara);
+     }
+ 
++    xText->ClearPortionInfo(); // tdf#147166 the PortionInfo is unwanted here
+     std::unique_ptr<OutlinerParaObject> pPObj(new OutlinerParaObject(std::move(xText), aParagraphDataVector, bIsEditDoc));
+     pPObj->SetOutlinerMode(GetMode());
+ 
+-- 
+2.35.1
+

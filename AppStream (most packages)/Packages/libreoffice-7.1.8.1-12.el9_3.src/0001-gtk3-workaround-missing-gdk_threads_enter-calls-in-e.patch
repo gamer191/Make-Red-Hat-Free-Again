@@ -1,0 +1,118 @@
+From b06e5e2b9761d242d9269b091da9a98ec705d2b1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Tue, 1 Jun 2021 13:20:43 +0100
+Subject: [PATCH] gtk3: workaround missing gdk_threads_enter calls in external
+ code
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+with gtk3 file dialog. file, open, +other locations,
+type davs://somewhere + return
+
+ #0  0x00007ffff7a6e2a2 in raise () at /lib64/libc.so.6
+ #1  0x00007ffff7a578a4 in abort () at /lib64/libc.so.6
+ #2  0x00007ffff7a57789 in _nl_load_domain.cold () at /lib64/libc.so.6
+ #3  0x00007ffff7a66a16 in  () at /lib64/libc.so.6
+ #4  0x00007fffd9be7672 in GtkYieldMutex::ThreadsLeave() (this=0x513480) at vcl/unx/gtk3/gtkinst.cxx:354
+ #5  0x00007fffd9be6a53 in GdkThreadsLeave() () at vcl/unx/gtk3/gtkinst.cxx:116
+ #6  0x00007fffd947ac2d in gtk_dialog_run (dialog=0xa984310) at /usr/src/debug/gtk3-3.24.29-1.fc34.x86_64/gtk/gtkdialog.c:1397
+ ^^^ this also (see #30) calls gdk_threads_leave before g_main_loop_run, but no gdk_threads_enter has been called, presumably emit_show_error_message should have called it (?) ^^^
+ #7  0x00007fffd94a6dc6 in error_message_with_parent (detail=0xa97f9b0 "HTTP Error: Error resolving “nowhere”: Name or service not known", msg=<optimized out>, parent=<optimized out>)
+     at /usr/src/debug/gtk3-3.24.29-1.fc34.x86_64/gtk/gtkfilechooserwidget.c:763
+ #8  error_message (impl=<optimized out>, msg=<optimized out>, detail=0xa97f9b0 "HTTP Error: Error resolving “nowhere”: Name or service not known") at /usr/src/debug/gtk3-3.24.29-1.fc34.x86_64/gtk/gtkfilechooserwidget.c:786
+ #9  0x00007fffe996ec2f in g_closure_invoke () at /lib64/libgobject-2.0.so.0
+ #10 0x00007fffe998aea6 in signal_emit_unlocked_R () at /lib64/libgobject-2.0.so.0
+ #11 0x00007fffe998c76a in g_signal_emit_valist () at /lib64/libgobject-2.0.so.0
+ #12 0x00007fffe998c983 in g_signal_emit () at /lib64/libgobject-2.0.so.0
+ #13 0x00007fffd9561fc7 in emit_show_error_message (secondary_message=0x7fffbc0566f0 "HTTP Error: Error resolving “nowhere”: Name or service not known", primary_message=<optimized out>, view=0x900a240)
+     at /usr/src/debug/gtk3-3.24.29-1.fc34.x86_64/gtk/gtkplacesview.c:171
+ #14 server_mount_ready_cb (source_file=0x7fffbc05b4c0, res=<optimized out>, user_data=0x900a240) at /usr/src/debug/gtk3-3.24.29-1.fc34.x86_64/gtk/gtkplacesview.c:1232
+ #15 0x00007fffe9a64a7a in g_task_return_now () at /lib64/libgio-2.0.so.0
+ #16 0x00007fffe9a64c7b in g_task_return () at /lib64/libgio-2.0.so.0
+ #17 0x00007fffd80653b8 in mount_reply () at /usr/lib64/gio/modules/libgvfsdbus.so
+ #18 0x00007fffe9a64a7a in g_task_return_now () at /lib64/libgio-2.0.so.0
+ #19 0x00007fffe9a64c7b in g_task_return () at /lib64/libgio-2.0.so.0
+ #20 0x00007fffe9acd2dd in reply_cb () at /lib64/libgio-2.0.so.0
+ #21 0x00007fffe9a64a7a in g_task_return_now () at /lib64/libgio-2.0.so.0
+ #22 0x00007fffe9a64c7b in g_task_return () at /lib64/libgio-2.0.so.0
+ #23 0x00007fffe9ac4c34 in g_dbus_connection_call_done () at /lib64/libgio-2.0.so.0
+ #24 0x00007fffe9a64a7a in g_task_return_now () at /lib64/libgio-2.0.so.0
+ #25 0x00007fffe9a64abd in complete_in_idle_cb () at /lib64/libgio-2.0.so.0
+ #26 0x00007fffe987074b in g_idle_dispatch () at /lib64/libglib-2.0.so.0
+ #27 0x00007fffe98744cf in g_main_context_dispatch () at /lib64/libglib-2.0.so.0
+ #28 0x00007fffe98c84e8 in g_main_context_iterate.constprop () at /lib64/libglib-2.0.so.0
+ #29 0x00007fffe9873a93 in g_main_loop_run () at /lib64/libglib-2.0.so.0
+ #30 0x00007fffd947ac37 in gtk_dialog_run (dialog=0x1604460) at /usr/src/debug/gtk3-3.24.29-1.fc34.x86_64/gtk/gtkdialog.c:1398
+ ^^^ this will call gdk_threads_leave before g_main_loop_run, (gdk_threads_enter has been called earlier, and gdk_threads_enter will be called after g_main_loop_run) ^^^
+ #31 0x00007fffd9bdbd96 in RunDialog::run() (this=0x9134f00) at vcl/unx/gtk3/fpicker/SalGtkPicker.cxx:199
+ #32 0x00007fffd9bbf23f in SalGtkFilePicker::execute() (this=0x9004690) at vcl/unx/gtk3/fpicker/SalGtkFilePicker.cxx:953
+ #33 0x00007ffff474741a in sfx2::FileDialogHelper_Impl::implDoExecute() (this=0x1667470) at sfx2/source/dialog/filedlghelper.cxx:1279
+
+ #14 presumably server_mount_ready_cb of gtkplacesview.c should protect its gtk
+     calls with gdk_threads_enter/gdk_threads_leave like enclosing_volume_mount_cb
+     of gtkfilesystem.c does.
+
+Seeing as gdk_threads_leave/gdk_threads_enter is gone in gtk4 I doubt
+there's any point looking for a fix in gtk3 and we should just try and
+survive the problem.
+
+Change-Id: I007be4dee4f615d4431e27034dcf7f3d446c3e9a
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/116559
+Tested-by: Jenkins
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit 08b7529f628eda1d209cf27f9bbe52ee336fef62)
+---
+ vcl/unx/gtk3/gtk3gtkinst.cxx | 30 ++++++++++++++++++++++--------
+ 1 file changed, 22 insertions(+), 8 deletions(-)
+
+diff --git a/vcl/unx/gtk3/gtk3gtkinst.cxx b/vcl/unx/gtk3/gtk3gtkinst.cxx
+index 2d4dc36ce5fe..bba4e07f3003 100644
+--- a/vcl/unx/gtk3/gtk3gtkinst.cxx
++++ b/vcl/unx/gtk3/gtk3gtkinst.cxx
+@@ -314,20 +314,34 @@ thread_local std::stack<sal_uInt32> GtkYieldMutex::yieldCounts;
+ void GtkYieldMutex::ThreadsEnter()
+ {
+     acquire();
+-    if (!yieldCounts.empty()) {
+-        auto n = yieldCounts.top();
+-        yieldCounts.pop();
+-        assert(n > 0);
+-        n--;
+-        if (n > 0)
+-            acquire(n);
++    if (yieldCounts.empty())
++        return;
++    auto n = yieldCounts.top();
++    yieldCounts.pop();
++
++    const bool bUndoingLeaveWithoutEnter = n == 0;
++    // if the ThreadsLeave bLeaveWithoutEnter of true condition occurred to
++    // create this entry then return early undoing the initial acquire of the
++    // function
++    if G_UNLIKELY(bUndoingLeaveWithoutEnter)
++    {
++        release();
++        return;
+     }
++
++    assert(n > 0);
++    n--;
++    if (n > 0)
++        acquire(n);
+ }
+ 
+ void GtkYieldMutex::ThreadsLeave()
+ {
+-    assert(m_nCount != 0);
++    const bool bLeaveWithoutEnter = m_nCount == 0;
++    SAL_WARN_IF(bLeaveWithoutEnter, "vcl.gtk", "gdk_threads_leave without matching gdk_threads_enter");
+     yieldCounts.push(m_nCount);
++    if G_UNLIKELY(bLeaveWithoutEnter) // this ideally shouldn't happen, but can due to the gtk3 file dialog
++        return;
+     release(true);
+ }
+ 
+-- 
+2.31.1
+

@@ -1,0 +1,38 @@
+From feb17e93b4e58131cf6875c4ae638a791a875a22 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?J=C3=BCrgen=20H=C3=B6tzel?= <juergen@archlinux.org>
+Date: Sat, 27 May 2023 15:32:36 +0200
+Subject: [PATCH] ocaml/implicit_close test: collect all currently unreachable
+ blocks
+
+Fixes failing implice_close test on OCaml 5.
+
+RWMJ:
+
+I adjusted this patch so that we continue to call Gc.compact on
+exiting the test, to move all of the heap (hopefully revealing flaws
+in the bindings).  This only works on OCaml <= 4, but Gc.compact may
+be fixed/reimplemented later in the 5.x series.
+
+Please see also the lengthy discussion of this patch upstream:
+https://listman.redhat.com/archives/libguestfs/2023-May/thread.html#31639
+https://listman.redhat.com/archives/libguestfs/2023-June/thread.html#31709
+https://discuss.ocaml.org/t/ocaml-heap-fsck-and-forcing-collection-of-unreachable-objects/12281/1
+
+(cherry picked from commit 1274452d225da71f115e0cb8ad435e02670dc4fb)
+---
+ ocaml/t/guestfs_065_implicit_close.ml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ocaml/t/guestfs_065_implicit_close.ml b/ocaml/t/guestfs_065_implicit_close.ml
+index 567e550b..f2dfecbd 100644
+--- a/ocaml/t/guestfs_065_implicit_close.ml
++++ b/ocaml/t/guestfs_065_implicit_close.ml
+@@ -30,7 +30,7 @@ let () =
+  *)
+ 
+ (* This should cause the GC to close the handle. *)
+-let () = Gc.compact ()
++let () = Gc.full_major ()
+ 
+ let () = assert  (!close_invoked = 1)
+ 

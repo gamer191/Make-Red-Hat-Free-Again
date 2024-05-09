@@ -1,0 +1,22 @@
+diff --git a/libipt/test/src/ptunit-msec_cache.c b/libipt/test/src/ptunit-msec_cache.c
+index 68d9daf..cfb059b 100644
+--- a/libipt/test/src/ptunit-msec_cache.c
++++ b/libipt/test/src/ptunit-msec_cache.c
+@@ -296,7 +296,7 @@ static struct ptunit_result read(struct test_fixture *tfix)
+ static struct ptunit_result fill_nomap(struct test_fixture *tfix)
+ {
+ 	const struct pt_mapped_section *msec;
+-	struct pt_asid asid;
++	struct pt_asid asid = { 0 };
+ 	struct pt_section *section;
+ 	int status;
+ 
+@@ -320,7 +320,7 @@ static struct ptunit_result fill(struct test_fixture *tfix)
+ {
+ 	const struct pt_mapped_section *msec;
+ 	struct pt_section *section;
+-	struct pt_asid asid;
++	struct pt_asid asid = { 0 };
+ 	int status;
+ 
+ 	status = pt_msec_cache_fill(&tfix->mcache, &msec, &tfix->image, &asid,

@@ -1,0 +1,1309 @@
+From 4fd868fdfca690e9b0f159b2beadde5920897ab4 Mon Sep 17 00:00:00 2001
+From: Stephan Bergmann <sbergman@redhat.com>
+Date: Sun, 11 Apr 2021 09:20:13 +0200
+Subject: [PATCH] Get rid of apache-commons-logging
+
+...using Java 1.4 java.util.logging.Logger instead also for the last remaining
+uses in reportbuilder.
+
+(The mention in swext/mediawiki/src/THIRDPARTYLICENSEREADME.html was presumably
+a leftover from 4b6ceed4a4a9b152905a8b1712ffb9bd61373c16 "swext: Wiki Publisher
+does not use those apache-commons libraries".)
+
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/113939
+Tested-by: Jenkins
+Reviewed-by: Stephan Bergmann <sbergman@redhat.com>
+(cherry picked from commit 6de0b1710adfba82c96b75a5da6f52633a54c692)
+Conflicts:
+	readlicense_oo/license/NOTICE
+	swext/mediawiki/src/THIRDPARTYLICENSEREADME.html
+
+Change-Id: Ia0bc598fe5844ced11cae497548ec7d09453a99d
+---
+ Makefile.fetch                                |  1 -
+ RepositoryExternal.mk                         | 26 ----------
+ config_host.mk.in                             |  3 --
+ configure.ac                                  | 40 ---------------
+ distro-configs/LibreOfficeFlatpak.conf        |  1 -
+ download.lst                                  |  2 -
+ external/Module_external.mk                   |  1 -
+ .../ExternalPackage_apache_commons_logging.mk | 16 ------
+ .../ExternalProject_apache_commons_logging.mk | 32 ------------
+ external/apache-commons/Makefile              |  7 ---
+ .../apache-commons/Module_apache-commons.mk   | 18 -------
+ external/apache-commons/README                |  1 -
+ .../UnpackedTarball_apache_commons_logging.mk | 22 ---------
+ external/apache-commons/patches/logging.patch | 46 -----------------
+ readlicense_oo/license/NOTICE                 |  8 ---
+ readlicense_oo/license/license.xml            |  6 ---
+ reportbuilder/Jar_reportbuilder.mk            |  1 -
+ .../report/SDBCReportDataFactory.java         |  7 +--
+ .../libreoffice/report/StorageRepository.java | 48 +++++++++---------
+ .../libreoffice/report/pentaho/Manifest.mf    |  2 +-
+ .../report/pentaho/PentahoReportJob.java      | 10 ++--
+ .../report/pentaho/SOReportJobFactory.java    |  9 ++--
+ .../layoutprocessor/FormatValueUtility.java   |  2 +-
+ .../FormattedTextLayoutController.java        |  7 ++-
+ .../ImageElementLayoutController.java         | 19 ++++---
+ .../report/pentaho/output/ImageProducer.java  | 23 ++++-----
+ .../output/OfficeDocumentReportTarget.java    | 23 ++++-----
+ .../report/pentaho/output/OleProducer.java    | 12 ++---
+ .../report/pentaho/output/StyleUtilities.java | 10 ++--
+ .../SpreadsheetRawReportTarget.java           |  2 +-
+ .../office/DocumentContentReadHandler.java    | 13 +++--
+ solenv/flatpak-manifest.in                    |  6 ---
+ .../src/THIRDPARTYLICENSEREADME.html          | 49 -------------------
+ 33 files changed, 82 insertions(+), 391 deletions(-)
+ delete mode 100644 external/apache-commons/ExternalPackage_apache_commons_logging.mk
+ delete mode 100644 external/apache-commons/ExternalProject_apache_commons_logging.mk
+ delete mode 100644 external/apache-commons/Makefile
+ delete mode 100644 external/apache-commons/Module_apache-commons.mk
+ delete mode 100644 external/apache-commons/README
+ delete mode 100644 external/apache-commons/UnpackedTarball_apache_commons_logging.mk
+ delete mode 100644 external/apache-commons/patches/logging.patch
+
+diff --git a/Makefile.fetch b/Makefile.fetch
+index 0a6202a4b3c7..924927bb4fb5 100644
+--- a/Makefile.fetch
++++ b/Makefile.fetch
+@@ -101,7 +101,6 @@ $(WORKDIR)/download: $(BUILDDIR)/config_$(gb_Side).mk $(SRCDIR)/download.lst $(S
+ 	@date >> $(fetch_LOGFILE)
+ 	$(foreach item, \
+ 		$(call fetch_Optional,ABW,ABW_TARBALL) \
+-		$(call fetch_Optional,APACHE_COMMONS,APACHE_COMMONS_LOGGING_TARBALL) \
+ 		$(call fetch_Optional,APR,APR_TARBALL) \
+ 		$(call fetch_Optional,APR,APR_UTIL_TARBALL) \
+ 		$(call fetch_Optional,BOOST,BOOST_TARBALL) \
+diff --git a/RepositoryExternal.mk b/RepositoryExternal.mk
+index ad3febbae41b..d2fe7e044dfb 100644
+--- a/RepositoryExternal.mk
++++ b/RepositoryExternal.mk
+@@ -3723,32 +3723,6 @@ endif # SYSTEM_RHINO
+ 
+ endif
+ 
+-ifneq ($(SYSTEM_APACHE_COMMONS),)
+-
+-define gb_Jar__use_commons-logging
+-$(call gb_Jar_use_system_jar,$(1),$(COMMONS_LOGGING_JAR))
+-endef
+-gb_ExternalProject__use_commons-logging :=
+-
+-else # !SYSTEM_APACHE_COMMONS
+-
+-ifeq ($(ENABLE_JAVA),TRUE)
+-$(eval $(call gb_Helper_register_jars_for_install,OOO,reportbuilder,\
+-	commons-logging-$(COMMONS_LOGGING_VERSION) \
+-))
+-endif
+-
+-define gb_Jar__use_commons-logging
+-$(call gb_Jar_use_external_project,$(1),apache_commons_logging)
+-$(call gb_Jar_use_jar,$(1),commons-logging-$(COMMONS_LOGGING_VERSION))
+-endef
+-define gb_ExternalProject__use_commons-logging
+-$(call gb_ExternalProject_use_external_project,$(1),apache_commons_logging)
+-endef
+-
+-endif # SYSTEM_APACHE_COMMONS
+-
+-
+ ifneq ($(SYSTEM_JFREEREPORT),)
+ 
+ define gb_Jar__use_flow-engine
+diff --git a/config_host.mk.in b/config_host.mk.in
+index 42f4511a62e8..c9b3aa015123 100644
+--- a/config_host.mk.in
++++ b/config_host.mk.in
+@@ -77,8 +77,6 @@ export CLUCENE_LIBS=$(gb_SPACE)@CLUCENE_LIBS@
+ export LIBCMIS_CFLAGS=$(gb_SPACE)@LIBCMIS_CFLAGS@
+ export LIBCMIS_LIBS=$(gb_SPACE)@LIBCMIS_LIBS@
+ export COM=@COM@
+-export COMMONS_LOGGING_JAR=@COMMONS_LOGGING_JAR@
+-export COMMONS_LOGGING_VERSION=@COMMONS_LOGGING_VERSION@
+ export COMPATH=@COMPATH@
+ export COMPILER_PLUGINS=@COMPILER_PLUGINS@
+ export COMPILER_PLUGINS_ANALYZER_PCH=@COMPILER_PLUGINS_ANALYZER_PCH@
+@@ -546,7 +544,6 @@ export STRIP=@STRIP@
+ export STRIP_COMPONENTS=@STRIP_COMPONENTS@
+ export SYSBASE=@SYSBASE@
+ export SYSTEM_ABW=@SYSTEM_ABW@
+-export SYSTEM_APACHE_COMMONS=@SYSTEM_APACHE_COMMONS@
+ export SYSTEM_APR=@SYSTEM_APR@
+ export SYSTEM_BLUEZ=@SYSTEM_BLUEZ@
+ export SYSTEM_BOOST=@SYSTEM_BOOST@
+diff --git a/configure.ac b/configure.ac
+index 11d93b7ba6eb..1cb0a61ad9c2 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -2076,11 +2076,6 @@ AC_ARG_WITH(system-gpgmepp,
+         [Use gpgmepp already on system]),,
+     [with_system_gpgmepp="$with_system_libs"])
+ 
+-AC_ARG_WITH(system-apache-commons,
+-    AS_HELP_STRING([--with-system-apache-commons],
+-        [Use Apache commons libraries already on system.]),,
+-    [with_system_apache_commons="$with_system_jars"])
+-
+ AC_ARG_WITH(system-mariadb,
+     AS_HELP_STRING([--with-system-mariadb],
+         [Use MariaDB/MySQL libraries already on system.]),,
+@@ -2158,11 +2153,6 @@ AC_ARG_WITH(rhino-jar,
+         [Specify path to jarfile manually.]),
+     RHINO_JAR=$withval)
+ 
+-AC_ARG_WITH(commons-logging-jar,
+-    AS_HELP_STRING([--with-commons-logging-jar=JARFILE],
+-        [Specify path to jarfile manually.]),
+-    COMMONS_LOGGING_JAR=$withval)
+-
+ AC_ARG_WITH(system-jfreereport,
+     AS_HELP_STRING([--with-system-jfreereport],
+         [Use JFreeReport already on system.]),,
+@@ -12298,36 +12288,6 @@ AC_SUBST(LIBREPOSITORY_JAR)
+ AC_SUBST(LIBFONTS_JAR)
+ AC_SUBST(LIBSERIALIZER_JAR)
+ 
+-# this has to be here because both the Wiki Publisher and the SRB use
+-# commons-logging
+-COMMONS_LOGGING_VERSION=1.2
+-if test "$ENABLE_REPORTBUILDER" = "TRUE"; then
+-    AC_MSG_CHECKING([which Apache commons-* libs to use])
+-    if test "$with_system_apache_commons" = "yes"; then
+-        SYSTEM_APACHE_COMMONS=TRUE
+-        AC_MSG_RESULT([external])
+-        if test -z $COMMONS_LOGGING_JAR; then
+-            if test -f /usr/share/java/commons-logging-${COMMONS_LOGGING_VERSION}.jar; then
+-               COMMONS_LOGGING_JAR=/usr/share/java/commons-logging-${COMMONS_LOGGING_VERSION}.jar
+-           elif test -f /usr/share/java/commons-logging.jar; then
+-                COMMONS_LOGGING_JAR=/usr/share/java/commons-logging.jar
+-            else
+-                AC_MSG_ERROR(commons-logging.jar replacement not found.)
+-            fi
+-        elif ! test -f $COMMONS_LOGGING_JAR; then
+-            AC_MSG_ERROR(commons-logging.jar not found.)
+-        fi
+-    else
+-        AC_MSG_RESULT([internal])
+-        SYSTEM_APACHE_COMMONS=
+-        BUILD_TYPE="$BUILD_TYPE APACHE_COMMONS"
+-        NEED_ANT=TRUE
+-    fi
+-fi
+-AC_SUBST(SYSTEM_APACHE_COMMONS)
+-AC_SUBST(COMMONS_LOGGING_JAR)
+-AC_SUBST(COMMONS_LOGGING_VERSION)
+-
+ # scripting provider for BeanShell?
+ AC_MSG_CHECKING([whether to build support for scripts in BeanShell])
+ if test "${enable_scripting_beanshell}" != "no" -a "x$with_java" != "xno"; then
+diff --git a/distro-configs/LibreOfficeFlatpak.conf b/distro-configs/LibreOfficeFlatpak.conf
+index 81604de9f1f7..97bfaba200fc 100644
+--- a/distro-configs/LibreOfficeFlatpak.conf
++++ b/distro-configs/LibreOfficeFlatpak.conf
+@@ -10,7 +10,6 @@
+ --without-export-validation
+ --without-junit
+ --without-lxml
+---without-system-apache-commons
+ --without-system-beanshell
+ --without-system-bluez
+ --without-system-boost
+diff --git a/download.lst b/download.lst
+index c474e9f60208..f74d49e8dfcb 100644
+--- a/download.lst
++++ b/download.lst
+@@ -5,8 +5,6 @@
+ 
+ export ABW_SHA256SUM := e763a9dc21c3d2667402d66e202e3f8ef4db51b34b79ef41f56cacb86dcd6eed
+ export ABW_TARBALL := libabw-0.1.3.tar.xz
+-export APACHE_COMMONS_LOGGING_SHA256SUM := 49665da5a60d033e6dff40fe0a7f9173e886ae859ce6096c1afe34c48b677c81
+-export APACHE_COMMONS_LOGGING_TARBALL := commons-logging-1.2-src.tar.gz
+ export APR_SHA256SUM := 1af06e1720a58851d90694a984af18355b65bb0d047be03ec7d659c746d6dbdb
+ export APR_TARBALL := apr-1.5.2.tar.gz
+ export APR_UTIL_SHA256SUM := 976a12a59bc286d634a21d7be0841cc74289ea9077aa1af46be19d1a6e844c19
+diff --git a/external/Module_external.mk b/external/Module_external.mk
+index 1c722a325c2d..185974271b93 100644
+--- a/external/Module_external.mk
++++ b/external/Module_external.mk
+@@ -16,7 +16,6 @@ endif
+ $(eval $(call gb_Module_add_moduledirs,external,\
+ 	$(call gb_Helper_optional,XMLSEC,xmlsec) \
+ 	$(call gb_Helper_optional,ABW,libabw) \
+-	$(call gb_Helper_optional,APACHE_COMMONS,apache-commons) \
+ 	$(call gb_Helper_optional,APR,apr) \
+ 	$(call gb_Helper_optional,BOOST,boost) \
+ 	$(call gb_Helper_optional,BOX2D,box2d) \
+diff --git a/external/apache-commons/ExternalPackage_apache_commons_logging.mk b/external/apache-commons/ExternalPackage_apache_commons_logging.mk
+deleted file mode 100644
+index 2bff13b93c66..000000000000
+--- a/external/apache-commons/ExternalPackage_apache_commons_logging.mk
++++ /dev/null
+@@ -1,16 +0,0 @@
+-# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+-#
+-# This file is part of the LibreOffice project.
+-#
+-# This Source Code Form is subject to the terms of the Mozilla Public
+-# License, v. 2.0. If a copy of the MPL was not distributed with this
+-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-#
+-
+-$(eval $(call gb_ExternalPackage_ExternalPackage,apache_commons_logging,apache_commons_logging))
+-
+-$(eval $(call gb_ExternalPackage_use_external_project,apache_commons_logging,apache_commons_logging))
+-
+-$(eval $(call gb_ExternalPackage_add_file,apache_commons_logging,$(LIBO_SHARE_JAVA_FOLDER)/commons-logging-$(COMMONS_LOGGING_VERSION).jar,target/commons-logging-$(COMMONS_LOGGING_VERSION).jar))
+-
+-# vim: set noet sw=4 ts=4:
+diff --git a/external/apache-commons/ExternalProject_apache_commons_logging.mk b/external/apache-commons/ExternalProject_apache_commons_logging.mk
+deleted file mode 100644
+index 7c689d18c443..000000000000
+--- a/external/apache-commons/ExternalProject_apache_commons_logging.mk
++++ /dev/null
+@@ -1,32 +0,0 @@
+-# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+-#
+-# This file is part of the LibreOffice project.
+-#
+-# This Source Code Form is subject to the terms of the Mozilla Public
+-# License, v. 2.0. If a copy of the MPL was not distributed with this
+-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-#
+-
+-$(eval $(call gb_ExternalProject_ExternalProject,apache_commons_logging))
+-
+-$(eval $(call gb_ExternalProject_register_targets,apache_commons_logging,\
+-	build \
+-))
+-
+-$(call gb_ExternalProject_get_state_target,apache_commons_logging,build) :
+-	$(call gb_Trace_StartRange,apache_commons_logging,EXTERNAL)
+-	$(call gb_ExternalProject_run,build,\
+-	JAVA_HOME=$(JAVA_HOME_FOR_BUILD) \
+-	ANT_OPTS="$$ANT_OPTS -Dfile.encoding=ISO-8859-1" \
+-	$(ICECREAM_RUN) "$(ANT)" \
+-		$(if $(verbose),-v,-q) \
+-		-f build.xml \
+-		-Dbuild.label="build-$(LIBO_VERSION_MAJOR).$(LIBO_VERSION_MINOR).$(LIBO_VERSION_MICRO).$(LIBO_VERSION_PATCH)" \
+-		-Dant.build.javac.source=$(JAVA_SOURCE_VER) \
+-		-Dant.build.javac.target=$(JAVA_TARGET_VER) \
+-		$(if $(debug),-Dcompile.debug="true",-Dcompile.debug="false") \
+-		compile build-jar \
+-	)
+-	$(call gb_Trace_EndRange,apache_commons_logging,EXTERNAL)
+-
+-# vim: set noet sw=4 ts=4:
+diff --git a/external/apache-commons/Makefile b/external/apache-commons/Makefile
+deleted file mode 100644
+index e4968cf85fb6..000000000000
+--- a/external/apache-commons/Makefile
++++ /dev/null
+@@ -1,7 +0,0 @@
+-# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+-
+-module_directory:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+-
+-include $(module_directory)/../../solenv/gbuild/partial_build.mk
+-
+-# vim: set noet sw=4 ts=4:
+diff --git a/external/apache-commons/Module_apache-commons.mk b/external/apache-commons/Module_apache-commons.mk
+deleted file mode 100644
+index 45aabe229b03..000000000000
+--- a/external/apache-commons/Module_apache-commons.mk
++++ /dev/null
+@@ -1,18 +0,0 @@
+-# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+-#
+-# This file is part of the LibreOffice project.
+-#
+-# This Source Code Form is subject to the terms of the Mozilla Public
+-# License, v. 2.0. If a copy of the MPL was not distributed with this
+-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-#
+-
+-$(eval $(call gb_Module_Module,apache-commons))
+-
+-$(eval $(call gb_Module_add_targets,apache-commons,\
+-	ExternalPackage_apache_commons_logging \
+-	ExternalProject_apache_commons_logging \
+-	UnpackedTarball_apache_commons_logging \
+-))
+-
+-# vim: set noet sw=4 ts=4:
+diff --git a/external/apache-commons/README b/external/apache-commons/README
+deleted file mode 100644
+index 18944aca4af7..000000000000
+--- a/external/apache-commons/README
++++ /dev/null
+@@ -1 +0,0 @@
+-Java library; used for logging in Extensions, from [http://commons.apache.org/]
+diff --git a/external/apache-commons/UnpackedTarball_apache_commons_logging.mk b/external/apache-commons/UnpackedTarball_apache_commons_logging.mk
+deleted file mode 100644
+index 1d5ad3dc2d9d..000000000000
+--- a/external/apache-commons/UnpackedTarball_apache_commons_logging.mk
++++ /dev/null
+@@ -1,22 +0,0 @@
+-# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+-#
+-# This file is part of the LibreOffice project.
+-#
+-# This Source Code Form is subject to the terms of the Mozilla Public
+-# License, v. 2.0. If a copy of the MPL was not distributed with this
+-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-#
+-
+-$(eval $(call gb_UnpackedTarball_UnpackedTarball,apache_commons_logging))
+-
+-$(eval $(call gb_UnpackedTarball_set_tarball,apache_commons_logging,$(APACHE_COMMONS_LOGGING_TARBALL),,apache-commons))
+-
+-$(eval $(call gb_UnpackedTarball_fix_end_of_line,apache_commons_logging,\
+-	build.xml \
+-))
+-
+-$(eval $(call gb_UnpackedTarball_add_patches,apache_commons_logging,\
+-	external/apache-commons/patches/logging.patch \
+-))
+-
+-# vim: set noet sw=4 ts=4:
+diff --git a/external/apache-commons/patches/logging.patch b/external/apache-commons/patches/logging.patch
+deleted file mode 100644
+index c225e5a30338..000000000000
+--- a/external/apache-commons/patches/logging.patch
++++ /dev/null
+@@ -1,46 +0,0 @@
+---- misc/commons-logging-1.1.1-src/build.xml   2007-11-22 00:27:52.000000000 +0100
+-+++ misc/build/commons-logging-1.1.1-src/build.xml     2008-06-24 14:23:56.316301736 +0200
+-@@ -129,12 +129,6 @@
+-   
+- <!-- ========== Compiler Defaults ========================================= -->
+- 
+--  <!-- Version of java class files to generate. -->
+--  <property name="target.version" value="1.2"/>
+--
+--  <!-- Version of java source to accept -->
+--  <property name="source.version" value="1.2"/>
+--
+-   <!-- Should Java compilations set the 'debug' compiler option? -->
+-   <property name="compile.debug"           value="true"/>
+- 
+-@@ -283,6 +277,10 @@
+-                classpathref="compile.classpath"
+-                classname="org.apache.avalon.framework.logger.Logger"/>
+- 
+-+    <available property="servlet-api.present"
+-+               classpathref="compile.classpath"
+-+               classname="javax.servlet.ServletContextListener"/>
+-+
+-     <available file="${log4j12.jar}" property="log4j12.present"/>
+-     <available file="${log4j13.jar}" property="log4j13.present"/>
+-     <available file="${build.home}/docs" property="maven.generated.docs.present"/>
+-@@ -362,8 +360,8 @@
+-            debug="${compile.debug}"
+-            deprecation="${compile.deprecation}"
+-            optimize="${compile.optimize}"
+--           source="${source.version}"
+--           target="${target.version}">
+-+           source="${ant.build.javac.source}"
+-+           target="${ant.build.javac.target}">
+- 
+-       <classpath refid="compile.classpath"/>
+-     
+-@@ -373,6 +371,8 @@
+-                unless="logkit.present"/>
+-       <exclude name="org/apache/commons/logging/impl/AvalonLogger.java"
+-                unless="avalon-framework.present"/>
+-+      <exclude name="org/apache/commons/logging/impl/ServletContextCleaner.java"
+-+               unless="servlet-api.present"/>
+-     </javac>
+-   </target>
+- 
+diff --git a/readlicense_oo/license/NOTICE b/readlicense_oo/license/NOTICE
+index 46b7fccaf737..0cecc2dbfa50 100644
+--- a/readlicense_oo/license/NOTICE
++++ b/readlicense_oo/license/NOTICE
+@@ -25,7 +25,6 @@ Apache projects:
+ - Apache Lucene
+ - Apache Portable Runtime
+ - Apache Portable Runtime Utility Library
+-- Apache Commons - used by MediaWiki Publisher extension
+ - Apache Jakarta HttpClient - used by MediaWiki Publisher extension
+ - Apache Tomcat - used by MediaWiki Publisher extension
+ 
+@@ -106,13 +105,6 @@ This product includes software from the Spring Framework,
+ under the Apache License 2.0 (see: StringUtils.containsWhitespace())
+ 
+ 
+-Apache Commons Logging
+-Copyright 2003-2007 The Apache Software Foundation
+-
+-This product includes software developed by
+-The Apache Software Foundation (http://www.apache.org/).
+-
+-
+ Apache Tomcat
+ Copyright 1999-2012 The Apache Software Foundation
+ 
+diff --git a/readlicense_oo/license/license.xml b/readlicense_oo/license/license.xml
+index 2c45a12fd202..2bd6b943096f 100644
+--- a/readlicense_oo/license/license.xml
++++ b/readlicense_oo/license/license.xml
+@@ -52,12 +52,6 @@
+     <h1 style="text-align: center;"><a id="thirdparty" name="thirdparty">Third Party Code Additional Copyright
+     Notices and License Terms</a></h1>
+     <h1><a id="a__Libraries" name="a__Libraries">Libraries</a></h1>
+-    <div class="APACHE_COMMONS">
+-        <h2>Apache Commons</h2>
+-        <p>The following software may be included in this product: Apache Commons (codec, httpclient, lang, logging).
+-        Use of any of this software is governed by the terms of the license below:</p>
+-        <p><a href="#a__Apache_License_version_2_0">Jump to Apache License Version 2.0</a></p>
+-    </div>
+     <div class="APR">
+         <h2>Apache Portable Runtime (APR)</h2>
+         <p>The following software may be included in this product: Apache Portable Runtime (APR).
+diff --git a/reportbuilder/Jar_reportbuilder.mk b/reportbuilder/Jar_reportbuilder.mk
+index 101ebc9330b7..7abcf796a0d0 100644
+--- a/reportbuilder/Jar_reportbuilder.mk
++++ b/reportbuilder/Jar_reportbuilder.mk
+@@ -15,7 +15,6 @@ $(eval $(call gb_Jar_use_jars,reportbuilder,\
+ ))
+ 
+ $(eval $(call gb_Jar_use_externals,reportbuilder,\
+-	commons-logging \
+ 	flow-engine \
+ 	flute \
+ 	libbase \
+diff --git a/reportbuilder/java/org/libreoffice/report/SDBCReportDataFactory.java b/reportbuilder/java/org/libreoffice/report/SDBCReportDataFactory.java
+index 463addc63e71..b3c4508666ca 100644
+--- a/reportbuilder/java/org/libreoffice/report/SDBCReportDataFactory.java
++++ b/reportbuilder/java/org/libreoffice/report/SDBCReportDataFactory.java
+@@ -58,9 +58,6 @@ import java.util.Map;
+ import java.util.logging.Level;
+ import java.util.logging.Logger;
+ 
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
+-
+ 
+ /**
+  * Very primitive implementation, just to show how this could be used ...
+@@ -142,7 +139,7 @@ public class SDBCReportDataFactory implements DataSourceFactory
+         private int parameterCount = 0;
+         private final ArrayList<Integer> parameterIndex = new ArrayList<Integer>();
+     }
+-    private static final Log LOGGER = LogFactory.getLog(SDBCReportDataFactory.class);
++    private static final Logger LOGGER = Logger.getLogger(SDBCReportDataFactory.class.getName());
+     public static final String COMMAND_TYPE = "command-type";
+     public static final String ESCAPE_PROCESSING = "escape-processing";
+     public static final String SORT_EXPRESSIONS = "sort-expressions";
+@@ -259,7 +256,7 @@ public class SDBCReportDataFactory implements DataSourceFactory
+         }
+         catch (SQLException ex)
+         {
+-            LOGGER.error("ReportProcessing failed / getOrderStatement could not get quote character", ex);
++            LOGGER.severe("ReportProcessing failed / getOrderStatement could not get quote character: " + ex);
+             // fall back to the SQL standard
+             quote="";
+         }
+diff --git a/reportbuilder/java/org/libreoffice/report/StorageRepository.java b/reportbuilder/java/org/libreoffice/report/StorageRepository.java
+index 8b6d08c458a2..a338ee5dedb5 100644
+--- a/reportbuilder/java/org/libreoffice/report/StorageRepository.java
++++ b/reportbuilder/java/org/libreoffice/report/StorageRepository.java
+@@ -37,9 +37,7 @@ import java.io.BufferedOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.OutputStream;
+-
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
++import java.util.logging.Logger;
+ 
+ /**
+  * A directory holds all the contents here.
+@@ -49,8 +47,8 @@ import org.apache.commons.logging.LogFactory;
+ public class StorageRepository implements InputRepository, OutputRepository
+ {
+ 
+-    private static final Log LOGGER = LogFactory.getLog(StorageRepository.class);
+-    private static final String REPORT_PROCESSING_FAILED = "ReportProcessing failed";
++    private static final Logger LOGGER = Logger.getLogger(StorageRepository.class.getName());
++    private static final String REPORT_PROCESSING_FAILED = "ReportProcessing failed: ";
+     private XStorage input;
+     private XStorage output;
+     private final String rootURL;
+@@ -134,11 +132,11 @@ public class StorageRepository implements InputRepository, OutputRepository
+         }
+         catch (InvalidStorageException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (com.sun.star.lang.IllegalArgumentException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (NoSuchElementException e)
+         {
+@@ -168,15 +166,15 @@ public class StorageRepository implements InputRepository, OutputRepository
+         }
+         catch (InvalidStorageException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (com.sun.star.lang.IllegalArgumentException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (NoSuchElementException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         return false;
+     }
+@@ -195,23 +193,23 @@ public class StorageRepository implements InputRepository, OutputRepository
+         }
+         catch (NoSuchElementException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (WrappedTargetException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (InvalidStorageException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (IllegalArgumentException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (com.sun.star.io.IOException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         throw new IOException();
+     }
+@@ -245,27 +243,27 @@ public class StorageRepository implements InputRepository, OutputRepository
+         }
+         catch (UnknownPropertyException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (PropertyVetoException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (IllegalArgumentException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (WrappedTargetException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (InvalidStorageException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (com.sun.star.io.IOException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+ 
+         throw new IOException();
+@@ -293,11 +291,11 @@ public class StorageRepository implements InputRepository, OutputRepository
+             }
+             catch (com.sun.star.io.IOException ex)
+             {
+-                LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++                LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+             }
+             catch (WrappedTargetException ex)
+             {
+-                LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++                LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+             }
+             output.dispose();
+         }
+@@ -312,11 +310,11 @@ public class StorageRepository implements InputRepository, OutputRepository
+         }
+         catch (InvalidStorageException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (com.sun.star.lang.IllegalArgumentException ex)
+         {
+-            LOGGER.error(REPORT_PROCESSING_FAILED, ex);
++            LOGGER.severe(REPORT_PROCESSING_FAILED + ex);
+         }
+         catch (NoSuchElementException ex)
+         {
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/Manifest.mf b/reportbuilder/java/org/libreoffice/report/pentaho/Manifest.mf
+index 23731b104054..2a56b2fbb9fa 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/Manifest.mf
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/Manifest.mf
+@@ -3,5 +3,5 @@ Class-Path: reportbuilderwizard.jar
+   flute-1.1.6.jar libserializer-1.1.6.jar libbase-1.1.6.jar
+   libfonts-1.1.6.jar libformula-1.1.7.jar liblayout.jar
+   libloader-1.1.6.jar librepository-1.1.6.jar libxml-1.1.7.jar
+-  flow-engine.jar sac.jar commons-logging-1.2.jar
++  flow-engine.jar sac.jar
+ UNO-Type-Path: 
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/PentahoReportJob.java b/reportbuilder/java/org/libreoffice/report/pentaho/PentahoReportJob.java
+index 480bca548e7e..efb4261ce127 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/PentahoReportJob.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/PentahoReportJob.java
+@@ -42,9 +42,7 @@ import java.io.IOException;
+ 
+ import java.util.ArrayList;
+ import java.util.List;
+-
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
++import java.util.logging.Logger;
+ 
+ import org.jfree.report.expressions.Expression;
+ import org.jfree.report.expressions.FormulaExpression;
+@@ -72,7 +70,7 @@ import org.pentaho.reporting.libraries.resourceloader.ResourceManager;
+ public class PentahoReportJob implements ReportJob
+ {
+ 
+-    private static final Log LOGGER = LogFactory.getLog(PentahoReportJob.class);
++    private static final Logger LOGGER = Logger.getLogger(PentahoReportJob.class.getName());
+     private final DataSourceFactory dataSourceFactory;
+     private final OutputRepository outputRepository;
+     private final JobProperties jobProperties;
+@@ -235,7 +233,7 @@ public class PentahoReportJob implements ReportJob
+                 }
+                 catch (ParseException ex)
+                 {
+-                    LOGGER.error("ReportProcessing failed", ex);
++                    LOGGER.severe("ReportProcessing failed: " + ex);
+                 }
+             }
+             else if (node instanceof OfficeDetailSection)
+@@ -338,7 +336,7 @@ public class PentahoReportJob implements ReportJob
+             rp.processReport(job);
+             job.close();
+             final long endTime = System.currentTimeMillis();
+-            LOGGER.debug("Report processing time: " + (endTime - startTime));
++            LOGGER.config("Report processing time: " + (endTime - startTime));
+         }
+         catch (final Exception e)
+         {
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/SOReportJobFactory.java b/reportbuilder/java/org/libreoffice/report/pentaho/SOReportJobFactory.java
+index 54694fd619ab..3c52473e3d3c 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/SOReportJobFactory.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/SOReportJobFactory.java
+@@ -68,9 +68,6 @@ import java.io.Writer;
+ import java.io.PrintWriter;
+ import java.io.StringWriter;
+ 
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
+-
+ /**
+  * This class capsulates the class, that implements the minimal component, a factory for creating the service
+  * (<CODE>__getComponentFactory</CODE>) and a method, that writes the information into the given registry key
+@@ -86,7 +83,7 @@ public class SOReportJobFactory
+     public static class _SOReportJobFactory extends WeakBase implements XInitialization, XServiceInfo, XJob, XPropertySet, ReportJobFactory
+     {
+ 
+-        private static final Log LOGGER = LogFactory.getLog(_SOReportJobFactory.class);
++        private static final Logger LOGGER = Logger.getLogger(_SOReportJobFactory.class.getName());
+         /**
+          * The service name, that must be used to get an instance of this service.
+          */
+@@ -242,7 +239,7 @@ public class SOReportJobFactory
+             }
+             catch (java.lang.Exception e)
+             {
+-                LOGGER.error("ReportProcessing failed", e);
++                LOGGER.severe("ReportProcessing failed: " + e);
+                 Writer result = new StringWriter();
+                 PrintWriter printWriter = new PrintWriter(result);
+                 e.printStackTrace(printWriter);
+@@ -254,7 +251,7 @@ public class SOReportJobFactory
+             }
+             catch (java.lang.IncompatibleClassChangeError e)
+             {
+-                LOGGER.error("Detected an IncompatibleClassChangeError");
++                LOGGER.severe("Detected an IncompatibleClassChangeError");
+                 Writer result = new StringWriter();
+                 PrintWriter printWriter = new PrintWriter(result);
+                 e.printStackTrace(printWriter);
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/FormatValueUtility.java b/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/FormatValueUtility.java
+index 6a1bd00736ee..eab7c512284d 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/FormatValueUtility.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/FormatValueUtility.java
+@@ -208,7 +208,7 @@ public class FormatValueUtility
+         if (result == null)
+         {
+             // ignore it. Ignoring it is much better than printing 'null'.
+-            // LOGGER.debug("Formula '" + formulaExpression.getFormula() + "' evaluated to null.");
++            // LOGGER.config("Formula '" + formulaExpression.getFormula() + "' evaluated to null.");
+             return null;
+         }
+         else if (result instanceof DataFlags)
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/FormattedTextLayoutController.java b/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/FormattedTextLayoutController.java
+index 7f1470edc866..7959b5857408 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/FormattedTextLayoutController.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/FormattedTextLayoutController.java
+@@ -20,8 +20,7 @@ package org.libreoffice.report.pentaho.layoutprocessor;
+ 
+ import org.libreoffice.report.pentaho.OfficeNamespaces;
+ import org.libreoffice.report.pentaho.model.FormattedTextElement;
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
++import java.util.logging.Logger;
+ 
+ import org.jfree.report.DataFlags;
+ import org.jfree.report.DataSourceException;
+@@ -45,7 +44,7 @@ public class FormattedTextLayoutController
+         extends AbstractReportElementLayoutController
+ {
+ 
+-    private static final Log LOGGER = LogFactory.getLog(FormattedTextLayoutController.class);
++    private static final Logger LOGGER = Logger.getLogger(FormattedTextLayoutController.class.getName());
+ 
+     @Override
+     public boolean isValueChanged()
+@@ -62,7 +61,7 @@ public class FormattedTextLayoutController
+         }
+         catch (final ParseException e)
+         {
+-            LOGGER.debug("Parse Exception", e);
++            LOGGER.config("Parse Exception: " + e);
+             return false;
+         }
+     }
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/ImageElementLayoutController.java b/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/ImageElementLayoutController.java
+index 0bf40b9dcd28..6fc68e816f7c 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/ImageElementLayoutController.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/layoutprocessor/ImageElementLayoutController.java
+@@ -22,8 +22,7 @@ import org.libreoffice.report.OfficeToken;
+ import org.libreoffice.report.pentaho.OfficeNamespaces;
+ import org.libreoffice.report.pentaho.model.ImageElement;
+ 
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
++import java.util.logging.Logger;
+ 
+ import org.jfree.layouting.util.AttributeMap;
+ import org.jfree.report.DataSourceException;
+@@ -59,7 +58,7 @@ public class ImageElementLayoutController
+         extends AbstractReportElementLayoutController
+ {
+ 
+-    private static final Log LOGGER = LogFactory.getLog(ImageElementLayoutController.class);
++    private static final Logger LOGGER = Logger.getLogger(ImageElementLayoutController.class.getName());
+     private ImageElementContext context;
+ 
+     @Override
+@@ -116,7 +115,7 @@ public class ImageElementLayoutController
+             final LayoutController cellController = findParentCell();
+             if (cellController == null)
+             {
+-                LOGGER.warn("Image is not contained in a table. Unable to calculate the image-size.");
++                LOGGER.warning("Image is not contained in a table. Unable to calculate the image-size.");
+                 return null;
+             }
+             final Element tableCell = (Element) cellController.getNode();
+@@ -124,14 +123,14 @@ public class ImageElementLayoutController
+             final int colSpan = TextUtilities.parseInt((String) tableCell.getAttribute(OfficeNamespaces.TABLE_NS, "number-columns-spanned"), 1);
+             if (rowSpan < 1 || colSpan < 1)
+             {
+-                LOGGER.warn("Rowspan or colspan for image-size calculation was invalid.");
++                LOGGER.warning("Rowspan or colspan for image-size calculation was invalid.");
+                 return null;
+             }
+ 
+             final LayoutController rowController = cellController.getParent();
+             if (rowController == null)
+             {
+-                LOGGER.warn("Table-Cell has no parent. Unable to calculate the image-size.");
++                LOGGER.warning("Table-Cell has no parent. Unable to calculate the image-size.");
+                 return null;
+             }
+             final Section tableRow = (Section) rowController.getNode();
+@@ -141,14 +140,14 @@ public class ImageElementLayoutController
+             final int columnPos = findNodeInSection(tableRow, tableCell, OfficeToken.COVERED_TABLE_CELL);
+             if (columnPos == -1)
+             {
+-                LOGGER.warn("Table-Cell is not a direct child of the table-row. Unable to calculate the image-size.");
++                LOGGER.warning("Table-Cell is not a direct child of the table-row. Unable to calculate the image-size.");
+                 return null;
+             }
+ 
+             final LayoutController tableController = rowController.getParent();
+             if (tableController == null)
+             {
+-                LOGGER.warn("Table-Row has no Table. Unable to calculate the image-size.");
++                LOGGER.warning("Table-Row has no Table. Unable to calculate the image-size.");
+                 return null;
+             }
+ 
+@@ -158,7 +157,7 @@ public class ImageElementLayoutController
+             if (columns.getNodeCount() <= columnPos + colSpan)
+             {
+                 // the colspan is too large. The table definition is therefore invalid. We do not try to fix this.
+-                LOGGER.warn(
++                LOGGER.warning(
+                         "The Table's defined columns do not match the col-span or col-position. Unable to calculate the image-size.");
+                 return null;
+             }
+@@ -169,7 +168,7 @@ public class ImageElementLayoutController
+             final int rowPos = findNodeInSection(table, tableRow, null);
+             if (rowPos == -1)
+             {
+-                LOGGER.warn("Table-Cell is not a direct child of the table-row. Unable to calculate the image-size.");
++                LOGGER.warning("Table-Cell is not a direct child of the table-row. Unable to calculate the image-size.");
+                 return null;
+             }
+ 
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/output/ImageProducer.java b/reportbuilder/java/org/libreoffice/report/pentaho/output/ImageProducer.java
+index ae1a8273bfb7..69995d7aa1c5 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/output/ImageProducer.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/output/ImageProducer.java
+@@ -48,9 +48,6 @@ import java.util.Map;
+ import java.util.logging.Level;
+ import java.util.logging.Logger;
+ 
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
+-
+ import org.jfree.layouting.input.style.values.CSSNumericType;
+ import org.jfree.layouting.input.style.values.CSSNumericValue;
+ 
+@@ -67,7 +64,7 @@ import org.pentaho.reporting.libraries.base.util.WaitingImageObserver;
+ public class ImageProducer
+ {
+ 
+-    private static final Log LOGGER = LogFactory.getLog(ImageProducer.class);
++    private static final Logger LOGGER = Logger.getLogger(ImageProducer.class.getName());
+ 
+     public static class OfficeImage
+     {
+@@ -188,7 +185,7 @@ public class ImageProducer
+             final boolean preserveIRI)
+     {
+ 
+-        LOGGER.debug("Want to produce image " + imageData);
++        LOGGER.config("Want to produce image " + imageData);
+         if (imageData instanceof String)
+         {
+             return produceFromString((String) imageData, preserveIRI);
+@@ -247,11 +244,11 @@ public class ImageProducer
+         }
+         catch (IOException e)
+         {
+-            LOGGER.warn("Failed to produce image from Blob", e);
++            LOGGER.warning("Failed to produce image from Blob: " + e);
+         }
+         catch (SQLException e)
+         {
+-            LOGGER.warn("Failed to produce image from Blob", e);
++            LOGGER.warning("Failed to produce image from Blob: " + e);
+         }
+         return null;
+     }
+@@ -295,11 +292,11 @@ public class ImageProducer
+         }
+         catch (IOException e)
+         {
+-            LOGGER.warn("Failed to load image from local input-repository", e);
++            LOGGER.warning("Failed to load image from local input-repository: " + e);
+         }
+         catch (ReportExecutionException e)
+         {
+-            LOGGER.warn("Failed to create image from local input-repository", e);
++            LOGGER.warning("Failed to create image from local input-repository: " + e);
+         }
+         return null;
+     }
+@@ -353,11 +350,11 @@ public class ImageProducer
+             }
+             catch (IOException e)
+             {
+-                LOGGER.warn("Failed to load image from local input-repository", e);
++                LOGGER.warning("Failed to load image from local input-repository: " + e);
+             }
+             catch (ReportExecutionException e)
+             {
+-                LOGGER.warn("Failed to create image from local input-repository", e);
++                LOGGER.warning("Failed to create image from local input-repository: " + e);
+             }
+         }
+         else
+@@ -435,11 +432,11 @@ public class ImageProducer
+         }
+         catch (IOException e)
+         {
+-            LOGGER.warn("Failed to load image from local input-repository", e);
++            LOGGER.warning("Failed to load image from local input-repository: " + e);
+         }
+         catch (ReportExecutionException e)
+         {
+-            LOGGER.warn("Failed to create image from local input-repository", e);
++            LOGGER.warning("Failed to create image from local input-repository: " + e);
+         }
+ 
+         if (!preserveIRI)
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/output/OfficeDocumentReportTarget.java b/reportbuilder/java/org/libreoffice/report/pentaho/output/OfficeDocumentReportTarget.java
+index a5c3be135a65..b73b5781b3a3 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/output/OfficeDocumentReportTarget.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/output/OfficeDocumentReportTarget.java
+@@ -65,9 +65,6 @@ import java.util.Map;
+ import java.util.zip.DeflaterOutputStream;
+ import java.util.zip.InflaterInputStream;
+ 
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
+-
+ import org.jfree.layouting.input.style.parser.CSSValueFactory;
+ import org.jfree.layouting.input.style.parser.StyleSheetParserUtil;
+ import org.jfree.layouting.input.style.values.CSSNumericType;
+@@ -112,7 +109,7 @@ import org.w3c.css.sac.LexicalUnit;
+ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+ {
+ 
+-    protected static final Log LOGGER = LogFactory.getLog(OfficeDocumentReportTarget.class);
++    protected static final Logger LOGGER = Logger.getLogger(OfficeDocumentReportTarget.class.getName());
+     public static final String HORIZONTAL_POS = "horizontal-pos";
+     public static final String TAG_DEF_PREFIX = "org.libreoffice.report.pentaho.output.";
+     private static final int ROLE_NONE = 0;
+@@ -517,7 +514,7 @@ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+         // todo
+         if (DEBUG_ELEMENTS)
+         {
+-            LOGGER.debug("Starting " + getCurrentState() + '/' + states.size() + ' ' + ReportTargetUtil.getNamespaceFromAttribute(attrs) + " -> " + ReportTargetUtil.getElemenTypeFromAttribute(attrs));
++            LOGGER.config("Starting " + getCurrentState() + '/' + states.size() + ' ' + ReportTargetUtil.getNamespaceFromAttribute(attrs) + " -> " + ReportTargetUtil.getElemenTypeFromAttribute(attrs));
+         }
+         try
+         {
+@@ -713,7 +710,7 @@ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+         }
+         catch (IOException ioe)
+         {
+-            LOGGER.error("ReportProcessing failed", ioe);
++            LOGGER.severe("ReportProcessing failed: " + ioe);
+             throw new ReportProcessingException("Failed to write content", ioe);
+         }
+     }
+@@ -762,7 +759,7 @@ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+                 if (styleMapper.isListOfStyles(elementNamespace, elementName, attrNamespace, attrName))
+                 {
+                     // ignored for now.
+-                    LOGGER.warn("List of styles is not yet implemented.");
++                    LOGGER.warning("List of styles is not yet implemented.");
+                     continue;
+                 }
+ 
+@@ -970,7 +967,7 @@ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+ 
+             if (DEBUG_ELEMENTS)
+             {
+-                LOGGER.debug("Finished " + getCurrentState() + "/" + states.size() + " " + ReportTargetUtil.getNamespaceFromAttribute(attrs) + ":" + ReportTargetUtil.getElemenTypeFromAttribute(attrs));
++                LOGGER.config("Finished " + getCurrentState() + "/" + states.size() + " " + ReportTargetUtil.getNamespaceFromAttribute(attrs) + ":" + ReportTargetUtil.getElemenTypeFromAttribute(attrs));
+             }
+ 
+         }
+@@ -1153,7 +1150,7 @@ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+         }
+         catch (IOException e)
+         {
+-            LOGGER.error("ReportProcessing failed", e);
++            LOGGER.severe("ReportProcessing failed: " + e);
+         }
+         return state;
+     }
+@@ -1294,7 +1291,7 @@ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+ 
+             final CSSNumericValue height = image.getHeight(); // always in 100th of a mm
+ 
+-            LOGGER.debug("Image " + imageData + " Width: " + width + ", Height: " + height);
++            LOGGER.config("Image " + imageData + " Width: " + width + ", Height: " + height);
+             if (width == null || height == null)
+             {
+                 return;
+@@ -1313,7 +1310,7 @@ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+ 
+                 if (imageAreaWidthVal == null || imageAreaHeightVal == null)
+                 {
+-                    LOGGER.debug("Image data returned from context is invalid. Maybe this is not an image?");
++                    LOGGER.config("Image data returned from context is invalid. Maybe this is not an image?");
+                     return;
+                 }
+                 else
+@@ -1410,7 +1407,7 @@ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+             }
+             else
+             {
+-                LOGGER.debug("There is no image-context, so we have to rely on the image's natural bounds. " + "This may go awfully wrong.");
++                LOGGER.config("There is no image-context, so we have to rely on the image's natural bounds. " + "This may go awfully wrong.");
+                 imageAreaWidthVal = image.getWidth();
+                 imageAreaHeightVal = image.getHeight();
+             }
+@@ -1427,7 +1424,7 @@ public abstract class OfficeDocumentReportTarget extends AbstractReportTarget
+             frameList.setAttribute(OfficeNamespaces.SVG_NS, "y", posY.getValue() + posY.getType().getType());
+ 
+ 
+-            LOGGER.debug("Image " + imageData + " A-Width: " + imageAreaWidthVal + ", A-Height: " + imageAreaHeightVal);
++            LOGGER.config("Image " + imageData + " A-Width: " + imageAreaWidthVal + ", A-Height: " + imageAreaHeightVal);
+ 
+             if (imageAreaWidthVal != null)
+             {
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/output/OleProducer.java b/reportbuilder/java/org/libreoffice/report/pentaho/output/OleProducer.java
+index 2010a189be1d..27f3c25a4b4b 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/output/OleProducer.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/output/OleProducer.java
+@@ -32,14 +32,12 @@ import org.libreoffice.report.pentaho.PentahoReportEngineMetaData;
+ import java.io.IOException;
+ 
+ import java.util.List;
+-
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
++import java.util.logging.Logger;
+ 
+ public class OleProducer
+ {
+ 
+-    private static final Log LOGGER = LogFactory.getLog(OleProducer.class);
++    private static final Logger LOGGER = Logger.getLogger(OleProducer.class.getName());
+     private final InputRepository inputRepository;
+     private final OutputRepository outputRepository;
+     private final DefaultNameGenerator nameGenerator;
+@@ -100,16 +98,16 @@ public class OleProducer
+             }
+             catch (ReportExecutionException ex)
+             {
+-                LOGGER.error("ReportProcessing failed", ex);
++                LOGGER.severe("ReportProcessing failed: " + ex);
+             }
+             catch (IOException ex)
+             {
+-                LOGGER.error("ReportProcessing failed", ex);
++                LOGGER.severe("ReportProcessing failed: " + ex);
+             }
+         }
+         catch (IOException ex)
+         {
+-            LOGGER.error("ReportProcessing failed", ex);
++            LOGGER.severe("ReportProcessing failed: " + ex);
+         } finally
+         {
+             if (subInputRepository != null)
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/output/StyleUtilities.java b/reportbuilder/java/org/libreoffice/report/pentaho/output/StyleUtilities.java
+index 2b204a4bf502..98af0c3fa076 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/output/StyleUtilities.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/output/StyleUtilities.java
+@@ -28,9 +28,7 @@ import org.libreoffice.report.pentaho.model.OfficeStylesCollection;
+ import java.util.ArrayList;
+ import java.util.HashSet;
+ import java.util.Set;
+-
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
++import java.util.logging.Logger;
+ 
+ import org.jfree.report.ReportProcessingException;
+ import org.jfree.report.structure.Element;
+@@ -46,7 +44,7 @@ import org.jfree.report.util.AttributeNameGenerator;
+ public class StyleUtilities
+ {
+ 
+-    private static final Log LOGGER = LogFactory.getLog(StyleUtilities.class);
++    private static final Logger LOGGER = Logger.getLogger(StyleUtilities.class.getName());
+     private static final String STYLE = "style";
+ 
+     private StyleUtilities()
+@@ -180,7 +178,7 @@ public class StyleUtilities
+             }
+             else if (styleParent != null)
+             {
+-                LOGGER.warn("Inconsistent styles: " + styleFamily + ":" + styleParent + " does not exist.");
++                LOGGER.warning("Inconsistent styles: " + styleFamily + ":" + styleParent + " does not exist.");
+             }
+             return preStyle;
+         }
+@@ -301,7 +299,7 @@ public class StyleUtilities
+                         }
+                         else
+                         {
+-                            LOGGER.warn("Dangling data style: " + styleName);
++                            LOGGER.warning("Dangling data style: " + styleName);
+                             derivedStyle = null;
+                         }
+                     }
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/output/spreadsheet/SpreadsheetRawReportTarget.java b/reportbuilder/java/org/libreoffice/report/pentaho/output/spreadsheet/SpreadsheetRawReportTarget.java
+index e6c234503c22..b1d979e7b788 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/output/spreadsheet/SpreadsheetRawReportTarget.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/output/spreadsheet/SpreadsheetRawReportTarget.java
+@@ -305,7 +305,7 @@ public class SpreadsheetRawReportTarget extends OfficeDocumentReportTarget
+             }
+             catch (IOException ex)
+             {
+-                LOGGER.error("ReportProcessing failed", ex);
++                LOGGER.severe("ReportProcessing failed: " + ex);
+             }
+         }
+     }
+diff --git a/reportbuilder/java/org/libreoffice/report/pentaho/parser/office/DocumentContentReadHandler.java b/reportbuilder/java/org/libreoffice/report/pentaho/parser/office/DocumentContentReadHandler.java
+index 6d36eb6f9ea5..65a48252e69f 100644
+--- a/reportbuilder/java/org/libreoffice/report/pentaho/parser/office/DocumentContentReadHandler.java
++++ b/reportbuilder/java/org/libreoffice/report/pentaho/parser/office/DocumentContentReadHandler.java
+@@ -22,8 +22,7 @@ import org.libreoffice.report.pentaho.model.OfficeDocument;
+ import org.libreoffice.report.pentaho.model.OfficeStylesCollection;
+ import org.libreoffice.report.pentaho.parser.style.OfficeStylesReadHandler;
+ 
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
++import java.util.logging.Logger;
+ 
+ import org.jfree.report.JFreeReport;
+ 
+@@ -49,7 +48,7 @@ import org.xml.sax.SAXException;
+ public class DocumentContentReadHandler extends AbstractXmlReadHandler
+ {
+ 
+-    private static final Log LOGGER = LogFactory.getLog(DocumentContentReadHandler.class);
++    private static final Logger LOGGER = Logger.getLogger(DocumentContentReadHandler.class.getName());
+     private OfficeDocument report;
+     private FontFaceDeclsReadHandler fontFaceReadHandler;
+     private BodyReadHandler bodyReadHandler;
+@@ -98,12 +97,12 @@ public class DocumentContentReadHandler extends AbstractXmlReadHandler
+         catch (ResourceKeyCreationException e)
+         {
+             // ignore ..
+-            LOGGER.debug("Failed to create resource-key for 'styles.xml'. Ignoring.", e);
++            LOGGER.config("Failed to create resource-key for 'styles.xml'. Ignoring: " + e);
+         }
+         catch (ResourceException e)
+         {
+             // ignore ..
+-            LOGGER.debug("Failed to parse resource for 'styles.xml'. Ignoring.", e);
++            LOGGER.config("Failed to parse resource for 'styles.xml'. Ignoring: " + e);
+         }
+ 
+         return new OfficeStylesCollection();
+@@ -135,12 +134,12 @@ public class DocumentContentReadHandler extends AbstractXmlReadHandler
+         catch (ResourceKeyCreationException e)
+         {
+             // ignore ..
+-            LOGGER.debug("Failed to create resource-key for 'content.xml'. Ignoring.");
++            LOGGER.config("Failed to create resource-key for 'content.xml'. Ignoring.");
+         }
+         catch (ResourceException e)
+         {
+             // ignore ..
+-            LOGGER.debug("Failed to parse resource for 'content.xml'. Ignoring.");
++            LOGGER.config("Failed to parse resource for 'content.xml'. Ignoring.");
+         }
+         return new OfficeDocument();
+ 
+diff --git a/solenv/flatpak-manifest.in b/solenv/flatpak-manifest.in
+index d5699baefb90..8610fa05d6f5 100644
+--- a/solenv/flatpak-manifest.in
++++ b/solenv/flatpak-manifest.in
+@@ -543,13 +543,6 @@
+                     "dest": "external/tarballs",
+                     "dest-filename": "beeca87be45ec87d241ddd0e1bad80c1-bsh-2.0b6-src.zip"
+                 },
+-                {
+-                    "url": "https://dev-www.libreoffice.org/src/commons-logging-1.2-src.tar.gz",
+-                    "sha256": "49665da5a60d033e6dff40fe0a7f9173e886ae859ce6096c1afe34c48b677c81",
+-                    "type": "file",
+-                    "dest": "external/tarballs",
+-                    "dest-filename": "commons-logging-1.2-src.tar.gz"
+-                },
+                 {
+                     "url": "https://dev-www.libreoffice.org/src/ba2930200c9f019c2d93a8c88c651a0f-flow-engine-0.9.4.zip",
+                     "sha256": "233f66e8d25c5dd971716d4200203a612a407649686ef3b52075d04b4c9df0dd",
+diff --git a/swext/mediawiki/src/THIRDPARTYLICENSEREADME.html b/swext/mediawiki/src/THIRDPARTYLICENSEREADME.html
+index fbd8b0bfdca0..877661330b6b 100644
+--- a/swext/mediawiki/src/THIRDPARTYLICENSEREADME.html
++++ b/swext/mediawiki/src/THIRDPARTYLICENSEREADME.html
+@@ -10,27 +10,6 @@ DO NOT TRANSLATE OR LOCALIZE THIS DOCUMENT<br>
+ <br>
+ <ul id="mozToc">
+ <!--mozToc h2 1 h3 2-->
+-  <li><a href="#mozTocId445655">The Apache Software Foundation
+-    </a>
+-    <ul>
+-      <li><a href="#mozTocId662146">Commons Codec
+-        </a></li>
+-    </ul>
+-  </li>
+-  <li><a href="#mozTocId954021">The Apache Software Foundation
+-    </a>
+-    <ul>
+-      <li><a href="#mozTocId934893">Commons HTTP Client
+-        </a></li>
+-    </ul>
+-  </li>
+-  <li><a href="#mozTocId478594">The Apache Software Foundation
+-    </a>
+-    <ul>
+-      <li><a href="#mozTocId789223">Commons Lang
+-        </a></li>
+-    </ul>
+-  </li>
+   <li><a href="#mozTocId877758">The Apache Software Foundation
+     </a>
+     <ul>
+@@ -51,34 +30,6 @@ Foundation
+ <hr style="width: 100%; height: 2px;">The following software may be
+ included in this product: Jakarta Commons Codec; Use of any of this
+ software is governed by the terms of the license below:<br>
+-<h2><a class="mozTocH2" name="mozTocId445655"></a>The Apache Software
+-Foundation<br>
+-</h2>
+-<h3><a class="mozTocH3" name="mozTocId662146"></a>Commons Codec<br>
+-</h3>
+-<pre>                                 Apache License<br>                           Version 2.0, January 2004<br>                        http://www.apache.org/licenses/<br><br>   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION<br><br>   1. Definitions.<br><br>      "License" shall mean the terms and conditions for use, reproduction,<br>      and distribution as defined by Sections 1 through 9 of this document.<br><br>      "Licensor" shall mean the copyright owner or entity authorized by<br>      the copyright owner that is granting the License.<br><br>      "Legal Entity" shall mean the union of the acting entity and all<br>      other entities that control, are controlled by, or are under common<br>      control with that entity. For the purposes of this definition,<br>      "control" means (i) the power, direct or indirect, to cause the<br>      direction or management of such entity, whether by contract or<br>      otherwise, or (ii) ownership of fifty percent (50%) or more of the<br>      outstanding shares, or (iii) beneficial ownership of such entity.<br><br>      "You" (or "Your") shall mean an individual or Legal Entity<br>      exercising permissions granted by this License.<br><br>      "Source" form shall mean the preferred form for making modifications,<br>      including but not limited to software source code, documentation<br>      source, and configuration files.<br><br>      "Object" form shall mean any form resulting from mechanical<br>      transformation or translation of a Source form, including but<br>      not limited to compiled object code, generated documentation,<br>      and conversions to other media types.<br><br>      "Work" shall mean the work of authorship, whether in Source or<br>      Object form, made available under the License, as indicated by a<br>      copyright notice that is included in or attached to the work<br>      (an example is provided in the Appendix below).<br><br>      "Derivative Works" shall mean any work, whether in Source or Object<br>      form, that is based on (or derived from) the Work and for which the<br>      editorial revisions, annotations, elaborations, or other modifications<br>      represent, as a whole, an original work of authorship. For the purposes<br>      of this License, Derivative Works shall not include works that remain<br>      separable from, or merely link (or bind by name) to the interfaces of,<br>      the Work and Derivative Works thereof.<br><br>      "Contribution" shall mean any work of authorship, including<br>      the original version of the Work and any modifications or additions<br>      to that Work or Derivative Works thereof, that is intentionally<br>      submitted to Licensor for inclusion in the Work by the copyright owner<br>      or by an individual or Legal Entity authorized to submit on behalf of<br>      the copyright owner. For the purposes of this definition, "submitted"<br>      means any form of electronic, verbal, or written communication sent<br>      to the Licensor or its representatives, including but not limited to<br>      communication on electronic mailing lists, source code control systems,<br>      and issue tracking systems that are managed by, or on behalf of, the<br>      Licensor for the purpose of discussing and improving the Work, but<br>      excluding communication that is conspicuously marked or otherwise<br>      designated in writing by the copyright owner as "Not a Contribution."<br><br>      "Contributor" shall mean Licensor and any individual or Legal Entity<br>      on behalf of whom a Contribution has been received by Licensor and<br>      subsequently incorporated within the Work.<br><br>   2. Grant of Copyright License. Subject to the terms and conditions of<br>      this License, each Contributor hereby grants to You a perpetual,<br>      worldwide, non-exclusive, no-charge, royalty-free, irrevocable<br>      copyright license to reproduce, prepare Derivative Works of,<br>      publicly display, publicly perform, sublicense, and distribute the<br>      Work and such Derivative Works in Source or Object form.<br><br>   3. Grant of Patent License. Subject to the terms and conditions of<br>      this License, each Contributor hereby grants to You a perpetual,<br>      worldwide, non-exclusive, no-charge, royalty-free, irrevocable<br>      (except as stated in this section) patent license to make, have made,<br>      use, offer to sell, sell, import, and otherwise transfer the Work,<br>      where such license applies only to those patent claims licensable<br>      by such Contributor that are necessarily infringed by their<br>      Contribution(s) alone or by combination of their Contribution(s)<br>      with the Work to which such Contribution(s) was submitted. If You<br>      institute patent litigation against any entity (including a<br>      cross-claim or counterclaim in a lawsuit) alleging that the Work<br>      or a Contribution incorporated within the Work constitutes direct<br>      or contributory patent infringement, then any patent licenses<br>      granted to You under this License for that Work shall terminate<br>      as of the date such litigation is filed.<br><br>   4. Redistribution. You may reproduce and distribute copies of the<br>      Work or Derivative Works thereof in any medium, with or without<br>      modifications, and in Source or Object form, provided that You<br>      meet the following conditions:<br><br>      (a) You must give any other recipients of the Work or<br>          Derivative Works a copy of this License; and<br><br>      (b) You must cause any modified files to carry prominent notices<br>          stating that You changed the files; and<br><br>      (c) You must retain, in the Source form of any Derivative Works<br>          that You distribute, all copyright, patent, trademark, and<br>          attribution notices from the Source form of the Work,<br>          excluding those notices that do not pertain to any part of<br>          the Derivative Works; and<br><br>      (d) If the Work includes a "NOTICE" text file as part of its<br>          distribution, then any Derivative Works that You distribute must<br>          include a readable copy of the attribution notices contained<br>          within such NOTICE file, excluding those notices that do not<br>          pertain to any part of the Derivative Works, in at least one<br>          of the following places: within a NOTICE text file distributed<br>          as part of the Derivative Works; within the Source form or<br>          documentation, if provided along with the Derivative Works; or,<br>          within a display generated by the Derivative Works, if and<br>          wherever such third-party notices normally appear. The contents<br>          of the NOTICE file are for informational purposes only and<br>          do not modify the License. You may add Your own attribution<br>          notices within Derivative Works that You distribute, alongside<br>          or as an addendum to the NOTICE text from the Work, provided<br>          that such additional attribution notices cannot be construed<br>          as modifying the License.<br><br>      You may add Your own copyright statement to Your modifications and<br>      may provide additional or different license terms and conditions<br>      for use, reproduction, or distribution of Your modifications, or<br>      for any such Derivative Works as a whole, provided Your use,<br>      reproduction, and distribution of the Work otherwise complies with<br>      the conditions stated in this License.<br><br>   5. Submission of Contributions. Unless You explicitly state otherwise,<br>      any Contribution intentionally submitted for inclusion in the Work<br>      by You to the Licensor shall be under the terms and conditions of<br>      this License, without any additional terms or conditions.<br>      Notwithstanding the above, nothing herein shall supersede or modify<br>      the terms of any separate license agreement you may have executed<br>      with Licensor regarding such Contributions.<br><br>   6. Trademarks. This License does not grant permission to use the trade<br>      names, trademarks, service marks, or product names of the Licensor,<br>      except as required for reasonable and customary use in describing the<br>      origin of the Work and reproducing the content of the NOTICE file.<br><br>   7. Disclaimer of Warranty. Unless required by applicable law or<br>      agreed to in writing, Licensor provides the Work (and each<br>      Contributor provides its Contributions) on an "AS IS" BASIS,<br>      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or<br>      implied, including, without limitation, any warranties or conditions<br>      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A<br>      PARTICULAR PURPOSE. You are solely responsible for determining the<br>      appropriateness of using or redistributing the Work and assume any<br>      risks associated with Your exercise of permissions under this License.<br><br>   8. Limitation of Liability. In no event and under no legal theory,<br>      whether in tort (including negligence), contract, or otherwise,<br>      unless required by applicable law (such as deliberate and grossly<br>      negligent acts) or agreed to in writing, shall any Contributor be<br>      liable to You for damages, including any direct, indirect, special,<br>      incidental, or consequential damages of any character arising as a<br>      result of this License or out of the use or inability to use the<br>      Work (including but not limited to damages for loss of goodwill,<br>      work stoppage, computer failure or malfunction, or any and all<br>      other commercial damages or losses), even if such Contributor<br>      has been advised of the possibility of such damages.<br><br>   9. Accepting Warranty or Additional Liability. While redistributing<br>      the Work or Derivative Works thereof, You may choose to offer,<br>      and charge a fee for, acceptance of support, warranty, indemnity,<br>      or other liability obligations and/or rights consistent with this<br>      License. However, in accepting such obligations, You may act only<br>      on Your own behalf and on Your sole responsibility, not on behalf<br>      of any other Contributor, and only if You agree to indemnify,<br>      defend, and hold each Contributor harmless for any liability<br>      incurred by, or claims asserted against, such Contributor by reason<br>      of your accepting any such warranty or additional liability.<br><br>   END OF TERMS AND CONDITIONS<br><br>   APPENDIX: How to apply the Apache License to your work.<br><br>      To apply the Apache License to your work, attach the following<br>      boilerplate notice, with the fields enclosed by brackets "[]"<br>      replaced with your own identifying information. (Don't include<br>      the brackets!)  The text should be enclosed in the appropriate<br>      comment syntax for the file format. We also recommend that a<br>      file or class name and description of purpose be included on the<br>      same "printed page" as the copyright notice for easier<br>      identification within third-party archives.<br><br>   Copyright [yyyy] [name of copyright owner]<br><br>   Licensed under the Apache License, Version 2.0 (the "License");<br>   you may not use this file except in compliance with the License.<br>   You may obtain a copy of the License at<br><br>       http://www.apache.org/licenses/LICENSE-2.0<br><br>   Unless required by applicable law or agreed to in writing, software<br>   distributed under the License is distributed on an "AS IS" BASIS,<br>   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.<br>   See the License for the specific language governing permissions and<br>   limitations under the License.<br><br></pre>
+-<hr style="width: 100%; height: 2px;">The following software may be
+-included in this product: Jakarta Commons HTTP Client 2; Use of any of
+-this
+-software is governed by the terms of the license below:<br>
+-<h2><a class="mozTocH2" name="mozTocId954021"></a>The Apache Software
+-Foundation<br>
+-</h2>
+-<h3><a class="mozTocH3" name="mozTocId934893"></a>Commons HTTP Client<br>
+-</h3>
+-<pre>                                 Apache License<br>                           Version 2.0, January 2004<br>                        http://www.apache.org/licenses/<br><br>   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION<br><br>   1. Definitions.<br><br>      "License" shall mean the terms and conditions for use, reproduction,<br>      and distribution as defined by Sections 1 through 9 of this document.<br><br>      "Licensor" shall mean the copyright owner or entity authorized by<br>      the copyright owner that is granting the License.<br><br>      "Legal Entity" shall mean the union of the acting entity and all<br>      other entities that control, are controlled by, or are under common<br>      control with that entity. For the purposes of this definition,<br>      "control" means (i) the power, direct or indirect, to cause the<br>      direction or management of such entity, whether by contract or<br>      otherwise, or (ii) ownership of fifty percent (50%) or more of the<br>      outstanding shares, or (iii) beneficial ownership of such entity.<br><br>      "You" (or "Your") shall mean an individual or Legal Entity<br>      exercising permissions granted by this License.<br><br>      "Source" form shall mean the preferred form for making modifications,<br>      including but not limited to software source code, documentation<br>      source, and configuration files.<br><br>      "Object" form shall mean any form resulting from mechanical<br>      transformation or translation of a Source form, including but<br>      not limited to compiled object code, generated documentation,<br>      and conversions to other media types.<br><br>      "Work" shall mean the work of authorship, whether in Source or<br>      Object form, made available under the License, as indicated by a<br>      copyright notice that is included in or attached to the work<br>      (an example is provided in the Appendix below).<br><br>      "Derivative Works" shall mean any work, whether in Source or Object<br>      form, that is based on (or derived from) the Work and for which the<br>      editorial revisions, annotations, elaborations, or other modifications<br>      represent, as a whole, an original work of authorship. For the purposes<br>      of this License, Derivative Works shall not include works that remain<br>      separable from, or merely link (or bind by name) to the interfaces of,<br>      the Work and Derivative Works thereof.<br><br>      "Contribution" shall mean any work of authorship, including<br>      the original version of the Work and any modifications or additions<br>      to that Work or Derivative Works thereof, that is intentionally<br>      submitted to Licensor for inclusion in the Work by the copyright owner<br>      or by an individual or Legal Entity authorized to submit on behalf of<br>      the copyright owner. For the purposes of this definition, "submitted"<br>      means any form of electronic, verbal, or written communication sent<br>      to the Licensor or its representatives, including but not limited to<br>      communication on electronic mailing lists, source code control systems,<br>      and issue tracking systems that are managed by, or on behalf of, the<br>      Licensor for the purpose of discussing and improving the Work, but<br>      excluding communication that is conspicuously marked or otherwise<br>      designated in writing by the copyright owner as "Not a Contribution."<br><br>      "Contributor" shall mean Licensor and any individual or Legal Entity<br>      on behalf of whom a Contribution has been received by Licensor and<br>      subsequently incorporated within the Work.<br><br>   2. Grant of Copyright License. Subject to the terms and conditions of<br>      this License, each Contributor hereby grants to You a perpetual,<br>      worldwide, non-exclusive, no-charge, royalty-free, irrevocable<br>      copyright license to reproduce, prepare Derivative Works of,<br>      publicly display, publicly perform, sublicense, and distribute the<br>      Work and such Derivative Works in Source or Object form.<br><br>   3. Grant of Patent License. Subject to the terms and conditions of<br>      this License, each Contributor hereby grants to You a perpetual,<br>      worldwide, non-exclusive, no-charge, royalty-free, irrevocable<br>      (except as stated in this section) patent license to make, have made,<br>      use, offer to sell, sell, import, and otherwise transfer the Work,<br>      where such license applies only to those patent claims licensable<br>      by such Contributor that are necessarily infringed by their<br>      Contribution(s) alone or by combination of their Contribution(s)<br>      with the Work to which such Contribution(s) was submitted. If You<br>      institute patent litigation against any entity (including a<br>      cross-claim or counterclaim in a lawsuit) alleging that the Work<br>      or a Contribution incorporated within the Work constitutes direct<br>      or contributory patent infringement, then any patent licenses<br>      granted to You under this License for that Work shall terminate<br>      as of the date such litigation is filed.<br><br>   4. Redistribution. You may reproduce and distribute copies of the<br>      Work or Derivative Works thereof in any medium, with or without<br>      modifications, and in Source or Object form, provided that You<br>      meet the following conditions:<br><br>      (a) You must give any other recipients of the Work or<br>          Derivative Works a copy of this License; and<br><br>      (b) You must cause any modified files to carry prominent notices<br>          stating that You changed the files; and<br><br>      (c) You must retain, in the Source form of any Derivative Works<br>          that You distribute, all copyright, patent, trademark, and<br>          attribution notices from the Source form of the Work,<br>          excluding those notices that do not pertain to any part of<br>          the Derivative Works; and<br><br>      (d) If the Work includes a "NOTICE" text file as part of its<br>          distribution, then any Derivative Works that You distribute must<br>          include a readable copy of the attribution notices contained<br>          within such NOTICE file, excluding those notices that do not<br>          pertain to any part of the Derivative Works, in at least one<br>          of the following places: within a NOTICE text file distributed<br>          as part of the Derivative Works; within the Source form or<br>          documentation, if provided along with the Derivative Works; or,<br>          within a display generated by the Derivative Works, if and<br>          wherever such third-party notices normally appear. The contents<br>          of the NOTICE file are for informational purposes only and<br>          do not modify the License. You may add Your own attribution<br>          notices within Derivative Works that You distribute, alongside<br>          or as an addendum to the NOTICE text from the Work, provided<br>          that such additional attribution notices cannot be construed<br>          as modifying the License.<br><br>      You may add Your own copyright statement to Your modifications and<br>      may provide additional or different license terms and conditions<br>      for use, reproduction, or distribution of Your modifications, or<br>      for any such Derivative Works as a whole, provided Your use,<br>      reproduction, and distribution of the Work otherwise complies with<br>      the conditions stated in this License.<br><br>   5. Submission of Contributions. Unless You explicitly state otherwise,<br>      any Contribution intentionally submitted for inclusion in the Work<br>      by You to the Licensor shall be under the terms and conditions of<br>      this License, without any additional terms or conditions.<br>      Notwithstanding the above, nothing herein shall supersede or modify<br>      the terms of any separate license agreement you may have executed<br>      with Licensor regarding such Contributions.<br><br>   6. Trademarks. This License does not grant permission to use the trade<br>      names, trademarks, service marks, or product names of the Licensor,<br>      except as required for reasonable and customary use in describing the<br>      origin of the Work and reproducing the content of the NOTICE file.<br><br>   7. Disclaimer of Warranty. Unless required by applicable law or<br>      agreed to in writing, Licensor provides the Work (and each<br>      Contributor provides its Contributions) on an "AS IS" BASIS,<br>      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or<br>      implied, including, without limitation, any warranties or conditions<br>      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A<br>      PARTICULAR PURPOSE. You are solely responsible for determining the<br>      appropriateness of using or redistributing the Work and assume any<br>      risks associated with Your exercise of permissions under this License.<br><br>   8. Limitation of Liability. In no event and under no legal theory,<br>      whether in tort (including negligence), contract, or otherwise,<br>      unless required by applicable law (such as deliberate and grossly<br>      negligent acts) or agreed to in writing, shall any Contributor be<br>      liable to You for damages, including any direct, indirect, special,<br>      incidental, or consequential damages of any character arising as a<br>      result of this License or out of the use or inability to use the<br>      Work (including but not limited to damages for loss of goodwill,<br>      work stoppage, computer failure or malfunction, or any and all<br>      other commercial damages or losses), even if such Contributor<br>      has been advised of the possibility of such damages.<br><br>   9. Accepting Warranty or Additional Liability. While redistributing<br>      the Work or Derivative Works thereof, You may choose to offer,<br>      and charge a fee for, acceptance of support, warranty, indemnity,<br>      or other liability obligations and/or rights consistent with this<br>      License. However, in accepting such obligations, You may act only<br>      on Your own behalf and on Your sole responsibility, not on behalf<br>      of any other Contributor, and only if You agree to indemnify,<br>      defend, and hold each Contributor harmless for any liability<br>      incurred by, or claims asserted against, such Contributor by reason<br>      of your accepting any such warranty or additional liability.<br><br>   END OF TERMS AND CONDITIONS<br><br>   APPENDIX: How to apply the Apache License to your work.<br><br>      To apply the Apache License to your work, attach the following<br>      boilerplate notice, with the fields enclosed by brackets "[]"<br>      replaced with your own identifying information. (Don't include<br>      the brackets!)  The text should be enclosed in the appropriate<br>      comment syntax for the file format. We also recommend that a<br>      file or class name and description of purpose be included on the<br>      same "printed page" as the copyright notice for easier<br>      identification within third-party archives.<br><br>   Copyright [yyyy] [name of copyright owner]<br><br>   Licensed under the Apache License, Version 2.0 (the "License");<br>   you may not use this file except in compliance with the License.<br>   You may obtain a copy of the License at<br><br>       http://www.apache.org/licenses/LICENSE-2.0<br><br>   Unless required by applicable law or agreed to in writing, software<br>   distributed under the License is distributed on an "AS IS" BASIS,<br>   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.<br>   See the License for the specific language governing permissions and<br>   limitations under the License.<br><br></pre>
+-<hr style="width: 100%; height: 2px;">The following software may be
+-included in this product: Jakarta Commons Lang 2.1; Use of any of this
+-software is governed by the terms of the license below:<br>
+-<h2><a class="mozTocH2" name="mozTocId478594"></a>The Apache Software
+-Foundation<br>
+-</h2>
+-<h3><a class="mozTocH3" name="mozTocId789223"></a>Commons Lang<br>
+-</h3>
+-<pre>                                 Apache License<br>                           Version 2.0, January 2004<br>                        http://www.apache.org/licenses/<br><br>   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION<br><br>   1. Definitions.<br><br>      "License" shall mean the terms and conditions for use, reproduction,<br>      and distribution as defined by Sections 1 through 9 of this document.<br><br>      "Licensor" shall mean the copyright owner or entity authorized by<br>      the copyright owner that is granting the License.<br><br>      "Legal Entity" shall mean the union of the acting entity and all<br>      other entities that control, are controlled by, or are under common<br>      control with that entity. For the purposes of this definition,<br>      "control" means (i) the power, direct or indirect, to cause the<br>      direction or management of such entity, whether by contract or<br>      otherwise, or (ii) ownership of fifty percent (50%) or more of the<br>      outstanding shares, or (iii) beneficial ownership of such entity.<br><br>      "You" (or "Your") shall mean an individual or Legal Entity<br>      exercising permissions granted by this License.<br><br>      "Source" form shall mean the preferred form for making modifications,<br>      including but not limited to software source code, documentation<br>      source, and configuration files.<br><br>      "Object" form shall mean any form resulting from mechanical<br>      transformation or translation of a Source form, including but<br>      not limited to compiled object code, generated documentation,<br>      and conversions to other media types.<br><br>      "Work" shall mean the work of authorship, whether in Source or<br>      Object form, made available under the License, as indicated by a<br>      copyright notice that is included in or attached to the work<br>      (an example is provided in the Appendix below).<br><br>      "Derivative Works" shall mean any work, whether in Source or Object<br>      form, that is based on (or derived from) the Work and for which the<br>      editorial revisions, annotations, elaborations, or other modifications<br>      represent, as a whole, an original work of authorship. For the purposes<br>      of this License, Derivative Works shall not include works that remain<br>      separable from, or merely link (or bind by name) to the interfaces of,<br>      the Work and Derivative Works thereof.<br><br>      "Contribution" shall mean any work of authorship, including<br>      the original version of the Work and any modifications or additions<br>      to that Work or Derivative Works thereof, that is intentionally<br>      submitted to Licensor for inclusion in the Work by the copyright owner<br>      or by an individual or Legal Entity authorized to submit on behalf of<br>      the copyright owner. For the purposes of this definition, "submitted"<br>      means any form of electronic, verbal, or written communication sent<br>      to the Licensor or its representatives, including but not limited to<br>      communication on electronic mailing lists, source code control systems,<br>      and issue tracking systems that are managed by, or on behalf of, the<br>      Licensor for the purpose of discussing and improving the Work, but<br>      excluding communication that is conspicuously marked or otherwise<br>      designated in writing by the copyright owner as "Not a Contribution."<br><br>      "Contributor" shall mean Licensor and any individual or Legal Entity<br>      on behalf of whom a Contribution has been received by Licensor and<br>      subsequently incorporated within the Work.<br><br>   2. Grant of Copyright License. Subject to the terms and conditions of<br>      this License, each Contributor hereby grants to You a perpetual,<br>      worldwide, non-exclusive, no-charge, royalty-free, irrevocable<br>      copyright license to reproduce, prepare Derivative Works of,<br>      publicly display, publicly perform, sublicense, and distribute the<br>      Work and such Derivative Works in Source or Object form.<br><br>   3. Grant of Patent License. Subject to the terms and conditions of<br>      this License, each Contributor hereby grants to You a perpetual,<br>      worldwide, non-exclusive, no-charge, royalty-free, irrevocable<br>      (except as stated in this section) patent license to make, have made,<br>      use, offer to sell, sell, import, and otherwise transfer the Work,<br>      where such license applies only to those patent claims licensable<br>      by such Contributor that are necessarily infringed by their<br>      Contribution(s) alone or by combination of their Contribution(s)<br>      with the Work to which such Contribution(s) was submitted. If You<br>      institute patent litigation against any entity (including a<br>      cross-claim or counterclaim in a lawsuit) alleging that the Work<br>      or a Contribution incorporated within the Work constitutes direct<br>      or contributory patent infringement, then any patent licenses<br>      granted to You under this License for that Work shall terminate<br>      as of the date such litigation is filed.<br><br>   4. Redistribution. You may reproduce and distribute copies of the<br>      Work or Derivative Works thereof in any medium, with or without<br>      modifications, and in Source or Object form, provided that You<br>      meet the following conditions:<br><br>      (a) You must give any other recipients of the Work or<br>          Derivative Works a copy of this License; and<br><br>      (b) You must cause any modified files to carry prominent notices<br>          stating that You changed the files; and<br><br>      (c) You must retain, in the Source form of any Derivative Works<br>          that You distribute, all copyright, patent, trademark, and<br>          attribution notices from the Source form of the Work,<br>          excluding those notices that do not pertain to any part of<br>          the Derivative Works; and<br><br>      (d) If the Work includes a "NOTICE" text file as part of its<br>          distribution, then any Derivative Works that You distribute must<br>          include a readable copy of the attribution notices contained<br>          within such NOTICE file, excluding those notices that do not<br>          pertain to any part of the Derivative Works, in at least one<br>          of the following places: within a NOTICE text file distributed<br>          as part of the Derivative Works; within the Source form or<br>          documentation, if provided along with the Derivative Works; or,<br>          within a display generated by the Derivative Works, if and<br>          wherever such third-party notices normally appear. The contents<br>          of the NOTICE file are for informational purposes only and<br>          do not modify the License. You may add Your own attribution<br>          notices within Derivative Works that You distribute, alongside<br>          or as an addendum to the NOTICE text from the Work, provided<br>          that such additional attribution notices cannot be construed<br>          as modifying the License.<br><br>      You may add Your own copyright statement to Your modifications and<br>      may provide additional or different license terms and conditions<br>      for use, reproduction, or distribution of Your modifications, or<br>      for any such Derivative Works as a whole, provided Your use,<br>      reproduction, and distribution of the Work otherwise complies with<br>      the conditions stated in this License.<br><br>   5. Submission of Contributions. Unless You explicitly state otherwise,<br>      any Contribution intentionally submitted for inclusion in the Work<br>      by You to the Licensor shall be under the terms and conditions of<br>      this License, without any additional terms or conditions.<br>      Notwithstanding the above, nothing herein shall supersede or modify<br>      the terms of any separate license agreement you may have executed<br>      with Licensor regarding such Contributions.<br><br>   6. Trademarks. This License does not grant permission to use the trade<br>      names, trademarks, service marks, or product names of the Licensor,<br>      except as required for reasonable and customary use in describing the<br>      origin of the Work and reproducing the content of the NOTICE file.<br><br>   7. Disclaimer of Warranty. Unless required by applicable law or<br>      agreed to in writing, Licensor provides the Work (and each<br>      Contributor provides its Contributions) on an "AS IS" BASIS,<br>      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or<br>      implied, including, without limitation, any warranties or conditions<br>      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A<br>      PARTICULAR PURPOSE. You are solely responsible for determining the<br>      appropriateness of using or redistributing the Work and assume any<br>      risks associated with Your exercise of permissions under this License.<br><br>   8. Limitation of Liability. In no event and under no legal theory,<br>      whether in tort (including negligence), contract, or otherwise,<br>      unless required by applicable law (such as deliberate and grossly<br>      negligent acts) or agreed to in writing, shall any Contributor be<br>      liable to You for damages, including any direct, indirect, special,<br>      incidental, or consequential damages of any character arising as a<br>      result of this License or out of the use or inability to use the<br>      Work (including but not limited to damages for loss of goodwill,<br>      work stoppage, computer failure or malfunction, or any and all<br>      other commercial damages or losses), even if such Contributor<br>      has been advised of the possibility of such damages.<br><br>   9. Accepting Warranty or Additional Liability. While redistributing<br>      the Work or Derivative Works thereof, You may choose to offer,<br>      and charge a fee for, acceptance of support, warranty, indemnity,<br>      or other liability obligations and/or rights consistent with this<br>      License. However, in accepting such obligations, You may act only<br>      on Your own behalf and on Your sole responsibility, not on behalf<br>      of any other Contributor, and only if You agree to indemnify,<br>      defend, and hold each Contributor harmless for any liability<br>      incurred by, or claims asserted against, such Contributor by reason<br>      of your accepting any such warranty or additional liability.<br><br>   END OF TERMS AND CONDITIONS<br><br>   APPENDIX: How to apply the Apache License to your work.<br><br>      To apply the Apache License to your work, attach the following<br>      boilerplate notice, with the fields enclosed by brackets "[]"<br>      replaced with your own identifying information. (Don't include<br>      the brackets!)  The text should be enclosed in the appropriate<br>      comment syntax for the file format. We also recommend that a<br>      file or class name and description of purpose be included on the<br>      same "printed page" as the copyright notice for easier<br>      identification within third-party archives.<br><br>   Copyright [yyyy] [name of copyright owner]<br><br>   Licensed under the Apache License, Version 2.0 (the "License");<br>   you may not use this file except in compliance with the License.<br>   You may obtain a copy of the License at<br><br>       http://www.apache.org/licenses/LICENSE-2.0<br><br>   Unless required by applicable law or agreed to in writing, software<br>   distributed under the License is distributed on an "AS IS" BASIS,<br>   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.<br>   See the License for the specific language governing permissions and<br>   limitations under the License.<br><br></pre>
+-<hr style="width: 100%; height: 2px;">The following software may be
+-included in this product: Jakarta Commons Codec; Use of any of this
+-software is governed by the terms of the license below:<br>
+ <h2><a class="mozTocH2" name="mozTocId877758"></a>The Apache Software
+ Foundation<br>
+ </h2>
+-- 
+2.30.2
+

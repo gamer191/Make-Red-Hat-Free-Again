@@ -1,0 +1,53 @@
+From 71c3a616c4ebd9705827382d3cddc6b93c1dbdfa Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Thu, 20 Apr 2023 20:58:21 +0100
+Subject: [PATCH 3/3] assume IFrame script/macro support isn't needed
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+seems undocumented at least
+
+Change-Id: I316e4f4f25ddb7cf6b7bac4d856a721b987207a3
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/151020
+Tested-by: Jenkins
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/152154
+Tested-by: Caolán McNamara <caolan.mcnamara@collabora.com>
+Reviewed-by: Caolán McNamara <caolan.mcnamara@collabora.com>
+(cherry picked from commit 797d92b5d1c33e8ca22450768533e9d5dc05f82f)
+---
+ sfx2/source/doc/iframe.cxx | 12 ++++--------
+ 1 file changed, 4 insertions(+), 8 deletions(-)
+
+diff --git a/sfx2/source/doc/iframe.cxx b/sfx2/source/doc/iframe.cxx
+index 73030f151359..e73fb1f1f2d1 100644
+--- a/sfx2/source/doc/iframe.cxx
++++ b/sfx2/source/doc/iframe.cxx
+@@ -166,20 +166,16 @@ sal_Bool SAL_CALL IFrameObject::load(
+         uno::Reference < util::XURLTransformer > xTrans( util::URLTransformer::create( mxContext ) );
+         xTrans->parseStrict( aTargetURL );
+ 
++        INetURLObject aURLObject(aTargetURL.Complete);
++        if (aURLObject.GetProtocol() == INetProtocol::Macro || aURLObject.isSchemeEqualTo(u"vnd.sun.star.script"))
++            return false;
++
+         uno::Reference<frame::XFramesSupplier> xParentFrame = xFrame->getCreator();
+         SfxObjectShell* pDoc = SfxMacroLoader::GetObjectShell(xParentFrame);
+ 
+-        if (INetURLObject(aTargetURL.Complete).GetProtocol() == INetProtocol::Macro)
+-        {
+-            if (pDoc && !pDoc->AdjustMacroMode())
+-                return false;
+-        }
+-
+         bool bUpdateAllowed(true);
+         if (pDoc)
+         {
+-            // perhaps should only check for file targets, but lets default to making it strong
+-            // unless there is a known need to distinguish
+             comphelper::EmbeddedObjectContainer& rEmbeddedObjectContainer = pDoc->getEmbeddedObjectContainer();
+             bUpdateAllowed = rEmbeddedObjectContainer.getUserAllowsLinkUpdate();
+         }
+-- 
+2.41.0
+

@@ -1,0 +1,46 @@
+From 15cc20d1f5e0413c1af26c683437995886146eb6 Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Fri, 19 May 2023 16:08:49 +0200
+Subject: [PATCH] LUKS-on-LVM inspection test: test /dev/mapper/VG-LV
+ translation
+
+In the LUKS-on-LVM inspection test, call the "check_filesystems" function
+yet another time, now with such "--key" options that exercise the recent
+"/dev/mapper/VG-LV" -> "/dev/VG/LV" translation (unescaping) from
+libguestfs-common.
+
+Bugzilla: https://bugzilla.redhat.com/show_bug.cgi?id=2168506
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+Message-Id: <20230519140849.310774-4-lersek@redhat.com>
+Reviewed-by: Richard W.M. Jones <rjones@redhat.com>
+(cherry picked from commit 32408a9c36165af376f9f42e7d3e158d3da2c76e)
+---
+ .../test-key-option-inspect-luks-on-lvm.sh     | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/tests/luks/test-key-option-inspect-luks-on-lvm.sh b/tests/luks/test-key-option-inspect-luks-on-lvm.sh
+index a8d72b9f..932862b1 100755
+--- a/tests/luks/test-key-option-inspect-luks-on-lvm.sh
++++ b/tests/luks/test-key-option-inspect-luks-on-lvm.sh
+@@ -101,3 +101,21 @@ eval "$fish_ref"
+ 
+ # Repeat the test.
+ check_filesystems
++
++# Exit the current guestfish background process.
++guestfish --remote -- exit
++GUESTFISH_PID=
++
++# Start up another guestfish background process, and specify the keys in
++# /dev/mapper/VG-LV format this time.
++keys_by_mapper_lvname=(
++  --key /dev/mapper/Volume--Group-Root:key:FEDORA-Root
++  --key /dev/mapper/Volume--Group-Logical--Volume--1:key:FEDORA-LV1
++  --key /dev/mapper/Volume--Group-Logical--Volume--2:key:FEDORA-LV2
++  --key /dev/mapper/Volume--Group-Logical--Volume--3:key:FEDORA-LV3
++)
++fish_ref=$("${guestfish[@]}" "${keys_by_mapper_lvname[@]}")
++eval "$fish_ref"
++
++# Repeat the test.
++check_filesystems

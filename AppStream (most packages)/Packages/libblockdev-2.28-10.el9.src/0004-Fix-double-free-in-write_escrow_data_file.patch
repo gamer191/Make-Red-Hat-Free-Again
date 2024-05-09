@@ -1,0 +1,59 @@
+From 7a0e344d0642f76992c943158621d8ee7e5caea3 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Tue, 15 Nov 2022 13:21:25 +0100
+Subject: [PATCH 1/2] crypto: Fix GError overwrite from libvolume_key
+
+---
+ src/plugins/crypto.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/plugins/crypto.c b/src/plugins/crypto.c
+index 35c38410..9064c8e3 100644
+--- a/src/plugins/crypto.c
++++ b/src/plugins/crypto.c
+@@ -2552,13 +2552,14 @@ static gboolean write_escrow_data_file (struct libvk_volume *volume, struct libv
+     GIOChannel *out_file = NULL;
+     GIOStatus status = G_IO_STATUS_ERROR;
+     gsize bytes_written = 0;
++    GError *l_error = NULL;
+ 
+     packet_data = libvk_volume_create_packet_asymmetric_with_format (volume, &packet_data_size, secret_type, cert,
+-                                                                     ui, LIBVK_PACKET_FORMAT_ASYMMETRIC_WRAP_SECRET_ONLY, error);
+-
++                                                                     ui, LIBVK_PACKET_FORMAT_ASYMMETRIC_WRAP_SECRET_ONLY, &l_error);
+     if (!packet_data) {
+         g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_ESCROW_FAILED,
+-                     "Failed to get escrow data");
++                     "Failed to get escrow data: %s", l_error->message);
++        g_clear_error (&l_error);
+         libvk_volume_free (volume);
+         return FALSE;
+     }
+-- 
+2.38.1
+
+
+From 25bf34c4c03e37eb3782dfccf459b9a3f795ddb3 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed, 16 Nov 2022 10:26:06 +0100
+Subject: [PATCH 2/2] crypto: Fix double free in write_escrow_data_file
+
+---
+ src/plugins/crypto.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/plugins/crypto.c b/src/plugins/crypto.c
+index 9064c8e3..2086209e 100644
+--- a/src/plugins/crypto.c
++++ b/src/plugins/crypto.c
+@@ -2560,7 +2560,6 @@ static gboolean write_escrow_data_file (struct libvk_volume *volume, struct libv
+         g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_ESCROW_FAILED,
+                      "Failed to get escrow data: %s", l_error->message);
+         g_clear_error (&l_error);
+-        libvk_volume_free (volume);
+         return FALSE;
+     }
+ 
+-- 
+2.38.1
+

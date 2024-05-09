@@ -1,0 +1,590 @@
+From d5a52e1004b7b151a1df286a72e49e9766ade2c8 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 16 Nov 2023 10:52:11 +0000
+Subject: [PATCH] New mailing list archives
+
+(cherry picked from commit b2f3994de26c25d61ed94d2ee3b2ea9600755ee1)
+---
+ README                      |  2 +-
+ configure.ac                |  2 +-
+ docs/guestfs-faq.pod        |  6 +++---
+ docs/guestfs-hacking.pod    |  2 +-
+ docs/guestfs-security.pod   |  2 +-
+ docs/guestfs-testing.pod    |  2 +-
+ po-docs/cs.po               |  4 ++--
+ po-docs/de.po               |  4 ++--
+ po-docs/en_GB.po            |  8 ++++----
+ po-docs/es.po               |  4 ++--
+ po-docs/eu.po               |  4 ++--
+ po-docs/fi.po               | 12 ++++++------
+ po-docs/fr.po               |  4 ++--
+ po-docs/ja.po               |  6 +++---
+ po-docs/libguestfs-docs.pot | 12 ++++++------
+ po-docs/nl.po               |  4 ++--
+ po-docs/pt_BR.po            |  4 ++--
+ po-docs/si.po               | 12 ++++++------
+ po-docs/tg.po               |  4 ++--
+ po-docs/uk.po               |  6 +++---
+ po-docs/zh_CN.po            |  4 ++--
+ website/index.html.in       |  2 +-
+ 22 files changed, 55 insertions(+), 55 deletions(-)
+
+diff --git a/README b/README
+index 40a7267e..b350edb5 100644
+--- a/README
++++ b/README
+@@ -6,7 +6,7 @@ disk images.  For more information see the home page:
+ For discussion, development, patches, etc. please use the mailing
+ list:
+ 
+-  http://www.redhat.com/mailman/listinfo/libguestfs
++  https://lists.libguestfs.org
+ 
+ To find out how to build libguestfs from source, read:
+ 
+diff --git a/configure.ac b/configure.ac
+index d1397f63..f8e5e9bb 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -322,7 +322,7 @@ echo "If any optional component is configured 'no' when you expected 'yes'"
+ echo "then you should check the preceding messages."
+ echo
+ echo "Please report bugs back to the mailing list:"
+-echo "http://www.redhat.com/mailman/listinfo/libguestfs"
++echo "https://lists.libguestfs.org"
+ echo
+ echo "Next you should type 'make' to build the package,"
+ echo "then 'make check' to run the tests."
+diff --git a/docs/guestfs-faq.pod b/docs/guestfs-faq.pod
+index 1e83a9c5..3a03282f 100644
+--- a/docs/guestfs-faq.pod
++++ b/docs/guestfs-faq.pod
+@@ -106,7 +106,7 @@ contact S<Red Hat Support>: L<http://redhat.com/support>
+ 
+ There is a mailing list, mainly for development, but users are also
+ welcome to ask questions about libguestfs and the virt tools:
+-L<https://www.redhat.com/mailman/listinfo/libguestfs>
++L<https://lists.libguestfs.org>
+ 
+ You can also talk to us on IRC channel C<#guestfs> on Libera Chat.
+ We're not always around, so please stay in the channel after asking
+@@ -1289,7 +1289,7 @@ documented stable API.
+ =head2 Where do I send patches?
+ 
+ Please send patches to the libguestfs mailing list
+-L<https://www.redhat.com/mailman/listinfo/libguestfs>.  You don't have
++L<https://lists.libguestfs.org>.  You don't have
+ to be subscribed, but there will be a delay until your posting is
+ manually approved.
+ 
+@@ -1302,7 +1302,7 @@ prefer to have a linear history.
+ 
+ Large new features that you intend to contribute should be discussed
+ on the mailing list first
+-(L<https://www.redhat.com/mailman/listinfo/libguestfs>).  This avoids
++(L<https://lists.libguestfs.org>).  This avoids
+ disappointment and wasted work if we don't think the feature would fit
+ into the libguestfs project.
+ 
+diff --git a/docs/guestfs-hacking.pod b/docs/guestfs-hacking.pod
+index 68cf8292..f0bac9f2 100644
+--- a/docs/guestfs-hacking.pod
++++ b/docs/guestfs-hacking.pod
+@@ -818,7 +818,7 @@ examining the F<tmp/valgrind*> log files carefully.
+ =head2 SUBMITTING PATCHES
+ 
+ Submit patches to the mailing list:
+-L<http://www.redhat.com/mailman/listinfo/libguestfs>
++L<https://lists.libguestfs.org>
+ and CC to L<rjones@redhat.com>.
+ 
+ You do not need to subscribe to the mailing list if you don’t want to.
+diff --git a/docs/guestfs-security.pod b/docs/guestfs-security.pod
+index afacb091..60d22952 100644
+--- a/docs/guestfs-security.pod
++++ b/docs/guestfs-security.pod
+@@ -15,7 +15,7 @@ L<https://access.redhat.com/security/team/contact>
+ 
+ If the security problem is not so serious, you can simply file a bug
+ (see L</BUGS> below), or send an email to our mailing list
+-(L<https://www.redhat.com/mailman/listinfo/libguestfs>).  You do not
++(L<https://lists.libguestfs.org>).  You do not
+ need to subscribe to the mailing list to send email, but there will be
+ a delay while the message is moderated.
+ 
+diff --git a/docs/guestfs-testing.pod b/docs/guestfs-testing.pod
+index c7b44928..ee4b26d6 100644
+--- a/docs/guestfs-testing.pod
++++ b/docs/guestfs-testing.pod
+@@ -21,7 +21,7 @@ or post on the mailing list (registration is B<not> required, but if
+ you're not registered then you'll have to wait for a moderator to
+ manually approve your message):
+ 
+-L<https://www.redhat.com/mailman/listinfo/libguestfs>
++L<https://lists.libguestfs.org>
+ 
+ =head1 TESTS
+ 
+diff --git a/po-docs/cs.po b/po-docs/cs.po
+index d50e53bf..60c29165 100644
+--- a/po-docs/cs.po
++++ b/po-docs/cs.po
+@@ -16000,7 +16000,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -38700,7 +38700,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/de.po b/po-docs/de.po
+index 76abc8d3..565cd66f 100644
+--- a/po-docs/de.po
++++ b/po-docs/de.po
+@@ -16118,7 +16118,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -38822,7 +38822,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/en_GB.po b/po-docs/en_GB.po
+index 75610b9e..31edb8bf 100644
+--- a/po-docs/en_GB.po
++++ b/po-docs/en_GB.po
+@@ -17054,12 +17054,12 @@ msgstr "How do I propose a feature?"
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ 
+@@ -42254,8 +42254,8 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
+-msgstr "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
++msgstr "L<https://lists.libguestfs.org>"
+ 
+ #. type: =head1
+ #: ../docs/guestfs-testing.pod:26
+diff --git a/po-docs/es.po b/po-docs/es.po
+index defbd61d..c84192f4 100644
+--- a/po-docs/es.po
++++ b/po-docs/es.po
+@@ -16057,7 +16057,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -38908,7 +38908,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/eu.po b/po-docs/eu.po
+index 63653271..44bc885d 100644
+--- a/po-docs/eu.po
++++ b/po-docs/eu.po
+@@ -15951,7 +15951,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -38651,7 +38651,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/fi.po b/po-docs/fi.po
+index 361de115..3ff70b33 100644
+--- a/po-docs/fi.po
++++ b/po-docs/fi.po
+@@ -13507,7 +13507,7 @@ msgstr ""
+ msgid ""
+ "There is a mailing list, mainly for development, but users are also welcome "
+ "to ask questions about libguestfs and the virt tools: "
+-"L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++"L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: textblock
+@@ -15849,7 +15849,7 @@ msgstr ""
+ #: docs/guestfs-faq.pod:1285
+ msgid ""
+ "Please send patches to the libguestfs mailing list "
+-"L<https://www.redhat.com/mailman/listinfo/libguestfs>.  You don't have to be "
++"L<https://lists.libguestfs.org>.  You don't have to be "
+ "subscribed, but there will be a delay until your posting is manually "
+ "approved."
+ msgstr ""
+@@ -15872,7 +15872,7 @@ msgstr ""
+ #: docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -17816,7 +17816,7 @@ msgstr ""
+ #: docs/guestfs-hacking.pod:840
+ msgid ""
+ "Submit patches to the mailing list: "
+-"L<http://www.redhat.com/mailman/listinfo/libguestfs> and CC to "
++"L<https://lists.libguestfs.org> and CC to "
+ "L<rjones@redhat.com>."
+ msgstr ""
+ 
+@@ -37995,7 +37995,7 @@ msgstr ""
+ msgid ""
+ "If the security problem is not so serious, you can simply file a bug (see "
+ "L</BUGS> below), or send an email to our mailing list "
+-"(L<https://www.redhat.com/mailman/listinfo/libguestfs>).  You do not need to "
++"(L<https://lists.libguestfs.org>).  You do not need to "
+ "subscribe to the mailing list to send email, but there will be a delay while "
+ "the message is moderated."
+ msgstr ""
+@@ -38598,7 +38598,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/fr.po b/po-docs/fr.po
+index cd903c0e..34b6149e 100644
+--- a/po-docs/fr.po
++++ b/po-docs/fr.po
+@@ -16363,7 +16363,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -40728,7 +40728,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/ja.po b/po-docs/ja.po
+index d90437dc..d00d73d2 100644
+--- a/po-docs/ja.po
++++ b/po-docs/ja.po
+@@ -16574,7 +16574,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -39859,8 +39859,8 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
+-msgstr "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
++msgstr "L<https://lists.libguestfs.org>"
+ 
+ #. type: =head1
+ #: ../docs/guestfs-testing.pod:26
+diff --git a/po-docs/libguestfs-docs.pot b/po-docs/libguestfs-docs.pot
+index 3954a51e..56d0777b 100644
+--- a/po-docs/libguestfs-docs.pot
++++ b/po-docs/libguestfs-docs.pot
+@@ -13453,7 +13453,7 @@ msgstr ""
+ msgid ""
+ "There is a mailing list, mainly for development, but users are also welcome "
+ "to ask questions about libguestfs and the virt tools: "
+-"L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++"L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: textblock
+@@ -15795,7 +15795,7 @@ msgstr ""
+ #: docs/guestfs-faq.pod:1285
+ msgid ""
+ "Please send patches to the libguestfs mailing list "
+-"L<https://www.redhat.com/mailman/listinfo/libguestfs>.  You don't have to be "
++"L<https://lists.libguestfs.org>.  You don't have to be "
+ "subscribed, but there will be a delay until your posting is manually "
+ "approved."
+ msgstr ""
+@@ -15818,7 +15818,7 @@ msgstr ""
+ #: docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -17762,7 +17762,7 @@ msgstr ""
+ #: docs/guestfs-hacking.pod:840
+ msgid ""
+ "Submit patches to the mailing list: "
+-"L<http://www.redhat.com/mailman/listinfo/libguestfs> and CC to "
++"L<https://lists.libguestfs.org> and CC to "
+ "L<rjones@redhat.com>."
+ msgstr ""
+ 
+@@ -37939,7 +37939,7 @@ msgstr ""
+ msgid ""
+ "If the security problem is not so serious, you can simply file a bug (see "
+ "L</BUGS> below), or send an email to our mailing list "
+-"(L<https://www.redhat.com/mailman/listinfo/libguestfs>).  You do not need to "
++"(L<https://lists.libguestfs.org>).  You do not need to "
+ "subscribe to the mailing list to send email, but there will be a delay while "
+ "the message is moderated."
+ msgstr ""
+@@ -38542,7 +38542,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/nl.po b/po-docs/nl.po
+index 0cf147ee..1f8ac7d0 100644
+--- a/po-docs/nl.po
++++ b/po-docs/nl.po
+@@ -15951,7 +15951,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -38651,7 +38651,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/pt_BR.po b/po-docs/pt_BR.po
+index 229f49c3..d69895cf 100644
+--- a/po-docs/pt_BR.po
++++ b/po-docs/pt_BR.po
+@@ -15947,7 +15947,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -38647,7 +38647,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/si.po b/po-docs/si.po
+index aa7f5f97..de16c4ac 100644
+--- a/po-docs/si.po
++++ b/po-docs/si.po
+@@ -13455,7 +13455,7 @@ msgstr ""
+ msgid ""
+ "There is a mailing list, mainly for development, but users are also welcome "
+ "to ask questions about libguestfs and the virt tools: "
+-"L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++"L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: textblock
+@@ -15797,7 +15797,7 @@ msgstr ""
+ #: docs/guestfs-faq.pod:1285
+ msgid ""
+ "Please send patches to the libguestfs mailing list "
+-"L<https://www.redhat.com/mailman/listinfo/libguestfs>.  You don't have to be "
++"L<https://lists.libguestfs.org>.  You don't have to be "
+ "subscribed, but there will be a delay until your posting is manually "
+ "approved."
+ msgstr ""
+@@ -15820,7 +15820,7 @@ msgstr ""
+ #: docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -17764,7 +17764,7 @@ msgstr ""
+ #: docs/guestfs-hacking.pod:840
+ msgid ""
+ "Submit patches to the mailing list: "
+-"L<http://www.redhat.com/mailman/listinfo/libguestfs> and CC to "
++"L<https://lists.libguestfs.org> and CC to "
+ "L<rjones@redhat.com>."
+ msgstr ""
+ 
+@@ -37941,7 +37941,7 @@ msgstr ""
+ msgid ""
+ "If the security problem is not so serious, you can simply file a bug (see "
+ "L</BUGS> below), or send an email to our mailing list "
+-"(L<https://www.redhat.com/mailman/listinfo/libguestfs>).  You do not need to "
++"(L<https://lists.libguestfs.org>).  You do not need to "
+ "subscribe to the mailing list to send email, but there will be a delay while "
+ "the message is moderated."
+ msgstr ""
+@@ -38544,7 +38544,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/tg.po b/po-docs/tg.po
+index 9e6fa072..80db7183 100644
+--- a/po-docs/tg.po
++++ b/po-docs/tg.po
+@@ -15952,7 +15952,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -38652,7 +38652,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/po-docs/uk.po b/po-docs/uk.po
+index 960ea8f8..40c96852 100644
+--- a/po-docs/uk.po
++++ b/po-docs/uk.po
+@@ -19726,7 +19726,7 @@ msgstr "Як запропонувати нову можливість?"
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -47713,8 +47713,8 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
+-msgstr "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
++msgstr "L<https://lists.libguestfs.org>"
+ 
+ #. type: =head1
+ #: ../docs/guestfs-testing.pod:26
+diff --git a/po-docs/zh_CN.po b/po-docs/zh_CN.po
+index 0c15c1c1..1ad0e1cd 100644
+--- a/po-docs/zh_CN.po
++++ b/po-docs/zh_CN.po
+@@ -15954,7 +15954,7 @@ msgstr ""
+ #: ../docs/guestfs-faq.pod:1297
+ msgid ""
+ "Large new features that you intend to contribute should be discussed on the "
+-"mailing list first (L<https://www.redhat.com/mailman/listinfo/libguestfs>).  "
++"mailing list first (L<https://lists.libguestfs.org>).  "
+ "This avoids disappointment and wasted work if we don't think the feature "
+ "would fit into the libguestfs project."
+ msgstr ""
+@@ -38654,7 +38654,7 @@ msgstr ""
+ 
+ #. type: textblock
+ #: ../docs/guestfs-testing.pod:24
+-msgid "L<https://www.redhat.com/mailman/listinfo/libguestfs>"
++msgid "L<https://lists.libguestfs.org>"
+ msgstr ""
+ 
+ #. type: =head1
+diff --git a/website/index.html.in b/website/index.html.in
+index 91088b59..e7a03d6d 100644
+--- a/website/index.html.in
++++ b/website/index.html.in
+@@ -54,7 +54,7 @@ guestfish --ro -i -a disk.img
+ 
+ <p>
+ Join us on
+-the <a href="http://www.redhat.com/mailman/listinfo/libguestfs">libguestfs
++the <a href="https://lists.libguestfs.org">libguestfs
+ mailing list</a>, or on IRC channel <code>#guestfs</code>
+ on <a href="https://libera.chat/">Libera Chat</a>.
+ </p>

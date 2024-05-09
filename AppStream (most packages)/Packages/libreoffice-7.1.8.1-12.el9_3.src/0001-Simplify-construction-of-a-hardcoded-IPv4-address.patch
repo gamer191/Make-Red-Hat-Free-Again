@@ -1,0 +1,39 @@
+From 68a6c70f25762374f7aed0d4d755345c6f37c78d Mon Sep 17 00:00:00 2001
+From: Stephan Bergmann <sbergman@redhat.com>
+Date: Mon, 31 May 2021 10:56:38 +0200
+Subject: [PATCH] Simplify construction of a hardcoded IPv4 address
+
+Change-Id: I822313ee708935dd4ecb636c13a961fdd054d660
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/116434
+Tested-by: Jenkins
+Reviewed-by: Stephan Bergmann <sbergman@redhat.com>
+---
+ sd/source/ui/remotecontrol/DiscoveryService.cxx | 12 +-----------
+ 1 file changed, 1 insertion(+), 11 deletions(-)
+
+diff --git a/sd/source/ui/remotecontrol/DiscoveryService.cxx b/sd/source/ui/remotecontrol/DiscoveryService.cxx
+index 9ed2ae727761..cf0043387403 100644
+--- a/sd/source/ui/remotecontrol/DiscoveryService.cxx
++++ b/sd/source/ui/remotecontrol/DiscoveryService.cxx
+@@ -119,17 +119,7 @@ void DiscoveryService::setupSockets()
+ 
+     struct ip_mreq multicastRequest;
+ 
+-// the Win32 SDK 8.1 deprecates inet_addr()
+-#if defined(_WIN32)
+-    IN_ADDR addr;
+-    INT ret = InetPtonW(AF_INET, L"239.0.0.1", & addr);
+-    if (1 == ret)
+-    {
+-        multicastRequest.imr_multiaddr.s_addr = addr.S_un.S_addr;
+-    }
+-#else
+-    multicastRequest.imr_multiaddr.s_addr = inet_addr( "239.0.0.1" );
+-#endif
++    multicastRequest.imr_multiaddr.s_addr = htonl((239U << 24) | 1U); // 239.0.0.1
+     multicastRequest.imr_interface.s_addr = htonl(INADDR_ANY);
+ 
+     rc = setsockopt( mSocket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+-- 
+2.31.1
+

@@ -1,0 +1,24 @@
+diff -up libsrtp-2.3.0/crypto/include/aes_gcm.h.nssfix libsrtp-2.3.0/crypto/include/aes_gcm.h
+--- libsrtp-2.3.0/crypto/include/aes_gcm.h.nssfix	2021-04-15 13:47:08.667150587 -0400
++++ libsrtp-2.3.0/crypto/include/aes_gcm.h	2021-04-15 13:47:26.991294515 -0400
+@@ -66,6 +66,8 @@ typedef struct {
+ 
+ #ifdef NSS
+ 
++#define NSS_PKCS11_2_0_COMPAT 1
++
+ #include <nss.h>
+ #include <pk11pub.h>
+ 
+diff -up libsrtp-2.3.0/crypto/include/aes_icm_ext.h.nssfix libsrtp-2.3.0/crypto/include/aes_icm_ext.h
+--- libsrtp-2.3.0/crypto/include/aes_icm_ext.h.nssfix	2021-04-15 13:47:36.617370124 -0400
++++ libsrtp-2.3.0/crypto/include/aes_icm_ext.h	2021-04-15 13:59:50.074073286 -0400
+@@ -65,6 +65,8 @@ typedef struct {
+ 
+ #ifdef NSS
+ 
++#define NSS_PKCS11_2_0_COMPAT 1
++
+ #include <nss.h>
+ #include <pk11pub.h>
+ 

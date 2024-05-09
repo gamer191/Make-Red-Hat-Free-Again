@@ -1,0 +1,144 @@
+From 986f5d8b1110b461d37d044c7a8052ed7ba27f87 Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Fri, 14 Jul 2023 15:22:11 +0200
+Subject: [PATCH] lib: move guestfs_int_create_socketname() from "launch.c" to
+ "tmpdirs.c"
+
+Consider the following inverted call tree (effectively a dependency tree
+-- callees are at the top and near the left margin):
+
+  lazy_make_tmpdir()                  [lib/tmpdirs.c]
+    guestfs_int_lazy_make_tmpdir()    [lib/tmpdirs.c]
+      guestfs_int_make_temp_path()    [lib/tmpdirs.c]
+    guestfs_int_lazy_make_sockdir()   [lib/tmpdirs.c]
+      guestfs_int_create_socketname() [lib/launch.c]
+
+lazy_make_tmpdir() is our common workhorse / helper function that
+centralizes the mkdtemp() function call.
+
+guestfs_int_lazy_make_tmpdir() and guestfs_int_lazy_make_sockdir() are the
+next level functions, both calling lazy_make_tmpdir(), just feeding it
+different dirname generator functions, and different "is_runtime_dir"
+qualifications. These functions create temp dirs for various, more
+specific, purposes (see the manual and "lib/guestfs-internal.h" for more
+details).
+
+On a yet higher level are guestfs_int_make_temp_path() and
+guestfs_int_create_socketname() -- they serve for creating *entries* in
+those specific temp directories.
+
+The discrepancy here is that, although all the other functions live in
+"lib/tmpdirs.c", guestfs_int_create_socketname() is defined in
+"lib/launch.c". That makes for a confusing code reading; move the function
+to "lib/tmpdirs.c", just below its sibling function
+guestfs_int_make_temp_path().
+
+While at it, correct the leading comment on
+guestfs_int_create_socketname() -- the socket pathname is created in the
+socket directory, not in the temporary directory.
+
+Bugzilla: https://bugzilla.redhat.com/show_bug.cgi?id=2184967
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+Reviewed-by: Richard W.M. Jones <rjones@redhat.com>
+Message-Id: <20230714132213.96616-6-lersek@redhat.com>
+(cherry picked from commit 0b2ad40a098cbaf91d0d0a2df6e31bf8e3e08ace)
+---
+ lib/guestfs-internal.h |  2 +-
+ lib/launch.c           | 26 --------------------------
+ lib/tmpdirs.c          | 26 ++++++++++++++++++++++++++
+ 3 files changed, 27 insertions(+), 27 deletions(-)
+
+diff --git a/lib/guestfs-internal.h b/lib/guestfs-internal.h
+index c7ef3227..ebd68380 100644
+--- a/lib/guestfs-internal.h
++++ b/lib/guestfs-internal.h
+@@ -668,6 +668,7 @@ extern int guestfs_int_set_env_runtimedir (guestfs_h *g, const char *envname, co
+ extern int guestfs_int_lazy_make_tmpdir (guestfs_h *g);
+ extern int guestfs_int_lazy_make_sockdir (guestfs_h *g);
+ extern char *guestfs_int_make_temp_path (guestfs_h *g, const char *name, const char *extension);
++extern int guestfs_int_create_socketname (guestfs_h *g, const char *filename, char (*sockname)[UNIX_PATH_MAX]);
+ extern char *guestfs_int_lazy_make_supermin_appliance_dir (guestfs_h *g);
+ extern void guestfs_int_remove_tmpdir (guestfs_h *g);
+ extern void guestfs_int_remove_sockdir (guestfs_h *g);
+@@ -700,7 +701,6 @@ extern int guestfs_int_get_uefi (guestfs_h *g, char *const *firmwares, const cha
+ extern int64_t guestfs_int_timeval_diff (const struct timeval *x, const struct timeval *y);
+ extern void guestfs_int_launch_send_progress (guestfs_h *g, int perdozen);
+ extern void guestfs_int_unblock_sigterm (void);
+-extern int guestfs_int_create_socketname (guestfs_h *g, const char *filename, char (*sockname)[UNIX_PATH_MAX]);
+ extern void guestfs_int_register_backend (const char *name, const struct backend_ops *);
+ extern int guestfs_int_set_backend (guestfs_h *g, const char *method);
+ 
+diff --git a/lib/launch.c b/lib/launch.c
+index 6e08b120..bd0526c9 100644
+--- a/lib/launch.c
++++ b/lib/launch.c
+@@ -309,32 +309,6 @@ guestfs_impl_config (guestfs_h *g,
+   return 0;
+ }
+ 
+-/**
+- * Create the path for a socket with the selected filename in the
+- * tmpdir.
+- */
+-int
+-guestfs_int_create_socketname (guestfs_h *g, const char *filename,
+-                               char (*sockpath)[UNIX_PATH_MAX])
+-{
+-  int r;
+-
+-  if (guestfs_int_lazy_make_sockdir (g) == -1)
+-    return -1;
+-
+-  r = snprintf (*sockpath, UNIX_PATH_MAX, "%s/%s", g->sockdir, filename);
+-  if (r >= UNIX_PATH_MAX) {
+-    error (g, _("socket path too long: %s/%s"), g->sockdir, filename);
+-    return -1;
+-  }
+-  if (r < 0) {
+-    perrorf (g, _("%s"), g->sockdir);
+-    return -1;
+-  }
+-
+-  return 0;
+-}
+-
+ /**
+  * When the library is loaded, each backend calls this function to
+  * register itself in a global list.
+diff --git a/lib/tmpdirs.c b/lib/tmpdirs.c
+index b8e19de2..24adf98d 100644
+--- a/lib/tmpdirs.c
++++ b/lib/tmpdirs.c
+@@ -253,6 +253,32 @@ guestfs_int_make_temp_path (guestfs_h *g,
+                         extension ? extension : "");
+ }
+ 
++/**
++ * Create the path for a socket with the selected filename in the
++ * sockdir.
++ */
++int
++guestfs_int_create_socketname (guestfs_h *g, const char *filename,
++                               char (*sockpath)[UNIX_PATH_MAX])
++{
++  int r;
++
++  if (guestfs_int_lazy_make_sockdir (g) == -1)
++    return -1;
++
++  r = snprintf (*sockpath, UNIX_PATH_MAX, "%s/%s", g->sockdir, filename);
++  if (r >= UNIX_PATH_MAX) {
++    error (g, _("socket path too long: %s/%s"), g->sockdir, filename);
++    return -1;
++  }
++  if (r < 0) {
++    perrorf (g, _("%s"), g->sockdir);
++    return -1;
++  }
++
++  return 0;
++}
++
+ /**
+  * Create the supermin appliance directory under cachedir, if it does
+  * not exist.

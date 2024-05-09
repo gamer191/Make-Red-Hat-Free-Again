@@ -1,0 +1,28 @@
+From e2110f72069f184c87df348247e8f3106c81d44a Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 27 Jun 2023 11:36:55 +0100
+Subject: [PATCH] ocaml: Release runtime lock around guestfs_close
+
+When finalizing the handle we call guestfs_close.  This function could
+be long-running (eg. it may have to shut down the qemu subprocess), so
+release the runtime lock.
+
+(cherry picked from commit 4a79c023e57e07844c2ac3259aaf9b885e402fdf)
+---
+ ocaml/guestfs-c.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/ocaml/guestfs-c.c b/ocaml/guestfs-c.c
+index 8c8aa460..a1865a72 100644
+--- a/ocaml/guestfs-c.c
++++ b/ocaml/guestfs-c.c
+@@ -77,7 +77,9 @@ guestfs_finalize (value gv)
+      * above, which is why we don't want to delete them before
+      * closing the handle.
+      */
++    caml_release_runtime_system ();
+     guestfs_close (g);
++    caml_acquire_runtime_system ();
+ 
+     /* Now unregister the global roots. */
+     if (roots && len > 0) {

@@ -1,0 +1,138 @@
+From 5c672d1541e7d769e73e6858944d33f66be12f30 Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Tue, 14 Mar 2023 14:15:05 +0100
+Subject: [PATCH] update common submodule
+
+Andrey Drobyshev (2):
+      inject_virtio_win: add Virtio_SCSI to block_type
+      inject_virtio_win: write the proper block controller PCI ID to Win registry
+
+Richard W.M. Jones (2):
+      mlcustomize: Fix overlong comment
+      mlcustomize: Add accessors for block driver priority list
+
+Roman Kagan (1):
+      inject_virtio_win: match only vendor/device/revision
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+(cherry picked from commit 7414ac40c7df0a8938a05ba50907312b0093d107)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common 90e0077e..360e037d:
+diff --git a/common/mlcustomize/inject_virtio_win.ml b/common/mlcustomize/inject_virtio_win.ml
+index 5f4aab72..2a30b200 100644
+--- a/common/mlcustomize/inject_virtio_win.ml
++++ b/common/mlcustomize/inject_virtio_win.ml
+@@ -49,9 +49,12 @@ type t = {
+       of libosinfo.  Although this behaviour is documented, IMHO it has
+       always been a bad idea.  We should change this in future to allow
+       the user to select where they want to get drivers from. XXX *)
++
++  mutable block_driver_priority : string list
++  (** List of block drivers *)
+ }
+ 
+-type block_type = Virtio_blk | IDE
++type block_type = Virtio_blk | Virtio_SCSI | IDE
+ and net_type = Virtio_net | E1000 | RTL8139
+ and machine_type = I440FX | Q35 | Virt
+ 
+@@ -107,13 +110,17 @@ and get_inspection g root =
+   { g; root;
+     i_arch; i_major_version; i_minor_version; i_osinfo;
+     i_product_variant; i_windows_current_control_set; i_windows_systemroot;
+-    virtio_win = ""; was_set = false }
++    virtio_win = ""; was_set = false;
++    block_driver_priority = ["virtio_blk"; "vrtioblk"; "viostor"] }
++
++let get_block_driver_priority t   = t.block_driver_priority
++let set_block_driver_priority t v = t.block_driver_priority <- v
+ 
+ let scsi_class_guid = "{4D36E97B-E325-11CE-BFC1-08002BE10318}"
+-let viostor_legacy_pciid = "VEN_1AF4&DEV_1001&SUBSYS_00021AF4&REV_00"
+-let viostor_modern_pciid = "VEN_1AF4&DEV_1042&SUBSYS_11001AF4&REV_01"
+-let vioscsi_legacy_pciid = "VEN_1AF4&DEV_1004&SUBSYS_00081AF4&REV_00"
+-let vioscsi_modern_pciid = "VEN_1AF4&DEV_1048&SUBSYS_11001AF4&REV_01"
++let viostor_legacy_pciid = "VEN_1AF4&DEV_1001&REV_00"
++let viostor_modern_pciid = "VEN_1AF4&DEV_1042&REV_01"
++let vioscsi_legacy_pciid = "VEN_1AF4&DEV_1004&REV_00"
++let vioscsi_modern_pciid = "VEN_1AF4&DEV_1048&REV_01"
+ 
+ let rec inject_virtio_win_drivers ({ g } as t) reg =
+   (* Copy the virtio drivers to the guest. *)
+@@ -176,14 +183,13 @@ let rec inject_virtio_win_drivers ({ g } as t) reg =
+   else (
+     (* Can we install the block driver? *)
+     let block : block_type =
+-      let filenames = ["virtio_blk"; "vrtioblk"; "viostor"] in
+       let viostor_driver = try (
+         Some (
+           List.find (
+             fun driver_file ->
+               let source = driverdir // driver_file ^ ".sys" in
+               g#exists source
+-          ) filenames
++          ) t.block_driver_priority
+         )
+       ) with Not_found -> None in
+       match viostor_driver with
+@@ -194,16 +200,22 @@ let rec inject_virtio_win_drivers ({ g } as t) reg =
+         IDE
+ 
+       | Some driver_name ->
+-        (* Block driver needs tweaks to allow booting; the rest is set up by PnP
+-         * manager *)
++        (* Block driver needs tweaks to allow booting;
++         * the rest is set up by PnP manager.
++         *)
+         let source = driverdir // (driver_name ^ ".sys") in
+         let target = sprintf "%s/system32/drivers/%s.sys"
+                              t.i_windows_systemroot driver_name in
+         let target = g#case_sensitive_path target in
++        let installed_block_type, legacy_pciid, modern_pciid =
++          match driver_name with
++          | "vioscsi" -> Virtio_SCSI, vioscsi_legacy_pciid, vioscsi_modern_pciid
++          | _ -> Virtio_blk, viostor_legacy_pciid, viostor_modern_pciid
++        in
+         g#cp source target;
+-        add_guestor_to_registry t reg driver_name viostor_legacy_pciid;
+-        add_guestor_to_registry t reg driver_name viostor_modern_pciid;
+-        Virtio_blk in
++        add_guestor_to_registry t reg driver_name legacy_pciid;
++        add_guestor_to_registry t reg driver_name modern_pciid;
++        installed_block_type in
+ 
+     (* Can we install the virtio-net driver? *)
+     let net : net_type =
+diff --git a/common/mlcustomize/inject_virtio_win.mli b/common/mlcustomize/inject_virtio_win.mli
+index 0ced02e8..d14f0497 100644
+--- a/common/mlcustomize/inject_virtio_win.mli
++++ b/common/mlcustomize/inject_virtio_win.mli
+@@ -20,7 +20,7 @@
+ 
+ type t (** Handle *)
+ 
+-type block_type = Virtio_blk | IDE
++type block_type = Virtio_blk | Virtio_SCSI | IDE
+ and net_type = Virtio_net | E1000 | RTL8139
+ and machine_type = I440FX | Q35 | Virt
+ 
+@@ -64,6 +64,16 @@ val from_environment : Guestfs.guestfs -> string -> string -> t
+ 
+     This should only be used by [virt-v2v] and is considered a legacy method. *)
+ 
++val get_block_driver_priority : t -> string list
++val set_block_driver_priority : t -> string list -> unit
++(** Get or set the current block driver priority list.  This is
++    a list of virtio-win block driver names (eg. ["viostor"]) that
++    we search until we come to the first [name ^ ".sys"] that
++    we find, and that is the block driver which gets installed.
++
++    This module contains a default priority list which should
++    be suitable for most use cases. *)
++
+ val inject_virtio_win_drivers : t -> Registry.t -> virtio_win_installed
+ (** [inject_virtio_win_drivers t reg]
+     installs virtio drivers from the driver directory or driver

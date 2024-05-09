@@ -1,0 +1,101 @@
+From 6c63f5cd8b43448f4847d550ad313d950d6b8520 Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Tue, 11 Jul 2023 13:39:06 +0200
+Subject: [PATCH] lib: remove guestfs_int_cmd_clear_close_files()
+
+The last (only?) caller of guestfs_int_cmd_clear_close_files() disappeared
+in commit e4c396888056 ("lib/info: Remove /dev/fd hacking and pass a true
+filename to qemu-img info.", 2018-01-23), part of v1.37.36.
+
+Simplify the code by removing guestfs_int_cmd_clear_close_files().
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+Message-Id: <20230711113906.107340-1-lersek@redhat.com>
+Reviewed-by: Richard W.M. Jones <rjones@redhat.com>
+(cherry picked from commit 13c7052ff96d5ee99ec1b1252f1a3b4d7aed44d2)
+---
+ lib/command.c          | 37 ++++++++++---------------------------
+ lib/guestfs-internal.h |  1 -
+ 2 files changed, 10 insertions(+), 28 deletions(-)
+
+diff --git a/lib/command.c b/lib/command.c
+index 515ef624..82a47baf 100644
+--- a/lib/command.c
++++ b/lib/command.c
+@@ -152,9 +152,6 @@ struct command
+   /* When using the pipe_* APIs, stderr is pointed to a temporary file. */
+   char *error_file;
+ 
+-  /* Close file descriptors (defaults to true). */
+-  bool close_files;
+-
+   /* Supply a callback to receive stdout. */
+   cmd_stdout_callback stdout_callback;
+   void *stdout_data;
+@@ -186,7 +183,6 @@ guestfs_int_new_command (guestfs_h *g)
+   cmd = safe_calloc (g, 1, sizeof *cmd);
+   cmd->g = g;
+   cmd->capture_errors = true;
+-  cmd->close_files = true;
+   cmd->errorfd = -1;
+   cmd->outfd = -1;
+   return cmd;
+@@ -358,17 +354,6 @@ guestfs_int_cmd_clear_capture_errors (struct command *cmd)
+   cmd->capture_errors = false;
+ }
+ 
+-/**
+- * Don't close file descriptors after the fork.
+- *
+- * XXX Should allow single fds to be sent to child process.
+- */
+-void
+-guestfs_int_cmd_clear_close_files (struct command *cmd)
+-{
+-  cmd->close_files = false;
+-}
+-
+ /**
+  * Set a function to be executed in the child, right before the
+  * execution.  Can be used to setup the child, for example changing
+@@ -564,18 +549,16 @@ run_child (struct command *cmd, char **env)
+   for (i = 1; i < NSIG; ++i)
+     sigaction (i, &sa, NULL);
+ 
+-  if (cmd->close_files) {
+-    /* Close all other file descriptors.  This ensures that we don't
+-     * hold open (eg) pipes from the parent process.
+-     */
+-    max_fd = sysconf (_SC_OPEN_MAX);
+-    if (max_fd == -1)
+-      max_fd = 1024;
+-    if (max_fd > 65536)
+-      max_fd = 65536;        /* bound the amount of work we do here */
+-    for (fd = 3; fd < max_fd; ++fd)
+-      close (fd);
+-  }
++  /* Close all other file descriptors.  This ensures that we don't
++   * hold open (eg) pipes from the parent process.
++   */
++  max_fd = sysconf (_SC_OPEN_MAX);
++  if (max_fd == -1)
++    max_fd = 1024;
++  if (max_fd > 65536)
++    max_fd = 65536;        /* bound the amount of work we do here */
++  for (fd = 3; fd < max_fd; ++fd)
++    close (fd);
+ 
+   /* Set the umask for all subcommands to something sensible (RHBZ#610880). */
+   umask (022);
+diff --git a/lib/guestfs-internal.h b/lib/guestfs-internal.h
+index fb55e026..c7ef3227 100644
+--- a/lib/guestfs-internal.h
++++ b/lib/guestfs-internal.h
+@@ -751,7 +751,6 @@ extern void guestfs_int_cmd_set_stdout_callback (struct command *, cmd_stdout_ca
+ extern void guestfs_int_cmd_set_stderr_to_stdout (struct command *);
+ extern void guestfs_int_cmd_set_child_rlimit (struct command *, int resource, long limit);
+ extern void guestfs_int_cmd_clear_capture_errors (struct command *);
+-extern void guestfs_int_cmd_clear_close_files (struct command *);
+ extern void guestfs_int_cmd_set_child_callback (struct command *, cmd_child_callback child_callback, void *data);
+ extern int guestfs_int_cmd_run (struct command *);
+ extern void guestfs_int_cmd_close (struct command *);

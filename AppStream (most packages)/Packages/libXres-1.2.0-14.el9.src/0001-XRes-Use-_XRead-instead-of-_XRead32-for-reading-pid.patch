@@ -1,0 +1,33 @@
+From 3e6bdd90c604e061c71715865eb403ffdd0dd7f0 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Wed, 21 Oct 2020 10:03:23 -0400
+Subject: [PATCH] XRes: Use _XRead instead of _XRead32 for reading pid
+
+_XRead32 requires the output variable to be a long, but
+`ReadClientValues` feeds it client->value which is a
+32-bit allocation.
+
+This commit changes the code to use _XRead instead, which
+properly handles 32-bit output variables.
+
+https://gitlab.freedesktop.org/xorg/lib/libxres/-/issues/3
+---
+ src/XRes.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/XRes.c b/src/XRes.c
+index 2bee277..90e72c9 100644
+--- a/src/XRes.c
++++ b/src/XRes.c
+@@ -256,7 +256,7 @@ static Bool ReadClientValues(
+         _XRead32 (dpy, &value, 4);
+         client->length = value;
+         client->value = malloc(client->length);
+-        _XRead32 (dpy, client->value, client->length);
++        _XRead (dpy, client->value, client->length);
+     }
+     return True;
+ }
+-- 
+2.28.0
+

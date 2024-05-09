@@ -1,0 +1,32 @@
+From 57b58d4fb85579a9aacbd6b2d7e389cce46f5fbc Mon Sep 17 00:00:00 2001
+From: Stephan Bergmann <sbergman@redhat.com>
+Date: Mon, 9 May 2022 16:17:15 +0200
+Subject: [PATCH] URE Library_boostrap should not depend on Library_comphelper
+
+...and apparently doesn't need to, even though that dependency got added with
+6ffdc88e79904882e319bdd0b901e7491abae0b3 "Simplify Sequence iterations in
+shell..svgio"
+
+Change-Id: I7cb67dc48d11e426d5d5f7912eca13e25a32dbc5
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/134079
+Tested-by: Jenkins
+Reviewed-by: Stephan Bergmann <sbergman@redhat.com>
+---
+ stoc/Library_bootstrap.mk | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/stoc/Library_bootstrap.mk b/stoc/Library_bootstrap.mk
+index ca1f49618bb8..62e2360581db 100644
+--- a/stoc/Library_bootstrap.mk
++++ b/stoc/Library_bootstrap.mk
+@@ -26,7 +26,6 @@ $(eval $(call gb_Library_use_internal_bootstrap_api,bootstrap,\
+ ))
+ 
+ $(eval $(call gb_Library_use_libraries,bootstrap,\
+-    comphelper \
+     cppu \
+     cppuhelper \
+     reg \
+-- 
+2.40.1
+

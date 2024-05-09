@@ -1,0 +1,33 @@
+From c1829048c598e11950c9d355fdd5c177a99e046f Mon Sep 17 00:00:00 2001
+From: Andrey Drobyshev <andrey.drobyshev@virtuozzo.com>
+Date: Wed, 26 Apr 2023 15:59:45 +0300
+Subject: [PATCH] daemon/selinux-relabel: search for "invalid option" in
+ setfiles output
+
+'X' in the setiles' stderr doesn't necessarily mean that option 'X'
+doesn't exist.  For instance, when passing '-T' we get: "setfiles:
+option requires an argument -- 'T'".
+
+Signed-off-by: Andrey Drobyshev <andrey.drobyshev@virtuozzo.com>
+Reviewed-by: Laszlo Ersek <lersek@redhat.com>
+Reviewed-by: Richard W.M. Jones <rjones@redhat.com>
+(cherry picked from commit 152d6e4bdf2dac88856a4ff83cf73451f897d4d4)
+---
+ daemon/selinux-relabel.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/daemon/selinux-relabel.c b/daemon/selinux-relabel.c
+index 454486c1..60a6f48a 100644
+--- a/daemon/selinux-relabel.c
++++ b/daemon/selinux-relabel.c
+@@ -56,8 +56,9 @@ setfiles_has_option (int *flag, char opt_char)
+ 
+   if (*flag == -1) {
+     char option[] = { '-', opt_char, '\0' };       /* "-X" */
+-    char err_opt[] = { '\'', opt_char, '\'', '\0'}; /* "'X'" */
++    char err_opt[32];     /* "invalid option -- 'X'" */
+ 
++    snprintf(err_opt, sizeof(err_opt), "invalid option -- '%c'", opt_char);
+     ignore_value (command (NULL, &err, "setfiles", option, NULL));
+     *flag = err && strstr (err, /* "invalid option -- " */ err_opt) == NULL;
+   }

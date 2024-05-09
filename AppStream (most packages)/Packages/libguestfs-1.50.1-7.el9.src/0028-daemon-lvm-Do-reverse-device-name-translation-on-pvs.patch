@@ -1,0 +1,57 @@
+From ec56c62c90d2230e8edcfaaad4517be63f5e2183 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 20 Jul 2023 11:15:26 +0100
+Subject: [PATCH] daemon: lvm: Do reverse device name translation on pvs_full
+ device fields
+
+Intermittent test failures in virt-filesystems showed that when using
+the pvs_full API, the pv_name field in the returned list of structures
+was not being reverse translated.  As a result internal partition
+names could appear in the output of virt-filesystems.
+
+See: https://listman.redhat.com/archives/libguestfs/2023-July/032058.html
+(cherry picked from commit 32cb5b45cfbe5edbc7643fc533da70db2d3c6cda)
+---
+ daemon/lvm.c | 29 ++++++++++++++++++++++++++++-
+ 1 file changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/daemon/lvm.c b/daemon/lvm.c
+index 7e76e17c..b8c01f71 100644
+--- a/daemon/lvm.c
++++ b/daemon/lvm.c
+@@ -146,7 +146,34 @@ do_vgs (void)
+ guestfs_int_lvm_pv_list *
+ do_pvs_full (void)
+ {
+-  return parse_command_line_pvs ();
++  guestfs_int_lvm_pv_list *r;
++  size_t i;
++  char *din, *dout;
++
++  r = parse_command_line_pvs ();
++  if (r == NULL)
++    /* parse_command_line_pvs has already called reply_with_error */
++    return NULL;
++
++  /* The pv_name fields contain device names which must be reverse
++   * translated.  The problem here is that the generator does not have
++   * a "FMountable" field type in types.mli.
++   */
++  for (i = 0; i < r->guestfs_int_lvm_pv_list_len; ++i) {
++    din = r->guestfs_int_lvm_pv_list_val[i].pv_name;
++    if (din) {
++      dout = reverse_device_name_translation (din);
++      if (!dout) {
++        /* reverse_device_name_translation has already called reply_with_error*/
++        /* XXX memory leak here */
++        return NULL;
++      }
++      r->guestfs_int_lvm_pv_list_val[i].pv_name = dout;
++      free (din);
++    }
++  }
++
++  return r;
+ }
+ 
+ guestfs_int_lvm_vg_list *

@@ -1,0 +1,428 @@
+From aec3e189e6e9aa1eb2fe91cbb1c46f308b074cd5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Tue, 13 Jul 2021 12:38:07 +0100
+Subject: [PATCH] rhbz#1980800 allow --convert-to csv to write each sheet to a
+ separate file
+
+Related: tdf#135762 except only currently implemented for command line use
+
+sample usage:
+soffice --convert-to csv:"Text - txt - csv (StarCalc)":44,34,UTF8,1,,0,false,true,false,false,false,-1 sample.ods
+where the new (11th!) final token ("-1") enables writing each sheet to a
+new file based on the suggested target name so output in this example
+is files sample-Sheet1.csv and sample-Sheet2.csv
+
+Only -1 for 'all sheets' vs 0 for existing 'current sheet only' (which
+is always sheet 0 from the command line) are currently options but the
+token could be expanded in the future to select specific sheets to
+export.
+
+Change-Id: Ib99a120f1a2c8d1008a7a3c59a6b39f572fb346e
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/118850
+Tested-by: Jenkins
+Reviewed-by: Eike Rathke <erack@redhat.com>
+(cherry picked from commit b8903bc106dad036acb3d117e5c4fc955697fe02)
+
+Related: tdf#135762 Allow --convert-to csv to specify 1-based sheet number
+
+Same multifile mechanism as for -1 all sheets is used, so
+
+soffice --convert-to csv:"Text - txt - csv (StarCalc)":44,34,UTF8,1,,0,false,true,false,false,false,2 sample.ods
+
+writes a file sample-Sheet2.csv
+
+Change-Id: Ib9248c9561e4e340c88458ac5dfd159e443a4cfd
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/118971
+Reviewed-by: Eike Rathke <erack@redhat.com>
+Tested-by: Jenkins
+(cherry picked from commit fda91f8be16ba760e360940ebafd6244c648cb8c)
+
+Related: tdf#135762 Suppress cout if not command line
+
+Change-Id: I9431221aadf97739bb197871f25fa151ef4c391c
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/119294
+Reviewed-by: Eike Rathke <erack@redhat.com>
+Tested-by: Jenkins
+(cherry picked from commit 0cda081c9aa3b3dcb363f97bac60c845ce9a13e0)
+---
+ desktop/source/app/dispatchwatcher.cxx |  50 +++++++--
+ sc/source/ui/dbgui/imoptdlg.cxx        |  16 ++-
+ sc/source/ui/docshell/docsh.cxx        | 141 +++++++++++++++++++++----
+ sc/source/ui/inc/docsh.hxx             |   2 +-
+ sc/source/ui/inc/imoptdlg.hxx          |   6 +-
+ 5 files changed, 179 insertions(+), 36 deletions(-)
+
+diff --git a/desktop/source/app/dispatchwatcher.cxx b/desktop/source/app/dispatchwatcher.cxx
+index 50b92ecb7834..3df4f34ccf83 100644
+--- a/desktop/source/app/dispatchwatcher.cxx
++++ b/desktop/source/app/dispatchwatcher.cxx
+@@ -30,6 +30,7 @@
+ #include "officeipcthread.hxx"
+ #include <rtl/ustring.hxx>
+ #include <comphelper/processfactory.hxx>
++#include <comphelper/string.hxx>
+ #include <comphelper/synchronousdispatch.hxx>
+ #include <com/sun/star/io/IOException.hpp>
+ #include <com/sun/star/util/XCloseable.hpp>
+@@ -598,6 +599,8 @@ bool DispatchWatcher::executeDispatchRequests( const std::vector<DispatchRequest
+                                 aFilter = impl_GuessFilter( aOutFile, aDocService );
+                             }
+ 
++                            bool bMultiFileTarget = false;
++
+                             if (aFilter.isEmpty())
+                             {
+                                 std::cerr << "Error: no export filter" << std::endl;
+@@ -605,29 +608,54 @@ bool DispatchWatcher::executeDispatchRequests( const std::vector<DispatchRequest
+                             else
+                             {
+                                 sal_Int32 nFilterOptionsIndex = aFilter.indexOf(':');
+-                                sal_Int32 nProps = ( 0 < nFilterOptionsIndex ) ? 3 : 2;
++                                sal_Int32 nProps = ( 0 < nFilterOptionsIndex ) ? 4 : 3;
+ 
+                                 if ( !aImgOut.isEmpty() )
+                                     nProps +=1;
+                                 Sequence<PropertyValue> conversionProperties( nProps );
+-                                conversionProperties[0].Name = "Overwrite";
+-                                conversionProperties[0].Value <<= true;
++                                conversionProperties[0].Name = "ConversionRequestOrigin";
++                                conversionProperties[0].Value <<= OUString("CommandLine");
++                                conversionProperties[1].Name = "Overwrite";
++                                conversionProperties[1].Value <<= true;
+ 
+-                                conversionProperties[1].Name = "FilterName";
++                                conversionProperties[2].Name = "FilterName";
+                                 if( 0 < nFilterOptionsIndex )
+                                 {
+-                                    conversionProperties[1].Value <<= aFilter.copy(0, nFilterOptionsIndex);
++                                    OUString sFilterName = aFilter.copy(0, nFilterOptionsIndex);
++                                    OUString sFilterOptions = aFilter.copy(nFilterOptionsIndex + 1);
++
++                                    if (sFilterName == "Text - txt - csv (StarCalc)")
++                                    {
++                                        sal_Int32 nIdx(0);
++                                        // If the 11th token is '-1' then we export a file
++                                        // per sheet where the file name is based on the suggested
++                                        // output filename concatenated with the sheet name, so adjust
++                                        // the output and overwrite messages
++                                        // If the 11th token is not present or numeric 0 then the
++                                        // default sheet is exported with the output filename. If it
++                                        // is numeric >0 then that sheet (1-based) with the output
++                                        // filename concatenated with the sheet name. So even if
++                                        // that is a single file, the multi file target mechanism is
++                                        // used.
++                                        const OUString aTok(sFilterOptions.getToken(11, ',', nIdx));
++                                        // Actual validity is checked in Calc, here just check for
++                                        // presence of numeric value at start.
++                                        bMultiFileTarget = (!aTok.isEmpty() && aTok.toInt32() != 0);
++                                    }
++
++                                    conversionProperties[2].Value <<= sFilterName;
+ 
+-                                    conversionProperties[2].Name = "FilterOptions";
+-                                    conversionProperties[2].Value <<= aFilter.copy(nFilterOptionsIndex + 1);
++                                    conversionProperties[3].Name = "FilterOptions";
++                                    conversionProperties[3].Value <<= sFilterOptions;
+                                 }
+                                 else
+                                 {
+-                                    conversionProperties[1].Value <<= aFilter;
++                                    conversionProperties[2].Value <<= aFilter;
+                                 }
+ 
+                                 if ( !aImgOut.isEmpty() )
+                                 {
++                                    assert(conversionProperties[nProps-1].Name.isEmpty());
+                                     conversionProperties[nProps-1].Name = "ImageFilter";
+                                     conversionProperties[nProps-1].Value <<= aImgOut;
+                                 }
+@@ -639,9 +667,11 @@ bool DispatchWatcher::executeDispatchRequests( const std::vector<DispatchRequest
+                                 OString aTargetURL8 = OUStringToOString(aTempName, osl_getThreadTextEncoding());
+                                 if (aDispatchRequest.aRequestType != REQUEST_CAT)
+                                 {
+-                                    std::cout << "convert " << aSource8 << " -> " << aTargetURL8;
++                                    std::cout << "convert " << aSource8;
++                                    if (!bMultiFileTarget)
++                                        std::cout << " -> " << aTargetURL8;
+                                     std::cout << " using filter : " << OUStringToOString(aFilter, osl_getThreadTextEncoding()) << std::endl;
+-                                    if (FStatHelper::IsDocument(aOutFile))
++                                    if (!bMultiFileTarget && FStatHelper::IsDocument(aOutFile))
+                                         std::cout << "Overwriting: " << OUStringToOString(aTempName, osl_getThreadTextEncoding()) << std::endl ;
+                                 }
+                                 try
+diff --git a/sc/source/ui/dbgui/imoptdlg.cxx b/sc/source/ui/dbgui/imoptdlg.cxx
+index 071f1b0257bc..a362e4df0ee7 100644
+--- a/sc/source/ui/dbgui/imoptdlg.cxx
++++ b/sc/source/ui/dbgui/imoptdlg.cxx
+@@ -20,6 +20,7 @@
+ #include <imoptdlg.hxx>
+ #include <asciiopt.hxx>
+ #include <comphelper/string.hxx>
++#include <unotools/charclass.hxx>
+ #include <osl/thread.h>
+ #include <global.hxx>
+ 
+@@ -43,6 +44,7 @@ ScImportOptions::ScImportOptions( const OUString& rStr )
+     bSaveNumberAsSuch = true;
+     bSaveFormulas = false;
+     bRemoveSpace = false;
++    nSheetToExport = 0;
+     sal_Int32 nTokenCount = comphelper::string::getTokenCount(rStr, ',');
+     if ( nTokenCount < 3 )
+         return;
+@@ -77,6 +79,16 @@ ScImportOptions::ScImportOptions( const OUString& rStr )
+             bSaveFormulas = rStr.getToken(0, ',', nIdx) == "true";
+         if ( nTokenCount >= 11 )
+             bRemoveSpace = rStr.getToken(0, ',', nIdx) == "true";
++        if ( nTokenCount >= 12 )
++        {
++            const OUString aTok(rStr.getToken(0, ',', nIdx));
++            if (aTok == "-1")
++                nSheetToExport = -1;    // all
++            else if (aTok.isEmpty() || CharClass::isAsciiNumeric(aTok))
++                nSheetToExport = aTok.toInt32();
++            else
++                nSheetToExport = -23;   // invalid, force error
++        }
+     }
+ }
+ 
+@@ -99,7 +111,9 @@ OUString ScImportOptions::BuildString() const
+             "," +
+             OUString::boolean( bSaveFormulas ) +  // "save formulas": not in ScAsciiOptions
+             "," +
+-            OUString::boolean( bRemoveSpace );    // same as "Remove space" in ScAsciiOptions
++            OUString::boolean( bRemoveSpace ) +  // same as "Remove space" in ScAsciiOptions
++            "," +
++            OUString::number(nSheetToExport) ;  // Only available for command line --convert-to
+ 
+     return aResult;
+ }
+diff --git a/sc/source/ui/docshell/docsh.cxx b/sc/source/ui/docshell/docsh.cxx
+index 91020db0b2e0..5fdfddd0c89b 100644
+--- a/sc/source/ui/docshell/docsh.cxx
++++ b/sc/source/ui/docshell/docsh.cxx
+@@ -44,6 +44,7 @@
+ #include <sfx2/objface.hxx>
+ #include <sfx2/viewfrm.hxx>
+ #include <svl/documentlockfile.hxx>
++#include <svl/fstathelper.hxx>
+ #include <svl/sharecontrolfile.hxx>
+ #include <svl/urihelper.hxx>
+ #include <osl/file.hxx>
+@@ -119,6 +120,7 @@
+ #include <comphelper/processfactory.hxx>
+ #include <comphelper/string.hxx>
+ #include <unotools/configmgr.hxx>
++#include <unotools/ucbstreamhelper.hxx>
+ #include <uiitems.hxx>
+ #include <dpobject.hxx>
+ #include <markdata.hxx>
+@@ -1925,7 +1927,7 @@ void escapeTextSep(sal_Int32 nPos, const StrT& rStrDelim, StrT& rStr)
+ 
+ }
+ 
+-void ScDocShell::AsciiSave( SvStream& rStream, const ScImportOptions& rAsciiOpt )
++void ScDocShell::AsciiSave( SvStream& rStream, const ScImportOptions& rAsciiOpt, SCTAB nTab )
+ {
+     sal_Unicode cDelim    = rAsciiOpt.nFieldSepCode;
+     sal_Unicode cStrDelim = rAsciiOpt.nTextSepCode;
+@@ -1971,7 +1973,6 @@ void ScDocShell::AsciiSave( SvStream& rStream, const ScImportOptions& rAsciiOpt
+ 
+     SCCOL nStartCol = 0;
+     SCROW nStartRow = 0;
+-    SCTAB nTab = GetSaveTab();
+     SCCOL nEndCol;
+     SCROW nEndRow;
+     m_aDocument.GetCellArea( nTab, nEndCol, nEndRow );
+@@ -2389,35 +2390,129 @@ bool ScDocShell::ConvertTo( SfxMedium &rMed )
+     }
+     else if (aFltName == pFilterAscii)
+     {
+-        SvStream* pStream = rMed.GetOutStream();
+-        if (pStream)
++        OUString sItStr;
++        SfxItemSet*  pSet = rMed.GetItemSet();
++        const SfxPoolItem* pItem;
++        if ( pSet && SfxItemState::SET ==
++             pSet->GetItemState( SID_FILE_FILTEROPTIONS, true, &pItem ) )
+         {
+-            OUString sItStr;
+-            SfxItemSet*  pSet = rMed.GetItemSet();
+-            const SfxPoolItem* pItem;
+-            if ( pSet && SfxItemState::SET ==
+-                 pSet->GetItemState( SID_FILE_FILTEROPTIONS, true, &pItem ) )
++            sItStr = static_cast<const SfxStringItem*>(pItem)->GetValue();
++        }
++
++        if ( sItStr.isEmpty() )
++        {
++            //  default for ascii export (from API without options):
++            //  ISO8859-1/MS_1252 encoding, comma, double quotes
++
++            ScImportOptions aDefOptions( ',', '"', RTL_TEXTENCODING_MS_1252 );
++            sItStr = aDefOptions.BuildString();
++        }
++
++        weld::WaitObject aWait( GetActiveDialogParent() );
++        ScImportOptions aOptions( sItStr );
++
++        if (aOptions.nSheetToExport)
++        {
++            // Only from command line --convert-to
++            bRet = true;
++
++            // Verbose only from command line, not UI (in case we actually
++            // implement that) nor macro filter options.
++            bool bVerbose = false;
++            const css::uno::Sequence<css::beans::PropertyValue> & rArgs = rMed.GetArgs();
++            const auto pProp = std::find_if( rArgs.begin(), rArgs.end(),
++                    [](const css::beans::PropertyValue& rProp) { return rProp.Name == "ConversionRequestOrigin"; });
++            if (pProp != rArgs.end())
+             {
+-                sItStr = static_cast<const SfxStringItem*>(pItem)->GetValue();
++                OUString aOrigin;
++                pProp->Value >>= aOrigin;
++                bVerbose = (aOrigin == "CommandLine");
+             }
+ 
+-            if ( sItStr.isEmpty() )
++            SCTAB nStartTab;
++            SCTAB nCount = m_aDocument.GetTableCount();
++            if (aOptions.nSheetToExport == -1)
+             {
+-                //  default for ascii export (from API without options):
+-                //  ISO8859-1/MS_1252 encoding, comma, double quotes
+-
+-                ScImportOptions aDefOptions( ',', '"', RTL_TEXTENCODING_MS_1252 );
+-                sItStr = aDefOptions.BuildString();
++                // All sheets.
++                nStartTab = 0;
++            }
++            else if (0 < aOptions.nSheetToExport && aOptions.nSheetToExport <= nCount)
++            {
++                // One sheet, 1-based.
++                nCount = aOptions.nSheetToExport;
++                nStartTab = nCount - 1;
++            }
++            else
++            {
++                // Usage error, no export but log.
++                if (bVerbose)
++                {
++                    if (aOptions.nSheetToExport < 0)
++                        std::cout << "Bad sheet number string given." << std::endl;
++                    else
++                        std::cout << "No sheet number " << aOptions.nSheetToExport
++                            << ", number of sheets is " << nCount << std::endl;
++                }
++                nStartTab = 0;
++                nCount = 0;
++                SetError(SCERR_EXPORT_DATA);
++                bRet = false;
+             }
+ 
+-            weld::WaitObject aWait( GetActiveDialogParent() );
+-            ScImportOptions aOptions( sItStr );
+-            AsciiSave( *pStream, aOptions );
+-            bRet = true;
++            INetURLObject aURLObject(rMed.GetURLObject());
++            OUString sExt = aURLObject.CutExtension();
++            OUString sBaseName = aURLObject.GetLastName();
++            aURLObject.CutLastName();
+ 
+-            if (m_aDocument.GetTableCount() > 1)
+-                if (!rMed.GetError())
+-                    rMed.SetError(SCWARN_EXPORT_ASCII);
++            for (SCTAB i = nStartTab; i < nCount; ++i)
++            {
++                OUString sTabName;
++                if (!m_aDocument.GetName(i, sTabName))
++                    sTabName = OUString::number(i);
++                INetURLObject aSheetURLObject(aURLObject);
++                OUString sFileName = sBaseName + "-" + sTabName;
++                if (!sExt.isEmpty())
++                    sFileName = sFileName + "." + sExt;
++                aSheetURLObject.Append(sFileName);
++
++                // log similar to DispatchWatcher::executeDispatchRequests
++                OUString aOutFile = aSheetURLObject.GetMainURL(INetURLObject::DecodeMechanism::NONE);
++                if (bVerbose)
++                {
++                    OUString aDisplayedName;
++                    if (osl::FileBase::E_None != osl::FileBase::getSystemPathFromFileURL(aOutFile, aDisplayedName))
++                        aDisplayedName = aOutFile;
++                    std::cout << "Writing sheet " << OUStringToOString(sTabName, osl_getThreadTextEncoding()) << " -> "
++                                                  << OUStringToOString(aDisplayedName, osl_getThreadTextEncoding())
++                                                  << std::endl;
++
++                    if (FStatHelper::IsDocument(aOutFile))
++                        std::cout << "Overwriting: " << OUStringToOString(aDisplayedName, osl_getThreadTextEncoding())
++                                                     << std::endl ;
++                }
++
++                std::unique_ptr<SvStream> xStm = ::utl::UcbStreamHelper::CreateStream(aOutFile, StreamMode::TRUNC | StreamMode::WRITE);
++                if (!xStm)
++                {
++                    SetError(ERRCODE_IO_CANTCREATE);
++                    bRet = false;
++                    break;
++                }
++                AsciiSave(*xStm, aOptions, i);
++            }
++        }
++        else
++        {
++            SvStream* pStream = rMed.GetOutStream();
++            if (pStream)
++            {
++                AsciiSave(*pStream, aOptions, GetSaveTab());
++                bRet = true;
++
++                if (m_aDocument.GetTableCount() > 1)
++                    if (!rMed.GetError())
++                        rMed.SetError(SCWARN_EXPORT_ASCII);
++            }
+         }
+     }
+     else if (aFltName == pFilterDBase)
+diff --git a/sc/source/ui/inc/docsh.hxx b/sc/source/ui/inc/docsh.hxx
+index 41c0b30a42a8..3aa5f6caf311 100644
+--- a/sc/source/ui/inc/docsh.hxx
++++ b/sc/source/ui/inc/docsh.hxx
+@@ -227,7 +227,7 @@ public:
+ 
+     ScDrawLayer*    MakeDrawLayer();
+ 
+-    void            AsciiSave( SvStream& rStream, const ScImportOptions& rOpt );
++    void            AsciiSave( SvStream& rStream, const ScImportOptions& rOpt, SCTAB nTab );
+ 
+     void            Execute( SfxRequest& rReq );
+     void            GetState( SfxItemSet &rSet );
+diff --git a/sc/source/ui/inc/imoptdlg.hxx b/sc/source/ui/inc/imoptdlg.hxx
+index bac941c2a377..382067d67813 100644
+--- a/sc/source/ui/inc/imoptdlg.hxx
++++ b/sc/source/ui/inc/imoptdlg.hxx
+@@ -32,7 +32,8 @@ public:
+         ScImportOptions( sal_Unicode nFieldSep, sal_Unicode nTextSep, rtl_TextEncoding nEnc )
+             : nFieldSepCode(nFieldSep), nTextSepCode(nTextSep),
+             bFixedWidth(false), bSaveAsShown(false), bQuoteAllText(false),
+-            bSaveNumberAsSuch(true), bSaveFormulas(false), bRemoveSpace(false)
++            bSaveNumberAsSuch(true), bSaveFormulas(false), bRemoveSpace(false),
++            nSheetToExport(0)
+         { SetTextEncoding( nEnc ); }
+ 
+     ScImportOptions& operator=( const ScImportOptions& rCpy ) = default;
+@@ -51,6 +52,9 @@ public:
+     bool        bSaveNumberAsSuch;
+     bool        bSaveFormulas;
+     bool        bRemoveSpace;
++    // "0" for 'current sheet', "-1" for all sheets (each to a separate file),
++    // or 1-based specific sheet number (to a separate file).
++    sal_Int32   nSheetToExport;
+ };
+ 
+ #endif // INCLUDED_SC_SOURCE_UI_INC_IMOPTDLG_HXX
+-- 
+2.31.1
+

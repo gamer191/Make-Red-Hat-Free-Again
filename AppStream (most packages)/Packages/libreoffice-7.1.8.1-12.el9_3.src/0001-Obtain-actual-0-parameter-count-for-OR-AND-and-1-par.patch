@@ -1,0 +1,77 @@
+From d6bfde52b0b51e96075cfb195c2f9d8200a0fb08 Mon Sep 17 00:00:00 2001
+From: Eike Rathke <erack@redhat.com>
+Date: Thu, 16 Feb 2023 20:20:31 +0100
+Subject: [PATCH 1/3] Obtain actual 0-parameter count for OR(), AND() and
+ 1-parameter functions
+
+OR and AND for legacy infix notation are classified as binary
+operators but in fact are functions with parameter count. In case
+no argument is supplied, GetByte() returns 0 and for that case the
+implicit binary operator 2 parameters were wrongly assumed.
+Similar for functions expecting 1 parameter, without argument 1
+was assumed. For "real" unary and binary operators the compiler
+already checks parameters. Omit OR and AND and 1-parameter
+functions from this implicit assumption and return the actual 0
+count.
+
+Change-Id: Ie05398c112a98021ac2875cf7b6de994aee9d882
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/147173
+Reviewed-by: Eike Rathke <erack@redhat.com>
+Tested-by: Jenkins
+(cherry picked from commit e7ce9bddadb2db222eaa5f594ef1de2e36d57e5c)
+---
+ formula/source/core/api/token.cxx | 13 +++++--------
+ sc/source/core/tool/interpr4.cxx  | 10 +++++++++-
+ 2 files changed, 14 insertions(+), 9 deletions(-)
+
+diff --git a/formula/source/core/api/token.cxx b/formula/source/core/api/token.cxx
+index 37dd26979ced..c2b12cf3a145 100644
+--- a/formula/source/core/api/token.cxx
++++ b/formula/source/core/api/token.cxx
+@@ -93,17 +93,14 @@ sal_uInt8 FormulaToken::GetParamCount() const
+         return 0;       // parameters and specials
+                         // ocIf... jump commands not for FAP, have cByte then
+ //2do: bool parameter whether FAP or not?
+-    else if ( GetByte() )
++    else if (GetByte())
+         return GetByte();   // all functions, also ocExternal and ocMacro
+-    else if (SC_OPCODE_START_BIN_OP <= eOp && eOp < SC_OPCODE_STOP_BIN_OP)
+-        return 2;           // binary
+-    else if ((SC_OPCODE_START_UN_OP <= eOp && eOp < SC_OPCODE_STOP_UN_OP)
+-            || eOp == ocPercentSign)
+-        return 1;           // unary
++    else if (SC_OPCODE_START_BIN_OP <= eOp && eOp < SC_OPCODE_STOP_BIN_OP && eOp != ocAnd && eOp != ocOr)
++        return 2;           // binary operators, compiler checked; OR and AND legacy but are functions
++    else if ((SC_OPCODE_START_UN_OP <= eOp && eOp < SC_OPCODE_STOP_UN_OP) || eOp == ocPercentSign)
++        return 1;           // unary operators, compiler checked
+     else if (SC_OPCODE_START_NO_PAR <= eOp && eOp < SC_OPCODE_STOP_NO_PAR)
+         return 0;           // no parameter
+-    else if (SC_OPCODE_START_1_PAR <= eOp && eOp < SC_OPCODE_STOP_1_PAR)
+-        return 1;           // one parameter
+     else if (FormulaCompiler::IsOpCodeJumpCommand( eOp ))
+         return 1;           // only the condition counts as parameter
+     else
+diff --git a/sc/source/core/tool/interpr4.cxx b/sc/source/core/tool/interpr4.cxx
+index b9d34cd080a6..d5d8588fe49a 100644
+--- a/sc/source/core/tool/interpr4.cxx
++++ b/sc/source/core/tool/interpr4.cxx
+@@ -4022,7 +4022,15 @@ StackVar ScInterpreter::Interpret()
+                 else if (sp >= pCur->GetParamCount())
+                     nStackBase = sp - pCur->GetParamCount();
+                 else
+-                    nStackBase = sp;    // underflow?!?
++                {
++                    SAL_WARN("sc.core", "Stack anomaly at " << aPos.Format(
++                                ScRefFlags::VALID | ScRefFlags::FORCE_DOC | ScRefFlags::TAB_3D, &mrDoc)
++                            << "  eOp: " << static_cast<int>(eOp)
++                            << "  params: " << static_cast<int>(pCur->GetParamCount())
++                            << "  nStackBase: " << nStackBase << "  sp: " << sp);
++                    nStackBase = sp;
++                    assert(!"underflow");
++                }
+             }
+ 
+             switch( eOp )
+-- 
+2.41.0
+

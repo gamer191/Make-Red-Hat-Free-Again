@@ -1,0 +1,45 @@
+From ce37356f6bcaaef62a80814d7d54d3aa6d53167d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Tue, 12 Oct 2021 09:52:53 +0100
+Subject: [PATCH] document-new shouldn't get prefixed to become
+ libreoffice-document-new
+
+seen by rpminspect as .desktop "references icon libreoffice-document-new
+but no subpackages contain libreoffice-document-new"
+
+introduced by:
+
+commit f767d5e2b017c0d0cfd23ff3318cb30901847722
+Date:   Sun Sep 1 11:30:12 2019 +0200
+
+    Add icons to New Document desktop file actions
+
+in the [Desktop Action NewDocument] section
+
+Change-Id: I64ce5e2dbaca32083b2f76e960c33a815f8a3773
+---
+ sysui/desktop/share/brand.pl | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/sysui/desktop/share/brand.pl b/sysui/desktop/share/brand.pl
+index 9d73e619c495..b17a7374fd62 100644
+--- a/sysui/desktop/share/brand.pl
++++ b/sysui/desktop/share/brand.pl
+@@ -81,9 +81,11 @@ while ($arg = shift) {
+         # remove possible Windows line-ends
+         chomp;
+ 
+-        # patch all occurrences of openoffice in ICON line with
+-        # $prefix
+-        s/Icon=/Icon=$iconprefix/;
++        # patch all icons in ICON line with $prefix
++        if (! /Icon=document-new/ ) { # except for Icon=document-new which
++                                      # is a stock icon, not one of ours
++            s/Icon=/Icon=$iconprefix/;
++        }
+ 
+         # patch all occurrences of openoffice in icon_filename
+         # line with $prefix
+-- 
+2.32.0
+

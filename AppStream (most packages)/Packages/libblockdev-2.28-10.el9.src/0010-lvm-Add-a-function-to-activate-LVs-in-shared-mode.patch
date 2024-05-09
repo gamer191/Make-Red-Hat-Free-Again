@@ -1,0 +1,300 @@
+From 6bdbafc79e5bcdf2087148c6caa88a6c50c1e94a Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Mon, 24 Apr 2023 11:57:18 +0200
+Subject: [PATCH] lvm: Add a function to activate LVs in shared mode
+
+Needed by the new blivet feature to support shared LVM setups.
+---
+ src/lib/plugin_apis/lvm.api         | 16 +++++++++
+ src/plugins/lvm-dbus.c              | 51 ++++++++++++++++++++-------
+ src/plugins/lvm.c                   | 53 ++++++++++++++++++++++-------
+ src/plugins/lvm.h                   |  1 +
+ src/python/gi/overrides/BlockDev.py |  5 ++-
+ tests/lvm_dbus_tests.py             | 18 +++++++---
+ tests/lvm_test.py                   | 18 +++++++---
+ 7 files changed, 124 insertions(+), 38 deletions(-)
+
+diff --git a/src/lib/plugin_apis/lvm.api b/src/lib/plugin_apis/lvm.api
+index b8cde70b..640eee49 100644
+--- a/src/lib/plugin_apis/lvm.api
++++ b/src/lib/plugin_apis/lvm.api
+@@ -1057,6 +1057,22 @@ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 si
+  */
+ gboolean bd_lvm_lvactivate (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, const BDExtraArg **extra, GError **error);
+ 
++/**
++ * bd_lvm_lvactivate_shared:
++ * @vg_name: name of the VG containing the to-be-activated LV
++ * @lv_name: name of the to-be-activated LV
++ * @ignore_skip: whether to ignore the skip flag or not
++ * @shared: whether to activate the LV in shared mode
++ * @extra: (allow-none) (array zero-terminated=1): extra options for the LV activation
++ *                                                 (just passed to LVM as is)
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the @vg_name/@lv_name LV was successfully activated or not
++ *
++ * Tech category: %BD_LVM_TECH_BASIC-%BD_LVM_TECH_MODE_MODIFY
++ */
++gboolean bd_lvm_lvactivate_shared (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, gboolean shared, const BDExtraArg **extra, GError **error);
++
+ /**
+  * bd_lvm_lvdeactivate:
+  * @vg_name: name of the VG containing the to-be-deactivated LV
+diff --git a/src/plugins/lvm-dbus.c b/src/plugins/lvm-dbus.c
+index 28f3bb25..46e09833 100644
+--- a/src/plugins/lvm-dbus.c
++++ b/src/plugins/lvm-dbus.c
+@@ -2163,6 +2163,27 @@ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 si
+     return (*error == NULL);
+ }
+ 
++static gboolean _lvm_lvactivate (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, gboolean shared, const BDExtraArg **extra, GError **error) {
++    GVariant *params = NULL;
++    GVariantBuilder builder;
++    GVariant *extra_params = NULL;
++
++    if (shared)
++        params = g_variant_new ("(t)", (guint64) 1 << 6);
++    else
++        params = g_variant_new ("(t)", (guint64) 0);
++
++    if (ignore_skip) {
++        g_variant_builder_init (&builder, G_VARIANT_TYPE_DICTIONARY);
++        g_variant_builder_add (&builder, "{sv}", "-K", g_variant_new ("s", ""));
++        extra_params = g_variant_builder_end (&builder);
++        g_variant_builder_clear (&builder);
++    }
++    call_lv_method_sync (vg_name, lv_name, "Activate", params, extra_params, extra, TRUE, error);
++
++    return (*error == NULL);
++}
++
+ /**
+  * bd_lvm_lvactivate:
+  * @vg_name: name of the VG containing the to-be-activated LV
+@@ -2177,19 +2198,25 @@ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 si
+  * Tech category: %BD_LVM_TECH_BASIC-%BD_LVM_TECH_MODE_MODIFY
+  */
+ gboolean bd_lvm_lvactivate (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, const BDExtraArg **extra, GError **error) {
+-    GVariant *params = g_variant_new ("(t)", (guint64) 0);
+-    GVariantBuilder builder;
+-    GVariant *extra_params = NULL;
+-
+-    if (ignore_skip) {
+-        g_variant_builder_init (&builder, G_VARIANT_TYPE_DICTIONARY);
+-        g_variant_builder_add (&builder, "{sv}", "-K", g_variant_new ("s", ""));
+-        extra_params = g_variant_builder_end (&builder);
+-        g_variant_builder_clear (&builder);
+-    }
+-    call_lv_method_sync (vg_name, lv_name, "Activate", params, extra_params, extra, TRUE, error);
++    return _lvm_lvactivate (vg_name, lv_name, ignore_skip, FALSE, extra, error);
++}
+ 
+-    return (*error == NULL);
++/**
++ * bd_lvm_lvactivate_shared:
++ * @vg_name: name of the VG containing the to-be-activated LV
++ * @lv_name: name of the to-be-activated LV
++ * @ignore_skip: whether to ignore the skip flag or not
++ * @shared: whether to activate the LV in shared mode
++ * @extra: (allow-none) (array zero-terminated=1): extra options for the LV activation
++ *                                                 (just passed to LVM as is)
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the @vg_name/@lv_name LV was successfully activated or not
++ *
++ * Tech category: %BD_LVM_TECH_BASIC-%BD_LVM_TECH_MODE_MODIFY
++ */
++gboolean bd_lvm_lvactivate_shared (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, gboolean shared, const BDExtraArg **extra, GError **error) {
++    return _lvm_lvactivate (vg_name, lv_name, ignore_skip, shared, extra, error);
+ }
+ 
+ /**
+diff --git a/src/plugins/lvm.c b/src/plugins/lvm.c
+index f1e2941b..0db3bf4a 100644
+--- a/src/plugins/lvm.c
++++ b/src/plugins/lvm.c
+@@ -1644,6 +1644,28 @@ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 si
+     return success;
+ }
+ 
++static gboolean _lvm_lvactivate (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, gboolean shared, const BDExtraArg **extra, GError **error) {
++    const gchar *args[5] = {"lvchange", NULL, NULL, NULL, NULL};
++    guint8 next_arg = 2;
++    gboolean success = FALSE;
++
++    if (shared)
++        args[1] = "-asy";
++    else
++        args[1] = "-ay";
++
++    if (ignore_skip) {
++        args[next_arg] = "-K";
++        next_arg++;
++    }
++    args[next_arg] = g_strdup_printf ("%s/%s", vg_name, lv_name);
++
++    success = call_lvm_and_report_error (args, extra, TRUE, error);
++    g_free ((gchar *) args[next_arg]);
++
++    return success;
++}
++
+ /**
+  * bd_lvm_lvactivate:
+  * @vg_name: name of the VG containing the to-be-activated LV
+@@ -1658,20 +1680,25 @@ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 si
+  * Tech category: %BD_LVM_TECH_BASIC-%BD_LVM_TECH_MODE_MODIFY
+  */
+ gboolean bd_lvm_lvactivate (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, const BDExtraArg **extra, GError **error) {
+-    const gchar *args[5] = {"lvchange", "-ay", NULL, NULL, NULL};
+-    guint8 next_arg = 2;
+-    gboolean success = FALSE;
+-
+-    if (ignore_skip) {
+-        args[next_arg] = "-K";
+-        next_arg++;
+-    }
+-    args[next_arg] = g_strdup_printf ("%s/%s", vg_name, lv_name);
+-
+-    success = call_lvm_and_report_error (args, extra, TRUE, error);
+-    g_free ((gchar *) args[next_arg]);
++    return _lvm_lvactivate (vg_name, lv_name, ignore_skip, FALSE, extra, error);
++}
+ 
+-    return success;
++/**
++ * bd_lvm_lvactivate_shared:
++ * @vg_name: name of the VG containing the to-be-activated LV
++ * @lv_name: name of the to-be-activated LV
++ * @ignore_skip: whether to ignore the skip flag or not
++ * @shared: whether to activate the LV in shared mode
++ * @extra: (allow-none) (array zero-terminated=1): extra options for the LV activation
++ *                                                 (just passed to LVM as is)
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the @vg_name/@lv_name LV was successfully activated or not
++ *
++ * Tech category: %BD_LVM_TECH_BASIC-%BD_LVM_TECH_MODE_MODIFY
++ */
++gboolean bd_lvm_lvactivate_shared (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, gboolean shared, const BDExtraArg **extra, GError **error) {
++    return _lvm_lvactivate (vg_name, lv_name, ignore_skip, shared, extra, error);
+ }
+ 
+ /**
+diff --git a/src/plugins/lvm.h b/src/plugins/lvm.h
+index fabf091f..c85c043d 100644
+--- a/src/plugins/lvm.h
++++ b/src/plugins/lvm.h
+@@ -277,6 +277,7 @@ gboolean bd_lvm_lvremove (const gchar *vg_name, const gchar *lv_name, gboolean f
+ gboolean bd_lvm_lvrename (const gchar *vg_name, const gchar *lv_name, const gchar *new_name, const BDExtraArg **extra, GError **error);
+ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 size, const BDExtraArg **extra, GError **error);
+ gboolean bd_lvm_lvactivate (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, const BDExtraArg **extra, GError **error);
++gboolean bd_lvm_lvactivate_shared (const gchar *vg_name, const gchar *lv_name, gboolean ignore_skip, gboolean shared, const BDExtraArg **extra, GError **error);
+ gboolean bd_lvm_lvdeactivate (const gchar *vg_name, const gchar *lv_name, const BDExtraArg **extra, GError **error);
+ gboolean bd_lvm_lvsnapshotcreate (const gchar *vg_name, const gchar *origin_name, const gchar *snapshot_name, guint64 size, const BDExtraArg **extra, GError **error);
+ gboolean bd_lvm_lvsnapshotmerge (const gchar *vg_name, const gchar *snapshot_name, const BDExtraArg **extra, GError **error);
+diff --git a/src/python/gi/overrides/BlockDev.py b/src/python/gi/overrides/BlockDev.py
+index 795e0de4..3e074260 100644
+--- a/src/python/gi/overrides/BlockDev.py
++++ b/src/python/gi/overrides/BlockDev.py
+@@ -605,11 +605,10 @@ def lvm_lvresize(vg_name, lv_name, size, extra=None, **kwargs):
+     return _lvm_lvresize(vg_name, lv_name, size, extra)
+ __all__.append("lvm_lvresize")
+ 
+-_lvm_lvactivate = BlockDev.lvm_lvactivate
+ @override(BlockDev.lvm_lvactivate)
+-def lvm_lvactivate(vg_name, lv_name, ignore_skip=False, extra=None, **kwargs):
++def lvm_lvactivate(vg_name, lv_name, ignore_skip=False, shared=False, extra=None, **kwargs):
+     extra = _get_extra(extra, kwargs)
+-    return _lvm_lvactivate(vg_name, lv_name, ignore_skip, extra)
++    return BlockDev.lvm_lvactivate_shared(vg_name, lv_name, ignore_skip, shared, extra)
+ __all__.append("lvm_lvactivate")
+ 
+ _lvm_lvdeactivate = BlockDev.lvm_lvdeactivate
+diff --git a/tests/lvm_dbus_tests.py b/tests/lvm_dbus_tests.py
+index fc12b55d..a821636e 100644
+--- a/tests/lvm_dbus_tests.py
++++ b/tests/lvm_dbus_tests.py
+@@ -873,15 +873,15 @@ class LvmTestLVactivateDeactivate(LvmPVVGLVTestCase):
+         self.assertTrue(succ)
+ 
+         with self.assertRaises(GLib.GError):
+-            BlockDev.lvm_lvactivate("nonexistingVG", "testLV", True, None)
++            BlockDev.lvm_lvactivate("nonexistingVG", "testLV", True)
+ 
+         with self.assertRaises(GLib.GError):
+-            BlockDev.lvm_lvactivate("testVG", "nonexistingLV", True, None)
++            BlockDev.lvm_lvactivate("testVG", "nonexistingLV", True)
+ 
+         with self.assertRaises(GLib.GError):
+-            BlockDev.lvm_lvactivate("nonexistingVG", "nonexistingLV", True, None)
++            BlockDev.lvm_lvactivate("nonexistingVG", "nonexistingLV", True)
+ 
+-        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True, None)
++        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True)
+         self.assertTrue(succ)
+ 
+         with self.assertRaises(GLib.GError):
+@@ -896,7 +896,15 @@ class LvmTestLVactivateDeactivate(LvmPVVGLVTestCase):
+         succ = BlockDev.lvm_lvdeactivate("testVG", "testLV", None)
+         self.assertTrue(succ)
+ 
+-        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True, None)
++        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True)
++        self.assertTrue(succ)
++
++        succ = BlockDev.lvm_lvdeactivate("testVG", "testLV", None)
++        self.assertTrue(succ)
++
++        # try activating in shared mode, unfortunately no way to check whether it really
++        # works or not
++        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True, True)
+         self.assertTrue(succ)
+ 
+         succ = BlockDev.lvm_lvdeactivate("testVG", "testLV", None)
+diff --git a/tests/lvm_test.py b/tests/lvm_test.py
+index 7ede4b59..63f43afb 100644
+--- a/tests/lvm_test.py
++++ b/tests/lvm_test.py
+@@ -807,15 +807,15 @@ class LvmTestLVactivateDeactivate(LvmPVVGLVTestCase):
+         self.assertTrue(succ)
+ 
+         with self.assertRaises(GLib.GError):
+-            BlockDev.lvm_lvactivate("nonexistingVG", "testLV", True, None)
++            BlockDev.lvm_lvactivate("nonexistingVG", "testLV", True)
+ 
+         with self.assertRaises(GLib.GError):
+-            BlockDev.lvm_lvactivate("testVG", "nonexistingLV", True, None)
++            BlockDev.lvm_lvactivate("testVG", "nonexistingLV", True)
+ 
+         with self.assertRaises(GLib.GError):
+-            BlockDev.lvm_lvactivate("nonexistingVG", "nonexistingLV", True, None)
++            BlockDev.lvm_lvactivate("nonexistingVG", "nonexistingLV", True)
+ 
+-        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True, None)
++        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True)
+         self.assertTrue(succ)
+ 
+         with self.assertRaises(GLib.GError):
+@@ -830,7 +830,15 @@ class LvmTestLVactivateDeactivate(LvmPVVGLVTestCase):
+         succ = BlockDev.lvm_lvdeactivate("testVG", "testLV", None)
+         self.assertTrue(succ)
+ 
+-        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True, None)
++        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True)
++        self.assertTrue(succ)
++
++        succ = BlockDev.lvm_lvdeactivate("testVG", "testLV", None)
++        self.assertTrue(succ)
++
++        # try activating in shared mode, unfortunately no way to check whether it really
++        # works or not
++        succ = BlockDev.lvm_lvactivate("testVG", "testLV", True, True)
+         self.assertTrue(succ)
+ 
+         succ = BlockDev.lvm_lvdeactivate("testVG", "testLV", None)
+-- 
+2.41.0
+

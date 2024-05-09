@@ -1,0 +1,63 @@
+From 461af8b9ed05cae188b24db71949a9e7758693e7 Mon Sep 17 00:00:00 2001
+From: David King <amigadave@amigadave.com>
+Date: Thu, 27 Jan 2022 15:33:17 +0000
+Subject: [PATCH 1/2] Use DocBook URL for tutorial DTD
+
+---
+ doc/tutorial2/libxslt_pipes.xml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/tutorial2/libxslt_pipes.xml b/doc/tutorial2/libxslt_pipes.xml
+index 9a672a9b..2aaac95f 100644
+--- a/doc/tutorial2/libxslt_pipes.xml
++++ b/doc/tutorial2/libxslt_pipes.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="iso-8859-2"?>
+-<!DOCTYPE article 
+-SYSTEM "file:///usr/share/docbook/docbook-xml-4.3/docbookx.dtd">
++<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.3//EN"
++               "http://www.oasis-open.org/docbook/xml/4.3/docbookx.dtd">
+ 
+ <article id="libxslt">
+ <articleinfo>
+-- 
+2.34.1
+
+
+From 634065b39285841eef7dab5bfb2a8ac71b0a5d05 Mon Sep 17 00:00:00 2001
+From: David King <amigadave@amigadave.com>
+Date: Fri, 28 Jan 2022 09:35:03 +0000
+Subject: [PATCH 2/2] Fix validity of tutorial XML
+
+Move the title element before articleinfo.
+
+https://tdg.docbook.org/tdg/4.5/article.html
+---
+ doc/tutorial2/libxslt_pipes.xml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/tutorial2/libxslt_pipes.xml b/doc/tutorial2/libxslt_pipes.xml
+index 2aaac95f..f6fa0d64 100644
+--- a/doc/tutorial2/libxslt_pipes.xml
++++ b/doc/tutorial2/libxslt_pipes.xml
+@@ -3,6 +3,8 @@
+                "http://www.oasis-open.org/docbook/xml/4.3/docbookx.dtd">
+ 
+ <article id="libxslt">
++<title>libxslt: An Extended Tutorial</title>
++
+ <articleinfo>
+   <author><firstname>Panos</firstname><surname>Louridas</surname></author>
+   <copyright>
+@@ -34,8 +36,6 @@
+   </legalnotice>
+ </articleinfo>
+ 
+-<title>libxslt: An Extended Tutorial</title>
+-
+ <sect1><title>Introduction</title>
+ 
+ <para>The Extensible Stylesheet Language Transformations (XSLT)
+-- 
+2.34.1
+

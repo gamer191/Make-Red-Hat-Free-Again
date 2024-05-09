@@ -1,0 +1,1395 @@
+From 2c4324b658931882bfb664e05673cd5c9082429d Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Fri, 7 Oct 2022 15:42:44 +0200
+Subject: [PATCH] nvme: Rework the disconnect device topology crawl
+
+This is more sane regarding to memory ownership and
+the scanned topology tree.
+---
+ src/plugins/nvme/nvme-fabrics.c | 93 +++++++++++++++++----------------
+ tests/nvme_test.py              |  2 +-
+ 2 files changed, 50 insertions(+), 45 deletions(-)
+
+diff --git a/src/plugins/nvme/nvme-fabrics.c b/src/plugins/nvme/nvme-fabrics.c
+index 20ed57f5d..26e2fa6ec 100644
+--- a/src/plugins/nvme/nvme-fabrics.c
++++ b/src/plugins/nvme/nvme-fabrics.c
+@@ -281,6 +281,47 @@ gboolean bd_nvme_connect (const gchar *subsysnqn, const gchar *transport, const
+     return TRUE;
+ }
+ 
++static gboolean _disconnect (const gchar *subsysnqn, const gchar *path, GError **error, gboolean *found) {
++    nvme_root_t root;
++    nvme_host_t host;
++    nvme_subsystem_t subsys;
++    nvme_ctrl_t ctrl;
++    int ret;
++
++    root = nvme_create_root (NULL, -1);
++    if (root == NULL) {
++        g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_FAILED,
++                     "Failed to create topology root: %s",
++                     strerror_l (errno, _C_LOCALE));
++        return FALSE;
++    }
++    ret = nvme_scan_topology (root, NULL, NULL);
++    if (ret < 0) {
++        g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_FAILED,
++                     "Failed to scan topology: %s",
++                     strerror_l (errno, _C_LOCALE));
++        nvme_free_tree (root);
++        return FALSE;
++    }
++    nvme_for_each_host (root, host)
++        nvme_for_each_subsystem (host, subsys)
++            if (!subsysnqn || g_strcmp0 (nvme_subsystem_get_nqn (subsys), subsysnqn) == 0)
++                nvme_subsystem_for_each_ctrl (subsys, ctrl)
++                    if (!path || g_strcmp0 (nvme_ctrl_get_name (ctrl), path) == 0) {
++                        ret = nvme_disconnect_ctrl (ctrl);
++                        if (ret != 0) {
++                            g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_FAILED,
++                                         "Error disconnecting the controller: %s",
++                                         strerror_l (errno, _C_LOCALE));
++                            nvme_free_tree (root);
++                            return FALSE;
++                        }
++                        *found = TRUE;
++                    }
++    nvme_free_tree (root);
++    return TRUE;
++}
++
+ /**
+  * bd_nvme_disconnect:
+  * @subsysnqn: The name of the NVMe subsystem to disconnect.
+@@ -296,37 +337,16 @@ gboolean bd_nvme_connect (const gchar *subsysnqn, const gchar *transport, const
+  * Tech category: %BD_NVME_TECH_FABRICS-%BD_NVME_TECH_MODE_INITIATOR
+  */
+ gboolean bd_nvme_disconnect (const gchar *subsysnqn, GError **error) {
+-    nvme_root_t root;
+-    nvme_host_t host;
+-    nvme_subsystem_t subsys;
+-    nvme_ctrl_t ctrl;
+     gboolean found = FALSE;
+ 
+-    root = nvme_scan (NULL);
+-    nvme_init_logging (root, -1, false, false);
+-    nvme_for_each_host (root, host)
+-        nvme_for_each_subsystem (host, subsys)
+-            if (g_strcmp0 (nvme_subsystem_get_nqn (subsys), subsysnqn) == 0)
+-                nvme_subsystem_for_each_ctrl (subsys, ctrl) {
+-                    int ret;
+-
+-                    ret = nvme_disconnect_ctrl (ctrl);
+-                    if (ret != 0) {
+-                        g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_FAILED,
+-                                     "Error disconnecting the controller: %s",
+-                                     strerror_l (errno, _C_LOCALE));
+-                        nvme_free_tree (root);
+-                        return FALSE;
+-                    }
+-                    found = TRUE;
+-                }
+-    nvme_free_tree (root);
++    if (!_disconnect (subsysnqn, NULL, error, &found))
++        return FALSE;
++
+     if (!found) {
+         g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_NO_MATCH,
+                      "No subsystems matching '%s' NQN found.", subsysnqn);
+         return FALSE;
+     }
+-
+     return TRUE;
+ }
+ 
+@@ -344,36 +364,21 @@ gboolean bd_nvme_disconnect (const gchar *subsysnqn, GError **error) {
+  * Tech category: %BD_NVME_TECH_FABRICS-%BD_NVME_TECH_MODE_INITIATOR
+  */
+ gboolean bd_nvme_disconnect_by_path (const gchar *path, GError **error) {
+-    nvme_root_t root;
+-    nvme_ctrl_t ctrl;
+     const gchar *p;
+-    int ret;
++    gboolean found = FALSE;
+ 
+     p = path;
+     if (g_str_has_prefix (p, "/dev/"))
+         p += 5;
+ 
+-    root = nvme_scan (NULL);
+-    nvme_init_logging (root, -1, false, false);
+-    ctrl = nvme_scan_ctrl (root, p);
+-    if (!ctrl) {
+-        g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_NO_MATCH,
+-                     "Unable to match a NVMeoF controller for the specified block device %s.",
+-                     path);
+-        nvme_free_tree (root);
++    if (!_disconnect (NULL, p, error, &found))
+         return FALSE;
+-    }
+ 
+-    ret = nvme_disconnect_ctrl (ctrl);
+-    if (ret != 0) {
+-        g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_FAILED,
+-                     "Error disconnecting the controller: %s",
+-                     strerror_l (errno, _C_LOCALE));
+-        nvme_free_tree (root);
++    if (!found) {
++        g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_NO_MATCH,
++                     "No controllers matching the %s device name found.", path);
+         return FALSE;
+     }
+-    nvme_free_tree (root);
+-
+     return TRUE;
+ }
+ 
+diff --git a/tests/nvme_test.py b/tests/nvme_test.py
+index f205e5391..696d594c9 100644
+--- a/tests/nvme_test.py
++++ b/tests/nvme_test.py
+@@ -387,7 +387,7 @@ def test_connect_single_ns(self):
+         # disconnect
+         with self.assertRaisesRegexp(GLib.GError, r"No subsystems matching '.*' NQN found."):
+             BlockDev.nvme_disconnect(self.SUBNQN + "xx")
+-        with self.assertRaisesRegexp(GLib.GError, r"Unable to match a NVMeoF controller for the specified block device /dev/nvme.*xx"):
++        with self.assertRaisesRegexp(GLib.GError, r"No controllers matching the /dev/nvme.*xx device name found."):
+             BlockDev.nvme_disconnect_by_path(ctrls[0] + "xx")
+         # should disconnect both connections as long the SUBNQN matches
+         BlockDev.nvme_disconnect(self.SUBNQN)
+From ac1e0c50dd7bab21a7837c806b82bf34090127d1 Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Sun, 5 Feb 2023 21:51:42 +0100
+Subject: [PATCH] nvme: Strip trailing whitespaces from subsysnqn when matching
+ the device tree
+
+---
+ src/plugins/nvme/nvme-fabrics.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/plugins/nvme/nvme-fabrics.c b/src/plugins/nvme/nvme-fabrics.c
+index 5cc7f670d..27f6ed444 100644
+--- a/src/plugins/nvme/nvme-fabrics.c
++++ b/src/plugins/nvme/nvme-fabrics.c
+@@ -721,6 +721,12 @@ gchar ** bd_nvme_find_ctrls_for_ns (const gchar *ns_sysfs_path, const gchar *sub
+     nvme_ctrl_t c;
+     nvme_ns_t n;
+     char realp[PATH_MAX];
++    gchar *subsysnqn_p;
++
++    /* libnvme strips trailing spaces and newlines when reading values from sysfs */
++    subsysnqn_p = g_strdup (subsysnqn);
++    if (subsysnqn_p)
++        g_strchomp (subsysnqn_p);
+ 
+     ptr_array = g_ptr_array_new ();
+ 
+@@ -736,7 +742,7 @@ gchar ** bd_nvme_find_ctrls_for_ns (const gchar *ns_sysfs_path, const gchar *sub
+         nvme_for_each_subsystem (h, s) {
+             gboolean found = FALSE;
+ 
+-            if (subsysnqn && g_strcmp0 (nvme_subsystem_get_nqn (s), subsysnqn) != 0)
++            if (subsysnqn && g_strcmp0 (nvme_subsystem_get_nqn (s), subsysnqn_p) != 0)
+                 continue;
+ 
+             nvme_subsystem_for_each_ctrl (s, c)
+@@ -767,6 +773,7 @@ gchar ** bd_nvme_find_ctrls_for_ns (const gchar *ns_sysfs_path, const gchar *sub
+         }
+     }
+     nvme_free_tree (root);
++    g_free (subsysnqn_p);
+ 
+     g_ptr_array_add (ptr_array, NULL);  /* trailing NULL element */
+     return (gchar **) g_ptr_array_free (ptr_array, FALSE);
+From 29b4defc50451dd54f1a7a988b92bdf5fadb22df Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Mon, 6 Feb 2023 11:29:43 +0100
+Subject: [PATCH] nvme: Return NULL in case the supported NVMe revision is not
+ reported
+
+...as is often the case for older, pre-1.2 NVMe devices.
+---
+ src/lib/plugin_apis/nvme.api | 2 +-
+ src/plugins/nvme/nvme-info.c | 2 ++
+ src/plugins/nvme/nvme.h      | 2 +-
+ 3 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/lib/plugin_apis/nvme.api b/src/lib/plugin_apis/nvme.api
+index 7bc2cf9ef..6e73870e5 100644
+--- a/src/lib/plugin_apis/nvme.api
++++ b/src/lib/plugin_apis/nvme.api
+@@ -142,7 +142,7 @@ GType bd_nvme_controller_info_get_type ();
+  * @model_number: The model number.
+  * @serial_number: The serial number.
+  * @firmware_ver: The currently active firmware revision.
+- * @nvme_ver: The NVM Express base specification that the controller implementation supports.
++ * @nvme_ver: The NVM Express base specification that the controller implementation supports or %NULL when not reported by the device.
+  * @features: features and capabilities present for this controller, see #BDNVMEControllerFeature.
+  * @controller_type: The controller type.
+  * @selftest_ext_time: Extended Device Self-test Time, if #BD_NVME_CTRL_FEAT_SELFTEST is supported then this field
+diff --git a/src/plugins/nvme/nvme-info.c b/src/plugins/nvme/nvme-info.c
+index ec5cae332..23ee8afde 100644
+--- a/src/plugins/nvme/nvme-info.c
++++ b/src/plugins/nvme/nvme-info.c
+@@ -401,6 +401,8 @@ static gchar *decode_nvme_rev (guint32 ver) {
+     if (mjr >= 2 || mnr >= 2)
+         ter = ver & 0xFF;
+ 
++    if (mjr == 0 && mnr == 0)
++        return NULL;
+     if (ter == 0)
+         return g_strdup_printf ("%u.%u", mjr, mnr);
+     else
+diff --git a/src/plugins/nvme/nvme.h b/src/plugins/nvme/nvme.h
+index ad456a82e..fa6f6abcc 100644
+--- a/src/plugins/nvme/nvme.h
++++ b/src/plugins/nvme/nvme.h
+@@ -129,7 +129,7 @@ typedef enum {
+  * @model_number: The model number.
+  * @serial_number: The serial number.
+  * @firmware_ver: The currently active firmware revision.
+- * @nvme_ver: The NVM Express base specification that the controller implementation supports.
++ * @nvme_ver: The NVM Express base specification that the controller implementation supports or %NULL when not reported by the device.
+  * @features: features and capabilities present for this controller, see #BDNVMEControllerFeature.
+  * @controller_type: The controller type.
+  * @selftest_ext_time: Extended Device Self-test Time, if #BD_NVME_CTRL_FEAT_SELFTEST is supported then this field
+From 5a709aa3475ee083237c3faf4fff8c316767bd71 Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Wed, 26 Apr 2023 18:39:57 +0200
+Subject: [PATCH] nvme: Add support for ENVME_CONNECT_CONNREFUSED
+
+Requires libnvme-1.3
+---
+ configure.ac                  | 2 +-
+ src/lib/plugin_apis/nvme.api  | 2 ++
+ src/plugins/nvme/nvme-error.c | 3 +++
+ src/plugins/nvme/nvme.h       | 2 ++
+ 4 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index 727465c9b..16fe3a0c2 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -238,7 +238,7 @@ AS_IF([test "x$with_nvdimm" != "xno"],
+       [])
+ 
+ AS_IF([test "x$with_nvme" != "xno"],
+-      [LIBBLOCKDEV_PKG_CHECK_MODULES([NVME], [libnvme >= 1.2])],
++      [LIBBLOCKDEV_PKG_CHECK_MODULES([NVME], [libnvme >= 1.3])],
+       [])
+ 
+ AS_IF([test "x$with_vdo" != "xno"],
+diff --git a/src/lib/plugin_apis/nvme.api b/src/lib/plugin_apis/nvme.api
+index 6e73870e5..1099da7db 100644
+--- a/src/lib/plugin_apis/nvme.api
++++ b/src/lib/plugin_apis/nvme.api
+@@ -31,6 +31,7 @@ GQuark bd_nvme_error_quark (void) {
+  * @BD_NVME_ERROR_CONNECT_ADDRINUSE: HostNQN already in use.
+  * @BD_NVME_ERROR_CONNECT_NODEV: Invalid interface.
+  * @BD_NVME_ERROR_CONNECT_OPNOTSUPP: Operation not supported.
++ * @BD_NVME_ERROR_CONNECT_REFUSED: Connection refused.
+  */
+ /* BpG-skip-end */
+ typedef enum {
+@@ -51,6 +52,7 @@ typedef enum {
+     BD_NVME_ERROR_CONNECT_ADDRINUSE,
+     BD_NVME_ERROR_CONNECT_NODEV,
+     BD_NVME_ERROR_CONNECT_OPNOTSUPP,
++    BD_NVME_ERROR_CONNECT_REFUSED,
+ } BDNVMEError;
+ 
+ typedef enum {
+diff --git a/src/plugins/nvme/nvme-error.c b/src/plugins/nvme/nvme-error.c
+index cb95a46dc..4bd4d7712 100644
+--- a/src/plugins/nvme/nvme-error.c
++++ b/src/plugins/nvme/nvme-error.c
+@@ -137,6 +137,9 @@ void _nvme_fabrics_errno_to_gerror (int result, int _errno, GError **error)
+             case ENVME_CONNECT_OPNOTSUPP:
+                 code = BD_NVME_ERROR_CONNECT_OPNOTSUPP;
+                 break;
++            case ENVME_CONNECT_CONNREFUSED:
++                code = BD_NVME_ERROR_CONNECT_REFUSED;
++                break;
+             default:
+                 code = BD_NVME_ERROR_CONNECT;
+         }
+diff --git a/src/plugins/nvme/nvme.h b/src/plugins/nvme/nvme.h
+index 438d66334..afd41b267 100644
+--- a/src/plugins/nvme/nvme.h
++++ b/src/plugins/nvme/nvme.h
+@@ -27,6 +27,7 @@ GQuark bd_nvme_error_quark (void);
+  * @BD_NVME_ERROR_CONNECT_ADDRINUSE: HostNQN already in use.
+  * @BD_NVME_ERROR_CONNECT_NODEV: Invalid interface.
+  * @BD_NVME_ERROR_CONNECT_OPNOTSUPP: Operation not supported.
++ * @BD_NVME_ERROR_CONNECT_REFUSED: Connection refused.
+  */
+ typedef enum {
+     BD_NVME_ERROR_TECH_UNAVAIL,
+@@ -46,6 +47,7 @@ typedef enum {
+     BD_NVME_ERROR_CONNECT_ADDRINUSE,
+     BD_NVME_ERROR_CONNECT_NODEV,
+     BD_NVME_ERROR_CONNECT_OPNOTSUPP,
++    BD_NVME_ERROR_CONNECT_REFUSED,
+ } BDNVMEError;
+ 
+ typedef enum {
+From b19600de73233317cd9de68dba356ec4bb80a0f3 Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Thu, 27 Apr 2023 17:32:25 +0200
+Subject: [PATCH] nvme: Add support for 'keyring' and 'tls_key' fabrics
+ attributes
+
+Requires libnvme-1.4
+---
+ configure.ac                    |  5 ++++-
+ src/lib/plugin_apis/nvme.api    |  2 ++
+ src/plugins/nvme/nvme-fabrics.c | 21 +++++++++++++++++++++
+ 3 files changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index 16fe3a0c2..12d007a53 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -238,7 +238,10 @@ AS_IF([test "x$with_nvdimm" != "xno"],
+       [])
+ 
+ AS_IF([test "x$with_nvme" != "xno"],
+-      [LIBBLOCKDEV_PKG_CHECK_MODULES([NVME], [libnvme >= 1.3])],
++      [LIBBLOCKDEV_PKG_CHECK_MODULES([NVME], [libnvme >= 1.3])
++      AS_IF([$PKG_CONFIG --atleast-version=1.4 libnvme],
++            [AC_DEFINE([HAVE_LIBNVME_1_4])], [])
++      ],
+       [])
+ 
+ AS_IF([test "x$with_vdo" != "xno"],
+diff --git a/src/lib/plugin_apis/nvme.api b/src/lib/plugin_apis/nvme.api
+index 1099da7db..667dbe9e0 100644
+--- a/src/lib/plugin_apis/nvme.api
++++ b/src/lib/plugin_apis/nvme.api
+@@ -1415,6 +1415,8 @@ gboolean bd_nvme_set_host_id (const gchar *host_id, GError **error);
+  * - `"data_digest"`: Generates/verifies data digest (TCP). Boolean value.
+  * - `"tls"`: Enable TLS encryption (TCP). Boolean value.
+  * - `"hostsymname"`: TP8010: NVMe host symbolic name.
++ * - `"keyring"`: Keyring to store and lookup keys. String value.
++ * - `"tls_key"`: TLS PSK for the connection. String value.
+  *
+  * Boolean values can be expressed by "0"/"1", "on"/"off" or "True"/"False" case-insensitive
+  * strings. Failed numerical or boolean string conversions will result in the option being ignored.
+diff --git a/src/plugins/nvme/nvme-fabrics.c b/src/plugins/nvme/nvme-fabrics.c
+index 27f6ed444..0c64fb513 100644
+--- a/src/plugins/nvme/nvme-fabrics.c
++++ b/src/plugins/nvme/nvme-fabrics.c
+@@ -125,6 +125,25 @@ static void parse_extra_args (const BDExtraArg **extra, struct nvme_fabrics_conf
+         else
+         if (g_strcmp0 ((*extra_i)->opt, "tls") == 0)
+             SAFE_BOOL_CONV (cfg->tls)
++#ifdef HAVE_LIBNVME_1_4
++        else
++        if (g_strcmp0 ((*extra_i)->opt, "keyring") == 0) {
++            int keyring;
++
++            keyring = nvme_lookup_keyring ((*extra_i)->val);
++            if (keyring) {
++                cfg->keyring = keyring;
++                nvme_set_keyring (cfg->keyring);
++            }
++        } else
++        if (g_strcmp0 ((*extra_i)->opt, "tls_key") == 0) {
++            int key;
++
++            key = nvme_lookup_key ("psk", (*extra_i)->val);
++            if (key)
++                cfg->tls_key = key;
++        }
++#endif
+     }
+ 
+ #undef SAFE_INT_CONV
+@@ -179,6 +198,8 @@ static void parse_extra_args (const BDExtraArg **extra, struct nvme_fabrics_conf
+  * - `"data_digest"`: Generates/verifies data digest (TCP). Boolean value.
+  * - `"tls"`: Enable TLS encryption (TCP). Boolean value.
+  * - `"hostsymname"`: TP8010: NVMe host symbolic name.
++ * - `"keyring"`: Keyring to store and lookup keys. String value.
++ * - `"tls_key"`: TLS PSK for the connection. String value.
+  *
+  * Boolean values can be expressed by "0"/"1", "on"/"off" or "True"/"False" case-insensitive
+  * strings. Failed numerical or boolean string conversions will result in the option being ignored.
+From 941448f5ec9f465266e1baf5de23e36692a17274 Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Thu, 27 Apr 2023 19:05:00 +0200
+Subject: [PATCH] nvme: Fix 128-bit int conversion
+
+Still using target 64-bit int and expecting overflow. This change
+at least handles endianness conversion properly.
+
+Futher experiments reveal shortcomings during gobject-introspection
+data type translation so until 128-bit int is properly supported
+throughout the stack, we can only hope numbers won't be that high.
+---
+ src/plugins/nvme/nvme-info.c | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/src/plugins/nvme/nvme-info.c b/src/plugins/nvme/nvme-info.c
+index 23ee8afde..bbc7de4f2 100644
+--- a/src/plugins/nvme/nvme-info.c
++++ b/src/plugins/nvme/nvme-info.c
+@@ -365,15 +365,26 @@ BDNVMESanitizeLog * bd_nvme_sanitize_log_copy (BDNVMESanitizeLog *log) {
+ }
+ 
+ 
+-static guint64 int128_to_guint64 (__u8 *data)
++/* can't use real __int128 due to gobject-introspection */
++static guint64 int128_to_guint64 (__u8 data[16])
+ {
+     int i;
++    __u8 d[16];
+     guint64 result = 0;
+ 
+-    /* FIXME: would overflow, need to find 128-bit int */
++    /* endianness conversion */
++#if G_BYTE_ORDER == G_BIG_ENDIAN
++    for (i = 0; i < 16; i++)
++        d[i] = data[15 - i];
++#else
++    memcpy (d, data, sizeof (d));
++#endif
++
++    /* FIXME: would overflow */
++    /* https://github.com/linux-nvme/libnvme/issues/475 */
+     for (i = 0; i < 16; i++) {
+         result *= 256;
+-        result += data[15 - i];
++        result += d[15 - i];
+     }
+     return result;
+ }
+From 5f118338e52a9096fdbac5ee9aa9c1e43f8b038b Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Fri, 23 Jun 2023 13:05:24 +0200
+Subject: [PATCH] docs: Change NVMe plugin description to be consistent with
+ other plugins
+
+---
+ src/plugins/nvme/nvme.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/plugins/nvme/nvme.c b/src/plugins/nvme/nvme.c
+index c0f4759de..c319f088c 100644
+--- a/src/plugins/nvme/nvme.c
++++ b/src/plugins/nvme/nvme.c
+@@ -36,7 +36,7 @@
+ 
+ /**
+  * SECTION: nvme
+- * @short_description: NVMe device reporting and management.
++ * @short_description: plugin for NVMe device reporting and management
+  * @title: NVMe
+  * @include: nvme.h
+  *
+From 0f91582182f1680e979ff5b6e0d7c48a19917abc Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Thu, 29 Jun 2023 14:42:41 +0200
+Subject: [PATCH] nvme: Mark private symbols as hidden
+
+---
+ src/plugins/nvme/nvme-private.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/plugins/nvme/nvme-private.h b/src/plugins/nvme/nvme-private.h
+index 3d4b2a996..8b6d13253 100644
+--- a/src/plugins/nvme/nvme-private.h
++++ b/src/plugins/nvme/nvme-private.h
+@@ -16,10 +16,13 @@
+ #define _C_LOCALE (locale_t) 0
+ 
+ /* nvme-error.c */
++G_GNUC_INTERNAL
+ void _nvme_status_to_error (gint status, gboolean fabrics, GError **error);
++G_GNUC_INTERNAL
+ void _nvme_fabrics_errno_to_gerror (int result, int _errno, GError **error);
+ 
+ /* nvme-info.c */
++G_GNUC_INTERNAL
+ gint _open_dev (const gchar *device, GError **error);
+ 
+ #endif  /* BD_NVME_PRIVATE */
+From ddfb806da578541c7a5a0947e29b81e33f594b11 Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Tue, 8 Aug 2023 16:51:26 +0200
+Subject: [PATCH] nvme: Use interim buffer for nvme_get_log_sanitize()
+
+Certain drives tend to return more data than expected resulting
+in stack corruption. Use an interim buffer large enough to handle
+the excess bytes.
+
+https://github.com/storaged-project/udisks/issues/1152
+https://github.com/linux-nvme/libnvme/issues/684
+---
+ src/plugins/nvme/nvme-info.c | 25 +++++++++++++++----------
+ 1 file changed, 15 insertions(+), 10 deletions(-)
+
+diff --git a/src/plugins/nvme/nvme-info.c b/src/plugins/nvme/nvme-info.c
+index bbc7de4f2..2a3d87cff 100644
+--- a/src/plugins/nvme/nvme-info.c
++++ b/src/plugins/nvme/nvme-info.c
+@@ -1026,7 +1026,8 @@ BDNVMESelfTestLog * bd_nvme_get_self_test_log (const gchar *device, GError **err
+ BDNVMESanitizeLog * bd_nvme_get_sanitize_log (const gchar *device, GError **error) {
+     int ret;
+     int fd;
+-    struct nvme_sanitize_log_page sanitize_log = ZERO_INIT;
++    char buf[65536] = ZERO_INIT;
++    struct nvme_sanitize_log_page *sanitize_log;
+     BDNVMESanitizeLog *log;
+     __u16 sstat;
+ 
+@@ -1036,7 +1037,7 @@ BDNVMESanitizeLog * bd_nvme_get_sanitize_log (const gchar *device, GError **erro
+         return NULL;
+ 
+     /* send the NVME_LOG_LID_SANITIZE ioctl */
+-    ret = nvme_get_log_sanitize (fd, FALSE /* rae */, &sanitize_log);
++    ret = nvme_get_log_sanitize (fd, FALSE /* rae */, (struct nvme_sanitize_log_page *) &buf);
+     if (ret != 0) {
+         _nvme_status_to_error (ret, FALSE, error);
+         g_prefix_error (error, "NVMe Get Log Page - Sanitize Status Log command error: ");
+@@ -1045,12 +1046,16 @@ BDNVMESanitizeLog * bd_nvme_get_sanitize_log (const gchar *device, GError **erro
+     }
+     close (fd);
+ 
+-    sstat = GUINT16_FROM_LE (sanitize_log.sstat);
++    /* need to use interim buffer that is large enough for broken drives
++     * returning more data than expected
++     */
++    sanitize_log = (struct nvme_sanitize_log_page *) &buf;
+ 
+     log = g_new0 (BDNVMESanitizeLog, 1);
+     log->sanitize_progress = 0;
++    sstat = GUINT16_FROM_LE (sanitize_log->sstat);
+     if ((sstat & NVME_SANITIZE_SSTAT_STATUS_MASK) == NVME_SANITIZE_SSTAT_STATUS_IN_PROGESS)
+-        log->sanitize_progress = ((gdouble) GUINT16_FROM_LE (sanitize_log.sprog) * 100) / 0x10000;
++        log->sanitize_progress = ((gdouble) GUINT16_FROM_LE (sanitize_log->sprog) * 100) / 0x10000;
+     log->global_data_erased = sstat & NVME_SANITIZE_SSTAT_GLOBAL_DATA_ERASED;
+     log->overwrite_passes = (sstat >> NVME_SANITIZE_SSTAT_COMPLETED_PASSES_SHIFT) & NVME_SANITIZE_SSTAT_COMPLETED_PASSES_MASK;
+ 
+@@ -1073,12 +1078,12 @@ BDNVMESanitizeLog * bd_nvme_get_sanitize_log (const gchar *device, GError **erro
+             break;
+     }
+ 
+-    log->time_for_overwrite = (GUINT32_FROM_LE (sanitize_log.eto) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log.eto);
+-    log->time_for_block_erase = (GUINT32_FROM_LE (sanitize_log.etbe) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log.etbe);
+-    log->time_for_crypto_erase = (GUINT32_FROM_LE (sanitize_log.etce) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log.etce);
+-    log->time_for_overwrite_nd = (GUINT32_FROM_LE (sanitize_log.etond) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log.etond);
+-    log->time_for_block_erase_nd = (GUINT32_FROM_LE (sanitize_log.etbend) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log.etbend);
+-    log->time_for_crypto_erase_nd = (GUINT32_FROM_LE (sanitize_log.etcend) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log.etcend);
++    log->time_for_overwrite = (GUINT32_FROM_LE (sanitize_log->eto) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log->eto);
++    log->time_for_block_erase = (GUINT32_FROM_LE (sanitize_log->etbe) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log->etbe);
++    log->time_for_crypto_erase = (GUINT32_FROM_LE (sanitize_log->etce) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log->etce);
++    log->time_for_overwrite_nd = (GUINT32_FROM_LE (sanitize_log->etond) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log->etond);
++    log->time_for_block_erase_nd = (GUINT32_FROM_LE (sanitize_log->etbend) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log->etbend);
++    log->time_for_crypto_erase_nd = (GUINT32_FROM_LE (sanitize_log->etcend) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log->etcend);
+ 
+     return log;
+ }
+From c9c3740e20dc891bddb3cfea79e589ad2bf4419f Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Wed, 16 Aug 2023 16:03:11 +0200
+Subject: [PATCH] nvme: Generate HostID when missing
+
+Newer kernels tend to refuse connection when no HostID is supplied.
+Even non-matching UUIDs within HostNQN/HostID seems to be working
+fine with kernel 6.5-rc6.
+
+This should bring us closer to the new HostNQN <--> HostID
+mapping validation introduced in kernel-6.5.
+---
+ src/plugins/nvme/nvme-fabrics.c | 41 +++++++++++++++++++++++++--------
+ 1 file changed, 32 insertions(+), 9 deletions(-)
+
+diff --git a/src/plugins/nvme/nvme-fabrics.c b/src/plugins/nvme/nvme-fabrics.c
+index c79d9e6de..1877845f2 100644
+--- a/src/plugins/nvme/nvme-fabrics.c
++++ b/src/plugins/nvme/nvme-fabrics.c
+@@ -161,7 +161,7 @@ static void parse_extra_args (const BDExtraArg **extra, struct nvme_fabrics_conf
+  * @host_iface: (nullable): The network interface used on the host to connect to the Controller (e.g. IP `eth1`, `enp2s0`). This forces the connection to be made on a specific interface instead of letting the system decide.
+  * @host_nqn: (nullable): Overrides the default Host NQN that identifies the NVMe Host. If this option is %NULL, the default is read from `/etc/nvme/hostnqn` first.
+  *                        If that does not exist, the autogenerated NQN value from the NVMe Host kernel module is used next. The Host NQN uniquely identifies the NVMe Host.
+- * @host_id: (nullable): User-defined host UUID or %NULL to use default (as defined in `/etc/nvme/hostid`)
++ * @host_id: (nullable): User-defined host UUID or %NULL to use default (as defined in `/etc/nvme/hostid`).
+  * @extra: (nullable) (array zero-terminated=1): Additional arguments.
+  * @error: (out) (nullable): Place to store error (if any).
+  *
+@@ -244,18 +244,41 @@ gboolean bd_nvme_connect (const gchar *subsysnqn, const gchar *transport, const
+         return FALSE;
+     }
+ 
+-    /* parse extra arguments */
+-    nvmf_default_config (&cfg);
+-    parse_extra_args (extra, &cfg, &config_file, &hostkey, &ctrlkey, &hostsymname);
+-
++    /* HostNQN checks */
+     host_nqn_val = g_strdup (host_nqn);
++    host_id_val = g_strdup (host_id);
+     if (host_nqn_val == NULL)
+         host_nqn_val = nvmf_hostnqn_from_file ();
+-    if (host_nqn_val == NULL)
+-        host_nqn_val = nvmf_hostnqn_generate ();
+-    host_id_val = g_strdup (host_id);
+     if (host_id_val == NULL)
+         host_id_val = nvmf_hostid_from_file ();
++    if (host_nqn_val == NULL)
++        host_nqn_val = nvmf_hostnqn_generate ();
++    if (host_nqn_val == NULL) {
++        g_set_error_literal (error, BD_NVME_ERROR, BD_NVME_ERROR_INVALID_ARGUMENT,
++                             "Could not determine HostNQN");
++        g_free (host_nqn_val);
++        g_free (host_id_val);
++        return FALSE;
++    }
++    if (host_id_val == NULL) {
++        /* derive hostid from hostnqn, newer kernels refuse empty hostid */
++        host_id_val = g_strrstr (host_nqn_val, "uuid:");
++        if (host_id_val)
++            host_id_val = g_strdup (host_id_val + strlen ("uuid:"));
++        /* TODO: in theory generating arbitrary uuid might work as a fallback */
++    }
++    if (host_id_val == NULL) {
++        g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_INVALID_ARGUMENT,
++                     "Could not determine HostID value from HostNQN '%s'",
++                     host_nqn_val);
++        g_free (host_nqn_val);
++        g_free (host_id_val);
++        return FALSE;
++    }
++
++    /* parse extra arguments */
++    nvmf_default_config (&cfg);
++    parse_extra_args (extra, &cfg, &config_file, &hostkey, &ctrlkey, &hostsymname);
+ 
+     root = nvme_scan (config_file);
+     g_assert (root != NULL);
+@@ -263,7 +286,7 @@ gboolean bd_nvme_connect (const gchar *subsysnqn, const gchar *transport, const
+     host = nvme_lookup_host (root, host_nqn_val, host_id_val);
+     if (host == NULL) {
+         g_set_error (error, BD_NVME_ERROR, BD_NVME_ERROR_FAILED,
+-                     "Unable to lookup host for nqn '%s' and id '%s'",
++                     "Unable to lookup host for HostNQN '%s' and HostID '%s'",
+                      host_nqn_val, host_id_val);
+         g_free (host_nqn_val);
+         g_free (host_id_val);
+From 2ae0d949eb87142b0212e5953a0e5ad1a146ed6b Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Thu, 5 Oct 2023 17:27:57 +0200
+Subject: [PATCH] nvme: Rework memory allocation for device ioctls
+
+Make sure to provide pagesize-aligned and large enough buffer
+for ioctls that may involve DMA buffer mapping.
+---
+ src/plugins/nvme/nvme-info.c    | 311 +++++++++++++++++++-------------
+ src/plugins/nvme/nvme-op.c      |  30 ++-
+ src/plugins/nvme/nvme-private.h |   2 +
+ 3 files changed, 204 insertions(+), 139 deletions(-)
+
+diff --git a/src/plugins/nvme/nvme-info.c b/src/plugins/nvme/nvme-info.c
+index 2a3d87cff..eaf77473c 100644
+--- a/src/plugins/nvme/nvme-info.c
++++ b/src/plugins/nvme/nvme-info.c
+@@ -402,6 +402,21 @@ gint _open_dev (const gchar *device, GError **error) {
+     return fd;
+ }
+ 
++/* backported from nvme-cli: https://github.com/linux-nvme/nvme-cli/pull/2051 */
++#define ROUND_UP(N, S) ((((N) + (S) - 1) / (S)) * (S))
++
++void *_nvme_alloc (size_t len)
++{
++    size_t _len = ROUND_UP (len, 0x1000);
++    void *p;
++
++    if (posix_memalign ((void *) &p, getpagesize (), _len))
++        return NULL;
++
++    memset (p, 0, _len);
++    return p;
++}
++
+ static gchar *decode_nvme_rev (guint32 ver) {
+     guint16 mjr;
+     guint8 mnr, ter = 0;
+@@ -452,7 +467,7 @@ static gboolean _nvme_a_is_zero (const __u8 a[], int len) {
+ BDNVMEControllerInfo * bd_nvme_get_controller_info (const gchar *device, GError **error) {
+     int ret;
+     int fd;
+-    struct nvme_id_ctrl ctrl_id = ZERO_INIT;
++    struct nvme_id_ctrl *ctrl_id;
+     BDNVMEControllerInfo *info;
+ 
+     /* open the block device */
+@@ -460,53 +475,56 @@ BDNVMEControllerInfo * bd_nvme_get_controller_info (const gchar *device, GError
+     if (fd < 0)
+         return NULL;
+ 
++    ctrl_id = _nvme_alloc (sizeof (struct nvme_id_ctrl));
++    g_warn_if_fail (ctrl_id != NULL);
+     /* send the NVME_IDENTIFY_CNS_CTRL ioctl */
+-    ret = nvme_identify_ctrl (fd, &ctrl_id);
++    ret = nvme_identify_ctrl (fd, ctrl_id);
+     if (ret != 0) {
+         _nvme_status_to_error (ret, FALSE, error);
+         g_prefix_error (error, "NVMe Identify Controller command error: ");
+         close (fd);
++        free (ctrl_id);
+         return NULL;
+     }
+     close (fd);
+ 
+     info = g_new0 (BDNVMEControllerInfo, 1);
+-    if ((ctrl_id.cmic & NVME_CTRL_CMIC_MULTI_PORT) == NVME_CTRL_CMIC_MULTI_PORT)
++    if ((ctrl_id->cmic & NVME_CTRL_CMIC_MULTI_PORT) == NVME_CTRL_CMIC_MULTI_PORT)
+         info->features |= BD_NVME_CTRL_FEAT_MULTIPORT;
+-    if ((ctrl_id.cmic & NVME_CTRL_CMIC_MULTI_CTRL) == NVME_CTRL_CMIC_MULTI_CTRL)
++    if ((ctrl_id->cmic & NVME_CTRL_CMIC_MULTI_CTRL) == NVME_CTRL_CMIC_MULTI_CTRL)
+         info->features |= BD_NVME_CTRL_FEAT_MULTICTRL;
+-    if ((ctrl_id.cmic & NVME_CTRL_CMIC_MULTI_SRIOV) == NVME_CTRL_CMIC_MULTI_SRIOV)
++    if ((ctrl_id->cmic & NVME_CTRL_CMIC_MULTI_SRIOV) == NVME_CTRL_CMIC_MULTI_SRIOV)
+         info->features |= BD_NVME_CTRL_FEAT_SRIOV;
+-    if ((ctrl_id.cmic & NVME_CTRL_CMIC_MULTI_ANA_REPORTING) == NVME_CTRL_CMIC_MULTI_ANA_REPORTING)
++    if ((ctrl_id->cmic & NVME_CTRL_CMIC_MULTI_ANA_REPORTING) == NVME_CTRL_CMIC_MULTI_ANA_REPORTING)
+         info->features |= BD_NVME_CTRL_FEAT_ANA_REPORTING;
+-    if ((ctrl_id.nvmsr & NVME_CTRL_NVMSR_NVMESD) == NVME_CTRL_NVMSR_NVMESD)
++    if ((ctrl_id->nvmsr & NVME_CTRL_NVMSR_NVMESD) == NVME_CTRL_NVMSR_NVMESD)
+         info->features |= BD_NVME_CTRL_FEAT_STORAGE_DEVICE;
+-    if ((ctrl_id.nvmsr & NVME_CTRL_NVMSR_NVMEE) == NVME_CTRL_NVMSR_NVMEE)
++    if ((ctrl_id->nvmsr & NVME_CTRL_NVMSR_NVMEE) == NVME_CTRL_NVMSR_NVMEE)
+         info->features |= BD_NVME_CTRL_FEAT_ENCLOSURE;
+-    if ((ctrl_id.mec & NVME_CTRL_MEC_PCIEME) == NVME_CTRL_MEC_PCIEME)
++    if ((ctrl_id->mec & NVME_CTRL_MEC_PCIEME) == NVME_CTRL_MEC_PCIEME)
+         info->features |= BD_NVME_CTRL_FEAT_MGMT_PCIE;
+-    if ((ctrl_id.mec & NVME_CTRL_MEC_SMBUSME) == NVME_CTRL_MEC_SMBUSME)
++    if ((ctrl_id->mec & NVME_CTRL_MEC_SMBUSME) == NVME_CTRL_MEC_SMBUSME)
+         info->features |= BD_NVME_CTRL_FEAT_MGMT_SMBUS;
+-    info->pci_vendor_id = GUINT16_FROM_LE (ctrl_id.vid);
+-    info->pci_subsys_vendor_id = GUINT16_FROM_LE (ctrl_id.ssvid);
+-    info->ctrl_id = GUINT16_FROM_LE (ctrl_id.cntlid);
+-    if (!_nvme_a_is_zero (ctrl_id.fguid, sizeof (ctrl_id.fguid)))
+-        info->fguid = _uuid_to_str (ctrl_id.fguid);
+-    info->model_number = g_strndup (ctrl_id.mn, sizeof (ctrl_id.mn));
++    info->pci_vendor_id = GUINT16_FROM_LE (ctrl_id->vid);
++    info->pci_subsys_vendor_id = GUINT16_FROM_LE (ctrl_id->ssvid);
++    info->ctrl_id = GUINT16_FROM_LE (ctrl_id->cntlid);
++    if (!_nvme_a_is_zero (ctrl_id->fguid, sizeof (ctrl_id->fguid)))
++        info->fguid = _uuid_to_str (ctrl_id->fguid);
++    info->model_number = g_strndup (ctrl_id->mn, sizeof (ctrl_id->mn));
+     g_strstrip (info->model_number);
+-    info->serial_number = g_strndup (ctrl_id.sn, sizeof (ctrl_id.sn));
++    info->serial_number = g_strndup (ctrl_id->sn, sizeof (ctrl_id->sn));
+     g_strstrip (info->serial_number);
+-    info->firmware_ver = g_strndup (ctrl_id.fr, sizeof (ctrl_id.fr));
++    info->firmware_ver = g_strndup (ctrl_id->fr, sizeof (ctrl_id->fr));
+     g_strstrip (info->firmware_ver);
+-    info->nvme_ver = decode_nvme_rev (GUINT32_FROM_LE (ctrl_id.ver));
++    info->nvme_ver = decode_nvme_rev (GUINT32_FROM_LE (ctrl_id->ver));
+     /* TODO: vwci: VPD Write Cycle Information */
+-    if ((ctrl_id.oacs & NVME_CTRL_OACS_FORMAT) == NVME_CTRL_OACS_FORMAT)
++    if ((ctrl_id->oacs & NVME_CTRL_OACS_FORMAT) == NVME_CTRL_OACS_FORMAT)
+         info->features |= BD_NVME_CTRL_FEAT_FORMAT;
+-    if ((ctrl_id.oacs & NVME_CTRL_OACS_NS_MGMT) == NVME_CTRL_OACS_NS_MGMT)
++    if ((ctrl_id->oacs & NVME_CTRL_OACS_NS_MGMT) == NVME_CTRL_OACS_NS_MGMT)
+         info->features |= BD_NVME_CTRL_FEAT_NS_MGMT;
+-    if ((ctrl_id.oacs & NVME_CTRL_OACS_SELF_TEST) == NVME_CTRL_OACS_SELF_TEST)
++    if ((ctrl_id->oacs & NVME_CTRL_OACS_SELF_TEST) == NVME_CTRL_OACS_SELF_TEST)
+         info->features |= BD_NVME_CTRL_FEAT_SELFTEST;
+-    switch (ctrl_id.cntrltype) {
++    switch (ctrl_id->cntrltype) {
+         case NVME_CTRL_CNTRLTYPE_IO:
+             info->controller_type = BD_NVME_CTRL_TYPE_IO;
+             break;
+@@ -519,36 +537,37 @@ BDNVMEControllerInfo * bd_nvme_get_controller_info (const gchar *device, GError
+         default:
+             info->controller_type = BD_NVME_CTRL_TYPE_UNKNOWN;
+     }
+-    info->hmb_pref_size = GUINT32_FROM_LE (ctrl_id.hmpre) * 4096LL;
+-    info->hmb_min_size = GUINT32_FROM_LE (ctrl_id.hmmin) * 4096LL;
+-    info->size_total = int128_to_guint64 (ctrl_id.tnvmcap);
+-    info->size_unalloc = int128_to_guint64 (ctrl_id.unvmcap);
+-    info->selftest_ext_time = GUINT16_FROM_LE (ctrl_id.edstt);
++    info->hmb_pref_size = GUINT32_FROM_LE (ctrl_id->hmpre) * 4096LL;
++    info->hmb_min_size = GUINT32_FROM_LE (ctrl_id->hmmin) * 4096LL;
++    info->size_total = int128_to_guint64 (ctrl_id->tnvmcap);
++    info->size_unalloc = int128_to_guint64 (ctrl_id->unvmcap);
++    info->selftest_ext_time = GUINT16_FROM_LE (ctrl_id->edstt);
+     /* TODO: lpa: Log Page Attributes - NVME_CTRL_LPA_PERSETENT_EVENT: Persistent Event log */
+-    if ((ctrl_id.dsto & NVME_CTRL_DSTO_ONE_DST) == NVME_CTRL_DSTO_ONE_DST)
++    if ((ctrl_id->dsto & NVME_CTRL_DSTO_ONE_DST) == NVME_CTRL_DSTO_ONE_DST)
+         info->features |= BD_NVME_CTRL_FEAT_SELFTEST_SINGLE;
+-    if ((ctrl_id.sanicap & NVME_CTRL_SANICAP_CES) == NVME_CTRL_SANICAP_CES)
++    if ((ctrl_id->sanicap & NVME_CTRL_SANICAP_CES) == NVME_CTRL_SANICAP_CES)
+         info->features |= BD_NVME_CTRL_FEAT_SANITIZE_CRYPTO;
+-    if ((ctrl_id.sanicap & NVME_CTRL_SANICAP_BES) == NVME_CTRL_SANICAP_BES)
++    if ((ctrl_id->sanicap & NVME_CTRL_SANICAP_BES) == NVME_CTRL_SANICAP_BES)
+         info->features |= BD_NVME_CTRL_FEAT_SANITIZE_BLOCK;
+-    if ((ctrl_id.sanicap & NVME_CTRL_SANICAP_OWS) == NVME_CTRL_SANICAP_OWS)
++    if ((ctrl_id->sanicap & NVME_CTRL_SANICAP_OWS) == NVME_CTRL_SANICAP_OWS)
+         info->features |= BD_NVME_CTRL_FEAT_SANITIZE_OVERWRITE;
+     /* struct nvme_id_ctrl.nn: If the &struct nvme_id_ctrl.mnan field is cleared to 0h,
+      * then the struct nvme_id_ctrl.nn field also indicates the maximum number of namespaces
+      * supported by the NVM subsystem.
+      */
+-    info->num_namespaces = GUINT32_FROM_LE (ctrl_id.mnan) == 0 ? GUINT32_FROM_LE (ctrl_id.nn) : GUINT32_FROM_LE (ctrl_id.mnan);
+-    if ((ctrl_id.fna & NVME_CTRL_FNA_FMT_ALL_NAMESPACES) == NVME_CTRL_FNA_FMT_ALL_NAMESPACES)
++    info->num_namespaces = GUINT32_FROM_LE (ctrl_id->mnan) == 0 ? GUINT32_FROM_LE (ctrl_id->nn) : GUINT32_FROM_LE (ctrl_id->mnan);
++    if ((ctrl_id->fna & NVME_CTRL_FNA_FMT_ALL_NAMESPACES) == NVME_CTRL_FNA_FMT_ALL_NAMESPACES)
+         info->features |= BD_NVME_CTRL_FEAT_FORMAT_ALL_NS;
+-    if ((ctrl_id.fna & NVME_CTRL_FNA_SEC_ALL_NAMESPACES) == NVME_CTRL_FNA_SEC_ALL_NAMESPACES)
++    if ((ctrl_id->fna & NVME_CTRL_FNA_SEC_ALL_NAMESPACES) == NVME_CTRL_FNA_SEC_ALL_NAMESPACES)
+         info->features |= BD_NVME_CTRL_FEAT_SECURE_ERASE_ALL_NS;
+-    if ((ctrl_id.fna & NVME_CTRL_FNA_CRYPTO_ERASE) == NVME_CTRL_FNA_CRYPTO_ERASE)
++    if ((ctrl_id->fna & NVME_CTRL_FNA_CRYPTO_ERASE) == NVME_CTRL_FNA_CRYPTO_ERASE)
+         info->features |= BD_NVME_CTRL_FEAT_SECURE_ERASE_CRYPTO;
+     /* TODO: enum nvme_id_ctrl_oncs: NVME_CTRL_ONCS_WRITE_UNCORRECTABLE, NVME_CTRL_ONCS_WRITE_ZEROES... */
+     /* TODO: nwpc: Namespace Write Protection Capabilities */
+-    info->subsysnqn = g_strndup (ctrl_id.subnqn, sizeof (ctrl_id.subnqn));
++    info->subsysnqn = g_strndup (ctrl_id->subnqn, sizeof (ctrl_id->subnqn));
+     g_strstrip (info->subsysnqn);
+ 
++    free (ctrl_id);
+     return info;
+ }
+ 
+@@ -572,10 +591,10 @@ BDNVMENamespaceInfo *bd_nvme_get_namespace_info (const gchar *device, GError **e
+     int ret_ns_ind = -1;
+     int fd;
+     __u32 nsid = 0;
+-    struct nvme_id_ctrl ctrl_id = ZERO_INIT;
+-    struct nvme_id_ns ns_info = ZERO_INIT;
+-    struct nvme_id_independent_id_ns ns_info_ind = ZERO_INIT;
+-    uint8_t desc[NVME_IDENTIFY_DATA_SIZE] = ZERO_INIT;
++    struct nvme_id_ctrl *ctrl_id;
++    struct nvme_id_ns *ns_info;
++    struct nvme_id_independent_id_ns *ns_info_ind = NULL;
++    struct nvme_ns_id_desc *descs = NULL;
+     guint8 flbas;
+     guint i;
+     guint len;
+@@ -597,44 +616,55 @@ BDNVMENamespaceInfo *bd_nvme_get_namespace_info (const gchar *device, GError **e
+     }
+ 
+     /* send the NVME_IDENTIFY_CNS_NS ioctl */
+-    ret = nvme_identify_ns (fd, nsid, &ns_info);
++    ns_info = _nvme_alloc (sizeof (struct nvme_id_ns));
++    g_warn_if_fail (ns_info != NULL);
++    ret = nvme_identify_ns (fd, nsid, ns_info);
+     if (ret != 0) {
+         _nvme_status_to_error (ret, FALSE, error);
+         g_prefix_error (error, "NVMe Identify Namespace command error: ");
+         close (fd);
++        free (ns_info);
+         return NULL;
+     }
+ 
+     /* send the NVME_IDENTIFY_CNS_CTRL ioctl */
+-    ret_ctrl = nvme_identify_ctrl (fd, &ctrl_id);
++    ctrl_id = _nvme_alloc (sizeof (struct nvme_id_ctrl));
++    g_warn_if_fail (ctrl_id != NULL);
++    ret_ctrl = nvme_identify_ctrl (fd, ctrl_id);
+ 
+     /* send the NVME_IDENTIFY_CNS_NS_DESC_LIST ioctl, NVMe 1.3 */
+-    if (ret_ctrl == 0 && GUINT32_FROM_LE (ctrl_id.ver) >= 0x10300)
+-        ret_desc = nvme_identify_ns_descs (fd, nsid, (struct nvme_ns_id_desc *) &desc);
++    if (ret_ctrl == 0 && GUINT32_FROM_LE (ctrl_id->ver) >= 0x10300) {
++        descs = _nvme_alloc (NVME_IDENTIFY_DATA_SIZE);
++        g_warn_if_fail (descs != NULL);
++        ret_desc = nvme_identify_ns_descs (fd, nsid, descs);
++    }
+ 
+     /* send the NVME_IDENTIFY_CNS_CSI_INDEPENDENT_ID_NS ioctl, NVMe 2.0 */
+-    if (ret_ctrl == 0 && GUINT32_FROM_LE (ctrl_id.ver) >= 0x20000)
+-        ret_ns_ind = nvme_identify_independent_identify_ns (fd, nsid, &ns_info_ind);
++    if (ret_ctrl == 0 && GUINT32_FROM_LE (ctrl_id->ver) >= 0x20000) {
++        ns_info_ind = _nvme_alloc (sizeof (struct nvme_id_independent_id_ns));
++        g_warn_if_fail (ns_info_ind != NULL);
++        ret_ns_ind = nvme_identify_independent_identify_ns (fd, nsid, ns_info_ind);
++    }
+     close (fd);
+ 
+     info = g_new0 (BDNVMENamespaceInfo, 1);
+     info->nsid = nsid;
+-    info->nsize = GUINT64_FROM_LE (ns_info.nsze);
+-    info->ncap = GUINT64_FROM_LE (ns_info.ncap);
+-    info->nuse = GUINT64_FROM_LE (ns_info.nuse);
+-    if ((ns_info.nsfeat & NVME_NS_FEAT_THIN) == NVME_NS_FEAT_THIN)
++    info->nsize = GUINT64_FROM_LE (ns_info->nsze);
++    info->ncap = GUINT64_FROM_LE (ns_info->ncap);
++    info->nuse = GUINT64_FROM_LE (ns_info->nuse);
++    if ((ns_info->nsfeat & NVME_NS_FEAT_THIN) == NVME_NS_FEAT_THIN)
+         info->features |= BD_NVME_NS_FEAT_THIN;
+-    if ((ns_info.nmic & NVME_NS_NMIC_SHARED) == NVME_NS_NMIC_SHARED)
++    if ((ns_info->nmic & NVME_NS_NMIC_SHARED) == NVME_NS_NMIC_SHARED)
+         info->features |= BD_NVME_NS_FEAT_MULTIPATH_SHARED;
+-    if ((ns_info.fpi & NVME_NS_FPI_SUPPORTED) == NVME_NS_FPI_SUPPORTED)
++    if ((ns_info->fpi & NVME_NS_FPI_SUPPORTED) == NVME_NS_FPI_SUPPORTED)
+         info->features |= BD_NVME_NS_FEAT_FORMAT_PROGRESS;
+-    info->format_progress_remaining = ns_info.fpi & NVME_NS_FPI_REMAINING;
+-    /* TODO: what the ns_info.nvmcap really stands for? */
+-    info->write_protected = (ns_info.nsattr & NVME_NS_NSATTR_WRITE_PROTECTED) == NVME_NS_NSATTR_WRITE_PROTECTED;
++    info->format_progress_remaining = ns_info->fpi & NVME_NS_FPI_REMAINING;
++    /* TODO: what the ns_info->nvmcap really stands for? */
++    info->write_protected = (ns_info->nsattr & NVME_NS_NSATTR_WRITE_PROTECTED) == NVME_NS_NSATTR_WRITE_PROTECTED;
+ 
+     if (ret_desc == 0) {
+         for (i = 0; i < NVME_IDENTIFY_DATA_SIZE; i += len) {
+-            struct nvme_ns_id_desc *d = (void *) desc + i;
++            struct nvme_ns_id_desc *d = descs + i;
+ 
+             if (!d->nidl)
+                 break;
+@@ -661,29 +691,29 @@ BDNVMENamespaceInfo *bd_nvme_get_namespace_info (const gchar *device, GError **e
+         }
+     }
+ 
+-    if (info->nguid == NULL && !_nvme_a_is_zero (ns_info.nguid, sizeof (ns_info.nguid))) {
+-        info->nguid = g_malloc0 (sizeof (ns_info.nguid) * 2 + 1);
+-        for (i = 0; i < sizeof (ns_info.nguid); i++)
+-            snprintf (info->nguid + i * 2, 3, "%02x", ns_info.nguid[i]);
++    if (info->nguid == NULL && !_nvme_a_is_zero (ns_info->nguid, sizeof (ns_info->nguid))) {
++        info->nguid = g_malloc0 (sizeof (ns_info->nguid) * 2 + 1);
++        for (i = 0; i < sizeof (ns_info->nguid); i++)
++            snprintf (info->nguid + i * 2, 3, "%02x", ns_info->nguid[i]);
+     }
+-    if (info->eui64 == NULL && !_nvme_a_is_zero (ns_info.eui64, sizeof (ns_info.eui64))) {
+-        info->eui64 = g_malloc0 (sizeof (ns_info.eui64) * 2 + 1);
+-        for (i = 0; i < sizeof (ns_info.eui64); i++)
+-            snprintf (info->eui64 + i * 2, 3, "%02x", ns_info.eui64[i]);
++    if (info->eui64 == NULL && !_nvme_a_is_zero (ns_info->eui64, sizeof (ns_info->eui64))) {
++        info->eui64 = g_malloc0 (sizeof (ns_info->eui64) * 2 + 1);
++        for (i = 0; i < sizeof (ns_info->eui64); i++)
++            snprintf (info->eui64 + i * 2, 3, "%02x", ns_info->eui64[i]);
+     }
+     if (ret_ns_ind == 0) {
+-        if ((ns_info_ind.nsfeat & 1 << 4) == 1 << 4)
++        if ((ns_info_ind->nsfeat & 1 << 4) == 1 << 4)
+             info->features |= BD_NVME_NS_FEAT_ROTATIONAL;
+     }
+ 
+     /* translate the LBA Format array */
+     ptr_array = g_ptr_array_new ();
+-    nvme_id_ns_flbas_to_lbaf_inuse (ns_info.flbas, &flbas);
+-    for (i = 0; i <= ns_info.nlbaf + ns_info.nulbaf; i++) {
++    nvme_id_ns_flbas_to_lbaf_inuse (ns_info->flbas, &flbas);
++    for (i = 0; i <= ns_info->nlbaf + ns_info->nulbaf; i++) {
+         BDNVMELBAFormat *lbaf = g_new0 (BDNVMELBAFormat, 1);
+-        lbaf->data_size = 1 << ns_info.lbaf[i].ds;
+-        lbaf->metadata_size = GUINT16_FROM_LE (ns_info.lbaf[i].ms);
+-        lbaf->relative_performance = ns_info.lbaf[i].rp + 1;
++        lbaf->data_size = 1 << ns_info->lbaf[i].ds;
++        lbaf->metadata_size = GUINT16_FROM_LE (ns_info->lbaf[i].ms);
++        lbaf->relative_performance = ns_info->lbaf[i].rp + 1;
+         g_ptr_array_add (ptr_array, lbaf);
+         if (i == flbas) {
+             info->current_lba_format.data_size = lbaf->data_size;
+@@ -694,6 +724,10 @@ BDNVMENamespaceInfo *bd_nvme_get_namespace_info (const gchar *device, GError **e
+     g_ptr_array_add (ptr_array, NULL);  /* trailing NULL element */
+     info->lba_formats = (BDNVMELBAFormat **) g_ptr_array_free (ptr_array, FALSE);
+ 
++    free (ctrl_id);
++    free (ns_info);
++    free (ns_info_ind);
++    free (descs);
+     return info;
+ }
+ 
+@@ -714,8 +748,8 @@ BDNVMESmartLog * bd_nvme_get_smart_log (const gchar *device, GError **error) {
+     int ret;
+     int ret_identify;
+     int fd;
+-    struct nvme_id_ctrl ctrl_id = ZERO_INIT;
+-    struct nvme_smart_log smart_log = ZERO_INIT;
++    struct nvme_id_ctrl *ctrl_id;
++    struct nvme_smart_log *smart_log;
+     BDNVMESmartLog *log;
+     guint i;
+ 
+@@ -724,59 +758,66 @@ BDNVMESmartLog * bd_nvme_get_smart_log (const gchar *device, GError **error) {
+     if (fd < 0)
+         return NULL;
+ 
+-    /* send the NVME_IDENTIFY_CNS_NS + NVME_IDENTIFY_CNS_CTRL ioctl */
+-    ret_identify = nvme_identify_ctrl (fd, &ctrl_id);
++    /* send the NVME_IDENTIFY_CNS_CTRL ioctl */
++    ctrl_id = _nvme_alloc (sizeof (struct nvme_id_ctrl));
++    g_warn_if_fail (ctrl_id != NULL);
++    ret_identify = nvme_identify_ctrl (fd, ctrl_id);
+     if (ret_identify != 0) {
+         _nvme_status_to_error (ret_identify, FALSE, error);
+         g_prefix_error (error, "NVMe Identify Controller command error: ");
+         close (fd);
++        free (ctrl_id);
+         return NULL;
+     }
+ 
+     /* send the NVME_LOG_LID_SMART ioctl */
+-    ret = nvme_get_log_smart (fd, NVME_NSID_ALL, FALSE /* rae */, &smart_log);
++    smart_log = _nvme_alloc (sizeof (struct nvme_smart_log));
++    g_warn_if_fail (smart_log != NULL);
++    ret = nvme_get_log_smart (fd, NVME_NSID_ALL, FALSE /* rae */, smart_log);
+     if (ret != 0) {
+         _nvme_status_to_error (ret, FALSE, error);
+         g_prefix_error (error, "NVMe Get Log Page - SMART / Health Information Log command error: ");
+         close (fd);
++        free (ctrl_id);
++        free (smart_log);
+         return NULL;
+     }
+     close (fd);
+ 
+     log = g_new0 (BDNVMESmartLog, 1);
+-    if ((smart_log.critical_warning & NVME_SMART_CRIT_SPARE) == NVME_SMART_CRIT_SPARE)
++    if ((smart_log->critical_warning & NVME_SMART_CRIT_SPARE) == NVME_SMART_CRIT_SPARE)
+         log->critical_warning |= BD_NVME_SMART_CRITICAL_WARNING_SPARE;
+-    if ((smart_log.critical_warning & NVME_SMART_CRIT_TEMPERATURE) == NVME_SMART_CRIT_TEMPERATURE)
++    if ((smart_log->critical_warning & NVME_SMART_CRIT_TEMPERATURE) == NVME_SMART_CRIT_TEMPERATURE)
+         log->critical_warning |= BD_NVME_SMART_CRITICAL_WARNING_TEMPERATURE;
+-    if ((smart_log.critical_warning & NVME_SMART_CRIT_DEGRADED) == NVME_SMART_CRIT_DEGRADED)
++    if ((smart_log->critical_warning & NVME_SMART_CRIT_DEGRADED) == NVME_SMART_CRIT_DEGRADED)
+         log->critical_warning |= BD_NVME_SMART_CRITICAL_WARNING_DEGRADED;
+-    if ((smart_log.critical_warning & NVME_SMART_CRIT_MEDIA) == NVME_SMART_CRIT_MEDIA)
++    if ((smart_log->critical_warning & NVME_SMART_CRIT_MEDIA) == NVME_SMART_CRIT_MEDIA)
+         log->critical_warning |= BD_NVME_SMART_CRITICAL_WARNING_READONLY;
+-    if ((smart_log.critical_warning & NVME_SMART_CRIT_VOLATILE_MEMORY) == NVME_SMART_CRIT_VOLATILE_MEMORY)
++    if ((smart_log->critical_warning & NVME_SMART_CRIT_VOLATILE_MEMORY) == NVME_SMART_CRIT_VOLATILE_MEMORY)
+         log->critical_warning |= BD_NVME_SMART_CRITICAL_WARNING_VOLATILE_MEM;
+-    if ((smart_log.critical_warning & NVME_SMART_CRIT_PMR_RO) == NVME_SMART_CRIT_PMR_RO)
++    if ((smart_log->critical_warning & NVME_SMART_CRIT_PMR_RO) == NVME_SMART_CRIT_PMR_RO)
+         log->critical_warning |= BD_NVME_SMART_CRITICAL_WARNING_PMR_READONLY;
+-    log->avail_spare = smart_log.avail_spare;
+-    log->spare_thresh = smart_log.spare_thresh;
+-    log->percent_used = smart_log.percent_used;
+-    log->total_data_read = int128_to_guint64 (smart_log.data_units_read) * 1000 * 512;
+-    log->total_data_written = int128_to_guint64 (smart_log.data_units_written) * 1000 * 512;
+-    log->ctrl_busy_time = int128_to_guint64 (smart_log.ctrl_busy_time);
+-    log->power_cycles = int128_to_guint64 (smart_log.power_cycles);
+-    log->power_on_hours = int128_to_guint64 (smart_log.power_on_hours);
+-    log->unsafe_shutdowns = int128_to_guint64 (smart_log.unsafe_shutdowns);
+-    log->media_errors = int128_to_guint64 (smart_log.media_errors);
+-    log->num_err_log_entries = int128_to_guint64 (smart_log.num_err_log_entries);
+-
+-    log->temperature = (smart_log.temperature[1] << 8) | smart_log.temperature[0];
+-    for (i = 0; i < G_N_ELEMENTS (smart_log.temp_sensor); i++)
+-        log->temp_sensors[i] = GUINT16_FROM_LE (smart_log.temp_sensor[i]);
+-    log->warning_temp_time = GUINT32_FROM_LE (smart_log.warning_temp_time);
+-    log->critical_temp_time = GUINT32_FROM_LE (smart_log.critical_comp_time);
++    log->avail_spare = smart_log->avail_spare;
++    log->spare_thresh = smart_log->spare_thresh;
++    log->percent_used = smart_log->percent_used;
++    log->total_data_read = int128_to_guint64 (smart_log->data_units_read) * 1000 * 512;
++    log->total_data_written = int128_to_guint64 (smart_log->data_units_written) * 1000 * 512;
++    log->ctrl_busy_time = int128_to_guint64 (smart_log->ctrl_busy_time);
++    log->power_cycles = int128_to_guint64 (smart_log->power_cycles);
++    log->power_on_hours = int128_to_guint64 (smart_log->power_on_hours);
++    log->unsafe_shutdowns = int128_to_guint64 (smart_log->unsafe_shutdowns);
++    log->media_errors = int128_to_guint64 (smart_log->media_errors);
++    log->num_err_log_entries = int128_to_guint64 (smart_log->num_err_log_entries);
++
++    log->temperature = (smart_log->temperature[1] << 8) | smart_log->temperature[0];
++    for (i = 0; i < G_N_ELEMENTS (smart_log->temp_sensor); i++)
++        log->temp_sensors[i] = GUINT16_FROM_LE (smart_log->temp_sensor[i]);
++    log->warning_temp_time = GUINT32_FROM_LE (smart_log->warning_temp_time);
++    log->critical_temp_time = GUINT32_FROM_LE (smart_log->critical_comp_time);
+ 
+     if (ret_identify == 0) {
+-        log->wctemp = GUINT16_FROM_LE (ctrl_id.wctemp);
+-        log->cctemp = GUINT16_FROM_LE (ctrl_id.cctemp);
++        log->wctemp = GUINT16_FROM_LE (ctrl_id->wctemp);
++        log->cctemp = GUINT16_FROM_LE (ctrl_id->cctemp);
+     }
+ 
+     /* FIXME: intentionally not providing Host Controlled Thermal Management attributes
+@@ -784,6 +825,8 @@ BDNVMESmartLog * bd_nvme_get_smart_log (const gchar *device, GError **error) {
+      *        Power State attributes. Subject to re-evaluation in the future.
+      */
+ 
++    free (ctrl_id);
++    free (smart_log);
+     return log;
+ }
+ 
+@@ -810,7 +853,7 @@ BDNVMEErrorLogEntry ** bd_nvme_get_error_log_entries (const gchar *device, GErro
+     int ret;
+     int fd;
+     guint elpe;
+-    struct nvme_id_ctrl ctrl_id = ZERO_INIT;
++    struct nvme_id_ctrl *ctrl_id;
+     struct nvme_error_log_page *err_log;
+     GPtrArray *ptr_array;
+     guint i;
+@@ -821,23 +864,29 @@ BDNVMEErrorLogEntry ** bd_nvme_get_error_log_entries (const gchar *device, GErro
+         return NULL;
+ 
+     /* find out the maximum number of error log entries as reported by the controller */
+-    ret = nvme_identify_ctrl (fd, &ctrl_id);
++    ctrl_id = _nvme_alloc (sizeof (struct nvme_id_ctrl));
++    g_warn_if_fail (ctrl_id != NULL);
++    ret = nvme_identify_ctrl (fd, ctrl_id);
+     if (ret != 0) {
+         _nvme_status_to_error (ret, FALSE, error);
+         g_prefix_error (error, "NVMe Identify Controller command error: ");
+         close (fd);
++        free (ctrl_id);
+         return NULL;
+     }
+ 
++    elpe = ctrl_id->elpe + 1;
++    free (ctrl_id);
++
+     /* send the NVME_LOG_LID_ERROR ioctl */
+-    elpe = ctrl_id.elpe + 1;
+-    err_log = g_new0 (struct nvme_error_log_page, elpe);
++    err_log = _nvme_alloc (sizeof (struct nvme_error_log_page) * elpe);
++    g_warn_if_fail (err_log != NULL);
+     ret = nvme_get_log_error (fd, elpe, FALSE /* rae */, err_log);
+     if (ret != 0) {
+         _nvme_status_to_error (ret, FALSE, error);
+         g_prefix_error (error, "NVMe Get Log Page - Error Information Log Entry command error: ");
+-        g_free (err_log);
+         close (fd);
++        free (err_log);
+         return NULL;
+     }
+     close (fd);
+@@ -863,7 +912,7 @@ BDNVMEErrorLogEntry ** bd_nvme_get_error_log_entries (const gchar *device, GErro
+         }
+     }
+     g_ptr_array_add (ptr_array, NULL);  /* trailing NULL element */
+-    g_free (err_log);
++    free (err_log);
+ 
+     return (BDNVMEErrorLogEntry **) g_ptr_array_free (ptr_array, FALSE);
+ }
+@@ -885,7 +934,7 @@ BDNVMEErrorLogEntry ** bd_nvme_get_error_log_entries (const gchar *device, GErro
+ BDNVMESelfTestLog * bd_nvme_get_self_test_log (const gchar *device, GError **error) {
+     int ret;
+     int fd;
+-    struct nvme_self_test_log self_test_log = ZERO_INIT;
++    struct nvme_self_test_log *self_test_log;
+     BDNVMESelfTestLog *log;
+     GPtrArray *ptr_array;
+     guint i;
+@@ -896,17 +945,20 @@ BDNVMESelfTestLog * bd_nvme_get_self_test_log (const gchar *device, GError **err
+         return NULL;
+ 
+     /* send the NVME_LOG_LID_DEVICE_SELF_TEST ioctl */
+-    ret = nvme_get_log_device_self_test (fd, &self_test_log);
++    self_test_log = _nvme_alloc (sizeof (struct nvme_self_test_log));
++    g_warn_if_fail (self_test_log != NULL);
++    ret = nvme_get_log_device_self_test (fd, self_test_log);
+     if (ret != 0) {
+         _nvme_status_to_error (ret, FALSE, error);
+         g_prefix_error (error, "NVMe Get Log Page - Device Self-test Log command error: ");
+         close (fd);
++        free (self_test_log);
+         return NULL;
+     }
+     close (fd);
+ 
+     log = g_new0 (BDNVMESelfTestLog, 1);
+-    switch (self_test_log.current_operation & NVME_ST_CURR_OP_MASK) {
++    switch (self_test_log->current_operation & NVME_ST_CURR_OP_MASK) {
+         case NVME_ST_CURR_OP_NOT_RUNNING:
+             log->current_operation = BD_NVME_SELF_TEST_ACTION_NOT_RUNNING;
+             break;
+@@ -921,8 +973,8 @@ BDNVMESelfTestLog * bd_nvme_get_self_test_log (const gchar *device, GError **err
+         default:
+             log->current_operation = BD_NVME_SELF_TEST_ACTION_VENDOR_SPECIFIC;
+     }
+-    if ((self_test_log.current_operation & NVME_ST_CURR_OP_MASK) > 0)
+-        log->current_operation_completion = self_test_log.completion & NVME_ST_CURR_OP_CMPL_MASK;
++    if ((self_test_log->current_operation & NVME_ST_CURR_OP_MASK) > 0)
++        log->current_operation_completion = self_test_log->completion & NVME_ST_CURR_OP_CMPL_MASK;
+ 
+     ptr_array = g_ptr_array_new ();
+     for (i = 0; i < NVME_LOG_ST_MAX_RESULTS; i++) {
+@@ -930,8 +982,8 @@ BDNVMESelfTestLog * bd_nvme_get_self_test_log (const gchar *device, GError **err
+         guint8 dsts;
+         guint8 code;
+ 
+-        dsts = self_test_log.result[i].dsts & NVME_ST_RESULT_MASK;
+-        code = self_test_log.result[i].dsts >> NVME_ST_CODE_SHIFT;
++        dsts = self_test_log->result[i].dsts & NVME_ST_RESULT_MASK;
++        code = self_test_log->result[i].dsts >> NVME_ST_CODE_SHIFT;
+         if (dsts == NVME_ST_RESULT_NOT_USED)
+             continue;
+ 
+@@ -987,21 +1039,22 @@ BDNVMESelfTestLog * bd_nvme_get_self_test_log (const gchar *device, GError **err
+                 g_warning ("Unhandled self-test log entry action code: %d", code);
+                 entry->action = BD_NVME_SELF_TEST_ACTION_VENDOR_SPECIFIC;
+         }
+-        entry->segment = self_test_log.result[i].seg;
+-        entry->power_on_hours = GUINT64_FROM_LE (self_test_log.result[i].poh);
+-        if (self_test_log.result[i].vdi & NVME_ST_VALID_DIAG_INFO_NSID)
+-            entry->nsid = GUINT32_FROM_LE (self_test_log.result[i].nsid);
+-        if (self_test_log.result[i].vdi & NVME_ST_VALID_DIAG_INFO_FLBA)
+-            entry->failing_lba = GUINT64_FROM_LE (self_test_log.result[i].flba);
+-        if ((self_test_log.result[i].vdi & NVME_ST_VALID_DIAG_INFO_SC) &&
+-            (self_test_log.result[i].vdi & NVME_ST_VALID_DIAG_INFO_SCT))
+-            _nvme_status_to_error ((self_test_log.result[i].sct & 7) << 8 | self_test_log.result[i].sc,
++        entry->segment = self_test_log->result[i].seg;
++        entry->power_on_hours = GUINT64_FROM_LE (self_test_log->result[i].poh);
++        if (self_test_log->result[i].vdi & NVME_ST_VALID_DIAG_INFO_NSID)
++            entry->nsid = GUINT32_FROM_LE (self_test_log->result[i].nsid);
++        if (self_test_log->result[i].vdi & NVME_ST_VALID_DIAG_INFO_FLBA)
++            entry->failing_lba = GUINT64_FROM_LE (self_test_log->result[i].flba);
++        if ((self_test_log->result[i].vdi & NVME_ST_VALID_DIAG_INFO_SC) &&
++            (self_test_log->result[i].vdi & NVME_ST_VALID_DIAG_INFO_SCT))
++            _nvme_status_to_error ((self_test_log->result[i].sct & 7) << 8 | self_test_log->result[i].sc,
+                                    FALSE, &entry->status_code_error);
+ 
+         g_ptr_array_add (ptr_array, entry);
+     }
+     g_ptr_array_add (ptr_array, NULL);
+     log->entries = (BDNVMESelfTestLogEntry **) g_ptr_array_free (ptr_array, FALSE);
++    free (self_test_log);
+ 
+     return log;
+ }
+@@ -1026,7 +1079,6 @@ BDNVMESelfTestLog * bd_nvme_get_self_test_log (const gchar *device, GError **err
+ BDNVMESanitizeLog * bd_nvme_get_sanitize_log (const gchar *device, GError **error) {
+     int ret;
+     int fd;
+-    char buf[65536] = ZERO_INIT;
+     struct nvme_sanitize_log_page *sanitize_log;
+     BDNVMESanitizeLog *log;
+     __u16 sstat;
+@@ -1037,20 +1089,18 @@ BDNVMESanitizeLog * bd_nvme_get_sanitize_log (const gchar *device, GError **erro
+         return NULL;
+ 
+     /* send the NVME_LOG_LID_SANITIZE ioctl */
+-    ret = nvme_get_log_sanitize (fd, FALSE /* rae */, (struct nvme_sanitize_log_page *) &buf);
++    sanitize_log = _nvme_alloc (sizeof (struct nvme_sanitize_log_page));
++    g_warn_if_fail (sanitize_log != NULL);
++    ret = nvme_get_log_sanitize (fd, FALSE /* rae */, sanitize_log);
+     if (ret != 0) {
+         _nvme_status_to_error (ret, FALSE, error);
+         g_prefix_error (error, "NVMe Get Log Page - Sanitize Status Log command error: ");
+         close (fd);
++        free (sanitize_log);
+         return NULL;
+     }
+     close (fd);
+ 
+-    /* need to use interim buffer that is large enough for broken drives
+-     * returning more data than expected
+-     */
+-    sanitize_log = (struct nvme_sanitize_log_page *) &buf;
+-
+     log = g_new0 (BDNVMESanitizeLog, 1);
+     log->sanitize_progress = 0;
+     sstat = GUINT16_FROM_LE (sanitize_log->sstat);
+@@ -1085,5 +1135,6 @@ BDNVMESanitizeLog * bd_nvme_get_sanitize_log (const gchar *device, GError **erro
+     log->time_for_block_erase_nd = (GUINT32_FROM_LE (sanitize_log->etbend) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log->etbend);
+     log->time_for_crypto_erase_nd = (GUINT32_FROM_LE (sanitize_log->etcend) == 0xffffffff) ? -1 : (gint64) GUINT32_FROM_LE (sanitize_log->etcend);
+ 
++    free (sanitize_log);
+     return log;
+ }
+diff --git a/src/plugins/nvme/nvme-op.c b/src/plugins/nvme/nvme-op.c
+index c9e92697c..dbef4f3a2 100644
+--- a/src/plugins/nvme/nvme-op.c
++++ b/src/plugins/nvme/nvme-op.c
+@@ -116,30 +116,37 @@ gboolean bd_nvme_device_self_test (const gchar *device, BDNVMESelfTestAction act
+ /* returns 0xff in case of error (the NVMe standard defines total of 16 flba records) */
+ static __u8 find_lbaf_for_size (int fd, __u32 nsid, guint16 lba_data_size, guint16 metadata_size, GError **error) {
+     int ret;
+-    struct nvme_id_ns ns_info = ZERO_INIT;
++    struct nvme_id_ns *ns_info;
+     __u8 flbas = 0;
+     guint i;
+ 
+     /* TODO: find first attached namespace instead of hardcoding NSID = 1 */
+-    ret = nvme_identify_ns (fd, nsid == 0xffffffff ? 1 : nsid, &ns_info);
++    ns_info = _nvme_alloc (sizeof (struct nvme_id_ns));
++    g_warn_if_fail (ns_info != NULL);
++    ret = nvme_identify_ns (fd, nsid == 0xffffffff ? 1 : nsid, ns_info);
+     if (ret != 0) {
+         _nvme_status_to_error (ret, FALSE, error);
+         g_prefix_error (error, "NVMe Identify Namespace command error: ");
++        free (ns_info);
+         return 0xff;
+     }
+ 
+     /* return currently used lbaf */
+     if (lba_data_size == 0) {
+-       nvme_id_ns_flbas_to_lbaf_inuse (ns_info.flbas, &flbas);
+-       return flbas;
++        nvme_id_ns_flbas_to_lbaf_inuse (ns_info->flbas, &flbas);
++        free (ns_info);
++        return flbas;
+     }
+ 
+-    for (i = 0; i <= ns_info.nlbaf + ns_info.nulbaf; i++)
+-        if (1UL << ns_info.lbaf[i].ds == lba_data_size && GUINT16_FROM_LE (ns_info.lbaf[i].ms) == metadata_size)
++    for (i = 0; i <= ns_info->nlbaf + ns_info->nulbaf; i++)
++        if (1UL << ns_info->lbaf[i].ds == lba_data_size && GUINT16_FROM_LE (ns_info->lbaf[i].ms) == metadata_size) {
++            free (ns_info);
+             return i;
++        }
+ 
+     g_set_error_literal (error, BD_NVME_ERROR, BD_NVME_ERROR_INVALID_ARGUMENT,
+                          "Couldn't match desired LBA data block size in a device supported LBA format data sizes");
++    free (ns_info);
+     return 0xff;
+ }
+ 
+@@ -176,7 +183,7 @@ static __u8 find_lbaf_for_size (int fd, __u32 nsid, guint16 lba_data_size, guint
+ gboolean bd_nvme_format (const gchar *device, guint16 lba_data_size, guint16 metadata_size, BDNVMEFormatSecureErase secure_erase, GError **error) {
+     int ret;
+     gboolean ctrl_device = FALSE;
+-    struct nvme_id_ctrl ctrl_id = ZERO_INIT;
++    struct nvme_id_ctrl *ctrl_id;
+     struct nvme_format_nvm_args args = {
+         .args_size = sizeof(args),
+         .result = NULL,
+@@ -207,11 +214,14 @@ gboolean bd_nvme_format (const gchar *device, guint16 lba_data_size, guint16 met
+ 
+     /* check the FNA controller bit when formatting a single namespace */
+     if (! ctrl_device) {
+-        ret = nvme_identify_ctrl (args.fd, &ctrl_id);
++        ctrl_id = _nvme_alloc (sizeof (struct nvme_id_ctrl));
++        g_warn_if_fail (ctrl_id != NULL);
++        ret = nvme_identify_ctrl (args.fd, ctrl_id);
+         if (ret != 0) {
+             _nvme_status_to_error (ret, FALSE, error);
+             g_prefix_error (error, "NVMe Identify Controller command error: ");
+             close (args.fd);
++            free (ctrl_id);
+             return FALSE;
+         }
+         /* from nvme-cli:
+@@ -219,14 +229,16 @@ gboolean bd_nvme_format (const gchar *device, guint16 lba_data_size, guint16 met
+          * attributes and a format (excluding secure erase) of any namespace results in a
+          * format of all namespaces.
+          */
+-        if ((ctrl_id.fna & NVME_CTRL_FNA_FMT_ALL_NAMESPACES) == NVME_CTRL_FNA_FMT_ALL_NAMESPACES) {
++        if ((ctrl_id->fna & NVME_CTRL_FNA_FMT_ALL_NAMESPACES) == NVME_CTRL_FNA_FMT_ALL_NAMESPACES) {
+             /* tell user that it would format other namespaces and that bd_nvme_format()
+              * should be called on a controller device instead */
+             g_set_error_literal (error, BD_NVME_ERROR, BD_NVME_ERROR_WOULD_FORMAT_ALL_NS,
+                          "The NVMe controller indicates it would format all namespaces.");
+             close (args.fd);
++            free (ctrl_id);
+             return FALSE;
+         }
++        free (ctrl_id);
+     }
+ 
+     /* find out the desired LBA data format index */
+diff --git a/src/plugins/nvme/nvme-private.h b/src/plugins/nvme/nvme-private.h
+index 8b6d13253..0d15fbb64 100644
+--- a/src/plugins/nvme/nvme-private.h
++++ b/src/plugins/nvme/nvme-private.h
+@@ -24,5 +24,7 @@ void _nvme_fabrics_errno_to_gerror (int result, int _errno, GError **error);
+ /* nvme-info.c */
+ G_GNUC_INTERNAL
+ gint _open_dev (const gchar *device, GError **error);
++G_GNUC_INTERNAL
++void *_nvme_alloc (size_t len);
+ 
+ #endif  /* BD_NVME_PRIVATE */

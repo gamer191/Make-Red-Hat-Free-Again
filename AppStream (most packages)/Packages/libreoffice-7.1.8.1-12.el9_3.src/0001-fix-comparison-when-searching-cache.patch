@@ -1,0 +1,40 @@
+From a94b58277c7aeaa83ce14347cd0b8f7137969d03 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Lubo=C5=A1=20Lu=C5=88=C3=A1k?= <l.lunak@collabora.com>
+Date: Fri, 29 Oct 2021 14:20:57 +0200
+Subject: [PATCH] fix comparison when searching cache
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This made the cache always fail and re-cache, making CJK text layout
+slower over time. A mistake from ef513fd4b049b214a03fbe6e that
+converted !strcmp() to != instead of ==.
+
+Change-Id: Ib70579cd36d7b1df062e4d067e03f5c65e34b142
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/124432
+Reviewed-by: Noel Grandin <noel.grandin@collabora.co.uk>
+Reviewed-by: Luboš Luňák <l.lunak@collabora.com>
+Tested-by: Luboš Luňák <l.lunak@collabora.com>
+(cherry picked from commit 5b38b5744af1e896892df708c16b83e1b551d2c7)
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/124206
+Tested-by: Jenkins
+---
+ i18npool/source/breakiterator/xdictionary.cxx | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/i18npool/source/breakiterator/xdictionary.cxx b/i18npool/source/breakiterator/xdictionary.cxx
+index 947a23c5073b..6b57433370c7 100644
+--- a/i18npool/source/breakiterator/xdictionary.cxx
++++ b/i18npool/source/breakiterator/xdictionary.cxx
+@@ -152,7 +152,7 @@ void xdictionary::initDictionaryData(const char *pLang)
+     osl::MutexGuard aGuard( osl::Mutex::getGlobalMutex() );
+     for(const datacache & i : aLoadedCache)
+     {
+-        if( i.maLang != pLang )
++        if( i.maLang == pLang )
+         {
+             data = i.maData;
+             return;
+-- 
+2.33.1
+

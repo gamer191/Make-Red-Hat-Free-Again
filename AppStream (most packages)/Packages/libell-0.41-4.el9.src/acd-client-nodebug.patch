@@ -1,0 +1,12 @@
+diff --git a/examples/acd-client.c b/examples/acd-client.c
+index e737288..71e14ef 100644
+--- a/examples/acd-client.c
++++ b/examples/acd-client.c
+@@ -107,7 +107,6 @@ int main(int argc, char *argv[])
+ 	bool no_probe = false;
+ 
+ 	l_log_set_stderr();
+-	l_debug_enable("*");
+ 
+ 	if (argc < 3) {
+ 		usage();

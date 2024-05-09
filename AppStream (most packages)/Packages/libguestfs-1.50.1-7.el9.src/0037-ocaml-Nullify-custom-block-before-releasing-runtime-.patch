@@ -1,0 +1,39 @@
+From 9f52ab7794bf54169139995c5296aa5f39e47706 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 14 Dec 2023 08:33:10 +0000
+Subject: [PATCH] ocaml: Nullify custom block before releasing runtime lock
+
+Avoids a potential, though if possible then very rare, double free
+path.
+
+Suggested-by: Guillaume Munch-Maccagnoni
+See: https://github.com/ocaml/ocaml/issues/12820
+(cherry picked from commit e93fd7e8acf34192c0d1b70611e3474dde346941)
+---
+ ocaml/guestfs-c.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/ocaml/guestfs-c.c b/ocaml/guestfs-c.c
+index 700c33ab..ea9a0598 100644
+--- a/ocaml/guestfs-c.c
++++ b/ocaml/guestfs-c.c
+@@ -156,6 +156,9 @@ guestfs_int_ocaml_close (value gv)
+     size_t len;
+     value **roots = get_all_event_callbacks (g, &len);
+ 
++    /* So we don't double-free. */
++    Guestfs_val (gv) = NULL;
++
+     /* Close the handle: this could invoke callbacks from the list
+      * above, which is why we don't want to delete them before
+      * closing the handle.
+@@ -173,9 +176,6 @@ guestfs_int_ocaml_close (value gv)
+       }
+       free (roots);
+     }
+-
+-    /* So we don't double-free. */
+-    Guestfs_val (gv) = NULL;
+   }
+ 
+   CAMLreturn (Val_unit);

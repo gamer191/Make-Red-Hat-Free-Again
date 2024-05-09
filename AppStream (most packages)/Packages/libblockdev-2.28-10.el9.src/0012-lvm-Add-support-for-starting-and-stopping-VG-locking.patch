@@ -1,0 +1,299 @@
+From f72ba6aded6093d34d5e8a1666a844ec2b0ee5eb Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Tue, 18 Apr 2023 12:05:35 +0200
+Subject: [PATCH] lvm: Add support for starting and stopping VG locking
+
+---
+ docs/libblockdev-sections.txt |  2 ++
+ src/lib/plugin_apis/lvm.api   | 27 +++++++++++++++++++
+ src/plugins/lvm-dbus.c        | 49 ++++++++++++++++++++++++++++++++++-
+ src/plugins/lvm.c             | 41 +++++++++++++++++++++++++++++
+ src/plugins/lvm.h             |  3 +++
+ tests/lvm_dbus_tests.py       | 33 +++++++++++++++++++++++
+ tests/lvm_test.py             | 32 +++++++++++++++++++++++
+ 7 files changed, 186 insertions(+), 1 deletion(-)
+
+diff --git a/docs/libblockdev-sections.txt b/docs/libblockdev-sections.txt
+index 540e2b96..08ea309c 100644
+--- a/docs/libblockdev-sections.txt
++++ b/docs/libblockdev-sections.txt
+@@ -286,6 +286,8 @@ bd_lvm_vgactivate
+ bd_lvm_vgdeactivate
+ bd_lvm_vgextend
+ bd_lvm_vgreduce
++bd_lvm_vglock_start
++bd_lvm_vglock_stop
+ bd_lvm_vginfo
+ bd_lvm_vgs
+ bd_lvm_lvorigin
+diff --git a/src/lib/plugin_apis/lvm.api b/src/lib/plugin_apis/lvm.api
+index 640eee49..1343fbdb 100644
+--- a/src/lib/plugin_apis/lvm.api
++++ b/src/lib/plugin_apis/lvm.api
+@@ -603,6 +603,7 @@ typedef enum {
+     BD_LVM_TECH_GLOB_CONF,
+     BD_LVM_TECH_VDO,
+     BD_LVM_TECH_DEVICES,
++    BD_LVM_TECH_SHARED,
+ } BDLVMTech;
+ 
+ typedef enum {
+@@ -943,6 +944,32 @@ gboolean bd_lvm_vgextend (const gchar *vg_name, const gchar *device, const BDExt
+  */
+ gboolean bd_lvm_vgreduce (const gchar *vg_name, const gchar *device, const BDExtraArg **extra, GError **error);
+ 
++/**
++ * bd_lvm_vglock_start:
++ * @vg_name: a shared VG to start the lockspace in lvmlockd
++ * @extra: (nullable) (array zero-terminated=1): extra options for the vgchange command
++ *                                               (just passed to LVM as is)
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the lock was successfully started for @vg_name or not
++ *
++ * Tech category: %BD_LVM_TECH_SHARED-%BD_LVM_TECH_MODE_MODIFY
++ */
++gboolean bd_lvm_vglock_start (const gchar *vg_name, const BDExtraArg **extra, GError **error);
++
++/**
++ * bd_lvm_vglock_stop:
++ * @vg_name: a shared VG to stop the lockspace in lvmlockd
++ * @extra: (nullable) (array zero-terminated=1): extra options for the vgchange command
++ *                                               (just passed to LVM as is)
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the lock was successfully stopped for @vg_name or not
++ *
++ * Tech category: %BD_LVM_TECH_SHARED-%BD_LVM_TECH_MODE_MODIFY
++ */
++gboolean bd_lvm_vglock_stop (const gchar *vg_name, const BDExtraArg **extra, GError **error);
++
+ /**
+  * bd_lvm_vginfo:
+  * @vg_name: a VG to get information about
+diff --git a/src/plugins/lvm-dbus.c b/src/plugins/lvm-dbus.c
+index 46e09833..a129d884 100644
+--- a/src/plugins/lvm-dbus.c
++++ b/src/plugins/lvm-dbus.c
+@@ -1872,10 +1872,57 @@ gboolean bd_lvm_vgreduce (const gchar *vg_name, const gchar *device, const BDExt
+     return ((*error) == NULL);
+ }
+ 
++gboolean _vglock_start_stop (const gchar *vg_name, gboolean start, const BDExtraArg **extra, GError **error) {
++    GVariantBuilder builder;
++    GVariant *params = NULL;
++
++    g_variant_builder_init (&builder, G_VARIANT_TYPE_DICTIONARY);
++    if (start)
++        g_variant_builder_add (&builder, "{sv}", "--lockstart", g_variant_new ("s", ""));
++    else
++        g_variant_builder_add (&builder, "{sv}", "--lockstop", g_variant_new ("s", ""));
++    params = g_variant_builder_end (&builder);
++    g_variant_builder_clear (&builder);
++
++    call_lvm_obj_method_sync (vg_name, VG_INTF, "Change", NULL, params, extra, TRUE, error);
++
++    return ((*error) == NULL);
++}
++
++/**
++ * bd_lvm_vglock_start:
++ * @vg_name: a shared VG to start the lockspace in lvmlockd
++ * @extra: (nullable) (array zero-terminated=1): extra options for the vgchange command
++ *                                               (just passed to LVM as is)
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the lock was successfully started for @vg_name or not
++ *
++ * Tech category: %BD_LVM_TECH_BASIC-%BD_LVM_TECH_MODE_MODIFY
++ */
++gboolean bd_lvm_vglock_start (const gchar *vg_name, const BDExtraArg **extra, GError **error) {
++    return _vglock_start_stop (vg_name, TRUE, extra, error);
++}
++
++/**
++ * bd_lvm_vglock_stop:
++ * @vg_name: a shared VG to stop the lockspace in lvmlockd
++ * @extra: (nullable) (array zero-terminated=1): extra options for the vgchange command
++ *                                               (just passed to LVM as is)
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the lock was successfully stopped for @vg_name or not
++ *
++ * Tech category: %BD_LVM_TECH_BASIC-%BD_LVM_TECH_MODE_MODIFY
++ */
++gboolean bd_lvm_vglock_stop (const gchar *vg_name, const BDExtraArg **extra, GError **error) {
++    return _vglock_start_stop (vg_name, FALSE, extra, error);
++}
++
+ /**
+  * bd_lvm_vginfo:
+  * @vg_name: a VG to get information about
+- * @error: (out): place to store error (if any)
++ * @error: (out) (optional): place to store error (if any)
+  *
+  * Returns: (transfer full): information about the @vg_name VG or %NULL in case
+  * of error (the @error) gets populated in those cases)
+diff --git a/src/plugins/lvm.c b/src/plugins/lvm.c
+index 0db3bf4a..b0a71224 100644
+--- a/src/plugins/lvm.c
++++ b/src/plugins/lvm.c
+@@ -1341,6 +1341,47 @@ gboolean bd_lvm_vgreduce (const gchar *vg_name, const gchar *device, const BDExt
+     return call_lvm_and_report_error (args, extra, TRUE, error);
+ }
+ 
++gboolean _vglock_start_stop (const gchar *vg_name, gboolean start, const BDExtraArg **extra, GError **error) {
++    const gchar *args[4] = {"vgchange", NULL, vg_name, NULL};
++
++    if (start)
++        args[1] = "--lockstart";
++    else
++        args[1] = "--lockstop";
++
++    return call_lvm_and_report_error (args, extra, TRUE, error);
++}
++
++/**
++ * bd_lvm_vglock_start:
++ * @vg_name: a shared VG to start the lockspace in lvmlockd
++ * @extra: (nullable) (array zero-terminated=1): extra options for the vgchange command
++ *                                               (just passed to LVM as is)
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the lock was successfully started for @vg_name or not
++ *
++ * Tech category: %BD_LVM_TECH_SHARED-%BD_LVM_TECH_MODE_MODIFY
++ */
++gboolean bd_lvm_vglock_start (const gchar *vg_name, const BDExtraArg **extra, GError **error) {
++    return _vglock_start_stop (vg_name, TRUE, extra, error);
++}
++
++/**
++ * bd_lvm_vglock_stop:
++ * @vg_name: a shared VG to stop the lockspace in lvmlockd
++ * @extra: (nullable) (array zero-terminated=1): extra options for the vgchange command
++ *                                               (just passed to LVM as is)
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the lock was successfully stopped for @vg_name or not
++ *
++ * Tech category: %BD_LVM_TECH_SHARED-%BD_LVM_TECH_MODE_MODIFY
++ */
++gboolean bd_lvm_vglock_stop (const gchar *vg_name, const BDExtraArg **extra, GError **error) {
++    return _vglock_start_stop (vg_name, FALSE, extra, error);
++}
++
+ /**
+  * bd_lvm_vginfo:
+  * @vg_name: a VG to get information about
+diff --git a/src/plugins/lvm.h b/src/plugins/lvm.h
+index c85c043d..2e47b06f 100644
+--- a/src/plugins/lvm.h
++++ b/src/plugins/lvm.h
+@@ -218,6 +218,7 @@ typedef enum {
+     BD_LVM_TECH_GLOB_CONF,
+     BD_LVM_TECH_VDO,
+     BD_LVM_TECH_DEVICES,
++    BD_LVM_TECH_SHARED,
+ } BDLVMTech;
+ 
+ typedef enum {
+@@ -268,6 +269,8 @@ gboolean bd_lvm_vgactivate (const gchar *vg_name, const BDExtraArg **extra, GErr
+ gboolean bd_lvm_vgdeactivate (const gchar *vg_name, const BDExtraArg **extra, GError **error);
+ gboolean bd_lvm_vgextend (const gchar *vg_name, const gchar *device, const BDExtraArg **extra, GError **error);
+ gboolean bd_lvm_vgreduce (const gchar *vg_name, const gchar *device, const BDExtraArg **extra, GError **error);
++gboolean bd_lvm_vglock_start (const gchar *vg_name, const BDExtraArg **extra, GError **error);
++gboolean bd_lvm_vglock_stop (const gchar *vg_name, const BDExtraArg **extra, GError **error);
+ BDLVMVGdata* bd_lvm_vginfo (const gchar *vg_name, GError **error);
+ BDLVMVGdata** bd_lvm_vgs (GError **error);
+ 
+diff --git a/tests/lvm_dbus_tests.py b/tests/lvm_dbus_tests.py
+index a821636e..bc8b3052 100644
+--- a/tests/lvm_dbus_tests.py
++++ b/tests/lvm_dbus_tests.py
+@@ -655,6 +655,39 @@ class LvmTestVGs(LvmPVVGTestCase):
+         succ = BlockDev.lvm_pvremove(self.loop_dev, None)
+         self.assertTrue(succ)
+ 
++@unittest.skipUnless(lvm_dbus_running, "LVM DBus not running")
++class LvmTestVGLocking(LvmPVVGTestCase):
++    @tag_test(TestTags.UNSAFE)
++    def test_vglock_stop_start(self):
++        """Verify that it is possible to start and stop locking on a VG"""
++
++        # better not do anything if lvmlockd is running, shared VGs have
++        # a tendency to wreak havoc on your system if you look at them wrong
++        ret, _out, _err = run_command("systemctl is-active lvmlockd")
++        if ret == 0:
++            self.skipTest("lvmlockd is running, skipping")
++
++        _ret, out, _err = run_command("lvm config 'global/use_lvmlockd'")
++        if "use_lvmlockd=0" not in out:
++            self.skipTest("lvmlockd is enabled, skipping")
++
++        succ = BlockDev.lvm_pvcreate(self.loop_dev, 0, 0, None)
++        self.assertTrue(succ)
++
++        succ = BlockDev.lvm_pvcreate(self.loop_dev2, 0, 0, None)
++        self.assertTrue(succ)
++
++        succ = BlockDev.lvm_vgcreate("testVG", [self.loop_dev, self.loop_dev2], 0, None)
++        self.assertTrue(succ)
++
++        # this actually doesn't "test" anything, the commands will just say lvmlockd is not
++        # running and return 0, but that's good enough for us
++        succ = BlockDev.lvm_vglock_start("testVG")
++        self.assertTrue(succ)
++
++        succ = BlockDev.lvm_vglock_stop("testVG")
++        self.assertTrue(succ)
++
+ @unittest.skipUnless(lvm_dbus_running, "LVM DBus not running")
+ class LvmPVVGLVTestCase(LvmPVVGTestCase):
+     def _clean_up(self):
+diff --git a/tests/lvm_test.py b/tests/lvm_test.py
+index 63f43afb..d517001b 100644
+--- a/tests/lvm_test.py
++++ b/tests/lvm_test.py
+@@ -632,6 +632,38 @@ class LvmTestVGs(LvmPVVGTestCase):
+         succ = BlockDev.lvm_pvremove(self.loop_dev, None)
+         self.assertTrue(succ)
+ 
++class LvmTestVGLocking(LvmPVVGTestCase):
++    @tag_test(TestTags.UNSAFE)
++    def test_vglock_stop_start(self):
++        """Verify that it is possible to start and stop locking on a VG"""
++
++        # better not do anything if lvmlockd is running, shared VGs have
++        # a tendency to wreak havoc on your system if you look at them wrong
++        ret, _out, _err = run_command("systemctl is-active lvmlockd")
++        if ret == 0:
++            self.skipTest("lvmlockd is running, skipping")
++
++        _ret, out, _err = run_command("lvm config 'global/use_lvmlockd'")
++        if "use_lvmlockd=0" not in out:
++            self.skipTest("lvmlockd is enabled, skipping")
++
++        succ = BlockDev.lvm_pvcreate(self.loop_dev, 0, 0, None)
++        self.assertTrue(succ)
++
++        succ = BlockDev.lvm_pvcreate(self.loop_dev2, 0, 0, None)
++        self.assertTrue(succ)
++
++        succ = BlockDev.lvm_vgcreate("testVG", [self.loop_dev, self.loop_dev2], 0, None)
++        self.assertTrue(succ)
++
++        # this actually doesn't "test" anything, the commands will just say lvmlockd is not
++        # running and return 0, but that's good enough for us
++        succ = BlockDev.lvm_vglock_start("testVG")
++        self.assertTrue(succ)
++
++        succ = BlockDev.lvm_vglock_stop("testVG")
++        self.assertTrue(succ)
++
+ class LvmPVVGLVTestCase(LvmPVVGTestCase):
+     def _clean_up(self):
+         try:
+-- 
+2.41.0
+

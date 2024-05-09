@@ -1,0 +1,241 @@
+From 6e3d91681c7dffdfdf291a809d6773691a2a7bda Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Sat, 15 Jul 2023 16:33:18 +0100
+Subject: [PATCH] generator: customize: Add new StringTriplet for use by
+ --chown
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The just added --chown option previously used StringPair, splitting
+the argument as ‘UID.GID:FILENAME’.  However this will not work if we
+ever extend this with the ability to use user or group names, since
+they may contain dot (but not colon).  Add a new StringTriplet type
+and split the argument string three ways.  The new option becomes:
+
+  virt-customize ... --chown UID:GID:FILENAME
+
+Include the following commit from the common submodule:
+
+  commit e70d89a58dae068be2e19c7c21558707261af96a
+  Author: Richard W.M. Jones <rjones@redhat.com>
+  Date:   Sat Jul 15 16:42:06 2023 +0100
+
+    customize: Update generated files for --chown with StringTriplet
+
+Updates: commit d8e48bff212f9b0558480ffedf8158157360d0d5
+(cherry picked from commit c08032ebe2763f5e9ce5b14e003721475219d390)
+---
+ common                 |  2 +-
+ generator/customize.ml | 44 ++++++++++++++++++++++++++++++++----------
+ 2 files changed, 35 insertions(+), 11 deletions(-)
+
+Submodule common bbb54714..e70d89a5:
+diff --git a/common/mlcustomize/customize-options.pod b/common/mlcustomize/customize-options.pod
+index 22724600..e658a447 100644
+--- a/common/mlcustomize/customize-options.pod
++++ b/common/mlcustomize/customize-options.pod
+@@ -63,7 +63,7 @@ Change the permissions of C<FILE> to C<PERMISSIONS>.
+ I<Note>: C<PERMISSIONS> by default would be decimal, unless you prefix
+ it with C<0> to get octal, ie. use C<0700> not C<700>.
+ 
+-=item B<--chown> UID.GID:PATH
++=item B<--chown> UID:GID:PATH
+ 
+ Change the owner user and group ID of a file or directory in the guest.
+ Note:
+@@ -83,7 +83,7 @@ This will not work with Windows guests.
+ 
+ For example:
+ 
+- virt-customize --chown '0.0:/var/log/audit.log'
++ virt-customize --chown '0:0:/var/log/audit.log'
+ 
+ See also: I<--upload>.
+ 
+diff --git a/common/mlcustomize/customize-synopsis.pod b/common/mlcustomize/customize-synopsis.pod
+index e20b12d4..5031b015 100644
+--- a/common/mlcustomize/customize-synopsis.pod
++++ b/common/mlcustomize/customize-synopsis.pod
+@@ -1,5 +1,5 @@
+     [--append-line FILE:LINE] [--chmod PERMISSIONS:FILE]
+-    [--chown UID.GID:PATH] [--commands-from-file FILENAME]
++    [--chown UID:GID:PATH] [--commands-from-file FILENAME]
+     [--copy SOURCE:DEST] [--copy-in LOCALPATH:REMOTEDIR]
+     [--delete PATH] [--edit FILE:EXPR] [--firstboot SCRIPT]
+     [--firstboot-command 'CMD+ARGS'] [--firstboot-install PKG,PKG..]
+diff --git a/common/mlcustomize/customize_cmdline.ml b/common/mlcustomize/customize_cmdline.ml
+index fd3074ad..3ce901db 100644
+--- a/common/mlcustomize/customize_cmdline.ml
++++ b/common/mlcustomize/customize_cmdline.ml
+@@ -41,8 +41,8 @@ and op = [
+       (* --append-line FILE:LINE *)
+   | `Chmod of string * string
+       (* --chmod PERMISSIONS:FILE *)
+-  | `Chown of string * string
+-      (* --chown UID.GID:PATH *)
++  | `Chown of string * string * string
++      (* --chown UID:GID:PATH *)
+   | `CommandsFromFile of string
+       (* --commands-from-file FILENAME *)
+   | `Copy of string * string
+@@ -154,8 +154,13 @@ let rec argspec () =
+           option_name in
+     let len = String.length arg in
+     String.sub arg 0 i, String.sub arg (i+1) (len-(i+1))
+-  in
+-  let split_string_list arg =
++  and split_string_triplet option_name arg =
++    match String.nsplit ~max:3 "," arg with
++    | [a; b; c] -> a, b, c
++    | _ ->
++        error (f_"invalid format for '--%s' parameter, see the man page")
++          option_name
++  and split_string_list arg =
+     String.nsplit "," arg
+   in
+   let split_links_list option_name arg =
+@@ -192,14 +197,14 @@ let rec argspec () =
+     (
+       [ L"chown" ],
+       Getopt.String (
+-        s_"UID.GID:PATH",
++        s_"UID:GID:PATH",
+         fun s ->
+-          let p = split_string_pair "chown" s in
++          let p = split_string_triplet "chown" s in
+           List.push_front (`Chown p) ops
+       ),
+       s_"Change the owner user and group ID of a file or directory"
+     ),
+-    Some "UID.GID:PATH", "Change the owner user and group ID of a file or directory in the guest.\nNote:\n\n=over 4\n\n=item *\n\nOnly numeric UIDs and GIDs will work, and these may not be the same\ninside the guest as on the host.\n\n=item *\n\nThis will not work with Windows guests.\n\n=back\n\nFor example:\n\n virt-customize --chown '0.0:/var/log/audit.log'\n\nSee also: I<--upload>.";
++    Some "UID:GID:PATH", "Change the owner user and group ID of a file or directory in the guest.\nNote:\n\n=over 4\n\n=item *\n\nOnly numeric UIDs and GIDs will work, and these may not be the same\ninside the guest as on the host.\n\n=item *\n\nThis will not work with Windows guests.\n\n=back\n\nFor example:\n\n virt-customize --chown '0:0:/var/log/audit.log'\n\nSee also: I<--upload>.";
+     (
+       [ L"commands-from-file" ],
+       Getopt.String (
+diff --git a/common/mlcustomize/customize_cmdline.mli b/common/mlcustomize/customize_cmdline.mli
+index 5883bbe0..112b74dc 100644
+--- a/common/mlcustomize/customize_cmdline.mli
++++ b/common/mlcustomize/customize_cmdline.mli
+@@ -33,8 +33,8 @@ and op = [
+       (* --append-line FILE:LINE *)
+   | `Chmod of string * string
+       (* --chmod PERMISSIONS:FILE *)
+-  | `Chown of string * string
+-      (* --chown UID.GID:PATH *)
++  | `Chown of string * string * string
++      (* --chown UID:GID:PATH *)
+   | `CommandsFromFile of string
+       (* --commands-from-file FILENAME *)
+   | `Copy of string * string
+diff --git a/generator/customize.ml b/generator/customize.ml
+index 8d3dec3e..fe87ef5e 100644
+--- a/generator/customize.ml
++++ b/generator/customize.ml
+@@ -41,6 +41,7 @@ and op_type =
+ | Unit                                  (* no argument *)
+ | String of string                      (* string *)
+ | StringPair of string                  (* string:string *)
++| StringTriplet of string               (* string:string:string *)
+ | StringList of string                  (* string,string,... *)
+ | TargetLinks of string                 (* target:link[:link...] *)
+ | PasswordSelector of string            (* password selector *)
+@@ -96,7 +97,7 @@ it with C<0> to get octal, ie. use C<0700> not C<700>.";
+   };
+ 
+   { op_name = "chown";
+-    op_type = StringPair "UID.GID:PATH";
++    op_type = StringTriplet "UID:GID:PATH";
+     op_discrim = "`Chown";
+     op_shortdesc = "Change the owner user and group ID of a file or directory";
+     op_pod_longdesc = "\
+@@ -118,7 +119,7 @@ This will not work with Windows guests.
+ 
+ For example:
+ 
+- virt-customize --chown '0.0:/var/log/audit.log'
++ virt-customize --chown '0:0:/var/log/audit.log'
+ 
+ See also: I<--upload>.";
+   };
+@@ -761,8 +762,13 @@ let rec argspec () =
+           option_name in
+     let len = String.length arg in
+     String.sub arg 0 i, String.sub arg (i+1) (len-(i+1))
+-  in
+-  let split_string_list arg =
++  and split_string_triplet option_name arg =
++    match String.nsplit ~max:3 \",\" arg with
++    | [a; b; c] -> a, b, c
++    | _ ->
++        error (f_\"invalid format for '--%%s' parameter, see the man page\")
++          option_name
++  and split_string_list arg =
+     String.nsplit \",\" arg
+   in
+   let split_links_list option_name arg =
+@@ -807,6 +813,19 @@ let rec argspec () =
+       pr "      s_\"%s\"\n" shortdesc;
+       pr "    ),\n";
+       pr "    Some %S, %S;\n" v longdesc
++    | { op_type = StringTriplet v; op_name = name; op_discrim = discrim;
++        op_shortdesc = shortdesc; op_pod_longdesc = longdesc } ->
++      pr "    (\n";
++      pr "      [ L\"%s\" ],\n" name;
++      pr "      Getopt.String (\n";
++      pr "        s_\"%s\",\n" v;
++      pr "        fun s ->\n";
++      pr "          let p = split_string_triplet \"%s\" s in\n" name;
++      pr "          List.push_front (%s p) ops\n" discrim;
++      pr "      ),\n";
++      pr "      s_\"%s\"\n" shortdesc;
++      pr "    ),\n";
++      pr "    Some %S, %S;\n" v longdesc
+     | { op_type = StringList v; op_name = name; op_discrim = discrim;
+         op_shortdesc = shortdesc; op_pod_longdesc = longdesc } ->
+       pr "    (\n";
+@@ -956,6 +975,7 @@ let rec argspec () =
+     | { op_type = Unit; }
+     | { op_type = String _; }
+     | { op_type = StringPair _; }
++    | { op_type = StringTriplet _; }
+     | { op_type = StringList _; }
+     | { op_type = TargetLinks _; }
+     | { op_type = PasswordSelector _; }
+@@ -1021,6 +1041,10 @@ type ops = {
+     | { op_type = StringPair v; op_discrim = discrim;
+         op_name = name } ->
+       pr "  | %s of string * string\n      (* --%s %s *)\n" discrim name v
++    | { op_type = StringTriplet v; op_discrim = discrim;
++        op_name = name } ->
++      pr "  | %s of string * string * string\n      (* --%s %s *)\n"
++        discrim name v
+     | { op_type = StringList v; op_discrim = discrim;
+         op_name = name } ->
+       pr "  | %s of string list\n      (* --%s %s *)\n" discrim name v
+@@ -1073,9 +1097,9 @@ let generate_customize_synopsis_pod () =
+       function
+       | { op_type = Unit; op_name = n } ->
+         n, sprintf "[--%s]" n
+-      | { op_type = String v | StringPair v | StringList v | TargetLinks v
+-            | PasswordSelector v | UserPasswordSelector v | SSHKeySelector v
+-            | StringFn (v, _) | SMPoolSelector v;
++      | { op_type = String v | StringPair v | StringTriplet v | StringList v
++            | TargetLinks v | PasswordSelector v | UserPasswordSelector v
++            | SSHKeySelector v | StringFn (v, _) | SMPoolSelector v;
+           op_name = n } ->
+         n, sprintf "[--%s %s]" n v
+     ) ops @
+@@ -1116,9 +1140,9 @@ let generate_customize_options_pod () =
+       function
+       | { op_type = Unit; op_name = n; op_pod_longdesc = ld } ->
+         n, sprintf "B<--%s>" n, ld
+-      | { op_type = String v | StringPair v | StringList v | TargetLinks v
+-            | PasswordSelector v | UserPasswordSelector v | SSHKeySelector v
+-            | StringFn (v, _) | SMPoolSelector v;
++      | { op_type = String v | StringPair v | StringTriplet v | StringList v
++            | TargetLinks v | PasswordSelector v | UserPasswordSelector v
++            | SSHKeySelector v | StringFn (v, _) | SMPoolSelector v;
+           op_name = n; op_pod_longdesc = ld } ->
+         n, sprintf "B<--%s> %s" n v, ld
+     ) ops @

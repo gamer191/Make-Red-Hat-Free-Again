@@ -1,0 +1,31 @@
+From 61c5a2b5cf1632d118ffff96edf30862b873b021 Mon Sep 17 00:00:00 2001
+From: Liping Zhang <zlpnobody@gmail.com>
+Date: Wed, 22 Mar 2017 21:00:47 +0800
+Subject: [PATCH] examples: kill the "invalid argument" error in
+ nftc-helper-add
+
+NFCTH_PRIV_DATA_LEN is a must attribute required by the kernel when
+creating the cthelper, add it now. Otherwise -EINVAL will be returned.
+
+Signed-off-by: Liping Zhang <zlpnobody@gmail.com>
+Signed-off-by: Pablo Neira Ayuso <pablo@netfilter.org>
+(cherry picked from commit 5fec728cf69d137450e230a88793b1251176c035)
+---
+ examples/nfct-helper-add.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/examples/nfct-helper-add.c b/examples/nfct-helper-add.c
+index cb7291e8ec4b0..79e09637415d3 100644
+--- a/examples/nfct-helper-add.c
++++ b/examples/nfct-helper-add.c
+@@ -31,6 +31,7 @@ int main(int argc, char *argv[])
+ 	nfct_helper_attr_set_u32(nfct_helper, NFCTH_ATTR_QUEUE_NUM, atoi(argv[2]));
+ 	nfct_helper_attr_set_u16(nfct_helper, NFCTH_ATTR_PROTO_L3NUM, AF_INET);
+ 	nfct_helper_attr_set_u8(nfct_helper, NFCTH_ATTR_PROTO_L4NUM, IPPROTO_TCP);
++	nfct_helper_attr_set_u32(nfct_helper, NFCTH_ATTR_PRIV_DATA_LEN, 0);
+ 
+ 	/* Will be freed by nfct_helper_free. */
+ 	p = nfct_helper_policy_alloc();
+-- 
+2.34.1
+

@@ -1,0 +1,88 @@
+From 89b6c8b458dcb00de83b543c47a6acb049f63f18 Mon Sep 17 00:00:00 2001
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Tue, 21 Mar 2023 16:55:15 +0100
+Subject: [PATCH] update common submodule
+
+HATAYAMA Daisuke (1):
+      progress: fix segmentation fault when TERM variable is "dumb"
+
+Laszlo Ersek (2):
+      detect_kernels: tighten "try" scope
+      detect_kernels: deal with RHEL's kernel-core / kernel-modules-core split
+
+rwmjones (1):
+      Merge pull request #5 from d-hatayama/fix_segfault_progress_bar
+
+Bugzilla: https://bugzilla.redhat.com/show_bug.cgi?id=2175703
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+(cherry picked from commit be11d25b3e2770d86699e94c5087e6625477d5ec)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common 360e037d..70c10a07:
+diff --git a/common/mldrivers/linux_kernels.ml b/common/mldrivers/linux_kernels.ml
+index a46146a1..23ff76a5 100644
+--- a/common/mldrivers/linux_kernels.ml
++++ b/common/mldrivers/linux_kernels.ml
+@@ -125,9 +125,9 @@ let detect_kernels (g : G.guestfs) root bootloader apps =
+             *)
+            let modpath, version =
+              let prefix = "/lib/modules/" in
++             let prefix_len = String.length prefix in
+              try
+-               let prefix_len = String.length prefix in
+-               List.find_map (
++               let modpath, version = List.find_map (
+                  fun filename ->
+                    let filename_len = String.length filename in
+                    if filename_len > prefix_len &&
+@@ -137,17 +137,29 @@ let detect_kernels (g : G.guestfs) root bootloader apps =
+                      Some (filename, version)
+                    ) else
+                      None
+-               ) files
++               ) files in
++               (* Fall back to the version in the vmlinuz file name not only if
++                * a candidate pathname couldn't be found under /lib/modules/,
++                * but also in case the candidate pathname doesn't reference a
++                * directory. See RHBZ#2175703.
++                *
++                * Note that this "is_dir" check is deliberately kept outside of
++                * the "find_map"'s mapper function above: we want the first
++                * candidate *to be* a directory, and not the first candidate
++                * *that is* a directory.
++                *)
++               if not (g#is_dir ~followsymlinks:true modpath) then
++                 raise Not_found;
++               modpath, version
+              with Not_found ->
+                let version =
+                  String.sub vmlinuz 14 (String.length vmlinuz - 14) in
+                let modpath = prefix ^ version in
++               (* Check that the modpath exists. *)
++               if not (g#is_dir ~followsymlinks:true modpath) then
++                 raise Not_found;
+                modpath, version in
+ 
+-           (* Check that the modpath exists. *)
+-           if not (g#is_dir ~followsymlinks:true modpath) then
+-             raise Not_found;
+-
+            (* Find the initramfs which corresponds to the kernel.
+             * Since the initramfs is built at runtime, and doesn't have
+             * to be covered by the RPM file list, this is basically
+diff --git a/common/progress/progress.c b/common/progress/progress.c
+index 4d52b97e..e4b30663 100644
+--- a/common/progress/progress.c
++++ b/common/progress/progress.c
+@@ -318,7 +318,8 @@ progress_bar_set (struct progress_bar *bar,
+        * (b) it's just not possible to use tputs in a sane way here.
+        */
+       /*tputs (UP, 2, putchar);*/
+-      fprintf (fp, "%s", UP);
++      if (UP)
++        fprintf (fp, "%s", UP);
+     }
+     bar->count++;
+ 

@@ -1,0 +1,364 @@
+From fee5967ab6ce7226f9baed984d7b1c49173a0c59 Mon Sep 17 00:00:00 2001
+From: Stephan Bergmann <sbergman@redhat.com>
+Date: Thu, 24 Feb 2022 14:31:23 +0100
+Subject: [PATCH] Don't use Library_tl in URE libraries
+
+This partly reverts 8b5e23eac31cafbd442a3acab5fbcf98bfd0af11 "log nice exception
+messages whereever possible", e1eb7cb04a4c30cec238ab0f54d41a6cdc3299c1
+"loplugin:logexceptionnicely in starmath..svgio",
+d6d80c4e1783b4459bd4a8fbcbdfeebe416c1cb5 "OSL_FAIL.*exception ->
+TOOLS_WARN_EXCEPTION", and 877f40ac3f2add2b6dc37bae280d4d98dd102286 "tdf#42949
+Fix new IWYU warnings in directories [h-r]*", and adapts
+loplugin:logexceptionnicely accordingly.
+
+Change-Id: I792b853b988c7c5f77179ca0672c30cb4223b5a6
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/130502
+Tested-by: Jenkins
+Reviewed-by: Stephan Bergmann <sbergman@redhat.com>
+
+Cherry-picked from 9c431f4d3afed0aad21b5ba67a5a55328c4d0685
+Conflicts:
+	stoc/source/javavm/javavm.cxx
+---
+ compilerplugins/clang/logexceptionnicely.cxx  |  6 +++++
+ io/Library_io.mk                              |  1 -
+ io/source/stm/opump.cxx                       | 24 ++++++++++---------
+ javaunohelper/Library_juhx.mk                 |  1 -
+ javaunohelper/source/bootstrap.cxx            |  7 ++----
+ stoc/Library_bootstrap.mk                     |  1 -
+ stoc/Library_javaloader.mk                    |  1 -
+ stoc/Library_javavm.mk                        |  1 -
+ stoc/source/javaloader/javaloader.cxx         |  7 +++---
+ stoc/source/javavm/javavm.cxx                 | 17 +++++++------
+ stoc/source/servicemanager/servicemanager.cxx | 13 +++++-----
+ 11 files changed, 39 insertions(+), 40 deletions(-)
+
+diff --git a/compilerplugins/clang/logexceptionnicely.cxx b/compilerplugins/clang/logexceptionnicely.cxx
+index a262d276b88c..fb5b1f86ed59 100644
+--- a/compilerplugins/clang/logexceptionnicely.cxx
++++ b/compilerplugins/clang/logexceptionnicely.cxx
+@@ -46,6 +46,12 @@ public:
+             return false;
+         if (loplugin::hasPathnamePrefix(fn, SRCDIR "/comphelper/"))
+             return false;
++        if (loplugin::hasPathnamePrefix(fn, SRCDIR "/io/"))
++            return false;
++        if (loplugin::hasPathnamePrefix(fn, SRCDIR "/javaunohelper/"))
++            return false;
++        if (loplugin::hasPathnamePrefix(fn, SRCDIR "/stoc/"))
++            return false;
+         // can't do that here, don't have an Any
+         if (loplugin::hasPathnamePrefix(fn, SRCDIR
+                                         "/connectivity/source/drivers/hsqldb/HStorageMap.cxx"))
+diff --git a/io/Library_io.mk b/io/Library_io.mk
+index b961b437cd46..fc61f3366e1b 100644
+--- a/io/Library_io.mk
++++ b/io/Library_io.mk
+@@ -17,7 +17,6 @@ $(eval $(call gb_Library_use_libraries,io,\
+     cppu \
+     cppuhelper \
+     sal \
+-    tl \
+ ))
+ 
+ $(eval $(call gb_Library_set_componentfile,io,io/source/io))
+diff --git a/io/source/stm/opump.cxx b/io/source/stm/opump.cxx
+index 7ba8752d8dfb..d120dd37f8ed 100644
+--- a/io/source/stm/opump.cxx
++++ b/io/source/stm/opump.cxx
+@@ -18,6 +18,8 @@
+  */
+ 
+ 
++#include <sal/log.hxx>
++
+ #include <com/sun/star/io/IOException.hpp>
+ #include <com/sun/star/io/NotConnectedException.hpp>
+ #include <com/sun/star/io/XActiveDataSource.hpp>
+@@ -32,7 +34,7 @@
+ #include <cppuhelper/supportsservice.hxx>
+ #include <osl/mutex.hxx>
+ #include <osl/thread.h>
+-#include <tools/diagnose_ex.h>
++
+ 
+ using namespace osl;
+ using namespace std;
+@@ -124,9 +126,9 @@ void Pump::fireError( const  Any & exception )
+         {
+             static_cast< XStreamListener * > ( iter.next() )->error( exception );
+         }
+-        catch ( const RuntimeException & )
++        catch ( const RuntimeException &e )
+         {
+-            TOOLS_WARN_EXCEPTION("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners");
++            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
+         }
+     }
+ }
+@@ -153,9 +155,9 @@ void Pump::fireClose()
+         {
+             static_cast< XStreamListener * > ( iter.next() )->closed( );
+         }
+-        catch ( const RuntimeException & )
++        catch ( const RuntimeException &e )
+         {
+-            TOOLS_WARN_EXCEPTION("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners");
++            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
+         }
+     }
+ }
+@@ -169,9 +171,9 @@ void Pump::fireStarted()
+         {
+             static_cast< XStreamListener * > ( iter.next() )->started( );
+         }
+-        catch ( const RuntimeException & )
++        catch ( const RuntimeException &e )
+         {
+-            TOOLS_WARN_EXCEPTION("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners");
++            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
+         }
+     }
+ }
+@@ -185,9 +187,9 @@ void Pump::fireTerminated()
+         {
+             static_cast< XStreamListener * > ( iter.next() )->terminated();
+         }
+-        catch ( const RuntimeException & )
++        catch ( const RuntimeException &e )
+         {
+-            TOOLS_WARN_EXCEPTION("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners");
++            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
+         }
+     }
+ }
+@@ -285,11 +287,11 @@ void Pump::run()
+         close();
+         fireClose();
+     }
+-    catch ( const css::uno::Exception & )
++    catch ( const css::uno::Exception &e )
+     {
+         // we are the last on the stack.
+         // this is to avoid crashing the program, when e.g. a bridge crashes
+-        TOOLS_WARN_EXCEPTION("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners");
++        SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
+     }
+ }
+ 
+diff --git a/javaunohelper/Library_juhx.mk b/javaunohelper/Library_juhx.mk
+index 6eacff250c0f..1a24e5ef54f2 100644
+--- a/javaunohelper/Library_juhx.mk
++++ b/javaunohelper/Library_juhx.mk
+@@ -19,7 +19,6 @@ $(eval $(call gb_Library_use_libraries,juhx,\
+     jvmaccess \
+     sal \
+     salhelper \
+-    tl \
+ ))
+ 
+ $(eval $(call gb_Library_add_exception_objects,juhx,\
+diff --git a/javaunohelper/source/bootstrap.cxx b/javaunohelper/source/bootstrap.cxx
+index e7bf63b841de..6ad39d467444 100644
+--- a/javaunohelper/source/bootstrap.cxx
++++ b/javaunohelper/source/bootstrap.cxx
+@@ -36,7 +36,6 @@
+ 
+ #include <jni.h>
+ #include <jvmaccess/unovirtualmachine.hxx>
+-#include <tools/diagnose_ex.h>
+ 
+ #include "juhx-export-functions.hxx"
+ #include "vm.hxx"
+@@ -148,11 +147,10 @@ jobject Java_com_sun_star_comp_helper_Bootstrap_cppuhelper_1bootstrap(
+     }
+     catch (const RuntimeException & exc)
+     {
+-        css::uno::Any exAny( cppu::getCaughtException() );
+         jclass c = jni_env->FindClass( "com/sun/star/uno/RuntimeException" );
+         if (nullptr != c)
+         {
+-            SAL_WARN("javaunohelper", "forwarding RuntimeException: " << exceptionToString(exAny) );
++            SAL_WARN("javaunohelper", "forwarding RuntimeException: " << exc );
+             OString cstr( OUStringToOString(
+                               exc.Message, RTL_TEXTENCODING_JAVA_UTF8 ) );
+             jni_env->ThrowNew( c, cstr.getStr() );
+@@ -160,11 +158,10 @@ jobject Java_com_sun_star_comp_helper_Bootstrap_cppuhelper_1bootstrap(
+     }
+     catch (const Exception & exc)
+     {
+-        css::uno::Any ex( cppu::getCaughtException() );
+         jclass c = jni_env->FindClass( "com/sun/star/uno/Exception" );
+         if (nullptr != c)
+         {
+-            SAL_WARN("javaunohelper",  "forwarding Exception: " << exceptionToString(ex) );
++            SAL_WARN("javaunohelper",  "forwarding Exception: " << exc );
+             OString cstr( OUStringToOString(
+                               exc.Message, RTL_TEXTENCODING_JAVA_UTF8 ) );
+             jni_env->ThrowNew( c, cstr.getStr() );
+diff --git a/stoc/Library_bootstrap.mk b/stoc/Library_bootstrap.mk
+index 49fbafc12a09..3cc57e868d29 100644
+--- a/stoc/Library_bootstrap.mk
++++ b/stoc/Library_bootstrap.mk
+@@ -32,7 +32,6 @@ $(eval $(call gb_Library_use_libraries,bootstrap,\
+     reg \
+     sal \
+     salhelper \
+-    tl \
+ ))
+ 
+ $(eval $(call gb_Library_set_componentfile,bootstrap,stoc/util/bootstrap))
+diff --git a/stoc/Library_javaloader.mk b/stoc/Library_javaloader.mk
+index caf4a1e27df6..f0b11fb4a9dc 100644
+--- a/stoc/Library_javaloader.mk
++++ b/stoc/Library_javaloader.mk
+@@ -19,7 +19,6 @@ $(eval $(call gb_Library_use_libraries,javaloader,\
+     jvmaccess \
+     sal \
+     salhelper \
+-    tl \
+ ))
+ 
+ $(eval $(call gb_Library_set_componentfile,javaloader,stoc/source/javaloader/javaloader))
+diff --git a/stoc/Library_javavm.mk b/stoc/Library_javavm.mk
+index ce5f773ef394..84e29e8556e0 100644
+--- a/stoc/Library_javavm.mk
++++ b/stoc/Library_javavm.mk
+@@ -21,7 +21,6 @@ $(eval $(call gb_Library_use_libraries,javavm,\
+     jvmfwk \
+     sal \
+     salhelper \
+-    tl \
+ ))
+ 
+ $(eval $(call gb_Library_set_componentfile,javavm,stoc/source/javavm/javavm))
+diff --git a/stoc/source/javaloader/javaloader.cxx b/stoc/source/javaloader/javaloader.cxx
+index 73b0ddf557ff..036ea71af93a 100644
+--- a/stoc/source/javaloader/javaloader.cxx
++++ b/stoc/source/javaloader/javaloader.cxx
+@@ -26,7 +26,6 @@
+ #include <com/sun/star/uno/RuntimeException.hpp>
+ #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+ #include <cppuhelper/exc_hlp.hxx>
+-#include <tools/diagnose_ex.h>
+ 
+ #ifdef LINUX
+ #undef minor
+@@ -328,8 +327,10 @@ stoc_JavaComponentLoader_get_implementation(
+     try {
+         return cppu::acquire(new JavaComponentLoader(context));
+     }
+-    catch(const RuntimeException &) {
+-        TOOLS_INFO_EXCEPTION("stoc", "could not init javaloader");
++    catch(const RuntimeException & runtimeException) {
++        SAL_INFO(
++            "stoc",
++            "could not init javaloader due to " << runtimeException);
+         throw;
+     }
+ }
+diff --git a/stoc/source/javavm/javavm.cxx b/stoc/source/javavm/javavm.cxx
+index 8600a23eb759..8d95f71a68a3 100644
+--- a/stoc/source/javavm/javavm.cxx
++++ b/stoc/source/javavm/javavm.cxx
+@@ -61,7 +61,6 @@
+ #include <rtl/ustring.hxx>
+ #include <sal/types.h>
+ #include <sal/log.hxx>
+-#include <tools/diagnose_ex.h>
+ #include <uno/current_context.hxx>
+ #include <jvmfwk/framework.hxx>
+ #include <i18nlangtag/languagetag.hxx>
+@@ -423,23 +422,23 @@ void initVMConfiguration(
+     try {
+         getINetPropsFromConfig(&jvm, xSMgr, xCtx);
+     }
+-    catch(const css::uno::Exception &) {
+-        TOOLS_INFO_EXCEPTION("stoc", "can not get INETProps");
++    catch(const css::uno::Exception & exception) {
++        SAL_INFO("stoc", "can not get INETProps because of " << exception);
+     }
+ 
+     try {
+         getDefaultLocaleFromConfig(&jvm, xSMgr,xCtx);
+     }
+-    catch(const css::uno::Exception &) {
+-        TOOLS_INFO_EXCEPTION("stoc", "can not get locale");
++    catch(const css::uno::Exception & exception) {
++        SAL_INFO("stoc", "can not get locale because of " << exception);
+     }
+ 
+     try
+     {
+         getJavaPropsFromSafetySettings(&jvm, xSMgr, xCtx);
+     }
+-    catch(const css::uno::Exception &) {
+-        TOOLS_INFO_EXCEPTION("stoc", "couldn't get safety settings");
++    catch(const css::uno::Exception & exception) {
++        SAL_INFO("stoc", "couldn't get safety settings because of " << exception);
+     }
+ 
+     *pjvm= jvm;
+@@ -1213,9 +1212,9 @@ void JavaVirtualMachine::registerConfigChangesListener()
+             if (m_xJavaConfiguration.is())
+                 m_xJavaConfiguration->addContainerListener(this);
+         }
+-    }catch(const css::uno::Exception &)
++    }catch(const css::uno::Exception & e)
+     {
+-        TOOLS_INFO_EXCEPTION("stoc", "could not set up listener for Configuration");
++        SAL_INFO("stoc", "could not set up listener for Configuration because of >" << e << "<");
+     }
+ }
+ 
+diff --git a/stoc/source/servicemanager/servicemanager.cxx b/stoc/source/servicemanager/servicemanager.cxx
+index ba728ba1fa88..1a53ecf97f63 100644
+--- a/stoc/source/servicemanager/servicemanager.cxx
++++ b/stoc/source/servicemanager/servicemanager.cxx
+@@ -24,7 +24,6 @@
+ #include <osl/diagnose.h>
+ #include <rtl/ustrbuf.hxx>
+ #include <sal/log.hxx>
+-#include <tools/diagnose_ex.h>
+ 
+ #include <cppuhelper/factory.hxx>
+ #include <cppuhelper/weakref.hxx>
+@@ -611,9 +610,9 @@ void OServiceManager::disposing()
+             if( xComp.is() )
+                 xComp->dispose();
+         }
+-        catch (const RuntimeException &)
++        catch (const RuntimeException & exc)
+         {
+-            TOOLS_INFO_EXCEPTION("stoc", "RuntimeException occurred upon disposing factory:");
++            SAL_INFO("stoc", "RuntimeException occurred upon disposing factory: " << exc);
+         }
+     }
+ 
+@@ -797,9 +796,9 @@ Reference< XInterface > OServiceManager::createInstanceWithContext(
+                 }
+             }
+         }
+-        catch (const lang::DisposedException &)
++        catch (const lang::DisposedException & exc)
+         {
+-            TOOLS_INFO_EXCEPTION("stoc", "");
++            SAL_INFO("stoc", "DisposedException occurred: " << exc);
+         }
+     }
+ 
+@@ -849,9 +848,9 @@ Reference< XInterface > OServiceManager::createInstanceWithArgumentsAndContext(
+                 }
+             }
+         }
+-        catch (const lang::DisposedException &)
++        catch (const lang::DisposedException & exc)
+         {
+-            TOOLS_INFO_EXCEPTION("stoc", "DisposedException occurred:");
++            SAL_INFO("stoc", "DisposedException occurred: " << exc);
+         }
+     }
+ 
+-- 
+2.40.1
+

@@ -1,0 +1,162 @@
+From 366e9237399a948d2ef616b758d390bd7d0978a5 Mon Sep 17 00:00:00 2001
+From: Stephan Bergmann <sbergman@redhat.com>
+Date: Mon, 31 May 2021 09:36:28 +0200
+Subject: [PATCH] Replace inet_ntoa with inet_ntop
+
+...as inet_ntoa is potentially not thread-safe; and add a test
+
+Change-Id: I9df945b006ba7194c3b1444c4886101c08339ad0
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/116425
+Tested-by: Jenkins
+Reviewed-by: Stephan Bergmann <sbergman@redhat.com>
+(cherry picked from commit 33bf4f0bcf941ee4609f558442035514f54cbc8a)
+
+and
+
+Replace inet_addr with inet_pton
+
+...as inet_addr is deprecated (it does not allow to distinguish successful
+return for "255.255.255.255" from -1 error return); and update tests
+
+Change-Id: I605cb2ba18fe9bd11d2d68c8f1c94271c4503509
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/116441
+Tested-by: Jenkins
+Reviewed-by: Stephan Bergmann <sbergman@redhat.com>
+(cherry picked from commit 1fef071c01caf6c293dd941ee7c8340e6894afc3)
+
+fix leak in SocketTest
+
+Change-Id: I8c5e2d4c4687beab08876fe3e945d19a1629bc36
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/116514
+Tested-by: Jenkins
+Reviewed-by: Noel Grandin <noel.grandin@collabora.co.uk>
+(cherry picked from commit 313eaf979ea2d69e4ffa88a5e87cc09ffe0ff088)
+---
+ sal/CppunitTest_sal_osl.mk |  1 +
+ sal/osl/unx/socket.cxx     | 16 +++++++----
+ sal/qa/osl/socket.cxx      | 58 ++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 70 insertions(+), 5 deletions(-)
+ create mode 100644 sal/qa/osl/socket.cxx
+
+diff --git a/sal/CppunitTest_sal_osl.mk b/sal/CppunitTest_sal_osl.mk
+index 2e4b77509f56..d8c2627d9e0f 100644
+--- a/sal/CppunitTest_sal_osl.mk
++++ b/sal/CppunitTest_sal_osl.mk
+@@ -23,6 +23,7 @@ $(eval $(call gb_CppunitTest_add_exception_objects,sal_osl,\
+ 	sal/qa/osl/process/osl_Thread \
+ 	sal/qa/osl/profile/osl_old_testprofile \
+ 	sal/qa/osl/setthreadname/test-setthreadname \
++	sal/qa/osl/socket \
+ ))
+ 
+ $(eval $(call gb_CppunitTest_use_libraries,sal_osl,\
+diff --git a/sal/osl/unx/socket.cxx b/sal/osl/unx/socket.cxx
+index 56a8f6cd63ac..9fafc6d1db81 100644
+--- a/sal/osl/unx/socket.cxx
++++ b/sal/osl/unx/socket.cxx
+@@ -437,7 +437,10 @@ oslSocketAddr SAL_CALL osl_createInetBroadcastAddr (
+             &pDottedAddr, strDottedAddr->buffer, strDottedAddr->length,
+             RTL_TEXTENCODING_UTF8, OUSTRING_TO_OSTRING_CVTFLAGS);
+ 
+-        nAddr = inet_addr (pDottedAddr->buffer);
++        in_addr buf;
++        if (inet_pton (AF_INET, pDottedAddr->buffer, &buf) == 1) {
++            nAddr = buf.s_addr;
++        }
+         rtl_string_release (pDottedAddr);
+     }
+ 
+@@ -505,11 +508,11 @@ oslSocketAddr osl_psz_createInetSocketAddr (
+     sal_Int32       Port)
+ {
+     oslSocketAddr pAddr = nullptr;
+-    sal_Int32 Addr = inet_addr(pszDottedAddr);
+-    if(Addr != -1)
++    in_addr buf;
++    if(inet_pton(AF_INET, pszDottedAddr, &buf) == 1)
+     {
+         /* valid dotted addr */
+-        pAddr = createSocketAddrWithFamily( osl_Socket_FamilyInet, htons(Port) , Addr );
++        pAddr = createSocketAddrWithFamily( osl_Socket_FamilyInet, htons(Port) , buf.s_addr );
+     }
+     return pAddr;
+ }
+@@ -1090,7 +1093,10 @@ oslSocketResult SAL_CALL osl_getDottedInetAddrOfSocketAddr(oslSocketAddr Addr, r
+         return osl_Socket_Error;
+     }
+ 
+-    rtl_uString_newFromAscii(ustrDottedInetAddr,inet_ntoa(pSystemInetAddr->sin_addr));
++    char buf[INET_ADDRSTRLEN];
++    auto const text = inet_ntop(AF_INET, &pSystemInetAddr->sin_addr, buf, INET_ADDRSTRLEN);
++    assert(text != nullptr);
++    rtl_uString_newFromAscii(ustrDottedInetAddr,text);
+ 
+     return osl_Socket_Ok;
+ 
+diff --git a/sal/qa/osl/socket.cxx b/sal/qa/osl/socket.cxx
+new file mode 100644
+index 000000000000..ed31c9ede7ae
+--- /dev/null
++++ b/sal/qa/osl/socket.cxx
+@@ -0,0 +1,58 @@
++/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
++/*
++ * This file is part of the LibreOffice project.
++ *
++ * This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
++ */
++
++#include <cppunit/TestAssert.h>
++#include <cppunit/TestFixture.h>
++#include <cppunit/extensions/HelperMacros.h>
++
++#include <osl/socket.h>
++#include <rtl/ustring.hxx>
++
++namespace
++{
++class SocketTest : public CppUnit::TestFixture
++{
++    CPPUNIT_TEST_SUITE(SocketTest);
++    CPPUNIT_TEST(test_createInetSocketAddr);
++    CPPUNIT_TEST(test_createInetBroadcastAddr);
++    CPPUNIT_TEST_SUITE_END();
++
++    void test_createInetSocketAddr()
++    {
++        OUString const in("123.4.56.78");
++        auto const addr = osl_createInetSocketAddr(in.pData, 100);
++        CPPUNIT_ASSERT(addr != nullptr);
++        CPPUNIT_ASSERT_EQUAL(osl_Socket_FamilyInet, osl_getFamilyOfSocketAddr(addr));
++        OUString out;
++        auto const res = osl_getDottedInetAddrOfSocketAddr(addr, &out.pData);
++        CPPUNIT_ASSERT_EQUAL(osl_Socket_Ok, res);
++        CPPUNIT_ASSERT_EQUAL(in, out);
++        CPPUNIT_ASSERT_EQUAL(sal_Int32(100), osl_getInetPortOfSocketAddr(addr));
++        osl_destroySocketAddr(addr);
++    }
++
++    void test_createInetBroadcastAddr()
++    {
++        OUString const in("123.4.56.78");
++        auto const addr = osl_createInetBroadcastAddr(in.pData, 100);
++        CPPUNIT_ASSERT(addr != nullptr);
++        CPPUNIT_ASSERT_EQUAL(osl_Socket_FamilyInet, osl_getFamilyOfSocketAddr(addr));
++        OUString out;
++        auto const res = osl_getDottedInetAddrOfSocketAddr(addr, &out.pData);
++        CPPUNIT_ASSERT_EQUAL(osl_Socket_Ok, res);
++        CPPUNIT_ASSERT_EQUAL(OUString("123.255.255.255"), out);
++        CPPUNIT_ASSERT_EQUAL(sal_Int32(100), osl_getInetPortOfSocketAddr(addr));
++        osl_destroySocketAddr(addr);
++    }
++};
++
++CPPUNIT_TEST_SUITE_REGISTRATION(SocketTest);
++}
++
++/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */
+-- 
+2.31.1
+

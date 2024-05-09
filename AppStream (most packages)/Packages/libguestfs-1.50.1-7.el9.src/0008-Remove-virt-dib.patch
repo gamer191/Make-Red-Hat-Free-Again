@@ -1,0 +1,63 @@
+From e916ad54c31a725cbf08fb186756d9e968ff20b2 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Tue, 7 Feb 2023 13:20:36 +0000
+Subject: [PATCH] Remove virt-dib
+
+The tool only supports an older version of the diskimage-builder
+metadata, and we do not have the time or inclination to update it to a
+newer version.
+
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1910039
+(cherry picked from commit 7503eeebede688409b2adf616d71a94e04b7f0d2)
+---
+ appliance/packagelist.in | 30 ------------------------------
+ 1 file changed, 30 deletions(-)
+
+diff --git a/appliance/packagelist.in b/appliance/packagelist.in
+index 585d52ad..20b08c47 100644
+--- a/appliance/packagelist.in
++++ b/appliance/packagelist.in
+@@ -110,7 +110,6 @@ ifelse(ARCHLINUX,1,
+   dnl syslinux has mtools as optional dependency, but in reality it's
+   dnl a hard one:
+   mtools
+-  multipath-tools  dnl for kpartx
+   nilfs-utils
+   ntfs-3g
+   ntfs-3g-system-compression
+@@ -266,35 +265,6 @@ util-linux-ng
+ xfsprogs
+ zerofree
+ 
+-dnl tools needed by virt-dib
+-ifelse(REDHAT,1,
+-  qemu-img
+-  which
+-)
+-ifelse(DEBIAN,1,
+-  qemu-utils
+-)
+-ifelse(ARCHLINUX,1,
+-  qemu
+-  which
+-)
+-ifelse(SUSE,1,
+-  qemu-tools
+-  which
+-)
+-ifelse(FRUGALWARE,1,
+-  qemu
+-  which
+-)
+-ifelse(MAGEIA,1,
+-  qemu-img
+-  which
+-)
+-curl
+-kpartx
+-dnl (virt-dib) tools optionally used for elements
+-debootstrap
+-
+ dnl exFAT is not usually available in free software repos
+ exfat-fuse
+ exfat-utils

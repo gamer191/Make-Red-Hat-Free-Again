@@ -1,0 +1,162 @@
+From d015c300eb0d6ac1d366cf02b15b7aade7e3063a Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 14 Dec 2023 09:03:49 +0000
+Subject: [PATCH] Update common submodule
+
+The list of patches is below.  The one which matters for guestfish is
+addition of --key all:... selector.
+
+Andrey Drobyshev (1):
+      mldrivers: look for bootloader config in /boot/grub/grub.cfg in case of UEFI
+
+Richard W.M. Jones (5):
+      mlxml: Include <libxml/parser.h> for xmlReadMemory
+      options/keys.c: Rewrite confusing match statement
+      options: Rewrite --key documentation fragment
+      options: Allow --key all:SELECTOR to be used to match any device
+      mltools/libosinfo-c.c: Fix off-by-one error
+
+Fixes: https://issues.redhat.com/browse/RHEL-19367
+(cherry picked from commit 7fd41b5a02b7a9d217150fa49940115a98aae329)
+---
+ common | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule common 9a8ba593..0dba002c:
+diff --git a/common/mldrivers/linux_bootloaders.ml b/common/mldrivers/linux_bootloaders.ml
+index 6f8857ef..91c5ab9e 100644
+--- a/common/mldrivers/linux_bootloaders.ml
++++ b/common/mldrivers/linux_bootloaders.ml
+@@ -375,6 +375,18 @@ let detect_bootloader (g : G.guestfs) root i_firmware =
+     with G.Error msg ->
+       error (f_"could not find bootloader mount point (%s): %s") mp msg in
+ 
++  (*
++   * Workaround for older UEFI-based Debian which may not have
++   * /boot/efi/EFI/debian/grub.cfg.
++   *)
++  let paths =
++    if g#exists "/boot/grub/grub.cfg" then
++      match i_firmware with
++      | Firmware.I_BIOS -> paths
++      | I_UEFI _ -> paths @ ["/boot/grub/grub.cfg"]
++    else paths
++  in
++
+   (* We can determine if the bootloader config file is grub 1 or
+    * grub 2 just by looking at the filename.
+    *)
+diff --git a/common/mltools/libosinfo-c.c b/common/mltools/libosinfo-c.c
+index 93357fd9..a48c8989 100644
+--- a/common/mltools/libosinfo-c.c
++++ b/common/mltools/libosinfo-c.c
+@@ -296,7 +296,7 @@ v2v_osinfo_os_get_device_drivers (value osv)
+ 
+     driver = OSINFO_DEVICE_DRIVER(osinfo_list_get_nth (OSINFO_LIST(list), i));
+ 
+-    vi = caml_alloc (6, 0);
++    vi = caml_alloc (7, 0);
+     str = osinfo_device_driver_get_architecture (driver);
+     copyv = caml_copy_string (str);
+     Store_field (vi, 0, copyv);
+diff --git a/common/mlxml/xml-c.c b/common/mlxml/xml-c.c
+index 715c3bb2..e024bd8a 100644
+--- a/common/mlxml/xml-c.c
++++ b/common/mlxml/xml-c.c
+@@ -34,6 +34,7 @@
+ #include <caml/memory.h>
+ #include <caml/mlvalues.h>
+ 
++#include <libxml/parser.h>
+ #include <libxml/xpath.h>
+ #include <libxml/xpathInternals.h>
+ #include <libxml/uri.h>
+diff --git a/common/options/key-option.pod b/common/options/key-option.pod
+index 6bc04df1..1470d863 100644
+--- a/common/options/key-option.pod
++++ b/common/options/key-option.pod
+@@ -1,22 +1,37 @@
+ =item B<--key> SELECTOR
+ 
+ Specify a key for LUKS, to automatically open a LUKS device when using
+-the inspection.  C<ID> can be either the libguestfs device name, or
+-the UUID of the LUKS device.
++the inspection.
+ 
+ =over 4
+ 
+-=item B<--key> C<ID>:key:KEY_STRING
++=item B<--key> NAMEB<:key:>KEY_STRING
++
++=item B<--key> UUIDB<:key:>KEY_STRING
++
++=item B<--key> B<all:key:>KEY_STRING
++
++C<NAME> is the libguestfs device name (eg. C</dev/sda1>).  C<UUID> is
++the device UUID.  C<all> means try the key against any encrypted
++device.
+ 
+ Use the specified C<KEY_STRING> as passphrase.
+ 
+-=item B<--key> C<ID>:file:FILENAME
++=item B<--key> NAMEB<:file:>FILENAME
++
++=item B<--key> UUIDB<:file:>FILENAME
++
++=item B<--key> B<all:file:>FILENAME
+ 
+ Read the passphrase from F<FILENAME>.
+ 
+-=item B<--key> C<ID>:clevis
++=item B<--key> NAMEB<:clevis>
+ 
+-Attempt passphrase-less unlocking for C<ID> with Clevis, over the
++=item B<--key> UUIDB<:clevis>
++
++=item B<--key> B<all:clevis>
++
++Attempt passphrase-less unlocking for the device with Clevis, over the
+ network.  Please refer to L<guestfs(3)/ENCRYPTED DISKS> for more
+ information on network-bound disk encryption (NBDE).
+ 
+diff --git a/common/options/keys.c b/common/options/keys.c
+index 52b27369..87acba51 100644
+--- a/common/options/keys.c
++++ b/common/options/keys.c
+@@ -20,6 +20,7 @@
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <stdbool.h>
+ #include <unistd.h>
+ #include <termios.h>
+ #include <string.h>
+@@ -152,9 +153,13 @@ get_keys (struct key_store *ks, const char *device, const char *uuid,
+   if (ks) {
+     for (i = 0; i < ks->nr_keys; ++i) {
+       struct key_store_key *key = &ks->keys[i];
++      bool key_id_matches_this_device;
+ 
+-      if (STRNEQ (key->id, device) && (!uuid || STRNEQ (key->id, uuid)))
+-        continue;
++      key_id_matches_this_device =
++	STREQ (key->id, "all") || /* special string "all" matches any device */
++	STREQ (key->id, device) ||
++	(uuid && STREQ (key->id, uuid));
++      if (!key_id_matches_this_device) continue;
+ 
+       switch (key->type) {
+       case key_string:
+diff --git a/common/options/options.h b/common/options/options.h
+index 94e8b9ee..dcb15c28 100644
+--- a/common/options/options.h
++++ b/common/options/options.h
+@@ -109,6 +109,8 @@ struct key_store_key {
+    * device name, or the UUID.
+    *
+    * There may be multiple matching devices in the list.
++   *
++   * This may be the special string "all" which matches any device.
+    */
+   char *id;
+ 

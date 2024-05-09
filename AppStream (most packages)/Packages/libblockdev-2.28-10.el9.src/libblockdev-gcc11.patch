@@ -1,0 +1,15 @@
+diff --git a/src/plugins/kbd.c b/src/plugins/kbd.c
+index a2908ec..97abd3b 100644
+--- a/src/plugins/kbd.c
++++ b/src/plugins/kbd.c
+@@ -732,6 +732,10 @@ static gboolean wait_for_file (const char *filename) {
+  *
+  * Tech category: %BD_KBD_TECH_BCACHE-%BD_KBD_TECH_MODE_CREATE
+  */
++/* This triggers a known false positive warning in gcc-11.  It's being
++   addressed upstream, but until the fix is available, this works around
++   the false positive.  */
++__attribute__ ((optimize ("-O1")))
+ gboolean bd_kbd_bcache_create (const gchar *backing_device, const gchar *cache_device, const BDExtraArg **extra, const gchar **bcache_device, GError **error) {
+     const gchar *argv[6] = {"make-bcache", "-B", backing_device, "-C", cache_device, NULL};
+     gboolean success = FALSE;

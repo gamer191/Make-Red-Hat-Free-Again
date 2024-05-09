@@ -1,0 +1,111 @@
+From 748a9fd3a8e90e52a126190dbe0d97da6e0941ff Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Wed, 11 Aug 2021 20:55:14 +0100
+Subject: [PATCH] make --with-idlc-cpp=cpp work for gcc cpp as a ucpp
+ replacement
+
+e.g. the example of
+https://bugs.launchpad.net/ubuntu/+source/libreoffice/+bug/1524638
+has the same output .urd using cpp with these flags as ucpp created
+
+Change-Id: Iadfd2deba7d365c66c3260fd6736c031987e107c
+---
+ config_host.mk.in           |  1 +
+ configure.ac                | 14 ++++++++++++++
+ idlc/Executable_idlc.mk     |  8 ++++++++
+ idlc/source/idlccompile.cxx |  8 ++++++++
+ 4 files changed, 31 insertions(+)
+
+diff --git a/config_host.mk.in b/config_host.mk.in
+index 58ca1d1c14fb..6810660067b0 100644
+--- a/config_host.mk.in
++++ b/config_host.mk.in
+@@ -635,6 +635,7 @@ export SYSTEM_RHINO=@SYSTEM_RHINO@
+ export SYSTEM_SERF=@SYSTEM_SERF@
+ export SYSTEM_STAROFFICE=@SYSTEM_STAROFFICE@
+ export SYSTEM_UCPP=@SYSTEM_UCPP@
++export SYSTEM_UCPP_IS_GCC=@SYSTEM_UCPP_IS_GCC@
+ export SYSTEM_VISIO=@SYSTEM_VISIO@
+ export SYSTEM_WPD=@SYSTEM_WPD@
+ export SYSTEM_WPG=@SYSTEM_WPG@
+diff --git a/configure.ac b/configure.ac
+index 3d2bf7e24555..ac226fd46ace 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -8807,9 +8807,22 @@ dnl ===================================================================
+ dnl Check for C preprocessor to use
+ dnl ===================================================================
+ AC_MSG_CHECKING([which C preprocessor to use in idlc])
++SYSTEM_UCPP_IS_GCC=
+ if test -n "$with_idlc_cpp"; then
+     AC_MSG_RESULT([$with_idlc_cpp])
+     AC_PATH_PROG(SYSTEM_UCPP, $with_idlc_cpp)
++    AC_MSG_CHECKING([if $with_idlc_cpp is GCC CPP])
++    # ucpp will accept -v (to output version), warn about the others as unknown
++    # and return 1 (due to -v)
++    # gcc will accept -v (as verbose), --version (to output version) and -nostdinc
++    # and return 0 (due to --version ) if all options are supported
++    $SYSTEM_UCPP -v --version -nostdinc >/dev/null 2>/dev/null
++    if test $? -eq 0;  then
++        SYSTEM_UCPP_IS_GCC=TRUE
++        AC_MSG_RESULT([yes])
++    else
++        AC_MSG_RESULT([no])
++    fi
+ else
+     AC_MSG_RESULT([ucpp])
+     AC_MSG_CHECKING([which ucpp tp use])
+@@ -8822,6 +8835,7 @@ else
+     fi
+ fi
+ AC_SUBST(SYSTEM_UCPP)
++AC_SUBST(SYSTEM_UCPP_IS_GCC)
+ 
+ dnl ===================================================================
+ dnl Check for epm (not needed for Windows)
+diff --git a/idlc/Executable_idlc.mk b/idlc/Executable_idlc.mk
+index e194e9049c77..f2f79dcb8911 100644
+--- a/idlc/Executable_idlc.mk
++++ b/idlc/Executable_idlc.mk
+@@ -35,10 +35,18 @@ $(eval $(call gb_Executable_add_scanners,idlc,\
+ ))
+ 
+ ifneq (,$(SYSTEM_UCPP))
++
+ $(eval $(call gb_Executable_add_defs,idlc,\
+     -DSYSTEM_UCPP \
+     -DUCPP=\"file://$(SYSTEM_UCPP)\" \
+ ))
++
++ifneq ($(SYSTEM_UCPP_IS_GCC),)
++$(eval $(call gb_Executable_add_defs,idlc,\
++    -DSYSTEM_UCPP_IS_GCC \
++))
++endif
++
+ endif
+ 
+ $(eval $(call gb_Executable_add_exception_objects,idlc,\
+diff --git a/idlc/source/idlccompile.cxx b/idlc/source/idlccompile.cxx
+index bf3325d6821a..1902d63e0cad 100644
+--- a/idlc/source/idlccompile.cxx
++++ b/idlc/source/idlccompile.cxx
+@@ -237,7 +237,15 @@ sal_Int32 compileFile(const OString * pathname)
+     ::std::vector< OUString> lCppArgs;
+     lCppArgs.emplace_back("-DIDL");
+     lCppArgs.emplace_back("-C");
++#ifdef SYSTEM_UCPP_IS_GCC
++    // -nostdinc Do not search the standard system directories for header files
++    lCppArgs.emplace_back("-nostdinc");
++    // with gcc cpp, even when not explicitly including anything, /usr/include/stdc-predef.h
++    // gets inserted without -nostdinc
++#else
++    // -zI Do not use the standard (compile-time) include path.
+     lCppArgs.emplace_back("-zI");
++#endif
+ 
+     Options* pOptions = idlc()->getOptions();
+ 
+-- 
+2.31.1
+

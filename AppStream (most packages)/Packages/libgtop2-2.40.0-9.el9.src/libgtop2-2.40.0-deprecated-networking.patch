@@ -1,0 +1,167 @@
+From 3cb07d9c440d7bf0c4f8877a68a8d7467b97a238 Mon Sep 17 00:00:00 2001
+From: David King <amigadave@amigadave.com>
+Date: Mon, 6 Jun 2022 17:30:40 +0100
+Subject: [PATCH] Avoid some deprecated networking functions
+
+rpminspect trips up on some old networking functions in libgtop, which
+are mentioned as deprecated in the Linux man pages.
+
+inet_ntoa() only works on IPv4 addresses, whereas the newer inet_ntop()
+works on both IPv4 and IPv6 addresses, so use inet_ntop() instead.
+Similarly, use getaddrinfo() rather than gethostbyname(), and avoid
+inet_addr() entirely.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=2050712
+---
+ examples/netload.c       | 10 +++-------
+ src/daemon/gnuserv.c     | 20 ++++++++++++++------
+ sysdeps/common/gnuslib.c | 16 ++++++++++------
+ 3 files changed, 27 insertions(+), 19 deletions(-)
+
+diff --git a/examples/netload.c b/examples/netload.c
+index 979b245d..520b5040 100644
+--- a/examples/netload.c
++++ b/examples/netload.c
+@@ -66,7 +66,7 @@ main (int argc, char *argv [])
+ 	glibtop_netload netload;
+ 	unsigned method, count, port;
+ 	struct in_addr addr, subnet;
+-	char *address_string, *subnet_string;
++	char address_string[INET_ADDRSTRLEN], subnet_string[INET_ADDRSTRLEN];
+ 	char address6_string[INET6_ADDRSTRLEN], prefix6_string[INET6_ADDRSTRLEN];
+ 	char *hwaddress_string;
+ 	char buffer [BUFSIZ];
+@@ -105,9 +105,8 @@ main (int argc, char *argv [])
+ 	addr.s_addr = netload.address;
+ 	subnet.s_addr = netload.subnet;
+ 
+-	address_string = g_strdup (inet_ntoa (addr));
+-	subnet_string  = g_strdup (inet_ntoa (subnet));
+-
++	inet_ntop (AF_INET, &addr,   address_string, INET_ADDRSTRLEN);
++	inet_ntop (AF_INET, &subnet, subnet_string,  INET_ADDRSTRLEN);
+ 	inet_ntop (AF_INET6, netload.address6, address6_string, INET6_ADDRSTRLEN);
+ 	inet_ntop (AF_INET6, netload.prefix6,  prefix6_string,  INET6_ADDRSTRLEN);
+ 
+@@ -153,9 +152,6 @@ main (int argc, char *argv [])
+ 		hwaddress_string);
+ 
+ 
+-	g_free (address_string);
+-	g_free (subnet_string);
+-
+ 	glibtop_close ();
+ 
+ 	exit (0);
+diff --git a/src/daemon/gnuserv.c b/src/daemon/gnuserv.c
+index 78ebb643..26e9dd92 100644
+--- a/src/daemon/gnuserv.c
++++ b/src/daemon/gnuserv.c
+@@ -392,6 +392,7 @@ handle_internet_request (int ls)
+     int s;
+     size_t addrlen = sizeof (struct sockaddr_in);
+     struct sockaddr_in peer;	/* for peer socket address */
++    char addrstr[addrlen];
+     pid_t pid;
+ 
+     memset ((char *) &peer, 0, sizeof (struct sockaddr_in));
+@@ -401,21 +402,24 @@ handle_internet_request (int ls)
+ 	exit (1);
+     }
+ 
++    /* TODO: Check errno. */
++    inet_ntop (AF_INET, &peer, addrstr, addrlen);
++
+     if (verbose_output)
+ 	syslog_message (LOG_INFO, "Connection was made from %s port %u.",
+-			inet_ntoa (peer.sin_addr), ntohs (peer.sin_port));
++			addrstr, ntohs (peer.sin_port));
+ 
+     /* Check that access is allowed - if not return crud to the client */
+     if (!permitted (peer.sin_addr.s_addr, s)) {
+ 	close (s);
+ 	syslog_message (LOG_CRIT, "Refused connection from %s.",
+-			inet_ntoa (peer.sin_addr));
++			addrstr);
+ 	return;
+     }			/* if */
+ 
+     if (verbose_output)
+ 	syslog_message (LOG_INFO, "Accepted connection from %s port %u.",
+-			inet_ntoa (peer.sin_addr), ntohs (peer.sin_port));
++			addrstr, ntohs (peer.sin_port));
+ 
+     pid = fork ();
+ 
+@@ -436,7 +440,7 @@ handle_internet_request (int ls)
+ 
+     if (verbose_output)
+ 	syslog_message (LOG_INFO, "Closed connection to %s port %u.",
+-			inet_ntoa (peer.sin_addr), ntohs (peer.sin_port));
++			addrstr, ntohs (peer.sin_port));
+ 
+     _exit (0);
+ }				/* handle_internet_request */
+@@ -560,6 +564,7 @@ main (int argc, char **argv)
+     if (invoked_from_inetd) {
+ 	size_t addrlen = sizeof (struct sockaddr_in);
+ 	struct sockaddr_in peer;
++	char addrstr[addrlen];
+ 
+ 	memset ((char *) &peer, 0, sizeof (struct sockaddr_in));
+ 
+@@ -568,15 +573,18 @@ main (int argc, char **argv)
+ 	    exit (1);
+ 	}
+ 
++	/* TODO: Check errno. */
++	inet_ntop (AF_INET, &peer, addrstr, addrlen);
++
+ 	if (verbose_output)
+ 	    syslog_message (LOG_INFO, "Connection was made from %s port %u.",
+-			    inet_ntoa (peer.sin_addr), ntohs (peer.sin_port));
++			    addrstr, ntohs (peer.sin_port));
+ 
+ 	/* Check that access is allowed - if not return crud to the client */
+ 	if (!permitted (peer.sin_addr.s_addr, 0)) {
+ 	    close (0);
+ 	    syslog_message (LOG_CRIT, "Refused connection from %s.",
+-			    inet_ntoa (peer.sin_addr));
++			    addrstr);
+ 	    exit (1);
+ 	}
+ 
+diff --git a/sysdeps/common/gnuslib.c b/sysdeps/common/gnuslib.c
+index 79295485..3f994f2c 100644
+--- a/sysdeps/common/gnuslib.c
++++ b/sysdeps/common/gnuslib.c
+@@ -202,16 +202,20 @@ connect_to_unix_server (void)
+ long
+ glibtop_internet_addr (const char *host)
+ {
+-	struct hostent *hp;	/* pointer to host info for remote host */
++	/* specify IPv4 and TCP */
++	struct addrinfo hints = { AF_INET, SOCK_STREAM, };
++	struct addrinfo *result;/* pointer to host info for remote host */
+ 	IN_ADDR numeric_addr;	/* host address */
+ 
+-	numeric_addr = inet_addr (host);
+-	if (!NUMERIC_ADDR_ERROR)
++	if (getaddrinfo (NULL, host, &hints, &result) == 0) {
++		/* Take only the first address. */
++		struct sockaddr_in *res = (struct sockaddr_in *)result->ai_addr;
++		numeric_addr = res->sin_addr.s_addr;
++		freeaddrinfo (result);
+ 		return numeric_addr;
+-	else if ((hp = gethostbyname (host)) != NULL)
+-		return ((struct in_addr *) (hp->h_addr))->s_addr;
++	}
+ 	else {
+-		glibtop_warn_io ("gethostbyname (%s)", host);
++		glibtop_warn_io ("getaddrinfo (%s)", host);
+ 		return -1;
+ 	}
+ 
+-- 
+2.36.1
+

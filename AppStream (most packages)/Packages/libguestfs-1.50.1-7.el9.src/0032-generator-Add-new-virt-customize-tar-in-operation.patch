@@ -1,0 +1,173 @@
+From 055c43fa60c7cefbe3baf32b21cfe8ffae09bf0f Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 26 Oct 2023 19:44:03 +0100
+Subject: [PATCH] generator: Add new virt-customize --tar-in operation
+
+Using 'virt-customize --tar-in some.tar:/dir -a disk.img' will unpack
+'some.tar' into '/dir' in the guest.  Note that this will not work for
+compressed tar files as written since the underlying guestfs_tar_in
+function requires the compression type to be set explicitly and
+defaults to no compression (it does not auto-detect or default to
+compression).
+
+(cherry picked from commit b5f7b0ec18e30d25342bc322e571edf17a72974f)
+---
+ common                 |  2 +-
+ generator/customize.ml | 12 ++++++++++++
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+Submodule common e70d89a5..9a8ba593:
+diff --git a/common/mlcustomize/customize-options.pod b/common/mlcustomize/customize-options.pod
+index e658a447..ff93630d 100644
+--- a/common/mlcustomize/customize-options.pod
++++ b/common/mlcustomize/customize-options.pod
+@@ -427,6 +427,14 @@ the C<SELECTOR> field.
+ You can have multiple I<--ssh-inject> options, for different users
+ and also for more keys for each user.
+ 
++=item B<--tar-in> TARFILE:REMOTEDIR
++
++Copy local files or directories from a local tar file
++called C<TARFILE> into the disk image, placing them in the
++directory C<REMOTEDIR> (which must exist).  Note that
++the tar file must be uncompressed (F<.tar.gz> files will not work
++here)
++
+ =item B<--timezone> TIMEZONE
+ 
+ Set the default timezone of the guest to C<TIMEZONE>.  Use a location
+diff --git a/common/mlcustomize/customize-synopsis.pod b/common/mlcustomize/customize-synopsis.pod
+index 5031b015..bb0ce125 100644
+--- a/common/mlcustomize/customize-synopsis.pod
++++ b/common/mlcustomize/customize-synopsis.pod
+@@ -9,8 +9,9 @@
+     [--password USER:SELECTOR] [--root-password SELECTOR]
+     [--run SCRIPT] [--run-command 'CMD+ARGS'] [--scrub FILE]
+     [--sm-attach SELECTOR] [--sm-register] [--sm-remove]
+-    [--sm-unregister] [--ssh-inject USER[:SELECTOR]] [--truncate FILE]
+-    [--truncate-recursive PATH] [--timezone TIMEZONE] [--touch FILE]
++    [--sm-unregister] [--ssh-inject USER[:SELECTOR]]
++    [--tar-in TARFILE:REMOTEDIR] [--timezone TIMEZONE] [--touch FILE]
++    [--truncate FILE] [--truncate-recursive PATH]
+     [--uninstall PKG,PKG..] [--update] [--upload FILE:DEST]
+     [--write FILE:CONTENT] [--no-logfile]
+     [--password-crypto md5|sha256|sha512] [--no-selinux-relabel]
+diff --git a/common/mlcustomize/customize_cmdline.ml b/common/mlcustomize/customize_cmdline.ml
+index 3ce901db..245d9960 100644
+--- a/common/mlcustomize/customize_cmdline.ml
++++ b/common/mlcustomize/customize_cmdline.ml
+@@ -93,14 +93,16 @@ and op = [
+       (* --sm-unregister *)
+   | `SSHInject of string * Ssh_key.ssh_key_selector
+       (* --ssh-inject USER[:SELECTOR] *)
+-  | `Truncate of string
+-      (* --truncate FILE *)
+-  | `TruncateRecursive of string
+-      (* --truncate-recursive PATH *)
++  | `TarIn of string * string
++      (* --tar-in TARFILE:REMOTEDIR *)
+   | `Timezone of string
+       (* --timezone TIMEZONE *)
+   | `Touch of string
+       (* --touch FILE *)
++  | `Truncate of string
++      (* --truncate FILE *)
++  | `TruncateRecursive of string
++      (* --truncate-recursive PATH *)
+   | `UninstallPackages of string list
+       (* --uninstall PKG,PKG.. *)
+   | `Update
+@@ -418,17 +420,16 @@ let rec argspec () =
+     ),
+     Some "USER[:SELECTOR]", "Inject an ssh key so the given C<USER> will be able to log in over\nssh without supplying a password.  The C<USER> must exist already\nin the guest.\n\nSee L<virt-builder(1)/SSH KEYS> for the format of\nthe C<SELECTOR> field.\n\nYou can have multiple I<--ssh-inject> options, for different users\nand also for more keys for each user.";
+     (
+-      [ L"truncate" ],
+-      Getopt.String (s_"FILE", fun s -> List.push_front (`Truncate s) ops),
+-      s_"Truncate a file to zero size"
++      [ L"tar-in" ],
++      Getopt.String (
++        s_"TARFILE:REMOTEDIR",
++        fun s ->
++          let p = split_string_pair "tar-in" s in
++          List.push_front (`TarIn p) ops
++      ),
++      s_"Copy local files or directories from a tarball into image"
+     ),
+-    Some "FILE", "This command truncates C<FILE> to a zero-length file. The file must exist\nalready.";
+-    (
+-      [ L"truncate-recursive" ],
+-      Getopt.String (s_"PATH", fun s -> List.push_front (`TruncateRecursive s) ops),
+-      s_"Recursively truncate all files in directory"
+-    ),
+-    Some "PATH", "This command recursively truncates all files under C<PATH> to zero-length.";
++    Some "TARFILE:REMOTEDIR", "Copy local files or directories from a local tar file\ncalled C<TARFILE> into the disk image, placing them in the\ndirectory C<REMOTEDIR> (which must exist).  Note that\nthe tar file must be uncompressed (F<.tar.gz> files will not work\nhere)";
+     (
+       [ L"timezone" ],
+       Getopt.String (s_"TIMEZONE", fun s -> List.push_front (`Timezone s) ops),
+@@ -441,6 +442,18 @@ let rec argspec () =
+       s_"Run touch on a file"
+     ),
+     Some "FILE", "This command performs a L<touch(1)>-like operation on C<FILE>.";
++    (
++      [ L"truncate" ],
++      Getopt.String (s_"FILE", fun s -> List.push_front (`Truncate s) ops),
++      s_"Truncate a file to zero size"
++    ),
++    Some "FILE", "This command truncates C<FILE> to a zero-length file. The file must exist\nalready.";
++    (
++      [ L"truncate-recursive" ],
++      Getopt.String (s_"PATH", fun s -> List.push_front (`TruncateRecursive s) ops),
++      s_"Recursively truncate all files in directory"
++    ),
++    Some "PATH", "This command recursively truncates all files under C<PATH> to zero-length.";
+     (
+       [ L"uninstall" ],
+       Getopt.String (
+diff --git a/common/mlcustomize/customize_cmdline.mli b/common/mlcustomize/customize_cmdline.mli
+index 112b74dc..51a156ea 100644
+--- a/common/mlcustomize/customize_cmdline.mli
++++ b/common/mlcustomize/customize_cmdline.mli
+@@ -85,14 +85,16 @@ and op = [
+       (* --sm-unregister *)
+   | `SSHInject of string * Ssh_key.ssh_key_selector
+       (* --ssh-inject USER[:SELECTOR] *)
+-  | `Truncate of string
+-      (* --truncate FILE *)
+-  | `TruncateRecursive of string
+-      (* --truncate-recursive PATH *)
++  | `TarIn of string * string
++      (* --tar-in TARFILE:REMOTEDIR *)
+   | `Timezone of string
+       (* --timezone TIMEZONE *)
+   | `Touch of string
+       (* --touch FILE *)
++  | `Truncate of string
++      (* --truncate FILE *)
++  | `TruncateRecursive of string
++      (* --truncate-recursive PATH *)
+   | `UninstallPackages of string list
+       (* --uninstall PKG,PKG.. *)
+   | `Update
+diff --git a/generator/customize.ml b/generator/customize.ml
+index c3dd259e..e64b45c0 100644
+--- a/generator/customize.ml
++++ b/generator/customize.ml
+@@ -510,6 +510,18 @@ You can have multiple I<--ssh-inject> options, for different users
+ and also for more keys for each user."
+   };
+ 
++  { op_name = "tar-in";
++    op_type = StringPair "TARFILE:REMOTEDIR";
++    op_discrim = "`TarIn";
++    op_shortdesc = "Copy local files or directories from a tarball into image";
++    op_pod_longdesc = "\
++Copy local files or directories from a local tar file
++called C<TARFILE> into the disk image, placing them in the
++directory C<REMOTEDIR> (which must exist).  Note that
++the tar file must be uncompressed (F<.tar.gz> files will not work
++here)";
++  };
++
+   { op_name = "timezone";
+     op_type = String "TIMEZONE";
+     op_discrim = "`Timezone";

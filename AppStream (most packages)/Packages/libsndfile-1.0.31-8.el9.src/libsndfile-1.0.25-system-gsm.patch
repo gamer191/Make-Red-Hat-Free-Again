@@ -1,0 +1,103 @@
+diff -up libsndfile-1.0.31/CMakeLists.txt.nobundlegsm libsndfile-1.0.31/CMakeLists.txt
+--- libsndfile-1.0.31/CMakeLists.txt.nobundlegsm	2021-01-24 13:22:23.000000000 +0100
++++ libsndfile-1.0.31/CMakeLists.txt	2021-01-27 12:54:51.112184824 +0100
+@@ -230,7 +230,6 @@ add_library (sndfile
+ 	src/double64.c
+ 	src/ima_adpcm.c
+ 	src/ms_adpcm.c
+-	src/gsm610.c
+ 	src/dwvw.c
+ 	src/vox_adpcm.c
+ 	src/interleave.c
+@@ -286,23 +285,6 @@ add_library (sndfile
+ 	src/ogg_opus.c
+ 	src/ogg_vcomment.c
+ 	src/nms_adpcm.c
+-	src/GSM610/config.h
+-	src/GSM610/gsm.h
+-	src/GSM610/gsm610_priv.h
+-	src/GSM610/add.c
+-	src/GSM610/code.c
+-	src/GSM610/decode.c
+-	src/GSM610/gsm_create.c
+-	src/GSM610/gsm_decode.c
+-	src/GSM610/gsm_destroy.c
+-	src/GSM610/gsm_encode.c
+-	src/GSM610/gsm_option.c
+-	src/GSM610/long_term.c
+-	src/GSM610/lpc.c
+-	src/GSM610/preprocess.c
+-	src/GSM610/rpe.c
+-	src/GSM610/short_term.c
+-	src/GSM610/table.c
+ 	src/G72x/g72x.h
+ 	src/G72x/g72x_priv.h
+ 	src/G72x/g721.c
+@@ -349,6 +331,7 @@ target_link_libraries (sndfile
+ 		$<$<BOOL:${HAVE_EXTERNAL_XIPH_LIBS}>:FLAC::FLAC>
+ 		$<$<AND:$<BOOL:${ENABLE_EXPERIMENTAL}>,$<BOOL:${HAVE_EXTERNAL_XIPH_LIBS}>,$<BOOL:${HAVE_SPEEX}>>:Speex::Speex>
+ 		$<$<BOOL:${HAVE_EXTERNAL_XIPH_LIBS}>:Opus::opus>
++		-lgsm
+ 	)
+ set_target_properties (sndfile PROPERTIES
+ 	PUBLIC_HEADER "${sndfile_HDRS}"
+diff -up libsndfile-1.0.31/Makefile.am.nobundlegsm libsndfile-1.0.31/Makefile.am
+--- libsndfile-1.0.31/Makefile.am.nobundlegsm	2021-01-27 12:57:08.819482207 +0100
++++ libsndfile-1.0.31/Makefile.am	2021-01-27 12:57:08.847481859 +0100
+@@ -46,7 +46,6 @@ SYMBOL_FILES = src/Symbols.gnu-binutils
+ 
+ EXTRA_DIST += include/sndfile.h.in src/config.h.in src/test_endswap.tpl src/test_endswap.def \
+ 	$(SYMBOL_FILES) src/create_symbols_file.py src/binheader_writef_check.py \
+-	src/GSM610/README src/GSM610/COPYRIGHT src/GSM610/ChangeLog \
+ 	src/G72x/README src/G72x/README.original src/G72x/ChangeLog \
+ 	src/make-static-lib-hidden-privates.sh \
+ 	src/config.h.cmake
+@@ -71,7 +70,7 @@ src_libsndfile_la_SOURCES = src/sndfile.
+ 	src/ogg_vorbis.c src/ogg_speex.c src/ogg_pcm.c src/ogg_opus.c src/ogg_vcomment.c \
+ 	src/common.h src/sfconfig.h src/sfendian.h src/wavlike.h src/sf_unistd.h src/ogg.h src/chanmap.h src/ogg_vcomment.h
+ nodist_src_libsndfile_la_SOURCES = $(nodist_include_HEADERS)
+-src_libsndfile_la_LIBADD = src/GSM610/libgsm.la src/G72x/libg72x.la src/ALAC/libalac.la \
++src_libsndfile_la_LIBADD = -lgsm src/G72x/libg72x.la src/ALAC/libalac.la \
+ 	src/libcommon.la $(EXTERNAL_XIPH_LIBS) -lm
+ EXTRA_src_libsndfile_la_DEPENDENCIES = $(SYMBOL_FILES)
+ 
+@@ -90,17 +89,6 @@ src_test_main_SOURCES = src/test_main.c
+ 	src/test_binheader_writef.c src/test_nms_adpcm.c
+ src_test_main_LDADD = src/libcommon.la
+ 
+-##############
+-# src/GSM610 #
+-##############
+-
+-noinst_LTLIBRARIES += src/GSM610/libgsm.la
+-src_GSM610_libgsm_la_SOURCES = src/GSM610/config.h src/GSM610/gsm.h src/GSM610/gsm610_priv.h \
+-	src/GSM610/add.c src/GSM610/code.c src/GSM610/decode.c src/GSM610/gsm_create.c \
+-	src/GSM610/gsm_decode.c src/GSM610/gsm_destroy.c src/GSM610/gsm_encode.c \
+-	src/GSM610/gsm_option.c src/GSM610/long_term.c src/GSM610/lpc.c src/GSM610/preprocess.c \
+-	src/GSM610/rpe.c src/GSM610/short_term.c src/GSM610/table.c
+-
+ ############
+ # src/G72x #
+ ############
+diff -up libsndfile-1.0.31/src/gsm610.c.nobundlegsm libsndfile-1.0.31/src/gsm610.c
+--- libsndfile-1.0.31/src/gsm610.c.nobundlegsm	2021-01-23 17:12:45.000000000 +0100
++++ libsndfile-1.0.31/src/gsm610.c	2021-01-27 12:54:51.112184824 +0100
+@@ -27,7 +27,7 @@
+ #include "sfendian.h"
+ #include "common.h"
+ #include "wavlike.h"
+-#include "GSM610/gsm.h"
++#include <gsm.h>
+ 
+ #define	GSM610_BLOCKSIZE		33
+ #define	GSM610_SAMPLES			160
+@@ -391,7 +391,8 @@ gsm610_seek	(SF_PRIVATE *psf, int UNUSED
+ 		psf_fseek (psf, psf->dataoffset, SEEK_SET) ;
+ 		pgsm610->blockcount = 0 ;
+ 
+-		gsm_init (pgsm610->gsm_data) ;
++                gsm_destroy (pgsm610->gsm_data) ;
++                pgsm610->gsm_data = gsm_create () ;
+ 		if ((SF_CONTAINER (psf->sf.format)) == SF_FORMAT_WAV ||
+ 				(SF_CONTAINER (psf->sf.format)) == SF_FORMAT_W64)
+ 			gsm_option (pgsm610->gsm_data, GSM_OPT_WAV49, &true_flag) ;

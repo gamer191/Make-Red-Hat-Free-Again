@@ -1,0 +1,119 @@
+From 54a9e48e5e1088a1b781c30b49bce695007e12fc Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 22 May 2023 16:40:21 +0100
+Subject: [PATCH] Replace Pervasives.* with Stdlib.*
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Since OCaml 4.07 (released 2018-07-10) the always-loaded standard
+library module has been called Stdlib.  The old Pervasives module was
+finally removed in OCaml 5.
+
+$ perl -pi.bak -e 's/Pervasives\./Stdlib./g' -- `git ls-files`
+
+OCaml >= 4.07 is now required.
+
+Also update the common submodule with:
+
+  commit d61cd820b49e403848d15c5deaccbf8dd7045370
+  Author: Jürgen Hötzel
+  Date:   Sat May 20 18:16:40 2023 +0200
+
+    Add support for OCaml 5.0
+
+(cherry picked from commit 3cb094083e61203a8751bcf31dcb56a47dec6840)
+---
+ common                    | 2 +-
+ daemon/chroot.ml          | 2 +-
+ docs/guestfs-building.pod | 2 +-
+ generator/pr.ml           | 4 ++--
+ m4/guestfs-ocaml.m4       | 6 +++---
+ 5 files changed, 8 insertions(+), 8 deletions(-)
+
+Submodule common b636c3f2..d61cd820:
+diff --git a/common/mlstdutils/std_utils.ml b/common/mlstdutils/std_utils.ml
+index 0d2fa22f..86b21a7c 100644
+--- a/common/mlstdutils/std_utils.ml
++++ b/common/mlstdutils/std_utils.ml
+@@ -341,12 +341,12 @@ module List = struct
+       | x::xs, y::ys, z::zs -> (x, y, z) :: combine3 xs ys zs
+       | _ -> invalid_arg "combine3"
+ 
+-    let rec assoc_lbl ?(cmp = Pervasives.compare) ~default x = function
++    let rec assoc_lbl ?(cmp = Stdlib.compare) ~default x = function
+       | [] -> default
+       | (y, y') :: _ when cmp x y = 0 -> y'
+       | _ :: ys -> assoc_lbl ~cmp ~default x ys
+ 
+-    let uniq ?(cmp = Pervasives.compare) xs =
++    let uniq ?(cmp = Stdlib.compare) xs =
+       let rec loop acc = function
+         | [] -> acc
+         | [x] -> x :: acc
+diff --git a/daemon/chroot.ml b/daemon/chroot.ml
+index 62f387ee..087b5031 100644
+--- a/daemon/chroot.ml
++++ b/daemon/chroot.ml
+@@ -51,7 +51,7 @@ let f t func arg =
+     try
+       let chan = out_channel_of_descr wfd in
+       output_value chan ret;
+-      Pervasives.flush chan;
++      Stdlib.flush chan;
+       Exit._exit 0
+     with
+       exn ->
+diff --git a/docs/guestfs-building.pod b/docs/guestfs-building.pod
+index b9bc885a..33703a96 100644
+--- a/docs/guestfs-building.pod
++++ b/docs/guestfs-building.pod
+@@ -119,7 +119,7 @@ virt tools which are still written in Perl.
+ 
+ I<Required>.  Part of Perl core.
+ 
+-=item OCaml E<ge> 4.04
++=item OCaml E<ge> 4.07
+ 
+ =item OCaml findlib
+ 
+diff --git a/generator/pr.ml b/generator/pr.ml
+index d7e6eba3..ed6e9372 100644
+--- a/generator/pr.ml
++++ b/generator/pr.ml
+@@ -25,7 +25,7 @@ open Std_utils
+ open Utils
+ 
+ (* Output channel, 'pr' prints to this. *)
+-let chan = ref Pervasives.stdout
++let chan = ref Stdlib.stdout
+ 
+ (* Number of lines generated. *)
+ let lines = ref 0
+@@ -53,7 +53,7 @@ let output_to ?(perm = 0o444) filename k =
+   chan := open_out filename_new;
+   k ();
+   close_out !chan;
+-  chan := Pervasives.stdout;
++  chan := Stdlib.stdout;
+ 
+   (* Is the new file different from the current file? *)
+   if Sys.file_exists filename && files_equal filename filename_new then
+diff --git a/m4/guestfs-ocaml.m4 b/m4/guestfs-ocaml.m4
+index 51072c1a..e850fb8c 100644
+--- a/m4/guestfs-ocaml.m4
++++ b/m4/guestfs-ocaml.m4
+@@ -38,10 +38,10 @@ AC_ARG_ENABLE([ocaml],
+     [],
+     [enable_ocaml=yes])
+ 
+-dnl OCaml >= 4.04 is required.
+-ocaml_ver_str=4.04
++dnl OCaml >= 4.07 is required.
++ocaml_ver_str=4.07
+ ocaml_min_major=4
+-ocaml_min_minor=4
++ocaml_min_minor=7
+ AC_MSG_CHECKING([if OCaml version >= $ocaml_ver_str])
+ ocaml_major="`echo $OCAMLVERSION | $AWK -F. '{print $1}'`"
+ ocaml_minor="`echo $OCAMLVERSION | $AWK -F. '{print $2}' | sed 's/^0//'`"

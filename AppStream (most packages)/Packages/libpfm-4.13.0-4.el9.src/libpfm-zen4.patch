@@ -1,0 +1,29 @@
+commit 1befa3d200cc17d5a278fcb2f597c4876c58f949
+Author: Stephane Eranian <eranian@gmail.com>
+Date:   Tue Apr 25 00:35:41 2023 -0700
+
+    fix AMD Zen3/Zen4 detection
+    
+    To cover more models of Zen4.
+    
+    Signed-off-by: Stephane Eranian <eranian@gmail.com>
+
+diff --git a/lib/pfmlib_amd64.c b/lib/pfmlib_amd64.c
+index e51a43d..0c6702d 100644
+--- a/lib/pfmlib_amd64.c
++++ b/lib/pfmlib_amd64.c
+@@ -181,10 +181,10 @@ amd64_get_revision(pfm_amd64_config_t *cfg)
+ 	} else if (cfg->family == 22) { /* family 16h */
+ 		rev = PFM_PMU_AMD64_FAM16H;
+ 	} else if (cfg->family == 25) { /* family 19h */
+-                if (cfg->model <= 0x0f || (cfg->model >= 0x20 && cfg->model <= 0x5f)) {
+-                  rev = PFM_PMU_AMD64_FAM19H_ZEN3;
+-		} else if (cfg->model == 17) {
+-                        rev = PFM_PMU_AMD64_FAM19H_ZEN4;
++                if (cfg->model >= 0x60 || (cfg->model >= 0x10 && cfg->model <= 0x1f)) {
++			rev = PFM_PMU_AMD64_FAM19H_ZEN4;
++		} else {
++			rev = PFM_PMU_AMD64_FAM19H_ZEN3;
+                 }
+         }
+ 

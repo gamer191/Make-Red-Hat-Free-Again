@@ -1,0 +1,72 @@
+From 94b5b99c96ad80e659ffa8dbe8045b65ab4cc791 Mon Sep 17 00:00:00 2001
+From: Eike Rathke <erack@redhat.com>
+Date: Fri, 17 Feb 2023 12:03:54 +0100
+Subject: [PATCH 2/3] Stack check safety belt before fishing in muddy waters
+
+Have it hit hard in debug builds.
+
+Change-Id: I9ea54844a0661fd7a75616a2876983a74b2d5bad
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/147205
+Reviewed-by: Eike Rathke <erack@redhat.com>
+Tested-by: Jenkins
+(cherry picked from commit 9d91fbba6f374fa1c10b38eae003da89bd4e6d4b)
+---
+ sc/source/core/inc/interpre.hxx  | 12 ++++++++++++
+ sc/source/core/tool/interpr1.cxx |  4 ++--
+ 2 files changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/sc/source/core/inc/interpre.hxx b/sc/source/core/inc/interpre.hxx
+index 4e986daf8453..3bcc9ef19fc2 100644
+--- a/sc/source/core/inc/interpre.hxx
++++ b/sc/source/core/inc/interpre.hxx
+@@ -235,6 +235,7 @@ private:
+     inline bool MustHaveParamCount( short nAct, short nMust );
+     inline bool MustHaveParamCount( short nAct, short nMust, short nMax );
+     inline bool MustHaveParamCountMin( short nAct, short nMin );
++    inline bool MustHaveParamCountMinWithStackCheck( short nAct, short nMin );
+     void PushParameterExpected();
+     void PushIllegalParameter();
+     void PushIllegalArgument();
+@@ -1089,6 +1090,17 @@ inline bool ScInterpreter::MustHaveParamCountMin( short nAct, short nMin )
+     return false;
+ }
+ 
++inline bool ScInterpreter::MustHaveParamCountMinWithStackCheck( short nAct, short nMin )
++{
++    assert(sp >= nAct);
++    if (sp < nAct)
++    {
++        PushParameterExpected();
++        return false;
++    }
++    return MustHaveParamCountMin( nAct, nMin);
++}
++
+ inline bool ScInterpreter::CheckStringPositionArgument( double & fVal )
+ {
+     if (!std::isfinite( fVal))
+diff --git a/sc/source/core/tool/interpr1.cxx b/sc/source/core/tool/interpr1.cxx
+index 4f2789160a1c..5e2f36685024 100644
+--- a/sc/source/core/tool/interpr1.cxx
++++ b/sc/source/core/tool/interpr1.cxx
+@@ -7547,7 +7547,7 @@ void ScInterpreter::ScVLookup()
+ void ScInterpreter::ScSubTotal()
+ {
+     sal_uInt8 nParamCount = GetByte();
+-    if ( !MustHaveParamCountMin( nParamCount, 2 ) )
++    if ( !MustHaveParamCountMinWithStackCheck( nParamCount, 2 ) )
+         return;
+ 
+     // We must fish the 1st parameter deep from the stack! And push it on top.
+@@ -7594,7 +7594,7 @@ void ScInterpreter::ScSubTotal()
+ void ScInterpreter::ScAggregate()
+ {
+     sal_uInt8 nParamCount = GetByte();
+-    if ( !MustHaveParamCountMin( nParamCount, 3 ) )
++    if ( !MustHaveParamCountMinWithStackCheck( nParamCount, 3 ) )
+         return;
+ 
+     const FormulaError nErr = nGlobalError;
+-- 
+2.41.0
+

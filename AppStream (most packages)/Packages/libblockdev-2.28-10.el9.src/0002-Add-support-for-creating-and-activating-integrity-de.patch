@@ -1,0 +1,963 @@
+From 77e6a109043e87f88d2bd2b47d1cefce0eb9f5a9 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Mon, 20 Sep 2021 16:38:16 +0200
+Subject: [PATCH 1/3] Add support for creating and activating integrity devices
+
+This adds support for create, open and close actions for standalone
+integrity devices using cryptsetup.
+---
+ configure.ac                        |   2 +-
+ src/lib/plugin_apis/crypto.api      | 157 +++++++++++++++++
+ src/plugins/crypto.c                | 261 +++++++++++++++++++++++++++-
+ src/plugins/crypto.h                |  41 +++++
+ src/python/gi/overrides/BlockDev.py |  24 +++
+ tests/crypto_test.py                |  96 +++++++++-
+ 6 files changed, 573 insertions(+), 8 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 79bd97d8..79bf8045 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -210,7 +210,7 @@ AS_IF([test "x$with_crypto" != "xno"],
+       AS_IF([$PKG_CONFIG --atleast-version=2.0.3 libcryptsetup],
+             [AC_DEFINE([LIBCRYPTSETUP_2])], [])
+       AS_IF([$PKG_CONFIG --atleast-version=2.3.0 libcryptsetup],
+-            [AC_DEFINE([LIBCRYPTSETUP_BITLK])], [])
++            [AC_DEFINE([LIBCRYPTSETUP_23])], [])
+       AS_IF([$PKG_CONFIG --atleast-version=2.4.0 libcryptsetup],
+             [AC_DEFINE([LIBCRYPTSETUP_24])], [])
+       AS_IF([test "x$with_escrow" != "xno"],
+diff --git a/src/lib/plugin_apis/crypto.api b/src/lib/plugin_apis/crypto.api
+index ef0217fe..40e32c89 100644
+--- a/src/lib/plugin_apis/crypto.api
++++ b/src/lib/plugin_apis/crypto.api
+@@ -1,5 +1,6 @@
+ #include <glib.h>
+ #include <blockdev/utils.h>
++#include <libcryptsetup.h>
+ 
+ #define BD_CRYPTO_LUKS_METADATA_SIZE G_GUINT64_CONSTANT (2097152ULL) // 2 MiB
+ 
+@@ -245,6 +246,115 @@ GType bd_crypto_luks_extra_get_type () {
+     return type;
+ }
+ 
++#define BD_CRYPTO_TYPE_INTEGRITY_EXTRA (bd_crypto_integrity_extra_get_type ())
++GType bd_crypto_integrity_extra_get_type();
++
++/**
++ * BDCryptoIntegrityExtra:
++ * @sector_size: integrity sector size
++ * @journal_size: size of journal in bytes
++ * @journal_watermark: journal flush watermark in percents; in bitmap mode sectors-per-bit
++ * @journal_commit_time: journal commit time (or bitmap flush time) in ms
++ * @interleave_sectors: number of interleave sectors (power of two)
++ * @tag_size: tag size per-sector in bytes
++ * @buffer_sectors: number of sectors in one buffer
++ */
++typedef struct BDCryptoIntegrityExtra {
++    guint32 sector_size;
++    guint64 journal_size;
++    guint journal_watermark;
++    guint journal_commit_time;
++    guint32 interleave_sectors;
++    guint32 tag_size;
++    guint32 buffer_sectors;
++} BDCryptoIntegrityExtra;
++
++/**
++ * bd_crypto_integrity_extra_copy: (skip)
++ * @extra: (allow-none): %BDCryptoIntegrityExtra to copy
++ *
++ * Creates a new copy of @extra.
++ */
++BDCryptoIntegrityExtra* bd_crypto_integrity_extra_copy (BDCryptoIntegrityExtra *extra) {
++    if (extra == NULL)
++        return NULL;
++
++    BDCryptoIntegrityExtra *new_extra = g_new0 (BDCryptoIntegrityExtra, 1);
++
++    new_extra->sector_size = extra->sector_size;
++    new_extra->journal_size = extra->journal_size;
++    new_extra->journal_watermark = extra->journal_watermark;
++    new_extra->journal_commit_time = extra->journal_commit_time;
++    new_extra->interleave_sectors = extra->interleave_sectors;
++    new_extra->tag_size = extra->tag_size;
++    new_extra->buffer_sectors = extra->buffer_sectors;
++
++    return new_extra;
++}
++
++/**
++ * bd_crypto_integrity_extra_free: (skip)
++ * @extra: (allow-none): %BDCryptoIntegrityExtra to free
++ *
++ * Frees @extra.
++ */
++void bd_crypto_integrity_extra_free (BDCryptoIntegrityExtra *extra) {
++    if (extra == NULL)
++        return;
++
++    g_free (extra);
++}
++
++/**
++ * bd_crypto_integrity_extra_new: (constructor)
++ * @sector_size: integrity sector size, 0 for default (512)
++ * @journal_size: size of journal in bytes
++ * @journal_watermark: journal flush watermark in percents; in bitmap mode sectors-per-bit
++ * @journal_commit_time: journal commit time (or bitmap flush time) in ms
++ * @interleave_sectors: number of interleave sectors (power of two)
++ * @tag_size: tag size per-sector in bytes
++ * @buffer_sectors: number of sectors in one buffer
++ *
++ * Returns: (transfer full): a new Integrity extra argument
++ */
++BDCryptoIntegrityExtra* bd_crypto_integrity_extra_new (guint64 sector_size, guint64 journal_size, guint journal_watermark, guint journal_commit_time, guint64 interleave_sectors, guint64 tag_size, guint64 buffer_sectors) {
++    BDCryptoIntegrityExtra *ret = g_new0 (BDCryptoIntegrityExtra, 1);
++    ret->sector_size = sector_size;
++    ret->journal_size = journal_size;
++    ret->journal_watermark = journal_watermark;
++    ret->journal_commit_time = journal_commit_time;
++    ret->interleave_sectors = interleave_sectors;
++    ret->tag_size = tag_size;
++    ret->buffer_sectors = buffer_sectors;
++
++    return ret;
++}
++
++GType bd_crypto_integrity_extra_get_type () {
++    static GType type = 0;
++
++    if (G_UNLIKELY(type == 0)) {
++        type = g_boxed_type_register_static("BDCryptoIntegrityExtra",
++                                            (GBoxedCopyFunc) bd_crypto_integrity_extra_copy,
++                                            (GBoxedFreeFunc) bd_crypto_integrity_extra_free);
++    }
++
++    return type;
++}
++
++typedef enum {
++    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL         = CRYPT_ACTIVATE_NO_JOURNAL,
++    BD_CRYPTO_INTEGRITY_OPEN_RECOVERY           = CRYPT_ACTIVATE_RECOVERY,
++#ifdef CRYPT_ACTIVATE_NO_JOURNAL_BITMAP
++    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL_BITMAP  = CRYPT_ACTIVATE_NO_JOURNAL_BITMAP,
++#endif
++    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE        = CRYPT_ACTIVATE_RECALCULATE,
++#ifdef CRYPT_ACTIVATE_RECALCULATE_RESET
++    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE_RESET  = CRYPT_ACTIVATE_RECALCULATE_RESET,
++#endif
++    BD_CRYPTO_INTEGRITY_OPEN_ALLOW_DISCARDS     = CRYPT_ACTIVATE_ALLOW_DISCARDS,
++} BDCryptoIntegrityOpenFlags;
++
+ #define BD_CRYPTO_TYPE_LUKS_INFO (bd_crypto_luks_info_get_type ())
+ GType bd_crypto_luks_info_get_type();
+ 
+@@ -857,6 +967,53 @@ BDCryptoLUKSInfo* bd_crypto_luks_info (const gchar *luks_device, GError **error)
+  */
+ BDCryptoIntegrityInfo* bd_crypto_integrity_info (const gchar *device, GError **error);
+ 
++/**
++ * bd_crypto_integrity_format:
++ * @device: a device to format as integrity
++ * @algorithm: integrity algorithm specification (e.g. "crc32c" or "sha256") or %NULL to use the default
++ * @wipe: whether to wipe the device after format; a device that is not initially wiped will contain invalid checksums
++ * @key_data: (allow-none) (array length=key_size): integrity key or %NULL if not needed
++ * @key_size: size the integrity key and @key_data
++ * @extra: (allow-none): extra arguments for integrity format creation
++ * @error: (out): place to store error (if any)
++ *
++ * Formats the given @device as integrity according to the other parameters given.
++ *
++ * Returns: whether the given @device was successfully formatted as integrity or not
++ * (the @error) contains the error in such cases)
++ *
++ * Tech category: %BD_CRYPTO_TECH_INTEGRITY-%BD_CRYPTO_TECH_MODE_CREATE
++ */
++gboolean bd_crypto_integrity_format (const gchar *device, const gchar *algorithm, gboolean wipe, const guint8* key_data, gsize key_size, BDCryptoIntegrityExtra *extra, GError **error);
++
++/**
++ * bd_crypto_integrity_open:
++ * @device: integrity device to open
++ * @name: name for the opened @device
++ * @algorithm: (allow-none): integrity algorithm specification (e.g. "crc32c" or "sha256") or %NULL to use the default
++ * @key_data: (allow-none) (array length=key_size): integrity key or %NULL if not needed
++ * @key_size: size the integrity key and @key_data
++ * @flags: flags for the integrity device activation
++ * @extra: (allow-none): extra arguments for integrity open
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the @device was successfully opened or not
++ *
++ * Tech category: %BD_CRYPTO_TECH_INTEGRITY-%BD_CRYPTO_TECH_MODE_OPEN_CLOSE
++ */
++gboolean bd_crypto_integrity_open (const gchar *device, const gchar *name, const gchar *algorithm, const guint8* key_data, gsize key_size, BDCryptoIntegrityOpenFlags flags, BDCryptoIntegrityExtra *extra, GError **error);
++
++/**
++ * bd_crypto_integrity_close:
++ * @integrity_device: integrity device to close
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the given @integrity_device was successfully closed or not
++ *
++ * Tech category: %BD_CRYPTO_TECH_INTEGRITY-%BD_CRYPTO_TECH_MODE_OPEN_CLOSE
++ */
++gboolean bd_crypto_integrity_close (const gchar *integrity_device, GError **error);
++
+ /**
+  * bd_crypto_device_seems_encrypted:
+  * @device: the queried device
+diff --git a/src/plugins/crypto.c b/src/plugins/crypto.c
+index 51908140..8549cf23 100644
+--- a/src/plugins/crypto.c
++++ b/src/plugins/crypto.c
+@@ -50,6 +50,18 @@
+ 
+ #define SECTOR_SIZE 512
+ 
++#define DEFAULT_LUKS_KEYSIZE_BITS 256
++#define DEFAULT_LUKS_CIPHER "aes-xts-plain64"
++
++#ifdef LIBCRYPTSETUP_23
++/* 0 for autodetect since 2.3.0 */
++#define DEFAULT_INTEGRITY_TAG_SIZE 0
++#else
++/* we need some sane default for older versions, users should specify tag size when using
++   other algorithms than the default crc32c */
++#define DEFAULT_INTEGRITY_TAG_SIZE 4
++#endif
++
+ #define UNUSED __attribute__((unused))
+ 
+ /**
+@@ -146,6 +158,43 @@ BDCryptoLUKSExtra* bd_crypto_luks_extra_new (guint64 data_alignment, const gchar
+     return ret;
+ }
+ 
++BDCryptoIntegrityExtra* bd_crypto_integrity_extra_new (guint64 sector_size, guint64 journal_size, guint journal_watermark, guint journal_commit_time, guint64 interleave_sectors, guint64 tag_size, guint64 buffer_sectors) {
++    BDCryptoIntegrityExtra *ret = g_new0 (BDCryptoIntegrityExtra, 1);
++    ret->sector_size = sector_size;
++    ret->journal_size = journal_size;
++    ret->journal_watermark = journal_watermark;
++    ret->journal_commit_time = journal_commit_time;
++    ret->interleave_sectors = interleave_sectors;
++    ret->tag_size = tag_size;
++    ret->buffer_sectors = buffer_sectors;
++
++    return ret;
++}
++
++BDCryptoIntegrityExtra* bd_crypto_integrity_extra_copy (BDCryptoIntegrityExtra *extra) {
++    if (extra == NULL)
++        return NULL;
++
++    BDCryptoIntegrityExtra *new_extra = g_new0 (BDCryptoIntegrityExtra, 1);
++
++    new_extra->sector_size = extra->sector_size;
++    new_extra->journal_size = extra->journal_size;
++    new_extra->journal_watermark = extra->journal_watermark;
++    new_extra->journal_commit_time = extra->journal_commit_time;
++    new_extra->interleave_sectors = extra->interleave_sectors;
++    new_extra->tag_size = extra->tag_size;
++    new_extra->buffer_sectors = extra->buffer_sectors;
++
++    return new_extra;
++}
++
++void bd_crypto_integrity_extra_free (BDCryptoIntegrityExtra *extra) {
++    if (extra == NULL)
++        return;
++
++    g_free (extra);
++}
++
+ void bd_crypto_luks_info_free (BDCryptoLUKSInfo *info) {
+     if (info == NULL)
+         return;
+@@ -346,15 +395,15 @@ gboolean bd_crypto_is_tech_avail (BDCryptoTech tech, guint64 mode, GError **erro
+                          "Integrity technology requires libcryptsetup >= 2.0");
+             return FALSE;
+ #endif
+-            ret = mode & (BD_CRYPTO_TECH_MODE_QUERY);
++            ret = mode & (BD_CRYPTO_TECH_MODE_CREATE|BD_CRYPTO_TECH_MODE_OPEN_CLOSE|BD_CRYPTO_TECH_MODE_QUERY);
+             if (ret != mode) {
+                 g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_TECH_UNAVAIL,
+-                             "Only 'query' supported for Integrity");
++                             "Only 'create', 'open' and 'query' supported for Integrity");
+                 return FALSE;
+             } else
+                 return TRUE;
+         case BD_CRYPTO_TECH_BITLK:
+-#ifndef LIBCRYPTSETUP_BITLK
++#ifndef LIBCRYPTSETUP_23
+             g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_TECH_UNAVAIL,
+                          "BITLK technology requires libcryptsetup >= 2.3.0");
+             return FALSE;
+@@ -2035,6 +2084,208 @@ BDCryptoIntegrityInfo* bd_crypto_integrity_info (const gchar *device, GError **e
+ }
+ #endif
+ 
++static int _wipe_progress (guint64 size, guint64 offset, void *usrptr) {
++    /* "convert" the progress from 0-100 to 50-100 because wipe starts at 50 in bd_crypto_integrity_format */
++    gdouble progress = 50 + (((gdouble) offset / size) * 100) / 2;
++    bd_utils_report_progress (*(guint64 *) usrptr, progress, "Integrity device wipe in progress");
++
++    return 0;
++}
++
++/**
++ * bd_crypto_integrity_format:
++ * @device: a device to format as integrity
++ * @algorithm: integrity algorithm specification (e.g. "crc32c" or "sha256")
++ * @wipe: whether to wipe the device after format; a device that is not initially wiped will contain invalid checksums
++ * @key_data: (allow-none) (array length=key_size): integrity key or %NULL if not needed
++ * @key_size: size the integrity key and @key_data
++ * @extra: (allow-none): extra arguments for integrity format creation
++ * @error: (out): place to store error (if any)
++ *
++ * Formats the given @device as integrity according to the other parameters given.
++ *
++ * Returns: whether the given @device was successfully formatted as integrity or not
++ * (the @error) contains the error in such cases)
++ *
++ * Tech category: %BD_CRYPTO_TECH_INTEGRITY-%BD_CRYPTO_TECH_MODE_CREATE
++ */
++gboolean bd_crypto_integrity_format (const gchar *device, const gchar *algorithm, gboolean wipe, const guint8* key_data, gsize key_size, BDCryptoIntegrityExtra *extra, GError **error) {
++    struct crypt_device *cd = NULL;
++    gint ret;
++    guint64 progress_id = 0;
++    gchar *msg = NULL;
++    struct crypt_params_integrity params = ZERO_INIT;
++    g_autofree gchar *tmp_name = NULL;
++    g_autofree gchar *tmp_path = NULL;
++    g_autofree gchar *dev_name = NULL;
++
++    msg = g_strdup_printf ("Started formatting '%s' as integrity device", device);
++    progress_id = bd_utils_report_started (msg);
++    g_free (msg);
++
++    ret = crypt_init (&cd, device);
++    if (ret != 0) {
++        g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_DEVICE,
++                     "Failed to initialize device: %s", strerror_l (-ret, c_locale));
++        bd_utils_report_finished (progress_id, (*error)->message);
++        return FALSE;
++    }
++
++    if (extra) {
++        params.sector_size = extra->sector_size;
++        params.journal_size = extra->journal_size;
++        params.journal_watermark = extra->journal_watermark;
++        params.journal_commit_time = extra->journal_commit_time;
++        params.interleave_sectors = extra->interleave_sectors;
++        params.tag_size = extra->tag_size;
++        params.buffer_sectors = extra->buffer_sectors;
++    }
++
++    params.integrity_key_size = key_size;
++    params.integrity = algorithm;
++    params.tag_size = params.tag_size ? params.tag_size : DEFAULT_INTEGRITY_TAG_SIZE;
++
++    ret = crypt_format (cd, CRYPT_INTEGRITY, NULL, NULL, NULL, NULL, 0, &params);
++    if (ret != 0) {
++        g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_FORMAT_FAILED,
++                     "Failed to format device: %s", strerror_l (-ret, c_locale));
++        crypt_free (cd);
++        bd_utils_report_finished (progress_id, (*error)->message);
++        return FALSE;
++    }
++
++    if (wipe) {
++        bd_utils_report_progress (progress_id, 50, "Format created");
++
++        dev_name = g_path_get_basename (device);
++        tmp_name = g_strdup_printf ("bd-temp-integrity-%s-%d", dev_name, g_random_int ());
++        tmp_path = g_strdup_printf ("%s/%s", crypt_get_dir (), tmp_name);
++
++        ret = crypt_activate_by_volume_key (cd, tmp_name, (const char *) key_data, key_size,
++                                            CRYPT_ACTIVATE_PRIVATE | CRYPT_ACTIVATE_NO_JOURNAL);
++        if (ret != 0) {
++            g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_DEVICE,
++                         "Failed to activate the newly created integrity device for wiping: %s",
++                         strerror_l (-ret, c_locale));
++            crypt_free (cd);
++            bd_utils_report_finished (progress_id, (*error)->message);
++            return FALSE;
++        }
++
++        bd_utils_report_progress (progress_id, 50, "Starting to wipe the newly created integrity device");
++        ret = crypt_wipe (cd, tmp_path, CRYPT_WIPE_ZERO, 0, 0, 1048576,
++                          0, &_wipe_progress, &progress_id);
++        bd_utils_report_progress (progress_id, 100, "Wipe finished");
++        if (ret != 0) {
++            g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_DEVICE,
++                         "Failed to wipe the newly created integrity device: %s",
++                         strerror_l (-ret, c_locale));
++
++            ret = crypt_deactivate (cd, tmp_name);
++            if (ret != 0)
++                g_warning ("Failed to deactivate temporary device %s", tmp_name);
++
++            crypt_free (cd);
++            bd_utils_report_finished (progress_id, (*error)->message);
++            return FALSE;
++        }
++
++        ret = crypt_deactivate (cd, tmp_name);
++        if (ret != 0)
++            g_warning ("Failed to deactivate temporary device %s", tmp_name);
++
++    } else
++        bd_utils_report_finished (progress_id, "Completed");
++
++    crypt_free (cd);
++
++    return TRUE;
++}
++
++/**
++ * bd_crypto_integrity_open:
++ * @device: integrity device to open
++ * @name: name for the opened @device
++ * @algorithm: (allow-none): integrity algorithm specification (e.g. "crc32c" or "sha256") or %NULL to use the default
++ * @key_data: (allow-none) (array length=key_size): integrity key or %NULL if not needed
++ * @key_size: size the integrity key and @key_data
++ * @flags: flags for the integrity device activation
++ * @extra: (allow-none): extra arguments for integrity open
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the @device was successfully opened or not
++ *
++ * Tech category: %BD_CRYPTO_TECH_INTEGRITY-%BD_CRYPTO_TECH_MODE_OPEN_CLOSE
++ */
++gboolean bd_crypto_integrity_open (const gchar *device, const gchar *name, const gchar *algorithm, const guint8* key_data, gsize key_size, BDCryptoIntegrityOpenFlags flags, BDCryptoIntegrityExtra *extra, GError **error) {
++    struct crypt_device *cd = NULL;
++    gint ret = 0;
++    guint64 progress_id = 0;
++    gchar *msg = NULL;
++    struct crypt_params_integrity params = ZERO_INIT;
++
++    params.integrity = algorithm;
++    params.integrity_key_size = key_size;
++
++    if (extra) {
++        params.sector_size = extra->sector_size;
++        params.journal_size = extra->journal_size;
++        params.journal_watermark = extra->journal_watermark;
++        params.journal_commit_time = extra->journal_commit_time;
++        params.interleave_sectors = extra->interleave_sectors;
++        params.tag_size = extra->tag_size;
++        params.buffer_sectors = extra->buffer_sectors;
++    }
++
++    msg = g_strdup_printf ("Started opening '%s' integrity device", device);
++    progress_id = bd_utils_report_started (msg);
++    g_free (msg);
++
++    ret = crypt_init (&cd, device);
++    if (ret != 0) {
++        g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_DEVICE,
++                     "Failed to initialize device: %s", strerror_l (-ret, c_locale));
++        bd_utils_report_finished (progress_id, (*error)->message);
++        return FALSE;
++    }
++
++    ret = crypt_load (cd, CRYPT_INTEGRITY, &params);
++    if (ret != 0) {
++        g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_DEVICE,
++                     "Failed to load device's parameters: %s", strerror_l (-ret, c_locale));
++        crypt_free (cd);
++        bd_utils_report_finished (progress_id, (*error)->message);
++        return FALSE;
++    }
++
++    ret = crypt_activate_by_volume_key (cd, name, (const char *) key_data, key_size, flags);
++    if (ret < 0) {
++        g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_DEVICE,
++                     "Failed to activate device: %s", strerror_l (-ret, c_locale));
++
++        crypt_free (cd);
++        bd_utils_report_finished (progress_id, (*error)->message);
++        return FALSE;
++    }
++
++    crypt_free (cd);
++    bd_utils_report_finished (progress_id, "Completed");
++    return TRUE;
++}
++
++/**
++ * bd_crypto_integrity_close:
++ * @integrity_device: integrity device to close
++ * @error: (out): place to store error (if any)
++ *
++ * Returns: whether the given @integrity_device was successfully closed or not
++ *
++ * Tech category: %BD_CRYPTO_TECH_INTEGRITY-%BD_CRYPTO_TECH_MODE_OPEN_CLOSE
++ */
++gboolean bd_crypto_integrity_close (const gchar *integrity_device, GError **error) {
++    return _crypto_close (integrity_device, "integrity", error);
++}
++
+ /**
+  * bd_crypto_device_seems_encrypted:
+  * @device: the queried device
+@@ -2471,7 +2722,7 @@ gboolean bd_crypto_escrow_device (const gchar *device, const gchar *passphrase,
+  *
+  * Tech category: %BD_CRYPTO_TECH_BITLK-%BD_CRYPTO_TECH_MODE_OPEN_CLOSE
+  */
+-#ifndef LIBCRYPTSETUP_BITLK
++#ifndef LIBCRYPTSETUP_23
+ gboolean bd_crypto_bitlk_open (const gchar *device UNUSED, const gchar *name UNUSED, const guint8* pass_data UNUSED, gsize data_len UNUSED, gboolean read_only UNUSED, GError **error) {
+     /* this will return FALSE and set error, because BITLK technology is not available */
+     return bd_crypto_is_tech_avail (BD_CRYPTO_TECH_BITLK, BD_CRYPTO_TECH_MODE_OPEN_CLOSE, error);
+@@ -2541,7 +2792,7 @@ gboolean bd_crypto_bitlk_open (const gchar *device, const gchar *name, const gui
+  *
+  * Tech category: %BD_CRYPTO_TECH_BITLK-%BD_CRYPTO_TECH_MODE_OPEN_CLOSE
+  */
+-#ifndef LIBCRYPTSETUP_BITLK
++#ifndef LIBCRYPTSETUP_23
+ gboolean bd_crypto_bitlk_close (const gchar *bitlk_device UNUSED, GError **error) {
+     /* this will return FALSE and set error, because BITLK technology is not available */
+     return bd_crypto_is_tech_avail (BD_CRYPTO_TECH_BITLK, BD_CRYPTO_TECH_MODE_OPEN_CLOSE, error);
+diff --git a/src/plugins/crypto.h b/src/plugins/crypto.h
+index 1c8f47ea..6c1d40dd 100644
+--- a/src/plugins/crypto.h
++++ b/src/plugins/crypto.h
+@@ -122,6 +122,43 @@ void bd_crypto_luks_extra_free (BDCryptoLUKSExtra *extra);
+ BDCryptoLUKSExtra* bd_crypto_luks_extra_copy (BDCryptoLUKSExtra *extra);
+ BDCryptoLUKSExtra* bd_crypto_luks_extra_new (guint64 data_alignment, const gchar *data_device, const gchar *integrity, guint64 sector_size, const gchar *label, const gchar *subsystem, BDCryptoLUKSPBKDF *pbkdf);
+ 
++/**
++ * BDCryptoIntegrityExtra:
++ * @sector_size: integrity sector size
++ * @journal_size: size of journal in bytes
++ * @journal_watermark: journal flush watermark in percents; in bitmap mode sectors-per-bit
++ * @journal_commit_time: journal commit time (or bitmap flush time) in ms
++ * @interleave_sectors: number of interleave sectors (power of two)
++ * @tag_size: tag size per-sector in bytes
++ * @buffer_sectors: number of sectors in one buffer
++ */
++typedef struct BDCryptoIntegrityExtra {
++    guint32 sector_size;
++    guint64 journal_size;
++    guint journal_watermark;
++    guint journal_commit_time;
++    guint32 interleave_sectors;
++    guint32 tag_size;
++    guint32 buffer_sectors;
++} BDCryptoIntegrityExtra;
++
++void bd_crypto_integrity_extra_free (BDCryptoIntegrityExtra *extra);
++BDCryptoIntegrityExtra* bd_crypto_integrity_extra_copy (BDCryptoIntegrityExtra *extra);
++BDCryptoIntegrityExtra* bd_crypto_integrity_extra_new (guint64 sector_size, guint64 journal_size, guint journal_watermark, guint journal_commit_time, guint64 interleave_sectors, guint64 tag_size, guint64 buffer_sectors);
++
++typedef enum {
++    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL         = CRYPT_ACTIVATE_NO_JOURNAL,
++    BD_CRYPTO_INTEGRITY_OPEN_RECOVERY           = CRYPT_ACTIVATE_RECOVERY,
++#ifdef CRYPT_ACTIVATE_NO_JOURNAL_BITMAP
++    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL_BITMAP  = CRYPT_ACTIVATE_NO_JOURNAL_BITMAP,
++#endif
++    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE        = CRYPT_ACTIVATE_RECALCULATE,
++#ifdef CRYPT_ACTIVATE_RECALCULATE_RESET
++    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE_RESET  = CRYPT_ACTIVATE_RECALCULATE_RESET,
++#endif
++    BD_CRYPTO_INTEGRITY_OPEN_ALLOW_DISCARDS     = CRYPT_ACTIVATE_ALLOW_DISCARDS,
++} BDCryptoIntegrityOpenFlags;
++
+ /**
+  * BDCryptoLUKSInfo:
+  * @version: LUKS version
+@@ -215,6 +252,10 @@ gboolean bd_crypto_luks_header_restore (const gchar *device, const gchar *backup
+ BDCryptoLUKSInfo* bd_crypto_luks_info (const gchar *luks_device, GError **error);
+ BDCryptoIntegrityInfo* bd_crypto_integrity_info (const gchar *device, GError **error);
+ 
++gboolean bd_crypto_integrity_format (const gchar *device, const gchar *algorithm, gboolean wipe, const guint8* key_data, gsize key_size, BDCryptoIntegrityExtra *extra, GError **error);
++gboolean bd_crypto_integrity_open (const gchar *device, const gchar *name, const gchar *algorithm, const guint8* key_data, gsize key_size, BDCryptoIntegrityOpenFlags flags, BDCryptoIntegrityExtra *extra, GError **error);
++gboolean bd_crypto_integrity_close (const gchar *integrity_device, GError **error);
++
+ gboolean bd_crypto_device_seems_encrypted (const gchar *device, GError **error);
+ gboolean bd_crypto_tc_open (const gchar *device, const gchar *name, const guint8* pass_data, gsize data_len, gboolean read_only, GError **error);
+ gboolean bd_crypto_tc_open_full (const gchar *device, const gchar *name, const guint8* pass_data, gsize data_len, const gchar **keyfiles, gboolean hidden, gboolean system, gboolean veracrypt, guint32 veracrypt_pim, gboolean read_only, GError **error);
+diff --git a/src/python/gi/overrides/BlockDev.py b/src/python/gi/overrides/BlockDev.py
+index 8574ab04..8bd03cf8 100644
+--- a/src/python/gi/overrides/BlockDev.py
++++ b/src/python/gi/overrides/BlockDev.py
+@@ -276,6 +276,30 @@ def crypto_bitlk_open(device, name, passphrase, read_only=False):
+ __all__.append("crypto_bitlk_open")
+ 
+ 
++class CryptoIntegrityExtra(BlockDev.CryptoIntegrityExtra):
++    def __new__(cls, sector_size=0, journal_size=0, journal_watermark=0, journal_commit_time=0, interleave_sectors=0, tag_size=0, buffer_sectors=0):
++        ret = BlockDev.CryptoIntegrityExtra.new(sector_size, journal_size, journal_watermark, journal_commit_time, interleave_sectors, tag_size, buffer_sectors)
++        ret.__class__ = cls
++        return ret
++    def __init__(self, *args, **kwargs):   # pylint: disable=unused-argument
++        super(CryptoIntegrityExtra, self).__init__()  #pylint: disable=bad-super-call
++CryptoIntegrityExtra = override(CryptoIntegrityExtra)
++__all__.append("CryptoIntegrityExtra")
++
++
++_crypto_integrity_format = BlockDev.crypto_integrity_format
++@override(BlockDev.crypto_integrity_format)
++def crypto_integrity_format(device, algorithm=None, wipe=True, key_data=None, extra=None):
++    return _crypto_integrity_format(device, algorithm, wipe, key_data, extra)
++__all__.append("crypto_integrity_format")
++
++_crypto_integrity_open = BlockDev.crypto_integrity_open
++@override(BlockDev.crypto_integrity_open)
++def crypto_integrity_open(device, name, algorithm, key_data=None, flags=0, extra=None):
++    return _crypto_integrity_open(device, name, algorithm, key_data, flags, extra)
++__all__.append("crypto_integrity_open")
++
++
+ _dm_create_linear = BlockDev.dm_create_linear
+ @override(BlockDev.dm_create_linear)
+ def dm_create_linear(map_name, device, length, uuid=None):
+diff --git a/tests/crypto_test.py b/tests/crypto_test.py
+index 5e02c00d..a8fc8579 100644
+--- a/tests/crypto_test.py
++++ b/tests/crypto_test.py
+@@ -2,6 +2,7 @@ import unittest
+ import os
+ import tempfile
+ import overrides_hack
++import secrets
+ import shutil
+ import subprocess
+ import six
+@@ -34,6 +35,8 @@ class CryptoTestCase(unittest.TestCase):
+ 
+     requested_plugins = BlockDev.plugin_specs_from_names(("crypto", "loop"))
+ 
++    _dm_name = "libblockdevTestLUKS"
++
+     @classmethod
+     def setUpClass(cls):
+         unittest.TestCase.setUpClass()
+@@ -64,7 +67,7 @@ class CryptoTestCase(unittest.TestCase):
+ 
+     def _clean_up(self):
+         try:
+-            BlockDev.crypto_luks_close("libblockdevTestLUKS")
++            BlockDev.crypto_luks_close(self._dm_name)
+         except:
+             pass
+ 
+@@ -1029,7 +1032,7 @@ class CryptoTestLuksSectorSize(CryptoTestCase):
+         self.assertTrue(succ)
+ 
+ 
+-class CryptoTestIntegrity(CryptoTestCase):
++class CryptoTestLUKS2Integrity(CryptoTestCase):
+     @tag_test(TestTags.SLOW)
+     @unittest.skipUnless(HAVE_LUKS2, "LUKS 2 not supported")
+     def test_luks2_integrity(self):
+@@ -1216,3 +1219,92 @@ class CryptoTestBitlk(CryptoTestCase):
+         succ = BlockDev.crypto_bitlk_close("libblockdevTestBitlk")
+         self.assertTrue(succ)
+         self.assertFalse(os.path.exists("/dev/mapper/libblockdevTestBitlk"))
++
++
++class CryptoTestIntegrity(CryptoTestCase):
++
++    _dm_name = "libblockdevTestIntegrity"
++
++    @unittest.skipUnless(HAVE_LUKS2, "Integrity not supported")
++    def test_integrity(self):
++        # basic format+open+close test
++        succ = BlockDev.crypto_integrity_format(self.loop_dev, "sha256", False)
++        self.assertTrue(succ)
++
++        succ = BlockDev.crypto_integrity_open(self.loop_dev, self._dm_name, "sha256")
++        self.assertTrue(succ)
++        self.assertTrue(os.path.exists("/dev/mapper/%s" % self._dm_name))
++
++        info = BlockDev.crypto_integrity_info(self._dm_name)
++        self.assertEqual(info.algorithm, "sha256")
++
++        succ = BlockDev.crypto_integrity_close(self._dm_name)
++        self.assertTrue(succ)
++        self.assertFalse(os.path.exists("/dev/mapper/%s" % self._dm_name))
++
++        # same now with a keyed algorithm
++        key = list(secrets.token_bytes(64))
++
++        succ = BlockDev.crypto_integrity_format(self.loop_dev, "hmac(sha256)", False, key)
++        self.assertTrue(succ)
++
++        succ = BlockDev.crypto_integrity_open(self.loop_dev, self._dm_name, "hmac(sha256)", key)
++        self.assertTrue(succ)
++        self.assertTrue(os.path.exists("/dev/mapper/%s" % self._dm_name))
++
++        info = BlockDev.crypto_integrity_info(self._dm_name)
++        self.assertEqual(info.algorithm, "hmac(sha256)")
++
++        succ = BlockDev.crypto_integrity_close(self._dm_name)
++        self.assertTrue(succ)
++        self.assertFalse(os.path.exists("/dev/mapper/%s" % self._dm_name))
++
++        # same with some custom parameters
++        extra = BlockDev.CryptoIntegrityExtra(sector_size=4096, interleave_sectors=65536)
++        succ = BlockDev.crypto_integrity_format(self.loop_dev, "crc32c", wipe=False, extra=extra)
++        self.assertTrue(succ)
++
++        succ = BlockDev.crypto_integrity_open(self.loop_dev, self._dm_name, "crc32c")
++        self.assertTrue(succ)
++        self.assertTrue(os.path.exists("/dev/mapper/%s" % self._dm_name))
++
++        info = BlockDev.crypto_integrity_info(self._dm_name)
++        self.assertEqual(info.algorithm, "crc32c")
++        self.assertEqual(info.sector_size, 4096)
++        self.assertEqual(info.interleave_sectors, 65536)
++
++        succ = BlockDev.crypto_integrity_close(self._dm_name)
++        self.assertTrue(succ)
++        self.assertFalse(os.path.exists("/dev/mapper/%s" % self._dm_name))
++
++    @tag_test(TestTags.SLOW)
++    @unittest.skipUnless(HAVE_LUKS2, "Integrity not supported")
++    def test_integrity_wipe(self):
++        # also check that wipe progress reporting works
++        progress_log = []
++
++        def _my_progress_func(_task, _status, completion, msg):
++            progress_log.append((completion, msg))
++
++        succ = BlockDev.utils_init_prog_reporting(_my_progress_func)
++        self.assertTrue(succ)
++        self.addCleanup(BlockDev.utils_init_prog_reporting, None)
++
++        succ = BlockDev.crypto_integrity_format(self.loop_dev, "sha256", True)
++        self.assertTrue(succ)
++
++        # at least one message "Integrity device wipe in progress" should be logged
++        self.assertTrue(any(prog[1] == "Integrity device wipe in progress" for prog in progress_log))
++
++        succ = BlockDev.crypto_integrity_open(self.loop_dev, self._dm_name, "sha256")
++        self.assertTrue(succ)
++        self.assertTrue(os.path.exists("/dev/mapper/%s" % self._dm_name))
++
++        # check the devices was wiped and the checksums recalculated
++        # (mkfs reads some blocks first so without checksums it would fail)
++        ret, _out, err = run_command("mkfs.ext2 /dev/mapper/%s " % self._dm_name)
++        self.assertEqual(ret, 0, msg="Failed to create ext2 filesystem on integrity: %s" % err)
++
++        succ = BlockDev.crypto_integrity_close(self._dm_name)
++        self.assertTrue(succ)
++        self.assertFalse(os.path.exists("/dev/mapper/%s" % self._dm_name))
+-- 
+2.37.3
+
+
+From ad4ac36520ec96af2a7b043189bbdf18cc3cffb9 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 30 Sep 2021 16:01:40 +0200
+Subject: [PATCH 2/3] Create smaller test images for integrity tests
+
+We are going to overwrite the entire device in test_integrity_wipe
+so we need to make sure the sparse actually fits to /tmp which
+can be smaller than 1 GiB.
+---
+ tests/crypto_test.py | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/tests/crypto_test.py b/tests/crypto_test.py
+index a8fc8579..9758bf81 100644
+--- a/tests/crypto_test.py
++++ b/tests/crypto_test.py
+@@ -36,6 +36,7 @@ class CryptoTestCase(unittest.TestCase):
+     requested_plugins = BlockDev.plugin_specs_from_names(("crypto", "loop"))
+ 
+     _dm_name = "libblockdevTestLUKS"
++    _sparse_size = 1024**3
+ 
+     @classmethod
+     def setUpClass(cls):
+@@ -49,8 +50,8 @@ class CryptoTestCase(unittest.TestCase):
+ 
+     def setUp(self):
+         self.addCleanup(self._clean_up)
+-        self.dev_file = create_sparse_tempfile("crypto_test", 1024**3)
+-        self.dev_file2 = create_sparse_tempfile("crypto_test2", 1024**3)
++        self.dev_file = create_sparse_tempfile("crypto_test", self._sparse_size)
++        self.dev_file2 = create_sparse_tempfile("crypto_test2", self._sparse_size)
+         try:
+             self.loop_dev = create_lio_device(self.dev_file)
+         except RuntimeError as e:
+@@ -1224,6 +1225,7 @@ class CryptoTestBitlk(CryptoTestCase):
+ class CryptoTestIntegrity(CryptoTestCase):
+ 
+     _dm_name = "libblockdevTestIntegrity"
++    _sparse_size = 100 * 1024**2
+ 
+     @unittest.skipUnless(HAVE_LUKS2, "Integrity not supported")
+     def test_integrity(self):
+-- 
+2.37.3
+
+
+From 048a803be5186b30c0f0a7e67020486990ba6b81 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed, 20 Oct 2021 10:27:41 +0200
+Subject: [PATCH 3/3] crypto: Do not use libcryptsetup flags directly in
+ crypto.h
+
+We can "translate" our flags in the implementation instead to
+avoid including libcryptsetup.h in our header and API files.
+---
+ src/lib/plugin_apis/crypto.api | 17 ++++++-----------
+ src/plugins/crypto.c           | 34 +++++++++++++++++++++++++++++++++-
+ src/plugins/crypto.h           | 16 ++++++----------
+ tests/crypto_test.py           | 14 ++++++++++++++
+ 4 files changed, 59 insertions(+), 22 deletions(-)
+
+diff --git a/src/lib/plugin_apis/crypto.api b/src/lib/plugin_apis/crypto.api
+index 40e32c89..cf87979d 100644
+--- a/src/lib/plugin_apis/crypto.api
++++ b/src/lib/plugin_apis/crypto.api
+@@ -1,6 +1,5 @@
+ #include <glib.h>
+ #include <blockdev/utils.h>
+-#include <libcryptsetup.h>
+ 
+ #define BD_CRYPTO_LUKS_METADATA_SIZE G_GUINT64_CONSTANT (2097152ULL) // 2 MiB
+ 
+@@ -343,16 +342,12 @@ GType bd_crypto_integrity_extra_get_type () {
+ }
+ 
+ typedef enum {
+-    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL         = CRYPT_ACTIVATE_NO_JOURNAL,
+-    BD_CRYPTO_INTEGRITY_OPEN_RECOVERY           = CRYPT_ACTIVATE_RECOVERY,
+-#ifdef CRYPT_ACTIVATE_NO_JOURNAL_BITMAP
+-    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL_BITMAP  = CRYPT_ACTIVATE_NO_JOURNAL_BITMAP,
+-#endif
+-    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE        = CRYPT_ACTIVATE_RECALCULATE,
+-#ifdef CRYPT_ACTIVATE_RECALCULATE_RESET
+-    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE_RESET  = CRYPT_ACTIVATE_RECALCULATE_RESET,
+-#endif
+-    BD_CRYPTO_INTEGRITY_OPEN_ALLOW_DISCARDS     = CRYPT_ACTIVATE_ALLOW_DISCARDS,
++    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL         = 1 << 0,
++    BD_CRYPTO_INTEGRITY_OPEN_RECOVERY           = 1 << 1,
++    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL_BITMAP  = 1 << 2,
++    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE        = 1 << 3,
++    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE_RESET  = 1 << 4,
++    BD_CRYPTO_INTEGRITY_OPEN_ALLOW_DISCARDS     = 1 << 5,
+ } BDCryptoIntegrityOpenFlags;
+ 
+ #define BD_CRYPTO_TYPE_LUKS_INFO (bd_crypto_luks_info_get_type ())
+diff --git a/src/plugins/crypto.c b/src/plugins/crypto.c
+index 8549cf23..35c38410 100644
+--- a/src/plugins/crypto.c
++++ b/src/plugins/crypto.c
+@@ -2223,6 +2223,7 @@ gboolean bd_crypto_integrity_open (const gchar *device, const gchar *name, const
+     guint64 progress_id = 0;
+     gchar *msg = NULL;
+     struct crypt_params_integrity params = ZERO_INIT;
++    guint32 activate_flags = 0;
+ 
+     params.integrity = algorithm;
+     params.integrity_key_size = key_size;
+@@ -2237,6 +2238,37 @@ gboolean bd_crypto_integrity_open (const gchar *device, const gchar *name, const
+         params.buffer_sectors = extra->buffer_sectors;
+     }
+ 
++
++    if (flags & BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL)
++        activate_flags |= CRYPT_ACTIVATE_NO_JOURNAL;
++    if (flags & BD_CRYPTO_INTEGRITY_OPEN_RECOVERY)
++        activate_flags |= CRYPT_ACTIVATE_RECOVERY;
++    if (flags & BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE)
++        activate_flags |= CRYPT_ACTIVATE_RECALCULATE;
++    if (flags & BD_CRYPTO_INTEGRITY_OPEN_ALLOW_DISCARDS)
++        activate_flags |= CRYPT_ACTIVATE_ALLOW_DISCARDS;
++    if (flags & BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL_BITMAP) {
++#ifndef CRYPT_ACTIVATE_NO_JOURNAL_BITMAP
++        g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_TECH_UNAVAIL,
++                     "Cannot activate %s with bitmap, installed version of cryptsetup doesn't support this option.", device);
++        bd_utils_report_finished (progress_id, (*error)->message);
++        return FALSE;
++#else
++        activate_flags |= CRYPT_ACTIVATE_NO_JOURNAL_BITMAP;
++#endif
++    }
++
++    if (flags & BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE_RESET) {
++#ifndef CRYPT_ACTIVATE_RECALCULATE_RESET
++        g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_TECH_UNAVAIL,
++                     "Cannot reset integrity recalculation while activating %s, installed version of cryptsetup doesn't support this option.", device);
++        bd_utils_report_finished (progress_id, (*error)->message);
++        return FALSE;
++#else
++        activate_flags |= CRYPT_ACTIVATE_RECALCULATE_RESET;
++#endif
++    }
++
+     msg = g_strdup_printf ("Started opening '%s' integrity device", device);
+     progress_id = bd_utils_report_started (msg);
+     g_free (msg);
+@@ -2258,7 +2290,7 @@ gboolean bd_crypto_integrity_open (const gchar *device, const gchar *name, const
+         return FALSE;
+     }
+ 
+-    ret = crypt_activate_by_volume_key (cd, name, (const char *) key_data, key_size, flags);
++    ret = crypt_activate_by_volume_key (cd, name, (const char *) key_data, key_size, activate_flags);
+     if (ret < 0) {
+         g_set_error (error, BD_CRYPTO_ERROR, BD_CRYPTO_ERROR_DEVICE,
+                      "Failed to activate device: %s", strerror_l (-ret, c_locale));
+diff --git a/src/plugins/crypto.h b/src/plugins/crypto.h
+index 6c1d40dd..536accf9 100644
+--- a/src/plugins/crypto.h
++++ b/src/plugins/crypto.h
+@@ -147,16 +147,12 @@ BDCryptoIntegrityExtra* bd_crypto_integrity_extra_copy (BDCryptoIntegrityExtra *
+ BDCryptoIntegrityExtra* bd_crypto_integrity_extra_new (guint64 sector_size, guint64 journal_size, guint journal_watermark, guint journal_commit_time, guint64 interleave_sectors, guint64 tag_size, guint64 buffer_sectors);
+ 
+ typedef enum {
+-    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL         = CRYPT_ACTIVATE_NO_JOURNAL,
+-    BD_CRYPTO_INTEGRITY_OPEN_RECOVERY           = CRYPT_ACTIVATE_RECOVERY,
+-#ifdef CRYPT_ACTIVATE_NO_JOURNAL_BITMAP
+-    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL_BITMAP  = CRYPT_ACTIVATE_NO_JOURNAL_BITMAP,
+-#endif
+-    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE        = CRYPT_ACTIVATE_RECALCULATE,
+-#ifdef CRYPT_ACTIVATE_RECALCULATE_RESET
+-    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE_RESET  = CRYPT_ACTIVATE_RECALCULATE_RESET,
+-#endif
+-    BD_CRYPTO_INTEGRITY_OPEN_ALLOW_DISCARDS     = CRYPT_ACTIVATE_ALLOW_DISCARDS,
++    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL         = 1 << 0,
++    BD_CRYPTO_INTEGRITY_OPEN_RECOVERY           = 1 << 1,
++    BD_CRYPTO_INTEGRITY_OPEN_NO_JOURNAL_BITMAP  = 1 << 2,
++    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE        = 1 << 3,
++    BD_CRYPTO_INTEGRITY_OPEN_RECALCULATE_RESET  = 1 << 4,
++    BD_CRYPTO_INTEGRITY_OPEN_ALLOW_DISCARDS     = 1 << 5,
+ } BDCryptoIntegrityOpenFlags;
+ 
+ /**
+diff --git a/tests/crypto_test.py b/tests/crypto_test.py
+index 9758bf81..94b89131 100644
+--- a/tests/crypto_test.py
++++ b/tests/crypto_test.py
+@@ -1279,6 +1279,20 @@ class CryptoTestIntegrity(CryptoTestCase):
+         self.assertTrue(succ)
+         self.assertFalse(os.path.exists("/dev/mapper/%s" % self._dm_name))
+ 
++        # open with flags
++        succ = BlockDev.crypto_integrity_open(self.loop_dev, self._dm_name, "crc32c",
++                                              flags=BlockDev.CryptoIntegrityOpenFlags.ALLOW_DISCARDS)
++        self.assertTrue(succ)
++        self.assertTrue(os.path.exists("/dev/mapper/%s" % self._dm_name))
++
++        # check that discard is enabled for the mapped device
++        _ret, out, _err = run_command("dmsetup table %s" % self._dm_name)
++        self.assertIn("allow_discards", out)
++
++        succ = BlockDev.crypto_integrity_close(self._dm_name)
++        self.assertTrue(succ)
++        self.assertFalse(os.path.exists("/dev/mapper/%s" % self._dm_name))
++
+     @tag_test(TestTags.SLOW)
+     @unittest.skipUnless(HAVE_LUKS2, "Integrity not supported")
+     def test_integrity_wipe(self):
+-- 
+2.37.3
+

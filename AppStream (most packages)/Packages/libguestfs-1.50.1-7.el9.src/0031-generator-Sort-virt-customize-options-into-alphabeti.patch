@@ -1,0 +1,63 @@
+From 205e2219b977e70c97ea4b55153d94dc3df91c28 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Thu, 26 Oct 2023 21:06:21 +0100
+Subject: [PATCH] generator: Sort virt-customize options into alphabetical
+ order
+
+(cherry picked from commit 297db5cccc1eb6e838f35d38e60fac894b372676)
+---
+ generator/customize.ml | 34 +++++++++++++++++-----------------
+ 1 file changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/generator/customize.ml b/generator/customize.ml
+index fe87ef5e..c3dd259e 100644
+--- a/generator/customize.ml
++++ b/generator/customize.ml
+@@ -510,23 +510,6 @@ You can have multiple I<--ssh-inject> options, for different users
+ and also for more keys for each user."
+   };
+ 
+-  { op_name = "truncate";
+-    op_type = String "FILE";
+-    op_discrim = "`Truncate";
+-    op_shortdesc = "Truncate a file to zero size";
+-    op_pod_longdesc = "\
+-This command truncates C<FILE> to a zero-length file. The file must exist
+-already.";
+-  };
+-
+-  { op_name = "truncate-recursive";
+-    op_type = String "PATH";
+-    op_discrim = "`TruncateRecursive";
+-    op_shortdesc = "Recursively truncate all files in directory";
+-    op_pod_longdesc = "\
+-This command recursively truncates all files under C<PATH> to zero-length.";
+-  };
+-
+   { op_name = "timezone";
+     op_type = String "TIMEZONE";
+     op_discrim = "`Timezone";
+@@ -544,6 +527,23 @@ string like C<Europe/London>";
+ This command performs a L<touch(1)>-like operation on C<FILE>.";
+   };
+ 
++  { op_name = "truncate";
++    op_type = String "FILE";
++    op_discrim = "`Truncate";
++    op_shortdesc = "Truncate a file to zero size";
++    op_pod_longdesc = "\
++This command truncates C<FILE> to a zero-length file. The file must exist
++already.";
++  };
++
++  { op_name = "truncate-recursive";
++    op_type = String "PATH";
++    op_discrim = "`TruncateRecursive";
++    op_shortdesc = "Recursively truncate all files in directory";
++    op_pod_longdesc = "\
++This command recursively truncates all files under C<PATH> to zero-length.";
++  };
++
+   { op_name = "uninstall";
+     op_type = StringList "PKG,PKG..";
+     op_discrim = "`UninstallPackages";

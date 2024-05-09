@@ -1,0 +1,219 @@
+From 08d0ab8b93907ed3e2c7588dcaecb76bc4b26055 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Mon, 27 Feb 2023 11:29:29 +0100
+Subject: [PATCH 1/2] Include LVM cli in the LVM DBus plugin dependencies
+
+Strictly speaking the lvm command is not needed by the plugin, but
+the LVM DBus daemon uses it so it must be present on the system
+and we are already calling "lvm segtypes" from the plugin so if
+the command is not available for us (for example not in $PATH) the
+plugin wouldn't load anyway so an extra check isn't going to
+change anything.
+---
+ src/plugins/lvm-dbus.c | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/src/plugins/lvm-dbus.c b/src/plugins/lvm-dbus.c
+index d4b542e2..8496a697 100644
+--- a/src/plugins/lvm-dbus.c
++++ b/src/plugins/lvm-dbus.c
+@@ -249,11 +249,14 @@ static volatile guint avail_features = 0;
+ static volatile guint avail_module_deps = 0;
+ static GMutex deps_check_lock;
+ 
+-#define DEPS_LVMDEVICES 0
++#define DEPS_LVM 0
++#define DEPS_LVM_MASK (1 << DEPS_LVM)
++#define DEPS_LVMDEVICES 1
+ #define DEPS_LVMDEVICES_MASK (1 << DEPS_LVMDEVICES)
+-#define DEPS_LAST 1
++#define DEPS_LAST 2
+ 
+ static const UtilDep deps[DEPS_LAST] = {
++    {"lvm", LVM_MIN_VERSION, "version", "LVM version:\\s+([\\d\\.]+)"},
+     {"lvmdevices", NULL, NULL, NULL},
+ };
+ 
+@@ -2121,6 +2124,7 @@ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 si
+     GVariantBuilder builder;
+     GVariantType *type = NULL;
+     GVariant *params = NULL;
++    GVariant *extra_params = NULL;
+ 
+     g_variant_builder_init (&builder, G_VARIANT_TYPE_TUPLE);
+     g_variant_builder_add_value (&builder, g_variant_new ("t", size));
+@@ -2130,7 +2134,12 @@ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 si
+     params = g_variant_builder_end (&builder);
+     g_variant_builder_clear (&builder);
+ 
+-    call_lv_method_sync (vg_name, lv_name, "Resize", params, NULL, extra, TRUE, error);
++    g_variant_builder_init (&builder, G_VARIANT_TYPE_DICTIONARY);
++    g_variant_builder_add (&builder, "{sv}", "--fs", g_variant_new ("s", "ignore"));
++    extra_params = g_variant_builder_end (&builder);
++    g_variant_builder_clear (&builder);
++
++    call_lv_method_sync (vg_name, lv_name, "Resize", params, extra_params, extra, TRUE, error);
+     return (*error == NULL);
+ }
+ 
+-- 
+2.39.2
+
+
+From cfb23f424c2f318efea7d9fd60ec1bcdb365ee35 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Mon, 27 Feb 2023 14:00:21 +0100
+Subject: [PATCH 2/2] Allow resizing of inactive LVs with latest LVM
+
+Latest LVM doesn't allow resizing of inactive LVs without the
+"--fs ignore" option to protect users from corrupting their
+filesystems. As a low level API we don't really want to offer this
+kind of protection and we should allow to resize an inactive LV.
+---
+ src/plugins/lvm-dbus.c  | 28 ++++++++++++++++++++++++----
+ src/plugins/lvm.c       | 31 ++++++++++++++++++++++++++++---
+ tests/lvm_dbus_tests.py |  4 ++++
+ tests/lvm_test.py       |  4 ++++
+ 4 files changed, 60 insertions(+), 7 deletions(-)
+
+diff --git a/src/plugins/lvm-dbus.c b/src/plugins/lvm-dbus.c
+index 8496a697..28f3bb25 100644
+--- a/src/plugins/lvm-dbus.c
++++ b/src/plugins/lvm-dbus.c
+@@ -32,6 +32,8 @@
+ #define SECTOR_SIZE 512
+ #define VDO_POOL_SUFFIX "vpool"
+ 
++#define LVM_VERSION_FSRESIZE "2.03.19"
++
+ static GMutex global_config_lock;
+ static gchar *global_config_str = NULL;
+ 
+@@ -2125,6 +2127,14 @@ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 si
+     GVariantType *type = NULL;
+     GVariant *params = NULL;
+     GVariant *extra_params = NULL;
++    gboolean success = FALSE;
++    BDLVMLVdata *lvinfo = NULL;
++    GError *l_error = NULL;
++
++    lvinfo = bd_lvm_lvinfo (vg_name, lv_name, error);
++    if (!lvinfo)
++        /* error is already populated */
++        return FALSE;
+ 
+     g_variant_builder_init (&builder, G_VARIANT_TYPE_TUPLE);
+     g_variant_builder_add_value (&builder, g_variant_new ("t", size));
+@@ -2134,10 +2144,20 @@ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 si
+     params = g_variant_builder_end (&builder);
+     g_variant_builder_clear (&builder);
+ 
+-    g_variant_builder_init (&builder, G_VARIANT_TYPE_DICTIONARY);
+-    g_variant_builder_add (&builder, "{sv}", "--fs", g_variant_new ("s", "ignore"));
+-    extra_params = g_variant_builder_end (&builder);
+-    g_variant_builder_clear (&builder);
++    if (lvinfo->attr[4] != 'a') {
++        /* starting with 2.03.19 we need to add extra option to allow resizing of inactive LVs */
++        success = bd_utils_check_util_version (deps[DEPS_LVM].name, LVM_VERSION_FSRESIZE,
++                                            deps[DEPS_LVM].ver_arg, deps[DEPS_LVM].ver_regexp, &l_error);
++        if (success) {
++            g_variant_builder_init (&builder, G_VARIANT_TYPE_DICTIONARY);
++            g_variant_builder_add (&builder, "{sv}", "--fs", g_variant_new ("s", "ignore"));
++            extra_params = g_variant_builder_end (&builder);
++            g_variant_builder_clear (&builder);
++        } else
++            g_clear_error (&l_error);
++    }
++
++    bd_lvm_lvdata_free (lvinfo);
+ 
+     call_lv_method_sync (vg_name, lv_name, "Resize", params, extra_params, extra, TRUE, error);
+     return (*error == NULL);
+diff --git a/src/plugins/lvm.c b/src/plugins/lvm.c
+index 03211f8a..f1e2941b 100644
+--- a/src/plugins/lvm.c
++++ b/src/plugins/lvm.c
+@@ -31,6 +31,8 @@
+ #define SECTOR_SIZE 512
+ #define VDO_POOL_SUFFIX "vpool"
+ 
++#define LVM_VERSION_FSRESIZE "2.03.19"
++
+ static GMutex global_config_lock;
+ static gchar *global_config_str = NULL;
+ 
+@@ -1606,15 +1608,38 @@ gboolean bd_lvm_lvrename (const gchar *vg_name, const gchar *lv_name, const gcha
+  * Tech category: %BD_LVM_TECH_BASIC-%BD_LVM_TECH_MODE_MODIFY
+  */
+ gboolean bd_lvm_lvresize (const gchar *vg_name, const gchar *lv_name, guint64 size, const BDExtraArg **extra, GError **error) {
+-    const gchar *args[6] = {"lvresize", "--force", "-L", NULL, NULL, NULL};
++    const gchar *args[8] = {"lvresize", "--force", "-L", NULL, NULL, NULL, NULL, NULL};
+     gboolean success = FALSE;
++    guint8 next_arg = 4;
++    g_autofree gchar *lvspec = NULL;
++    BDLVMLVdata *lvinfo = NULL;
++    GError *l_error = NULL;
++
++    lvinfo = bd_lvm_lvinfo (vg_name, lv_name, error);
++    if (!lvinfo)
++        /* error is already populated */
++        return FALSE;
+ 
+     args[3] = g_strdup_printf ("%"G_GUINT64_FORMAT"K", size/1024);
+-    args[4] = g_strdup_printf ("%s/%s", vg_name, lv_name);
++
++    if (lvinfo->attr[4] != 'a') {
++        /* starting with 2.03.19 we need to add extra option to allow resizing of inactive LVs */
++        success = bd_utils_check_util_version (deps[DEPS_LVM].name, LVM_VERSION_FSRESIZE,
++                                               deps[DEPS_LVM].ver_arg, deps[DEPS_LVM].ver_regexp, &l_error);
++        if (success) {
++            args[next_arg++] = "--fs";
++            args[next_arg++] = "ignore";
++        } else
++            g_clear_error (&l_error);
++    }
++
++    bd_lvm_lvdata_free (lvinfo);
++
++    lvspec = g_strdup_printf ("%s/%s", vg_name, lv_name);
++    args[next_arg++] = lvspec;
+ 
+     success = call_lvm_and_report_error (args, extra, TRUE, error);
+     g_free ((gchar *) args[3]);
+-    g_free ((gchar *) args[4]);
+ 
+     return success;
+ }
+diff --git a/tests/lvm_dbus_tests.py b/tests/lvm_dbus_tests.py
+index 61c898c1..fc12b55d 100644
+--- a/tests/lvm_dbus_tests.py
++++ b/tests/lvm_dbus_tests.py
+@@ -944,6 +944,10 @@ class LvmTestLVresize(LvmPVVGLVTestCase):
+         succ = BlockDev.lvm_lvdeactivate("testVG", "testLV", None)
+         self.assertTrue(succ)
+ 
++        # try to resize when deactivated
++        succ = BlockDev.lvm_lvresize("testVG", "testLV", 768 * 1024**2, None)
++        self.assertTrue(succ)
++
+ @unittest.skipUnless(lvm_dbus_running, "LVM DBus not running")
+ class LvmTestLVrename(LvmPVVGLVTestCase):
+     def test_lvrename(self):
+diff --git a/tests/lvm_test.py b/tests/lvm_test.py
+index 36ff10ec..7ede4b59 100644
+--- a/tests/lvm_test.py
++++ b/tests/lvm_test.py
+@@ -877,6 +877,10 @@ class LvmTestLVresize(LvmPVVGLVTestCase):
+         succ = BlockDev.lvm_lvdeactivate("testVG", "testLV", None)
+         self.assertTrue(succ)
+ 
++        # try to resize when deactivated
++        succ = BlockDev.lvm_lvresize("testVG", "testLV", 768 * 1024**2, None)
++        self.assertTrue(succ)
++
+ class LvmTestLVrename(LvmPVVGLVTestCase):
+     def test_lvrename(self):
+         """Verify that it's possible to rename an LV"""
+-- 
+2.39.2
+

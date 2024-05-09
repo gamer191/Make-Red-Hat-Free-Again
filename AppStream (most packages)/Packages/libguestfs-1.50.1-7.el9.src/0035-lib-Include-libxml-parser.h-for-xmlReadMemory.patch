@@ -1,0 +1,25 @@
+From 64a928f631bc79d885d9822a3022c382cbd5fd55 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 27 Nov 2023 14:04:33 +0000
+Subject: [PATCH] lib: Include <libxml/parser.h> for xmlReadMemory
+
+Since libxml2 2.12.1 including this header is required to have this
+function declared.
+
+(cherry picked from commit 02c39dc5e8109ddb911d90759883a504008ba509)
+---
+ lib/launch-libvirt.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/launch-libvirt.c b/lib/launch-libvirt.c
+index d4bf1a8f..79465dd4 100644
+--- a/lib/launch-libvirt.c
++++ b/lib/launch-libvirt.c
+@@ -38,6 +38,7 @@
+ #include <libvirt/virterror.h>
+ #endif
+ 
++#include <libxml/parser.h>
+ #include <libxml/xmlwriter.h>
+ #include <libxml/xpath.h>
+ 

@@ -1,0 +1,51 @@
+From ca209c2cda581249011398df0678ca37d5204be6 Mon Sep 17 00:00:00 2001
+From: Wim Taymans <wtaymans@redhat.com>
+Date: Thu, 3 Jan 2019 11:04:06 +0100
+Subject: [PATCH] desktop: add -q option to suppress errors
+
+It is possible that the sound theme does not have the specified sound
+and we don't want to spam the log with error messages in that case.
+---
+ src/libcanberra-login-sound.desktop.in | 2 +-
+ src/libcanberra-logout-sound.sh.in     | 2 +-
+ src/libcanberra-ready-sound.desktop.in | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/libcanberra-login-sound.desktop.in b/src/libcanberra-login-sound.desktop.in
+index 210d2c1..128391d 100644
+--- a/src/libcanberra-login-sound.desktop.in
++++ b/src/libcanberra-login-sound.desktop.in
+@@ -2,7 +2,7 @@
+ Type=Application
+ Name=GNOME Login Sound
+ Comment=Plays a sound whenever you log in
+-Exec=@bindir@/canberra-gtk-play --id="desktop-login" --description="GNOME Login"
++Exec=@bindir@/canberra-gtk-play -q --id="desktop-login" --description="GNOME Login"
+ OnlyShowIn=GNOME;
+ AutostartCondition=GSettings org.gnome.desktop.sound event-sounds
+ X-GNOME-Autostart-Phase=Application
+diff --git a/src/libcanberra-logout-sound.sh.in b/src/libcanberra-logout-sound.sh.in
+index 8b50de7..96ba602 100644
+--- a/src/libcanberra-logout-sound.sh.in
++++ b/src/libcanberra-logout-sound.sh.in
+@@ -1,3 +1,3 @@
+ #!/bin/sh
+ 
+-@bindir@/canberra-gtk-play --id="desktop-logout" --description="GNOME Logout"
++@bindir@/canberra-gtk-play -q --id="desktop-logout" --description="GNOME Logout"
+diff --git a/src/libcanberra-ready-sound.desktop.in b/src/libcanberra-ready-sound.desktop.in
+index 4e6a606..e70b080 100644
+--- a/src/libcanberra-ready-sound.desktop.in
++++ b/src/libcanberra-ready-sound.desktop.in
+@@ -2,7 +2,7 @@
+ Type=Application
+ Name=GNOME System Ready Sound
+ Comment=Plays a sound whenever your system is ready for login
+-Exec=@bindir@/canberra-gtk-play --id="system-ready" --description="GNOME System Ready"
++Exec=@bindir@/canberra-gtk-play -q --id="system-ready" --description="GNOME System Ready"
+ OnlyShowIn=GNOME;
+ AutostartCondition=GSettings org.gnome.desktop.sound event-sounds
+ X-GNOME-Autostart-Phase=Application
+-- 
+2.19.2
+

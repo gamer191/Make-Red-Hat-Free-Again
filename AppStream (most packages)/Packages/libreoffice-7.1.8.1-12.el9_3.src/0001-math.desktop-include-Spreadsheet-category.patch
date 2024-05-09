@@ -1,0 +1,39 @@
+From f586051919d047e2b67d32637817c3d96a898494 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Wed, 9 Jun 2021 09:13:23 +0100
+Subject: [PATCH] math.desktop include "Spreadsheet" category
+
+but it's not a spreadsheet
+
+since...
+
+commit dad7fe7227fb80a32d3c2c777584dc9d74b9e929
+Date:   Thu Jan 2 16:16:55 2014 +0100
+
+    Fix math categories to make SUSE rpm check happy
+
+Change-Id: I0397ea12cd7f29f4b0c1f0e0ad76a3429b55c455
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/116884
+Tested-by: Jenkins
+Reviewed-by: Adolfo Jayme Barrientos <fitojb@ubuntu.com>
+(cherry picked from commit 2df2ce1b51d13bc9e203fab1b7eb3c88c906588c)
+---
+ sysui/desktop/menus/math.desktop | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sysui/desktop/menus/math.desktop b/sysui/desktop/menus/math.desktop
+index d2391be5c234..5a8192ae4abc 100644
+--- a/sysui/desktop/menus/math.desktop
++++ b/sysui/desktop/menus/math.desktop
+@@ -21,7 +21,7 @@ Terminal=false
+ NoDisplay=false
+ Icon=math
+ Type=Application
+-Categories=Office;Spreadsheet;Education;Science;Math;X-Red-Hat-Base;X-MandrivaLinux-Office-Other;
++Categories=Office;Education;Science;Math;X-Red-Hat-Base;X-MandrivaLinux-Office-Other;
+ Exec=${UNIXBASISROOTNAME} --math %%FILE%%
+ MimeType=application/vnd.oasis.opendocument.formula;application/vnd.sun.xml.math;application/vnd.oasis.opendocument.formula-template;text/mathml;application/mathml+xml;
+ Name=%PRODUCTNAME Math
+-- 
+2.31.1
+

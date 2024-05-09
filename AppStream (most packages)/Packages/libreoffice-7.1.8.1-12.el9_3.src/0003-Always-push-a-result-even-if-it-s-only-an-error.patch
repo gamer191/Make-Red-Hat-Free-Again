@@ -1,0 +1,50 @@
+From 0caab4f6da81346e54a2d4881ad52752071347ba Mon Sep 17 00:00:00 2001
+From: Eike Rathke <erack@redhat.com>
+Date: Mon, 27 Feb 2023 16:10:06 +0100
+Subject: [PATCH 3/3] Always push a result, even if it's only an error
+
+PERCENTILE() and QUARTILE() if an error was passed as argument (or
+an error encountered during obtaining arguments) omitted to push
+an error result, only setting the error.
+
+Fallout from
+
+    commit f336f63da900d76c2bf6e5690f1c8a7bd15a0aa2
+    CommitDate: Thu Mar 3 16:28:59 2016 +0000
+
+        tdf#94635 Add FORECAST.ETS functions to Calc
+
+Change-Id: I23e276fb0ce735cfd6383cc963446499dcf819f4
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/147922
+Reviewed-by: Eike Rathke <erack@redhat.com>
+Tested-by: Jenkins
+(cherry picked from commit 64914560e279c71ff1233f4bab851e2a292797e6)
+---
+ sc/source/core/tool/interpr3.cxx | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/sc/source/core/tool/interpr3.cxx b/sc/source/core/tool/interpr3.cxx
+index 29c72f6f7280..cdbb4823a0e1 100644
+--- a/sc/source/core/tool/interpr3.cxx
++++ b/sc/source/core/tool/interpr3.cxx
+@@ -3481,7 +3481,7 @@ void ScInterpreter::ScPercentile( bool bInclusive )
+     GetNumberSequenceArray( 1, aArray, false );
+     if ( aArray.empty() || nGlobalError != FormulaError::NONE )
+     {
+-        SetError( FormulaError::NoValue );
++        PushNoValue();
+         return;
+     }
+     if ( bInclusive )
+@@ -3504,7 +3504,7 @@ void ScInterpreter::ScQuartile( bool bInclusive )
+     GetNumberSequenceArray( 1, aArray, false );
+     if ( aArray.empty() || nGlobalError != FormulaError::NONE )
+     {
+-        SetError( FormulaError::NoValue );
++        PushNoValue();
+         return;
+     }
+     if ( bInclusive )
+-- 
+2.41.0
+

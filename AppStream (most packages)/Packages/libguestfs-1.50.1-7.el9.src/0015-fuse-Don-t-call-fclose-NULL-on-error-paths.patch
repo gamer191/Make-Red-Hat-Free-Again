@@ -1,0 +1,62 @@
+From 1cdc22fa656a44320e9c53401130e98f536c9759 Mon Sep 17 00:00:00 2001
+From: "Richard W.M. Jones" <rjones@redhat.com>
+Date: Mon, 22 May 2023 17:15:39 +0100
+Subject: [PATCH] fuse: Don't call fclose(NULL) on error paths
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Various errors like this:
+
+In function ‘test_fuse’,
+    inlined from ‘main’ at test-fuse.c:133:11:
+test-fuse.c:274:5: error: argument 1 null where non-null expected [-Werror=nonnull]
+  274 |     fclose (fp);
+      |     ^~~~~~~~~~~
+In file included from test-fuse.c:26:
+/usr/include/stdio.h: In function ‘main’:
+/usr/include/stdio.h:183:12: note: in a call to function ‘fclose’ declared ‘nonnull’
+  183 | extern int fclose (FILE *__stream) __nonnull ((1));
+      |            ^~~~~~
+
+(cherry picked from commit ca20f27cb0898c347e49b543a8acdfb0a8a8fa7e)
+---
+ fuse/test-fuse.c | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/fuse/test-fuse.c b/fuse/test-fuse.c
+index 9c0db594..90a78dc7 100644
+--- a/fuse/test-fuse.c
++++ b/fuse/test-fuse.c
+@@ -271,7 +271,6 @@ test_fuse (void)
+   fp = fopen ("hello.txt", "r");
+   if (fp == NULL) {
+     perror ("open: hello.txt");
+-    fclose (fp);
+     return -1;
+   }
+   if (getline (&line, &len, fp) == -1) {
+@@ -289,7 +288,6 @@ test_fuse (void)
+   fp = fopen ("world.txt", "r");
+   if (fp == NULL) {
+     perror ("open: world.txt");
+-    fclose (fp);
+     return -1;
+   }
+   if (getline (&line, &len, fp) == -1) {
+@@ -352,7 +350,6 @@ test_fuse (void)
+   fp = fopen ("new", "w");
+   if (fp == NULL) {
+     perror ("open: new");
+-    fclose (fp);
+     return -1;
+   }
+   fclose (fp);
+@@ -615,7 +612,6 @@ test_fuse (void)
+   fp = fopen ("new.txt", "w");
+   if (fp == NULL) {
+     perror ("open: new.txt");
+-    fclose (fp);
+     return -1;
+   }
+   for (u = 0; u < 1000; ++u) {

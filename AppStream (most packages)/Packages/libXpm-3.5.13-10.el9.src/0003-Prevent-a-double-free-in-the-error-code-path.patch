@@ -1,0 +1,39 @@
+From ad5a88046266478c2c9600f6d8a11ab707cb4c7e Mon Sep 17 00:00:00 2001
+From: Matthieu Herrb <matthieu@herrb.eu>
+Date: Thu, 12 Jan 2023 15:05:39 +1000
+Subject: [PATCH libXpm 3/6] Prevent a double free in the error code path
+
+xpmParseDataAndCreate() calls XDestroyImage() in the error path.
+Reproducible with sxpm "zero-width.xpm", that file is in the test/
+directory.
+
+The same approach is needed in the bytes_per_line == 0 condition though
+here it just plugs a memory leak.
+---
+ src/create.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/create.c b/src/create.c
+index a750846..0f3735c 100644
+--- a/src/create.c
++++ b/src/create.c
+@@ -994,11 +994,15 @@ CreateXImage(
+ #if !defined(FOR_MSW) && !defined(AMIGA)
+     if (height != 0 && (*image_return)->bytes_per_line >= INT_MAX / height) {
+ 	XDestroyImage(*image_return);
++	*image_return = NULL;
+ 	return XpmNoMemory;
+     }
+     /* now that bytes_per_line must have been set properly alloc data */
+-    if((*image_return)->bytes_per_line == 0 ||  height == 0)
++    if((*image_return)->bytes_per_line == 0 ||  height == 0) {
++	XDestroyImage(*image_return);
++	*image_return = NULL;
+     	return XpmNoMemory;
++    }
+     (*image_return)->data =
+ 	(char *) XpmMalloc((*image_return)->bytes_per_line * height);
+ 
+-- 
+2.39.0
+

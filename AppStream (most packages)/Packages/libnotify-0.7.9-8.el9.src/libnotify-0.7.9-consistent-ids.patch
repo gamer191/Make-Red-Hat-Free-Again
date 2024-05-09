@@ -1,0 +1,26 @@
+From 34bf541f11b57995a019731e5a8d328422458bd3 Mon Sep 17 00:00:00 2001
+From: David King <amigadave@amigadave.com>
+Date: Mon, 13 Dec 2021 15:20:32 +0000
+Subject: [PATCH] docs: Use consistent IDs in spec build
+
+This avoids differences between IDs for separate builds of the
+specification.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1915831
+---
+ docs/config.xsl | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/docs/config.xsl b/docs/config.xsl
+index 7aa9def..59490e7 100644
+--- a/docs/config.xsl
++++ b/docs/config.xsl
+@@ -3,4 +3,5 @@
+                 xmlns:fo="http://www.w3.org/1999/XSL/Format"
+                 version="1.0">
+   <xsl:param name="html.stylesheet" select="'docbook.css'"/>
++  <xsl:param name="generate.consistent.ids" select="1"/>
+ </xsl:stylesheet>
+-- 
+2.33.1
+

@@ -1,0 +1,19 @@
+commit 75d8bb06f6ea0d7a8edf8e080c7ea6d434d598ff
+Author: William Cohen <wcohen@redhat.com>
+Date:   Fri Apr 14 16:07:07 2023 -0400
+
+    Make sure that p is set to a known value before using.
+
+diff --git a/lib/pfmlib_perf_event_pmu.c b/lib/pfmlib_perf_event_pmu.c
+index 637c5b1..8f7d7d1 100644
+--- a/lib/pfmlib_perf_event_pmu.c
++++ b/lib/pfmlib_perf_event_pmu.c
+@@ -361,7 +361,7 @@ gen_tracepoint_table(void)
+ {
+ 	DIR *dir1, *dir2;
+ 	struct dirent *d1, *d2;
+-	perf_event_t *p;
++	perf_event_t *p = NULL;
+ 	perf_umask_t *um;
+ 	char d2path[MAXPATHLEN];
+ 	char idpath[MAXPATHLEN];

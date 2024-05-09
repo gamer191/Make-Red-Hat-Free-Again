@@ -1,0 +1,63 @@
+From e58cd8df467e342463d08e3d761c2e322287b13e Mon Sep 17 00:00:00 2001
+From: Andrey Drobyshev <andrey.drobyshev@virtuozzo.com>
+Date: Wed, 26 Apr 2023 15:59:44 +0300
+Subject: [PATCH] daemon/selinux-relabel: don't exclude "/selinux" if it's
+ non-existent
+
+Since RHBZ#726528, filesystem.rpm doesn't include /selinux.  setfiles
+then gives us the warning: "Can't stat exclude path "/sysroot/selinux",
+No such file or directory - ignoring."
+
+Though the warning is harmless, let's get rid of it by checking the
+existence of /selinux directory.
+
+Signed-off-by: Andrey Drobyshev <andrey.drobyshev@virtuozzo.com>
+Reviewed-by: Laszlo Ersek <lersek@redhat.com>
+Reviewed-by: Richard W.M. Jones <rjones@redhat.com>
+(cherry picked from commit 9ced5fac8c1f0f8ff7ed2b5671c1c7f5f0bfa875)
+---
+ daemon/selinux-relabel.c | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/daemon/selinux-relabel.c b/daemon/selinux-relabel.c
+index 976cffe3..454486c1 100644
+--- a/daemon/selinux-relabel.c
++++ b/daemon/selinux-relabel.c
+@@ -21,6 +21,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <sys/stat.h>
+ 
+ #include "guestfs_protocol.h"
+ #include "daemon.h"
+@@ -37,6 +38,17 @@ optgroup_selinuxrelabel_available (void)
+   return prog_exists ("setfiles");
+ }
+ 
++static int
++dir_exists (const char *dir)
++{
++  struct stat statbuf;
++
++  if (stat (dir, &statbuf) == 0 && S_ISDIR (statbuf.st_mode))
++    return 1;
++  else
++    return 0;
++}
++
+ static int
+ setfiles_has_option (int *flag, char opt_char)
+ {
+@@ -99,8 +111,10 @@ do_selinux_relabel (const char *specfile, const char *path,
+    */
+   ADD_ARG (argv, i, "-e"); ADD_ARG (argv, i, s_dev);
+   ADD_ARG (argv, i, "-e"); ADD_ARG (argv, i, s_proc);
+-  ADD_ARG (argv, i, "-e"); ADD_ARG (argv, i, s_selinux);
+   ADD_ARG (argv, i, "-e"); ADD_ARG (argv, i, s_sys);
++  if (dir_exists (s_selinux)) {
++    ADD_ARG (argv, i, "-e"); ADD_ARG (argv, i, s_selinux);
++  }
+ 
+   /* You have to use the -m option (where available) otherwise
+    * setfiles puts all the mountpoints on the excludes list for no

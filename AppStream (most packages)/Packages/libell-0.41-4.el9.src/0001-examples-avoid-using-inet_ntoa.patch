@@ -1,0 +1,33 @@
+From 4097c1b862eb59f7110d097df7f719d00869191d Mon Sep 17 00:00:00 2001
+Message-Id: <4097c1b862eb59f7110d097df7f719d00869191d.1624267112.git.davide.caratti@gmail.com>
+From: Davide Caratti <davide.caratti@gmail.com>
+Date: Wed, 16 Jun 2021 21:22:15 +0200
+Subject: [PATCH 1/2] examples: avoid using inet_ntoa()
+
+---
+ examples/https-server-test.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/examples/https-server-test.c b/examples/https-server-test.c
+index 6362722..b626fd2 100644
+--- a/examples/https-server-test.c
++++ b/examples/https-server-test.c
+@@ -199,12 +199,13 @@ int main(int argc, char *argv[])
+ 			https_tls_ready, https_tls_disconnected, NULL);
+ 
+ 	if (getenv("TLS_DEBUG")) {
++		char buf[INET_ADDRSTRLEN];
+ 		char *str;
+ 
+ 		l_tls_set_debug(tls, https_tls_debug_cb, NULL, NULL);
+ 
+-		str = l_strdup_printf("/tmp/ell-certchain-%s.pem",
+-					inet_ntoa(client_addr.sin_addr));
++		inet_ntop(AF_INET,&client_addr.sin_addr, buf, INET_ADDRSTRLEN);
++		str = l_strdup_printf("/tmp/ell-certchain-%s.pem", buf);
+ 		l_tls_set_cert_dump_path(tls, str);
+ 		l_free(str);
+ 	}
+-- 
+2.31.1
+

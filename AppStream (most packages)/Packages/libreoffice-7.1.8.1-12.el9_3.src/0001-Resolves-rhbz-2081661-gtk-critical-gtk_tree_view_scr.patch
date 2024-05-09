@@ -1,0 +1,51 @@
+From 1dbfd248524789efa4a84dc94d56a229c19bc0b9 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Wed, 4 May 2022 11:52:58 +0100
+Subject: [PATCH] Resolves: rhbz#2081661 gtk-critical
+ gtk_tree_view_scroll_to_cell assertion
+
+Change-Id: I4c7c4caed907072ef3a73ccfafabe882d618fa0e
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/133730
+Tested-by: Jenkins
+Reviewed-by: Adolfo Jayme Barrientos <fitojb@ubuntu.com>
+(cherry picked from commit 816435e4c2d52615462670464c48689bebdf1e55)
+---
+ cui/source/customize/SvxMenuConfigPage.cxx    | 2 +-
+ cui/source/customize/SvxToolbarConfigPage.cxx | 6 ++++--
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/cui/source/customize/SvxMenuConfigPage.cxx b/cui/source/customize/SvxMenuConfigPage.cxx
+index 34cee1368d7a..bf7457193f5c 100644
+--- a/cui/source/customize/SvxMenuConfigPage.cxx
++++ b/cui/source/customize/SvxMenuConfigPage.cxx
+@@ -136,7 +136,7 @@ void SvxMenuConfigPage::Init()
+ 
+     ReloadTopLevelListBox();
+ 
+-    m_xTopLevelListBox->set_active(0);
++    m_xTopLevelListBox->set_active(m_xTopLevelListBox->get_count() ? 0 : -1);
+     SelectElement();
+ 
+     m_xCommandCategoryListBox->Init(comphelper::getProcessComponentContext(), m_xFrame,
+diff --git a/cui/source/customize/SvxToolbarConfigPage.cxx b/cui/source/customize/SvxToolbarConfigPage.cxx
+index 99a85d82f96e..d2284428d8f1 100644
+--- a/cui/source/customize/SvxToolbarConfigPage.cxx
++++ b/cui/source/customize/SvxToolbarConfigPage.cxx
+@@ -246,10 +246,12 @@ void SvxToolbarConfigPage::Init()
+ 
+     ReloadTopLevelListBox();
+ 
+-    sal_Int32 nPos = 0;
++    sal_Int32 nCount = m_xTopLevelListBox->get_count();
++    sal_Int32 nPos = nCount > 0 ? 0 : -1;
++
+     if (!m_aURLToSelect.isEmpty())
+     {
+-        for (sal_Int32 i = 0, nCount = m_xTopLevelListBox->get_count(); i < nCount; ++i)
++        for (sal_Int32 i = 0; i < nCount; ++i)
+         {
+             SvxConfigEntry* pData
+                 = reinterpret_cast<SvxConfigEntry*>(m_xTopLevelListBox->get_id(i).toInt64());
+-- 
+2.35.1
+

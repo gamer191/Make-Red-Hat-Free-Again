@@ -1,0 +1,896 @@
+From ed22ee21fdeaef43d82c4a18c5274e42fe85bd35 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Caol=C3=A1n=20McNamara?= <caolanm@redhat.com>
+Date: Thu, 13 Apr 2023 11:31:17 +0100
+Subject: [PATCH 2/3] put floating frames under managed links control
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+like we do for sections and ole objects that link to their content
+
+individual commits in trunk are:
+
+extract a OCommonEmbeddedObject::SetInplaceActiveState for reuse
+
+no behaviour change intended
+
+Change-Id: Ia1d12aa5c9afdc1347f6d4364bc6a0b7f41ee168
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/150341
+Tested-by: Caolán McNamara <caolanm@redhat.com>
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit 183e34a3f8c429c0698951e24c17844e416a3825)
+
+use parent window as dialog parent
+
+it makes no odds, but is more convenient for upcoming modification
+
+Change-Id: Ibc5333b137d2da089b3b701ff615c6ddf43063d0
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/150342
+Tested-by: Caolán McNamara <caolanm@redhat.com>
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit f93edf343658abd489bde3639d2ffaefd50c0f99)
+
+adjust IFrameObject so it could reuse mxFrame for a reload of content
+
+Change-Id: I7eec3132a23faafd9a2878215a0a117a67bc9bf2
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/150343
+Tested-by: Caolán McNamara <caolanm@redhat.com>
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit 3a727d26fd9eb6fa140bc3f5cadf3db079d42206)
+
+query getUserAllowsLinkUpdate for the case of content in a floating frame
+
+similarly to how it works for the more common "normal" embedded objects
+
+Change-Id: I83e38dfa2f84907c2de9680e91f779d34864a9ad
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/149971
+Tested-by: Jenkins
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit 52aa46468531918eabfa2031dedf50377ae72cf7)
+
+add a route to get writer Floating Frame links under 'manage links'
+
+Change-Id: If90ff71d6a96342574799312f764badaf97980eb
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/150349
+Tested-by: Jenkins
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit 8b8a2844addbd262befb1a2d193dfb590dfa20be)
+
+allow SvxOle2Shape::resetModifiedState to survive having no SdrObject
+
+Change-Id: Iea059262c124e3f44249e49b4189732310d28156
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/150538
+Tested-by: Jenkins
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit 02379929bd0e1d1676635f0ca1920422702ebb7c)
+
+create the FloatingFrameShape in a separate step to inserting it
+
+this is derived from the path taken by the AddShape(const OUString&)
+function for this case. No change in behavior is intended.
+
+Change-Id: Id09ae0c65a55a37743ad7c184070fb8dd97d8a7f
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/150526
+Tested-by: Jenkins
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit bafec47847a0b9697b3bbe9358e53f8118af3024)
+
+add a route to get calc Floating Frame links under 'manage links'
+
+much harder than writer because the organization and ordering
+of properties and object activation etc is different.
+
+This ended up ugly, but functions.
+
+We set FrameURL before AddShape, we have to do it again later because it
+gets cleared when the SdrOle2Obj is attached to the XShape.  But we want
+FrameURL to exist when AddShape triggers SetPersistName which itself
+triggers SdrOle2Obj::CheckFileLink_Impl and at that point we want to
+know what URL will end up being used. So bodge this by setting FrameURL
+to the temp pre-SdrOle2Obj attached properties and we can smuggle it
+eventually into SdrOle2Obj::SetPersistName at the right point after
+PersistName is set but before SdrOle2Obj::CheckFileLink_Impl is called
+in order to inform the link manager that this is an IFrame that links to
+a URL
+
+Change-Id: I67fc199fef9e67fa12ca7873f0fe12137aa16d8f
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/150539
+Tested-by: Jenkins
+Reviewed-by: Caolán McNamara <caolanm@redhat.com>
+(cherry picked from commit 07179a5a5bd00f34acfa8a3f260dd834ae003c63)
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/150755
+Reviewed-by: Michael Stahl <michael.stahl@allotropia.de>
+Reviewed-on: https://gerrit.libreoffice.org/c/core/+/152144
+Tested-by: Caolán McNamara <caolan.mcnamara@collabora.com>
+Reviewed-by: Caolán McNamara <caolan.mcnamara@collabora.com>
+(cherry picked from commit e3d1c8f1ad871d664886319a47bee161e673de6c)
+---
+ .../source/commonembedding/embedobj.cxx       |  60 +++++-----
+ .../source/commonembedding/specialobject.cxx  |   9 ++
+ embeddedobj/source/inc/commonembobj.hxx       |   3 +
+ embeddedobj/source/inc/specialobject.hxx      |   6 +
+ include/svx/svdoole2.hxx                      |  17 ++-
+ include/svx/unoshape.hxx                      |   2 +
+ sc/source/ui/docshell/documentlinkmgr.cxx     |   9 +-
+ sfx2/source/doc/iframe.cxx                    |  55 +++++----
+ svx/source/svdraw/svdoole2.cxx                | 104 +++++++++++++++---
+ svx/source/unodraw/shapeimpl.hxx              |   5 +
+ svx/source/unodraw/unoshap4.cxx               |  23 +++-
+ sw/inc/ndole.hxx                              |   4 +-
+ sw/source/core/ole/ndole.cxx                  |  89 +++++++++++++--
+ xmloff/source/draw/ximpshap.cxx               |  29 ++++-
+ xmloff/source/draw/ximpshap.hxx               |   2 +
+ 15 files changed, 331 insertions(+), 86 deletions(-)
+
+diff --git a/embeddedobj/source/commonembedding/embedobj.cxx b/embeddedobj/source/commonembedding/embedobj.cxx
+index ffa2a0789be0..3bd8d84d09e2 100644
+--- a/embeddedobj/source/commonembedding/embedobj.cxx
++++ b/embeddedobj/source/commonembedding/embedobj.cxx
+@@ -161,6 +161,37 @@ void OCommonEmbeddedObject::StateChangeNotification_Impl( bool bBeforeChange, sa
+     rGuard.reset();
+ }
+ 
++void OCommonEmbeddedObject::SetInplaceActiveState()
++{
++    if ( !m_xClientSite.is() )
++        throw embed::WrongStateException( "client site not set, yet", *this );
++
++    uno::Reference< embed::XInplaceClient > xInplaceClient( m_xClientSite, uno::UNO_QUERY );
++    if ( !xInplaceClient.is() || !xInplaceClient->canInplaceActivate() )
++        throw embed::WrongStateException(); //TODO: can't activate inplace
++    xInplaceClient->activatingInplace();
++
++    uno::Reference< embed::XWindowSupplier > xClientWindowSupplier( xInplaceClient, uno::UNO_QUERY_THROW );
++
++    m_xClientWindow = xClientWindowSupplier->getWindow();
++    m_aOwnRectangle = xInplaceClient->getPlacement();
++    m_aClipRectangle = xInplaceClient->getClipRectangle();
++    awt::Rectangle aRectangleToShow = GetRectangleInterception( m_aOwnRectangle, m_aClipRectangle );
++
++    // create own window based on the client window
++    // place and resize the window according to the rectangles
++    uno::Reference< awt::XWindowPeer > xClientWindowPeer( m_xClientWindow, uno::UNO_QUERY_THROW );
++
++    // dispatch provider may not be provided
++    uno::Reference< frame::XDispatchProvider > xContainerDP = xInplaceClient->getInplaceDispatchProvider();
++    bool bOk = m_xDocHolder->ShowInplace( xClientWindowPeer, aRectangleToShow, xContainerDP );
++    m_nObjectState = embed::EmbedStates::INPLACE_ACTIVE;
++    if ( !bOk )
++    {
++        SwitchStateTo_Impl( embed::EmbedStates::RUNNING );
++        throw embed::WrongStateException(); //TODO: can't activate inplace
++    }
++}
+ 
+ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
+ {
+@@ -234,34 +265,7 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
+         {
+             if ( nNextState == embed::EmbedStates::INPLACE_ACTIVE )
+             {
+-                if ( !m_xClientSite.is() )
+-                    throw embed::WrongStateException( "client site not set, yet", *this );
+-
+-                uno::Reference< embed::XInplaceClient > xInplaceClient( m_xClientSite, uno::UNO_QUERY );
+-                if ( !xInplaceClient.is() || !xInplaceClient->canInplaceActivate() )
+-                    throw embed::WrongStateException(); //TODO: can't activate inplace
+-                xInplaceClient->activatingInplace();
+-
+-                uno::Reference< embed::XWindowSupplier > xClientWindowSupplier( xInplaceClient, uno::UNO_QUERY_THROW );
+-
+-                m_xClientWindow = xClientWindowSupplier->getWindow();
+-                m_aOwnRectangle = xInplaceClient->getPlacement();
+-                m_aClipRectangle = xInplaceClient->getClipRectangle();
+-                awt::Rectangle aRectangleToShow = GetRectangleInterception( m_aOwnRectangle, m_aClipRectangle );
+-
+-                // create own window based on the client window
+-                // place and resize the window according to the rectangles
+-                uno::Reference< awt::XWindowPeer > xClientWindowPeer( m_xClientWindow, uno::UNO_QUERY_THROW );
+-
+-                // dispatch provider may not be provided
+-                uno::Reference< frame::XDispatchProvider > xContainerDP = xInplaceClient->getInplaceDispatchProvider();
+-                bool bOk = m_xDocHolder->ShowInplace( xClientWindowPeer, aRectangleToShow, xContainerDP );
+-                m_nObjectState = nNextState;
+-                if ( !bOk )
+-                {
+-                    SwitchStateTo_Impl( embed::EmbedStates::RUNNING );
+-                    throw embed::WrongStateException(); //TODO: can't activate inplace
+-                }
++                SetInplaceActiveState();
+             }
+             else if ( nNextState == embed::EmbedStates::ACTIVE )
+             {
+diff --git a/embeddedobj/source/commonembedding/specialobject.cxx b/embeddedobj/source/commonembedding/specialobject.cxx
+index 683fe0aab3f2..c17a39accf2c 100644
+--- a/embeddedobj/source/commonembedding/specialobject.cxx
++++ b/embeddedobj/source/commonembedding/specialobject.cxx
+@@ -47,6 +47,7 @@ uno::Any SAL_CALL OSpecialEmbeddedObject::queryInterface( const uno::Type& rType
+     uno::Any aReturn = ::cppu::queryInterface( rType,
+                                         static_cast< embed::XEmbeddedObject* >( this ),
+                                         static_cast< embed::XInplaceObject* >( this ),
++                                        static_cast< embed::XCommonEmbedPersist* >( static_cast< embed::XEmbedPersist* >( this ) ),
+                                         static_cast< embed::XVisualObject* >( this ),
+                                         static_cast< embed::XClassifiedObject* >( this ),
+                                         static_cast< embed::XComponentSupplier* >( this ),
+@@ -160,4 +161,12 @@ void SAL_CALL OSpecialEmbeddedObject::doVerb( sal_Int32 nVerbID )
+         OCommonEmbeddedObject::doVerb( nVerbID );
+ }
+ 
++void SAL_CALL OSpecialEmbeddedObject::reload(
++                const uno::Sequence< beans::PropertyValue >&,
++                const uno::Sequence< beans::PropertyValue >&)
++{
++    // Allow IFrames to reload their content
++    SetInplaceActiveState();
++}
++
+ /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
+diff --git a/embeddedobj/source/inc/commonembobj.hxx b/embeddedobj/source/inc/commonembobj.hxx
+index 1b020f430855..dbed7c26f28c 100644
+--- a/embeddedobj/source/inc/commonembobj.hxx
++++ b/embeddedobj/source/inc/commonembobj.hxx
+@@ -231,6 +231,9 @@ private:
+                     const css::uno::Sequence< css::beans::PropertyValue >& lArguments,
+                     const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs );
+ 
++protected:
++    void SetInplaceActiveState();
++
+ public:
+     OCommonEmbeddedObject(
+         const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+diff --git a/embeddedobj/source/inc/specialobject.hxx b/embeddedobj/source/inc/specialobject.hxx
+index 5c467b97a379..0b5e3ca23e9f 100644
+--- a/embeddedobj/source/inc/specialobject.hxx
++++ b/embeddedobj/source/inc/specialobject.hxx
+@@ -47,6 +47,12 @@ public:
+     virtual void SAL_CALL changeState( sal_Int32 nNewState ) override;
+ 
+     virtual void SAL_CALL doVerb( sal_Int32 nVerbID ) override;
++
++// XCommonEmbedPersist
++
++    virtual void SAL_CALL reload(
++                const css::uno::Sequence< css::beans::PropertyValue >& lArguments,
++                const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs ) override;
+ };
+ 
+ /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
+diff --git a/include/svx/svdoole2.hxx b/include/svx/svdoole2.hxx
+index 8c209ce7f281..342b5370c239 100644
+--- a/include/svx/svdoole2.hxx
++++ b/include/svx/svdoole2.hxx
+@@ -42,6 +42,7 @@ namespace frame { class XModel; }
+ namespace svt { class EmbeddedObjectRef; }
+ 
+ class SdrOle2ObjImpl;
++class SvxOle2Shape;
+ 
+ class SVXCORE_DLLPUBLIC SdrOle2Obj : public SdrRectObj
+ {
+@@ -49,7 +50,7 @@ private:
+     std::unique_ptr<SdrOle2ObjImpl> mpImpl;
+ 
+ private:
+-    SVX_DLLPRIVATE void Connect_Impl();
++    SVX_DLLPRIVATE void Connect_Impl(SvxOle2Shape* pCreator = nullptr);
+     SVX_DLLPRIVATE void Disconnect_Impl();
+     SVX_DLLPRIVATE void AddListeners_Impl();
+     SVX_DLLPRIVATE void RemoveListeners_Impl();
+@@ -105,7 +106,7 @@ public:
+     // OLE object has got a separate PersistName member now;
+     // !!! use ::SetPersistName( ... ) only, if you know what you do !!!
+     const OUString& GetPersistName() const;
+-    void        SetPersistName( const OUString& rPersistName );
++    void        SetPersistName( const OUString& rPersistName, SvxOle2Shape* pCreator = nullptr );
+ 
+     // One can add an application name to a SdrOle2Obj, which can be queried for
+     // later on (SD needs this for presentation objects).
+@@ -153,7 +154,7 @@ public:
+                                          sal_Int64 nAspect );
+     static bool Unload( const css::uno::Reference< css::embed::XEmbeddedObject >& xObj, sal_Int64 nAspect );
+     bool Unload();
+-    void Connect();
++    void Connect(SvxOle2Shape* pCreator = nullptr);
+     void Disconnect();
+     void ObjectLoaded();
+ 
+@@ -200,6 +201,16 @@ public:
+     void                Connect() { GetRealObject(); }
+ };
+ 
++class SVXCORE_DLLPUBLIC SdrIFrameLink final : public sfx2::SvBaseLink
++{
++    SdrOle2Obj* m_pObject;
++
++public:
++    explicit SdrIFrameLink(SdrOle2Obj* pObject);
++    virtual ::sfx2::SvBaseLink::UpdateResult DataChanged(
++        const OUString& rMimeType, const css::uno::Any & rValue ) override;
++};
++
+ #endif // INCLUDED_SVX_SVDOOLE2_HXX
+ 
+ /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
+diff --git a/include/svx/unoshape.hxx b/include/svx/unoshape.hxx
+index 1f948f50574b..5fe64331842c 100644
+--- a/include/svx/unoshape.hxx
++++ b/include/svx/unoshape.hxx
+@@ -607,6 +607,8 @@ public:
+     bool createObject( const SvGlobalName &aClassName );
+ 
+     void createLink( const OUString& aLinkURL );
++
++    virtual OUString GetAndClearInitialFrameURL();
+ };
+ 
+ 
+diff --git a/sc/source/ui/docshell/documentlinkmgr.cxx b/sc/source/ui/docshell/documentlinkmgr.cxx
+index 1796b02b5434..fce782935949 100644
+--- a/sc/source/ui/docshell/documentlinkmgr.cxx
++++ b/sc/source/ui/docshell/documentlinkmgr.cxx
+@@ -142,7 +142,7 @@ bool DocumentLinkManager::hasDdeOrOleOrWebServiceLinks(bool bDde, bool bOle, boo
+         sfx2::SvBaseLink* pBase = rLink.get();
+         if (bDde && dynamic_cast<ScDdeLink*>(pBase))
+             return true;
+-        if (bOle && dynamic_cast<SdrEmbedObjectLink*>(pBase))
++        if (bOle && (dynamic_cast<SdrEmbedObjectLink*>(pBase) || dynamic_cast<SdrIFrameLink*>(pBase)))
+             return true;
+         if (bWebService && dynamic_cast<ScWebServiceLink*>(pBase))
+             return true;
+@@ -173,6 +173,13 @@ bool DocumentLinkManager::updateDdeOrOleOrWebServiceLinks(weld::Window* pWin)
+             continue;
+         }
+ 
++        SdrIFrameLink* pIFrameLink = dynamic_cast<SdrIFrameLink*>(pBase);
++        if (pIFrameLink)
++        {
++            pIFrameLink->Update();
++            continue;
++        }
++
+         ScWebServiceLink* pWebserviceLink = dynamic_cast<ScWebServiceLink*>(pBase);
+         if (pWebserviceLink)
+         {
+diff --git a/sfx2/source/doc/iframe.cxx b/sfx2/source/doc/iframe.cxx
+index b9495b8fd311..73030f151359 100644
+--- a/sfx2/source/doc/iframe.cxx
++++ b/sfx2/source/doc/iframe.cxx
+@@ -175,31 +175,46 @@ sal_Bool SAL_CALL IFrameObject::load(
+                 return false;
+         }
+ 
++        bool bUpdateAllowed(true);
++        if (pDoc)
++        {
++            // perhaps should only check for file targets, but lets default to making it strong
++            // unless there is a known need to distinguish
++            comphelper::EmbeddedObjectContainer& rEmbeddedObjectContainer = pDoc->getEmbeddedObjectContainer();
++            bUpdateAllowed = rEmbeddedObjectContainer.getUserAllowsLinkUpdate();
++        }
++        if (!bUpdateAllowed)
++            return false;
++
+         OUString sReferer;
+         if (pDoc && pDoc->HasName())
+             sReferer = pDoc->GetMedium()->GetName();
+ 
+-        DBG_ASSERT( !mxFrame.is(), "Frame already existing!" );
+-        VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow( xFrame->getContainerWindow() );
+-        VclPtr<IFrameWindow_Impl> pWin = VclPtr<IFrameWindow_Impl>::Create( pParent, maFrmDescr.IsFrameBorderOn() );
+-        pWin->SetSizePixel( pParent->GetOutputSizePixel() );
+-        pWin->SetBackground();
+-        pWin->Show();
+-
+-        uno::Reference < awt::XWindow > xWindow( pWin->GetComponentInterface(), uno::UNO_QUERY );
+-        xFrame->setComponent( xWindow, uno::Reference < frame::XController >() );
++        uno::Reference<css::awt::XWindow> xParentWindow(xFrame->getContainerWindow());
+ 
+-        // we must destroy the IFrame before the parent is destroyed
+-        xWindow->addEventListener( this );
+-
+-        mxFrame = frame::Frame::create( mxContext );
+-        uno::Reference < awt::XWindow > xWin( pWin->GetComponentInterface(), uno::UNO_QUERY );
+-        mxFrame->initialize( xWin );
+-        mxFrame->setName( maFrmDescr.GetName() );
+-
+-        uno::Reference < frame::XFramesSupplier > xFramesSupplier( xFrame, uno::UNO_QUERY );
+-        if ( xFramesSupplier.is() )
+-            mxFrame->setCreator( xFramesSupplier );
++        if (!mxFrame.is())
++        {
++            VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow(xParentWindow);
++            VclPtr<IFrameWindow_Impl> pWin = VclPtr<IFrameWindow_Impl>::Create( pParent, maFrmDescr.IsFrameBorderOn() );
++            pWin->SetSizePixel( pParent->GetOutputSizePixel() );
++            pWin->SetBackground();
++            pWin->Show();
++
++            uno::Reference < awt::XWindow > xWindow( pWin->GetComponentInterface(), uno::UNO_QUERY );
++            xFrame->setComponent( xWindow, uno::Reference < frame::XController >() );
++
++            // we must destroy the IFrame before the parent is destroyed
++            xWindow->addEventListener( this );
++
++            mxFrame = frame::Frame::create( mxContext );
++            uno::Reference < awt::XWindow > xWin( pWin->GetComponentInterface(), uno::UNO_QUERY );
++            mxFrame->initialize( xWin );
++            mxFrame->setName( maFrmDescr.GetName() );
++
++            uno::Reference < frame::XFramesSupplier > xFramesSupplier( xFrame, uno::UNO_QUERY );
++            if ( xFramesSupplier.is() )
++                mxFrame->setCreator( xFramesSupplier );
++        }
+ 
+         uno::Sequence < beans::PropertyValue > aProps{
+             comphelper::makePropertyValue("PluginMode", sal_Int16(2)),
+diff --git a/svx/source/svdraw/svdoole2.cxx b/svx/source/svdraw/svdoole2.cxx
+index 23eb06465e87..de1ac41beb13 100644
+--- a/svx/source/svdraw/svdoole2.cxx
++++ b/svx/source/svdraw/svdoole2.cxx
+@@ -67,6 +67,7 @@
+ #include <sdr/contact/viewcontactofsdrole2obj.hxx>
+ #include <svx/svdograf.hxx>
+ #include <sdr/properties/oleproperties.hxx>
++#include <svx/unoshape.hxx>
+ #include <svx/xlineit0.hxx>
+ #include <svx/xlnclit.hxx>
+ #include <svx/xbtmpit.hxx>
+@@ -591,6 +592,35 @@ void SdrEmbedObjectLink::Closed()
+     SvBaseLink::Closed();
+ }
+ 
++SdrIFrameLink::SdrIFrameLink(SdrOle2Obj* pObject)
++    : ::sfx2::SvBaseLink(::SfxLinkUpdateMode::ONCALL, SotClipboardFormatId::SVXB)
++    , m_pObject(pObject)
++{
++    SetSynchron( false );
++}
++
++::sfx2::SvBaseLink::UpdateResult SdrIFrameLink::DataChanged(
++    const OUString&, const uno::Any& )
++{
++    uno::Reference<embed::XEmbeddedObject> xObject = m_pObject->GetObjRef();
++    uno::Reference<embed::XCommonEmbedPersist> xPersObj(xObject, uno::UNO_QUERY);
++    if (xPersObj.is())
++    {
++        // let the IFrameObject reload the link
++        try
++        {
++            xPersObj->reload(uno::Sequence<beans::PropertyValue>(), uno::Sequence<beans::PropertyValue>());
++        }
++        catch (const uno::Exception&)
++        {
++        }
++
++        m_pObject->SetChanged();
++    }
++
++    return SUCCESS;
++}
++
+ class SdrOle2ObjImpl
+ {
+ public:
+@@ -608,7 +638,7 @@ public:
+     bool mbLoadingOLEObjectFailed:1; // New local var to avoid repeated loading if load of OLE2 fails
+     bool mbConnected:1;
+ 
+-    SdrEmbedObjectLink* mpObjectLink;
++    sfx2::SvBaseLink* mpObjectLink;
+     OUString maLinkURL;
+ 
+     rtl::Reference<SvxUnoShapeModifyListener> mxModifyListener;
+@@ -808,7 +838,7 @@ bool SdrOle2Obj::IsEmpty() const
+     return !mpImpl->mxObjRef.is();
+ }
+ 
+-void SdrOle2Obj::Connect()
++void SdrOle2Obj::Connect(SvxOle2Shape* pCreator)
+ {
+     if( IsEmptyPresObj() )
+         return;
+@@ -821,7 +851,7 @@ void SdrOle2Obj::Connect()
+         return;
+     }
+ 
+-    Connect_Impl();
++    Connect_Impl(pCreator);
+     AddListeners_Impl();
+ }
+ 
+@@ -921,24 +951,51 @@ void SdrOle2Obj::CheckFileLink_Impl()
+ 
+     try
+     {
+-        uno::Reference< embed::XLinkageSupport > xLinkSupport( mpImpl->mxObjRef.GetObject(), uno::UNO_QUERY );
++        uno::Reference<embed::XEmbeddedObject> xObject = mpImpl->mxObjRef.GetObject();
++        if (!xObject)
++            return;
+ 
+-        if ( xLinkSupport.is() && xLinkSupport->isLink() )
+-        {
+-            OUString aLinkURL = xLinkSupport->getLinkURL();
++        bool bIFrame = false;
+ 
+-            if ( !aLinkURL.isEmpty() )
++        OUString aLinkURL;
++        uno::Reference<embed::XLinkageSupport> xLinkSupport(xObject, uno::UNO_QUERY);
++        if (xLinkSupport)
++        {
++            if (xLinkSupport->isLink())
++                aLinkURL = xLinkSupport->getLinkURL();
++        }
++        else
++        {
++            // get IFrame (Floating Frames) listed and updatable from the
++            // manage links dialog
++            SvGlobalName aClassId(xObject->getClassID());
++            if (aClassId == SvGlobalName(SO3_IFRAME_CLASSID))
+             {
+-                // this is a file link so the model link manager should handle it
+-                sfx2::LinkManager* pLinkManager(getSdrModelFromSdrObject().GetLinkManager());
++                uno::Reference<beans::XPropertySet> xSet(xObject->getComponent(), uno::UNO_QUERY);
++                if (xSet.is())
++                    xSet->getPropertyValue("FrameURL") >>= aLinkURL;
++                bIFrame = true;
++            }
++        }
++
++        if (!aLinkURL.isEmpty()) // this is a file link so the model link manager should handle it
++        {
++            sfx2::LinkManager* pLinkManager(getSdrModelFromSdrObject().GetLinkManager());
+ 
+-                if ( pLinkManager )
++            if ( pLinkManager )
++            {
++                SdrEmbedObjectLink* pEmbedObjectLink = nullptr;
++                if (!bIFrame)
+                 {
+-                    mpImpl->mpObjectLink = new SdrEmbedObjectLink( this );
+-                    mpImpl->maLinkURL = aLinkURL;
+-                    pLinkManager->InsertFileLink( *mpImpl->mpObjectLink, sfx2::SvBaseLinkObjectType::ClientOle, aLinkURL );
+-                    mpImpl->mpObjectLink->Connect();
++                    pEmbedObjectLink = new SdrEmbedObjectLink(this);
++                    mpImpl->mpObjectLink = pEmbedObjectLink;
+                 }
++                else
++                    mpImpl->mpObjectLink = new SdrIFrameLink(this);
++                mpImpl->maLinkURL = aLinkURL;
++                pLinkManager->InsertFileLink( *mpImpl->mpObjectLink, sfx2::SvBaseLinkObjectType::ClientOle, aLinkURL );
++                if (pEmbedObjectLink)
++                    pEmbedObjectLink->Connect();
+             }
+         }
+     }
+@@ -948,7 +1005,7 @@ void SdrOle2Obj::CheckFileLink_Impl()
+     }
+ }
+ 
+-void SdrOle2Obj::Connect_Impl()
++void SdrOle2Obj::Connect_Impl(SvxOle2Shape* pCreator)
+ {
+     if(mpImpl->aPersistName.isEmpty() )
+         return;
+@@ -989,6 +1046,17 @@ void SdrOle2Obj::Connect_Impl()
+             }
+         }
+ 
++        if (pCreator)
++        {
++            OUString sFrameURL(pCreator->GetAndClearInitialFrameURL());
++            if (!sFrameURL.isEmpty() && svt::EmbeddedObjectRef::TryRunningState(mpImpl->mxObjRef.GetObject()))
++            {
++                uno::Reference<beans::XPropertySet> xSet(mpImpl->mxObjRef->getComponent(), uno::UNO_QUERY);
++                if (xSet.is())
++                    xSet->setPropertyValue("FrameURL", uno::Any(sFrameURL));
++            }
++        }
++
+         if ( mpImpl->mxObjRef.is() )
+         {
+             if ( !mpImpl->mxLightClient.is() )
+@@ -1301,14 +1369,14 @@ SdrObjectUniquePtr SdrOle2Obj::getFullDragClone() const
+     return createSdrGrafObjReplacement(false);
+ }
+ 
+-void SdrOle2Obj::SetPersistName( const OUString& rPersistName )
++void SdrOle2Obj::SetPersistName( const OUString& rPersistName, SvxOle2Shape* pCreator )
+ {
+     DBG_ASSERT( mpImpl->aPersistName.isEmpty(), "Persist name changed!");
+ 
+     mpImpl->aPersistName = rPersistName;
+     mpImpl->mbLoadingOLEObjectFailed = false;
+ 
+-    Connect();
++    Connect(pCreator);
+     SetChanged();
+ }
+ 
+diff --git a/svx/source/unodraw/shapeimpl.hxx b/svx/source/unodraw/shapeimpl.hxx
+index a1a4e6963020..4381094d380a 100644
+--- a/svx/source/unodraw/shapeimpl.hxx
++++ b/svx/source/unodraw/shapeimpl.hxx
+@@ -64,8 +64,11 @@ public:
+ 
+     virtual void Create( SdrObject* pNewOpj, SvxDrawPage* pNewPage ) override;
+ };
++
+ class SvxFrameShape : public SvxOle2Shape
+ {
++private:
++    OUString m_sInitialFrameURL;
+ protected:
+     // override these for special property handling in subcasses. Return true if property is handled
+     virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue ) override;
+@@ -82,6 +85,8 @@ public:
+     virtual void SAL_CALL setPropertyValues( const css::uno::Sequence< OUString >& aPropertyNames, const css::uno::Sequence< css::uno::Any >& aValues ) override;
+ 
+     virtual void Create( SdrObject* pNewOpj, SvxDrawPage* pNewPage ) override;
++
++    virtual OUString GetAndClearInitialFrameURL() override;
+ };
+ 
+ 
+diff --git a/svx/source/unodraw/unoshap4.cxx b/svx/source/unodraw/unoshap4.cxx
+index 658cb2c8fd6c..e6bbe51ee1e0 100644
+--- a/svx/source/unodraw/unoshap4.cxx
++++ b/svx/source/unodraw/unoshap4.cxx
+@@ -174,7 +174,7 @@ bool SvxOle2Shape::setPropertyValueImpl( const OUString& rName, const SfxItemPro
+ #else
+             pOle = static_cast<SdrOle2Obj*>(GetSdrObject());
+ #endif
+-            pOle->SetPersistName( aPersistName );
++            pOle->SetPersistName( aPersistName, this );
+             return true;
+         }
+         break;
+@@ -495,10 +495,11 @@ void SvxOle2Shape::createLink( const OUString& aLinkURL )
+ 
+ void SvxOle2Shape::resetModifiedState()
+ {
+-    ::comphelper::IEmbeddedHelper* pPersist = GetSdrObject()->getSdrModelFromSdrObject().GetPersist();
++    SdrObject* pObject = GetSdrObject();
++    ::comphelper::IEmbeddedHelper* pPersist = pObject ? pObject->getSdrModelFromSdrObject().GetPersist() : nullptr;
+     if( pPersist && !pPersist->isEnableSetModified() )
+     {
+-        SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( GetSdrObject() );
++        SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >(pObject);
+         if( pOle && !pOle->IsEmpty() )
+         {
+             uno::Reference < util::XModifiable > xMod( pOle->GetObjRef(), uno::UNO_QUERY );
+@@ -548,6 +549,11 @@ SvGlobalName SvxOle2Shape::GetClassName_Impl(OUString& rHexCLSID)
+     return aClassName;
+ }
+ 
++OUString SvxOle2Shape::GetAndClearInitialFrameURL()
++{
++    return OUString();
++}
++
+ SvxAppletShape::SvxAppletShape(SdrObject* pObject)
+     : SvxOle2Shape( pObject, getSvxMapProvider().GetMap(SVXMAP_APPLET), getSvxMapProvider().GetPropertySet(SVXMAP_APPLET, SdrObject::GetGlobalDrawObjectItemPool())  )
+ {
+@@ -701,8 +707,19 @@ SvxFrameShape::~SvxFrameShape() throw()
+ {
+ }
+ 
++OUString SvxFrameShape::GetAndClearInitialFrameURL()
++{
++    OUString sRet(m_sInitialFrameURL);
++    m_sInitialFrameURL.clear();
++    return sRet;
++}
++
+ void SvxFrameShape::Create( SdrObject* pNewObj, SvxDrawPage* pNewPage )
+ {
++    uno::Reference<beans::XPropertySet> xSet(static_cast<OWeakObject *>(this), uno::UNO_QUERY);
++    if (xSet)
++        xSet->getPropertyValue("FrameURL") >>= m_sInitialFrameURL;
++
+     SvxShape::Create( pNewObj, pNewPage );
+     const SvGlobalName aIFrameClassId( SO3_IFRAME_CLASSID );
+     createObject(aIFrameClassId);
+diff --git a/sw/inc/ndole.hxx b/sw/inc/ndole.hxx
+index 7c07c2656b44..649b300e9be8 100644
+--- a/sw/inc/ndole.hxx
++++ b/sw/inc/ndole.hxx
+@@ -28,7 +28,7 @@ class SwGrfFormatColl;
+ class SwDoc;
+ class SwOLENode;
+ class SwOLEListener_Impl;
+-class SwEmbedObjectLink;
++namespace sfx2 { class SvBaseLink; }
+ class DeflateData;
+ 
+ class SW_DLLPUBLIC SwOLEObj
+@@ -90,7 +90,7 @@ class SW_DLLPUBLIC SwOLENode: public SwNoTextNode
+     bool   mbOLESizeInvalid; /**< Should be considered at SwDoc::PrtOLENotify
+                                    (e.g. copied). Is not persistent. */
+ 
+-    SwEmbedObjectLink*  mpObjectLink;
++    sfx2::SvBaseLink*  mpObjectLink;
+     OUString maLinkURL;
+ 
+     SwOLENode(  const SwNodeIndex &rWhere,
+diff --git a/sw/source/core/ole/ndole.cxx b/sw/source/core/ole/ndole.cxx
+index 74ceed65d2e0..02fc31daf550 100644
+--- a/sw/source/core/ole/ndole.cxx
++++ b/sw/source/core/ole/ndole.cxx
+@@ -147,6 +147,8 @@ void SAL_CALL SwOLEListener_Impl::disposing( const lang::EventObject& )
+ // TODO/LATER: actually SwEmbedObjectLink should be used here, but because different objects are used to control
+ //             embedded object different link objects with the same functionality had to be implemented
+ 
++namespace {
++
+ class SwEmbedObjectLink : public sfx2::SvBaseLink
+ {
+     SwOLENode*          pOleNode;
+@@ -209,6 +211,44 @@ void SwEmbedObjectLink::Closed()
+     SvBaseLink::Closed();
+ }
+ 
++class SwIFrameLink : public sfx2::SvBaseLink
++{
++    SwOLENode* m_pOleNode;
++
++public:
++    explicit SwIFrameLink(SwOLENode* pNode)
++        : ::sfx2::SvBaseLink(::SfxLinkUpdateMode::ONCALL, SotClipboardFormatId::SVXB)
++        , m_pOleNode(pNode)
++    {
++        SetSynchron( false );
++    }
++
++    ::sfx2::SvBaseLink::UpdateResult DataChanged(
++        const OUString&, const uno::Any& )
++    {
++        uno::Reference<embed::XEmbeddedObject> xObject = m_pOleNode->GetOLEObj().GetOleRef();
++        uno::Reference<embed::XCommonEmbedPersist> xPersObj(xObject, uno::UNO_QUERY);
++        if (xPersObj.is())
++        {
++            // let the IFrameObject reload the link
++            try
++            {
++                xPersObj->reload(uno::Sequence<beans::PropertyValue>(), uno::Sequence<beans::PropertyValue>());
++            }
++            catch (const uno::Exception&)
++            {
++            }
++
++            m_pOleNode->SetChanged();
++        }
++
++        return SUCCESS;
++    }
++
++};
++
++}
++
+ SwOLENode::SwOLENode( const SwNodeIndex &rWhere,
+                     const svt::EmbeddedObjectRef& xObj,
+                     SwGrfFormatColl *pGrfColl,
+@@ -607,18 +647,49 @@ void SwOLENode::CheckFileLink_Impl()
+ 
+     try
+     {
+-        uno::Reference< embed::XLinkageSupport > xLinkSupport( maOLEObj.m_xOLERef.GetObject(), uno::UNO_QUERY_THROW );
+-        if ( xLinkSupport->isLink() )
++        uno::Reference<embed::XEmbeddedObject> xObject = maOLEObj.m_xOLERef.GetObject();
++        if (!xObject)
++            return;
++
++        bool bIFrame = false;
++
++        OUString aLinkURL;
++        uno::Reference<embed::XLinkageSupport> xLinkSupport(xObject, uno::UNO_QUERY);
++        if (xLinkSupport)
+         {
+-            const OUString aLinkURL = xLinkSupport->getLinkURL();
+-            if ( !aLinkURL.isEmpty() )
++            if (xLinkSupport->isLink())
++                aLinkURL = xLinkSupport->getLinkURL();
++        }
++        else
++        {
++            // get IFrame (Floating Frames) listed and updatable from the
++            // manage links dialog
++            SvGlobalName aClassId(xObject->getClassID());
++            if (aClassId == SvGlobalName(SO3_IFRAME_CLASSID))
++            {
++                uno::Reference<beans::XPropertySet> xSet(xObject->getComponent(), uno::UNO_QUERY);
++                if (xSet.is())
++                    xSet->getPropertyValue("FrameURL") >>= aLinkURL;
++                bIFrame = true;
++            }
++        }
++
++        if (!aLinkURL.isEmpty()) // this is a file link so the model link manager should handle it
++        {
++            SwEmbedObjectLink* pEmbedObjectLink = nullptr;
++            if (!bIFrame)
++            {
++                pEmbedObjectLink = new SwEmbedObjectLink(this);
++                mpObjectLink = pEmbedObjectLink;
++            }
++            else
+             {
+-                // this is a file link so the model link manager should handle it
+-                mpObjectLink = new SwEmbedObjectLink( this );
+-                maLinkURL = aLinkURL;
+-                GetDoc().getIDocumentLinksAdministration().GetLinkManager().InsertFileLink( *mpObjectLink, sfx2::SvBaseLinkObjectType::ClientOle, aLinkURL );
+-                mpObjectLink->Connect();
++                mpObjectLink = new SwIFrameLink(this);
+             }
++            maLinkURL = aLinkURL;
++            GetDoc().getIDocumentLinksAdministration().GetLinkManager().InsertFileLink( *mpObjectLink, sfx2::SvBaseLinkObjectType::ClientOle, aLinkURL );
++            if (pEmbedObjectLink)
++                pEmbedObjectLink->Connect();
+         }
+     }
+     catch( uno::Exception& )
+diff --git a/xmloff/source/draw/ximpshap.cxx b/xmloff/source/draw/ximpshap.cxx
+index 4afa4e039776..3885f3b9219f 100644
+--- a/xmloff/source/draw/ximpshap.cxx
++++ b/xmloff/source/draw/ximpshap.cxx
+@@ -3210,9 +3210,35 @@ SdXMLFloatingFrameShapeContext::~SdXMLFloatingFrameShapeContext()
+ {
+ }
+ 
++uno::Reference<drawing::XShape> SdXMLFloatingFrameShapeContext::CreateFloatingFrameShape() const
++{
++    uno::Reference<lang::XMultiServiceFactory> xServiceFact(GetImport().GetModel(), uno::UNO_QUERY);
++    if (!xServiceFact.is())
++        return nullptr;
++    uno::Reference<drawing::XShape> xShape(
++            xServiceFact->createInstance("com.sun.star.drawing.FrameShape"), uno::UNO_QUERY);
++    return xShape;
++}
++
+ void SdXMLFloatingFrameShapeContext::StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& )
+ {
+-    AddShape("com.sun.star.drawing.FrameShape");
++    uno::Reference<drawing::XShape> xShape(SdXMLFloatingFrameShapeContext::CreateFloatingFrameShape());
++
++    uno::Reference< beans::XPropertySet > xProps(xShape, uno::UNO_QUERY);
++    // set FrameURL before AddShape, we have to do it again later because it
++    // gets cleared when the SdrOle2Obj is attached to the XShape.  But we want
++    // FrameURL to exist when AddShape triggers SetPersistName which itself
++    // triggers SdrOle2Obj::CheckFileLink_Impl and at that point we want to
++    // know what URL will end up being used. So bodge this by setting FrameURL
++    // to the temp pre-SdrOle2Obj attached properties and we can smuggle it
++    // eventually into SdrOle2Obj::SetPersistName at the right point after
++    // PersistName is set but before SdrOle2Obj::CheckFileLink_Impl is called
++    // in order to inform the link manager that this is an IFrame that links to
++    // a URL
++    if (xProps && !maHref.isEmpty())
++        xProps->setPropertyValue("FrameURL", Any(maHref));
++
++    AddShape(xShape);
+ 
+     if( !mxShape.is() )
+         return;
+@@ -3222,7 +3248,6 @@ void SdXMLFloatingFrameShapeContext::StartElement( const css::uno::Reference< cs
+     // set pos, size, shear and rotate
+     SetTransformation();
+ 
+-    uno::Reference< beans::XPropertySet > xProps( mxShape, uno::UNO_QUERY );
+     if( xProps.is() )
+     {
+         if( !maFrameName.isEmpty() )
+diff --git a/xmloff/source/draw/ximpshap.hxx b/xmloff/source/draw/ximpshap.hxx
+index 8a29b037229a..3931b3cdbb72 100644
+--- a/xmloff/source/draw/ximpshap.hxx
++++ b/xmloff/source/draw/ximpshap.hxx
+@@ -495,6 +495,8 @@ private:
+     OUString maFrameName;
+     OUString maHref;
+ 
++    css::uno::Reference<css::drawing::XShape> CreateFloatingFrameShape() const;
++
+ public:
+ 
+     SdXMLFloatingFrameShapeContext( SvXMLImport& rImport,
+-- 
+2.41.0
+
