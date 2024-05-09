@@ -16,3 +16,5 @@ TODO:
 PS: I'm aware that similar projects exist, such as git.rockylinux.org. The purpose of this project is too:
 - Store all Red Hat's code on Github, so it can be easily viewed and copied by other GPL projects, and so it can be easily analysed
 - To raise awareness that Red Hat's code is available (legally)
+
+Please send DMCA takedown requests to 68otepg8@duck.com
