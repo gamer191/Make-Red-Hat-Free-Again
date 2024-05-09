@@ -1,0 +1,11 @@
+--- gcc/reload.h.mp	2021-01-20 20:20:33.565766631 -0500
++++ gcc/reload.h	2021-01-20 20:20:48.437724432 -0500
+@@ -166,7 +166,7 @@ struct target_reload {
+      value indicates the level of indirect addressing supported, e.g., two
+      means that (MEM (MEM (REG n))) is also valid if (REG n) does not get
+      a hard register.  */
+-  bool x_spill_indirect_levels;
++  unsigned char x_spill_indirect_levels;
+ 
+   /* True if caller-save has been reinitialized.  */
+   bool x_caller_save_initialized_p;

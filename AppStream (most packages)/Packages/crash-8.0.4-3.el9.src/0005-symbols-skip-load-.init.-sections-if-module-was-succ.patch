@@ -1,0 +1,67 @@
+From 0c5ef6a4a3a2759915ffe72b1366dce2f32f65c5 Mon Sep 17 00:00:00 2001
+From: Tao Liu <ltao@redhat.com>
+Date: Tue, 14 Nov 2023 16:32:07 +0800
+Subject: [PATCH 05/14] symbols: skip load .init.* sections if module was
+ successfully initialized
+
+There might be address overlap of one modules .init.text symbols and
+another modules .text symbols. As a result, gdb fails to translate the
+address to symbol name correctly:
+
+  crash> sym -m virtio_blk | grep MODULE
+  ffffffffc00a4000 MODULE START: virtio_blk
+  ffffffffc00a86ec MODULE END: virtio_blk
+  crash> gdb info address floppy_module_init
+  Symbol "floppy_module_init" is a function at address 0xffffffffc00a4131.
+
+Since the .init.* sections of a module had been freed by kernel if the
+module was initialized successfully, there is no need to load the .init.*
+sections data from "*.ko.debug" in gdb to create such an overlap.
+lm->mod_init_module_ptr is used as a flag of whether module is freed.
+
+Without the patch:
+  crash> mod -S
+  crash> struct blk_mq_ops 0xffffffffc00a7160
+  struct blk_mq_ops {
+    queue_rq = 0xffffffffc00a45b0 <floppy_module_init+1151>, <-- translated from module floppy
+    map_queue = 0xffffffff813015c0 <blk_mq_map_queue>,
+    ...snip...
+    complete = 0xffffffffc00a4370 <floppy_module_init+575>,
+    init_request = 0xffffffffc00a4260 <floppy_module_init+303>,
+    ...snip...
+  }
+
+With the patch:
+  crash> mod -S
+  crash> struct blk_mq_ops 0xffffffffc00a7160
+  struct blk_mq_ops {
+    queue_rq = 0xffffffffc00a45b0 <virtio_queue_rq>, <-- translated from module virtio_blk
+    map_queue = 0xffffffff813015c0 <blk_mq_map_queue>,
+    ...snip...
+    complete = 0xffffffffc00a4370 <virtblk_request_done>,
+    init_request = 0xffffffffc00a4260 <virtblk_init_request>,
+    ...snip...
+  }
+
+Signed-off-by: Tao Liu <ltao@redhat.com>
+Signed-off-by: Lianbo Jiang <lijiang@redhat.com>
+---
+ symbols.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/symbols.c b/symbols.c
+index 176c95026f03..5d919910164e 100644
+--- a/symbols.c
++++ b/symbols.c
+@@ -13295,7 +13295,7 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
+ 			shift_string_right(req->buf, strlen(buf));
+ 			BCOPY(buf, req->buf, strlen(buf));
+ 			retval = TRUE;
+-		} else {
++		} else if (lm->mod_init_module_ptr || !STRNEQ(section_name, ".init.")) {
+ 			sprintf(buf, " -s %s 0x%lx", section_name, section_vaddr);
+ 			while ((len + strlen(buf)) >= buflen) {
+ 				RESIZEBUF(req->buf, buflen, buflen * 2);
+-- 
+2.41.0
+

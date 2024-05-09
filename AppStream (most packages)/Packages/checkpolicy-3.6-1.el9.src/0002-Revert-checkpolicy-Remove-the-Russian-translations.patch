@@ -1,0 +1,144 @@
+From d2c1492a7ab437362958c09d44b73c2e0f18c319 Mon Sep 17 00:00:00 2001
+From: Petr Lautrbach <lautrbach@redhat.com>
+Date: Mon, 13 Nov 2023 13:38:05 +0100
+Subject: [PATCH] Revert "checkpolicy: Remove the Russian translations"
+Content-type: text/plain
+
+This reverts commit b7e39e509b4fd3427adfd4c11e610609fa4f0911.
+---
+ checkpolicy/ru/checkmodule.8 | 55 +++++++++++++++++++++++++++++++++
+ checkpolicy/ru/checkpolicy.8 | 60 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 115 insertions(+)
+ create mode 100644 checkpolicy/ru/checkmodule.8
+ create mode 100644 checkpolicy/ru/checkpolicy.8
+
+diff --git a/checkpolicy/ru/checkmodule.8 b/checkpolicy/ru/checkmodule.8
+new file mode 100644
+index 000000000000..c6125904b324
+--- /dev/null
++++ b/checkpolicy/ru/checkmodule.8
+@@ -0,0 +1,55 @@
++.TH CHECKMODULE 8
++.SH ИМЯ
++checkmodule \- компилятор модулей политики SELinux
++.SH ОБЗОР
++.B checkmodule
++.I "[\-h] [\-b] [\-C] [\-m] [\-M] [\-U handle_unknown ] [\-V] [\-o output_file] [input_file]"
++.SH "ОПИСАНИЕ"
++Эта страница руководства содержит описание команды
++.BR checkmodule.
++.PP
++.B checkmodule
++- это программа, которая проверяет и компилирует модуль политики безопасности SELinux в двоичное представление.  Она может создавать либо базовый модуль политики (по умолчанию), либо небазовый модуль политики (параметр \-m); обычно требуется создать небазовый модуль политики для последующего добавления в существующее хранилище модулей, в котором уже есть базовый модуль, предоставленный базовой политикой. Используйте semodule_package, чтобы объединить этот модуль с соответствующим необязательным файлом контекстов файлов и таким образом создать пакет политики, а затем используйте semodule для установки пакета модуля в хранилище модулей и загрузите получившуюся политику.
++
++.SH ПАРАМЕТРЫ
++.TP
++.B \-b,\-\-binary
++Прочитать существующий файл двоичного модуля политики вместо исходного файла модуля политики. Этот параметр полезен при разработке/отладке.
++.TP
++.B \-C,\-\-cil
++Записать файл политики CIL, а не двоичный файл политики.
++.TP
++.B \-h,\-\-help
++Вывести справку.
++.TP
++.B \-m
++Создать небазовый модуль политики.
++.TP
++.B \-M,\-\-mls
++Включить поддержку MLS/MCS при проверке и компиляции модуля политики.
++.TP
++.B \-V,\-\-version
++Показать версии политики, созданные этой программой. Обратите внимание, что в настоящее время не поддерживается сборка более ранних версий.
++.TP
++.B \-o,\-\-output filename
++Записать файл двоичного модуля политики с указанным именем файла.
++Без указания имени файла checkmodule только проверит синтаксис исходного файла модуля и не будет создавать двоичный модуль.
++.TP
++.B \-U,\-\-handle-unknown <action>
++Указать, как ядро должно обрабатывать неизвестные классы или разрешения (запрещать, разрешать или отклонять).
++
++.SH ПРИМЕР
++.nf
++# Собрать небазовый модуль политики с включённой системой безопасности MLS/MCS.
++$ checkmodule \-M \-m httpd.te \-o httpd.mod
++.fi
++
++.SH "СМОТРИТЕ ТАКЖЕ"
++.B semodule(8), semodule_package(8)
++Документация SELinux Reference Policy по адресу https://github.com/SELinuxProject/refpolicy/wiki
++
++
++.SH АВТОРЫ
++Эта страница руководства была скопирована со страницы руководства checkpolicy, написанной Árpád Magosányi <mag@bunuel.tii.matav.hu>,
++и отредактирована Dan Walsh <dwalsh@redhat.com>.
++Перевод на русский язык выполнила Олеся Герасименко <gammaray@basealt.ru>.
+diff --git a/checkpolicy/ru/checkpolicy.8 b/checkpolicy/ru/checkpolicy.8
+new file mode 100644
+index 000000000000..bc9da9dab4e6
+--- /dev/null
++++ b/checkpolicy/ru/checkpolicy.8
+@@ -0,0 +1,60 @@
++.TH CHECKPOLICY 8
++.SH ИМЯ
++checkpolicy \- компилятор политики SELinux
++.SH ОБЗОР
++.B checkpolicy
++.I "[\-b[F]] [\-C] [\-d] [\-U handle_unknown (allow,deny,reject)] [\-M] [\-c policyvers] [\-o output_file] [\-S] [\-t target_platform (selinux,xen)] [\-V] [input_file]"
++.br
++.SH "ОПИСАНИЕ"
++Эта страница руководства содержит описание команды 
++.BR checkpolicy.
++.PP
++.B checkpolicy
++- это программа, которая проверяет и компилирует конфигурацию политики безопасности SELinux в двоичное представление, которое можно загрузить в ядро. Если имя входного файла не указано, checkpolicy попытается выполнить чтение из policy.conf или policy (если указан флаг \-b).
++
++.SH ПАРАМЕТРЫ
++.TP
++.B \-b,\-\-binary
++Прочитать существующий двоичный файл политики, а не исходный файл policy.conf.
++.TP
++.B \-F,\-\-conf
++Записать файл policy.conf, а не двоичный файл политики. Этот параметр можно использовать только при работе с двоичным файлом политики.
++.TP
++.B \-C,\-\-cil
++Записать файл политики CIL, а не двоичный файл политики.
++.TP
++.B \-d,\-\-debug
++Войти в режим отладки после загрузки политики.
++.TP
++.B \-U,\-\-handle-unknown <action>
++Указать, как ядро должно обрабатывать неизвестные классы или разрешения (запрещать, разрешать или отклонять).
++.TP
++.B \-M,\-\-mls
++Включить политику MLS при проверке и компиляции политики.
++.TP
++.B \-c policyvers
++Указать версию политики (по умолчанию используется последняя).
++.TP
++.B \-o,\-\-output filename
++Записать двоичный файл политики с указанным именем файла.
++.TP
++.B \-S,\-\-sort
++Сортировать прочие контексты (ocontexts) перед записью двоичной политики. Этот параметр позволяет задать соответствие вывода checkpolicy двоичным политикам, созданным с помощью semanage и secilc.
++.TP
++.B \-t,\-\-target
++Указать целевую платформу (selinux или xen).
++.TP
++.B \-V,\-\-version
++Показать сведения о версии.
++.TP
++.B \-h,\-\-help
++Показать сведения об использовании.
++
++.SH "СМОТРИТЕ ТАКЖЕ"
++Документация SELinux Reference Policy по адресу https://github.com/SELinuxProject/refpolicy/wiki
++
++.SH АВТОРЫ
++Эта страница руководства была написана Árpád Magosányi <mag@bunuel.tii.matav.hu>,
++и отредактирована Stephen Smalley <stephen.smalley.work@gmail.com>.
++Программа была написана Stephen Smalley <stephen.smalley.work@gmail.com>.
++Перевод на русский язык выполнила Олеся Герасименко <gammaray@basealt.ru>.
+-- 
+2.41.0
+

@@ -1,0 +1,27 @@
+From a87290f734ba136e7b648a9ce9754767cbb5eed3 Mon Sep 17 00:00:00 2001
+From: Petr Lautrbach <lautrbach@redhat.com>
+Date: Mon, 13 Nov 2023 13:37:36 +0100
+Subject: [PATCH] Revert "Do not automatically install Russian translations"
+Content-type: text/plain
+
+This reverts commit 14f35fde50cd080650ac3b0136234464a3ea6fbe.
+---
+ checkpolicy/Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/checkpolicy/Makefile b/checkpolicy/Makefile
+index 281d15be9a9e..86c4a19759fa 100644
+--- a/checkpolicy/Makefile
++++ b/checkpolicy/Makefile
+@@ -1,7 +1,7 @@
+ #
+ # Makefile for building the checkpolicy program
+ #
+-LINGUAS ?=
++LINGUAS ?= ru
+ PREFIX ?= /usr
+ BINDIR ?= $(PREFIX)/bin
+ MANDIR ?= $(PREFIX)/share/man
+-- 
+2.41.0
+

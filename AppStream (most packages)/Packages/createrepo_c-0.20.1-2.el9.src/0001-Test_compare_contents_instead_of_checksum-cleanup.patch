@@ -1,0 +1,110 @@
+From 3b69916685cd1dc1a64a59d9e1b90921de91e2d0 Mon Sep 17 00:00:00 2001
+From: Daniel Alley <dalley@redhat.com>
+Date: Fri, 13 Jan 2023 00:06:12 -0500
+Subject: [PATCH] Change test to compare contents instead of checksum
+
+Different implementations of the DEFLATE algorithm can produce different
+(but equally valid) gzip files. This can cause test failure if a
+different implementation (e.g. hardware acceleration) is used.
+---
+ tests/test_misc.c | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/tests/test_misc.c b/tests/test_misc.c
+index 6614809..f8025cb 100644
+--- a/tests/test_misc.c
++++ b/tests/test_misc.c
+@@ -544,19 +544,20 @@ compressfile_test_text_file(Copyfiletest *copyfiletest,
+                             G_GNUC_UNUSED gconstpointer test_data)
+ {
+     int ret;
+-    char *checksum;
+     GError *tmp_err = NULL;
+ 
+     g_assert(!g_file_test(copyfiletest->dst_file, G_FILE_TEST_EXISTS));
++
+     ret = cr_compress_file(TEST_TEXT_FILE, copyfiletest->dst_file,
+                            CR_CW_GZ_COMPRESSION, NULL, FALSE, &tmp_err);
+     g_assert(!tmp_err);
+     g_assert_cmpint(ret, ==, CRE_OK);
+     g_assert(g_file_test(copyfiletest->dst_file, G_FILE_TEST_IS_REGULAR));
+-    checksum = cr_checksum_file(copyfiletest->dst_file, CR_CHECKSUM_SHA256, NULL);
+-    g_assert_cmpstr(checksum, ==, "8909fde88a5747d800fd2562b0f22945f014aa7df64"
+-                                  "cf1c15c7933ae54b72ab6");
+-    g_free(checksum);
++
++    // assert content is readable after compression and decompression
++    char buf[30];
++    read_file(copyfiletest->dst_file, CR_CW_GZ_COMPRESSION, buf, 30);
++    g_assert(g_strrstr(buf, "Lorem ipsum dolor sit amet"));
+ }
+ 
+ 
+-- 
+2.40.1
+
+
+From 7844b63d932f36084a927b3cc8900cc0971436f3 Mon Sep 17 00:00:00 2001
+From: Daniel Alley <dalley@redhat.com>
+Date: Fri, 13 Jan 2023 12:52:42 -0500
+Subject: [PATCH] Remove 11 year old polyfill
+
+---
+ src/compression_wrapper.c | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/src/compression_wrapper.c b/src/compression_wrapper.c
+index 15e9e38..b23c345 100644
+--- a/src/compression_wrapper.c
++++ b/src/compression_wrapper.c
+@@ -86,11 +86,6 @@ LZMA_CHECK_SHA256
+ #define XZ_DECODER_FLAGS        0
+ #define XZ_BUFFER_SIZE          (1024*32)
+ 
+-#if ZLIB_VERNUM < 0x1240
+-// XXX: Zlib has gzbuffer since 1.2.4
+-#define gzbuffer(a,b) 0
+-#endif
+-
+ cr_ContentStat *
+ cr_contentstat_new(cr_ChecksumType type, GError **err)
+ {
+@@ -1549,7 +1544,7 @@ cr_printf(GError **err, CR_FILE *cr_file, const char *format, ...)
+     return ret;
+ }
+ 
+-ssize_t 
++ssize_t
+ cr_get_zchunk_with_index(CR_FILE *cr_file, ssize_t zchunk_index, char **copy_buf, GError **err)
+ {
+     assert(cr_file);
+-- 
+2.40.1
+
+
+From ad34359fbcaefb6fd5053a56b0472572ea2270b5 Mon Sep 17 00:00:00 2001
+From: Daniel Alley <dalley@redhat.com>
+Date: Fri, 13 Jan 2023 13:05:16 -0500
+Subject: [PATCH] Fix compile warning, off by one
+
+closes #337
+---
+ src/checksum.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/checksum.c b/src/checksum.c
+index ef420a1..1ae2a54 100644
+--- a/src/checksum.c
++++ b/src/checksum.c
+@@ -49,7 +49,7 @@ cr_checksum_type(const char *name)
+     if (len > MAX_CHECKSUM_NAME_LEN)
+         return CR_CHECKSUM_UNKNOWN;
+ 
+-    for (size_t x = 0; x <= len; x++)
++    for (size_t x = 0; x < len; x++)
+         name_lower[x] = tolower(name[x]);
+ 
+     if (!strncmp(name_lower, "sha", 3)) {
+-- 
+2.40.1
+

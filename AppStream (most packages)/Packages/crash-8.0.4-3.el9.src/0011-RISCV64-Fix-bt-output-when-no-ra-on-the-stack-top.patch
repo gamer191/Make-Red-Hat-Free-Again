@@ -1,0 +1,87 @@
+From 9b69093e623f1d54c373b1e091900d40576c059b Mon Sep 17 00:00:00 2001
+From: Song Shuai <songshuaishuai@tinylab.org>
+Date: Tue, 12 Dec 2023 18:20:51 +0800
+Subject: [PATCH 11/14] RISCV64: Fix 'bt' output when no ra on the stack top
+
+Same as the Linux commit f766f77a74f5 ("riscv/stacktrace: Fix
+stack output without ra on the stack top").
+
+When a function doesn't have a callee, then it will not
+push ra into the stack, such as lkdtm functions, so
+correct the FP of the second frame and use pt_regs to get
+the right PC of the second frame.
+
+Before this patch, the `bt -f` outputs only the first frame with
+the wrong PC and FP of next frame:
+```
+crash> bt -f
+PID: 1        TASK: ff600000000e0000  CPU: 1    COMMAND: "sh"
+ #0 [ff20000000013cf0] lkdtm_EXCEPTION at ffffffff805303c0
+    [PC: ffffffff805303c0 RA: ff20000000013d10 SP: ff20000000013cf0 SIZE: 16] <- wrong next PC
+    ff20000000013cf0: 0000000000000001 ff20000000013d10 <- next FP
+    ff20000000013d00: ff20000000013d40
+crash>
+```
+After this patch, the `bt` outputs the full frames:
+```
+crash> bt
+PID: 1        TASK: ff600000000e0000  CPU: 1    COMMAND: "sh"
+ #0 [ff20000000013cf0] lkdtm_EXCEPTION at ffffffff805303c0
+ #1 [ff20000000013d00] lkdtm_do_action at ffffffff8052fe36
+ #2 [ff20000000013d10] direct_entry at ffffffff80530018
+ #3 [ff20000000013d40] full_proxy_write at ffffffff80305044
+ #4 [ff20000000013d80] vfs_write at ffffffff801b68b4
+ #5 [ff20000000013e30] ksys_write at ffffffff801b6c4a
+ #6 [ff20000000013e80] __riscv_sys_write at ffffffff801b6cc4
+ #7 [ff20000000013e90] do_trap_ecall_u at ffffffff80836798
+crash>
+```
+
+Acked-by: Kazuhito Hagio <k-hagio-ab@nec.com>
+Signed-off-by: Song Shuai <songshuaishuai@tinylab.org>
+Signed-off-by: Lianbo Jiang <lijiang@redhat.com>
+---
+ riscv64.c | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/riscv64.c b/riscv64.c
+index 0aaa14b2671e..872be594d72b 100644
+--- a/riscv64.c
++++ b/riscv64.c
+@@ -747,11 +747,14 @@ riscv64_back_trace_cmd(struct bt_info *bt)
+ {
+ 	struct riscv64_unwind_frame current, previous;
+ 	struct stackframe curr_frame;
++	struct riscv64_register * regs;
+ 	int level = 0;
+ 
+ 	if (bt->flags & BT_REGS_NOT_FOUND)
+ 		return;
+ 
++	regs = (struct riscv64_register *) bt->machdep;
++
+ 	current.pc = bt->instptr;
+ 	current.sp = bt->stkptr;
+ 	current.fp = bt->frameptr;
+@@ -788,8 +791,16 @@ riscv64_back_trace_cmd(struct bt_info *bt)
+ 		    sizeof(curr_frame), "get stack frame", RETURN_ON_ERROR))
+ 			return;
+ 
+-		previous.pc = curr_frame.ra;
+-		previous.fp = curr_frame.fp;
++		/* correct PC and FP of the second frame when the first frame has no callee */
++
++		if (regs && (regs->regs[RISCV64_REGS_EPC] == current.pc) && curr_frame.fp & 0x7){
++			previous.pc = regs->regs[RISCV64_REGS_RA];
++			previous.fp = curr_frame.ra;
++		} else {
++			previous.pc = curr_frame.ra;
++			previous.fp = curr_frame.fp;
++		}
++
+ 		previous.sp = current.fp;
+ 
+ 		riscv64_dump_backtrace_entry(bt, symbol, &current, &previous, level++);
+-- 
+2.41.0
+

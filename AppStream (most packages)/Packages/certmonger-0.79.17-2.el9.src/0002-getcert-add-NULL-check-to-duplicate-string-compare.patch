@@ -1,0 +1,28 @@
+From d9a773f709b42b6fe7d8816da656e5bee2afd641 Mon Sep 17 00:00:00 2001
+From: Rob Crittenden <rcritten@redhat.com>
+Date: Tue, 30 Jan 2024 09:06:53 -0500
+Subject: [PATCH 2/2] getcert: add NULL check to duplicate string compare
+
+Fixes: https://www.pagure.io/certmonger/issue/269
+
+Signed-off-by: Rob Crittenden <rcritten@redhat.com>
+---
+ src/getcert.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/getcert.c b/src/getcert.c
+index 81b4bc8d..f5575bce 100644
+--- a/src/getcert.c
++++ b/src/getcert.c
+@@ -497,7 +497,7 @@ send_req(DBusMessage *req, int verbose)
+ 			printf(_("No response received from %s service.\n"),
+ 			       CM_DBUS_NAME);
+ 		}
+-		if (strcmp(err.name, "org.fedorahosted.certmonger.duplicate") == 0) {
++		if ((err.name != NULL) && strcmp(err.name, "org.fedorahosted.certmonger.duplicate") == 0) {
+ 			exit(2);
+ 		}
+ 		exit(1);
+-- 
+2.42.0
+

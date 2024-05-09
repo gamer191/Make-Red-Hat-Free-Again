@@ -1,0 +1,87 @@
+From 28891d1127542dbb2d5ba16c575e14e741ed73ef Mon Sep 17 00:00:00 2001
+From: Tao Liu <ltao@redhat.com>
+Date: Thu, 4 Jan 2024 09:20:27 +0800
+Subject: [PATCH] symbols: skip the module if the given address is not within
+ its address range
+
+Previously, to find a module symbol and its offset by an arbitrary address,
+all symbols within the module will be iterated by address ascending order
+until the last symbol with a smaller address been noticed.
+
+However if the address is not within the module address range, e.g.
+the address is higher than the module's last symbol's address, then
+the module can be surely skipped, because its symbol iteration is
+unnecessary. This can speed up the kernel module symbols finding and improve
+the overall performance.
+
+Without the patch:
+  $ time echo "bt 8993" | ~/crash-dev/crash vmcore vmlinux
+  crash> bt 8993
+  PID: 8993     TASK: ffff927569cc2100  CPU: 2    COMMAND: "WriterPool0"
+   #0 [ffff927569cd76f0] __schedule at ffffffffb3db78d8
+   #1 [ffff927569cd7758] schedule_preempt_disabled at ffffffffb3db8bf9
+   #2 [ffff927569cd7768] __mutex_lock_slowpath at ffffffffb3db6ca7
+   #3 [ffff927569cd77c0] mutex_lock at ffffffffb3db602f
+   #4 [ffff927569cd77d8] ucache_retrieve at ffffffffc0cf4409 [secfs2]
+   ...snip the stacktrace of the same module...
+   #11 [ffff927569cd7ba0] cskal_path_vfs_getattr_nosec at ffffffffc05cae76 [falcon_kal]
+   ...snip...
+   #13 [ffff927569cd7c40] _ZdlPv at ffffffffc086e751 [falcon_lsm_serviceable]
+   ...snip...
+   #20 [ffff927569cd7ef8] unload_network_ops_symbols at ffffffffc06f11c0 [falcon_lsm_pinned_14713]
+   #21 [ffff927569cd7f50] system_call_fastpath at ffffffffb3dc539a
+      RIP: 00007f2b28ed4023  RSP: 00007f2a45fe7f80  RFLAGS: 00000206
+      RAX: 0000000000000012  RBX: 00007f2a68302e00  RCX: 00007f2a682546d8
+      RDX: 0000000000000826  RSI: 00007eb57ea6a000  RDI: 00000000000000e3
+      RBP: 00007eb57ea6a000   R8: 0000000000000826   R9: 00000002670bdfd2
+      R10: 00000002670bdfd2  R11: 0000000000000293  R12: 00000002670bdfd2
+      R13: 00007f29d501a480  R14: 0000000000000826  R15: 00000002670bdfd2
+      ORIG_RAX: 0000000000000012  CS: 0033  SS: 002b
+  crash>
+  real	7m14.826s
+  user	7m12.502s
+  sys	0m1.091s
+
+With the patch:
+  $ time echo "bt 8993" | ~/crash-dev/crash vmcore vmlinux
+  crash> bt 8993
+  PID: 8993     TASK: ffff927569cc2100  CPU: 2    COMMAND: "WriterPool0"
+   #0 [ffff927569cd76f0] __schedule at ffffffffb3db78d8
+   #1 [ffff927569cd7758] schedule_preempt_disabled at ffffffffb3db8bf9
+   ...snip the same output...
+  crash>
+  real	0m8.827s
+  user	0m7.896s
+  sys	0m0.938s
+
+Signed-off-by: Tao Liu <ltao@redhat.com>
+---
+ symbols.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/symbols.c b/symbols.c
+index 5d91991..88a3fd1 100644
+--- a/symbols.c
++++ b/symbols.c
+@@ -5561,7 +5561,7 @@ value_search_module_6_4(ulong value, ulong *offset)
+ 			sp = lm->symtable[t];
+ 			sp_end = lm->symend[t];
+ 
+-			if (value < sp->value)
++			if (value < sp->value || value > sp_end->value)
+ 				continue;
+ 
+ 			splast = NULL;
+@@ -5646,6 +5646,9 @@ retry:
+ 		if (sp->value > value)   /* invalid -- between modules */
+ 			break;
+ 
++		if (sp_end->value < value) /* not within the module */
++			continue;
++
+ 	       /*
+ 		*  splast will contain the last module symbol encountered.
+ 		*  Note: "__insmod_"-type symbols will be set in splast only 
+-- 
+2.40.1
+

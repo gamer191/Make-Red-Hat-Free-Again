@@ -1,0 +1,23 @@
+Index: cepces-0.3.8/cepces/__init__.py
+===================================================================
+--- cepces-0.3.8.orig/cepces/__init__.py	2023-02-15 21:58:32.000000000 +0100
++++ cepces-0.3.8/cepces/__init__.py	2024-01-25 16:46:56.218989833 +0100
+@@ -23,7 +23,7 @@ import logging
+ __title__ = 'cepces'
+ __description__ = 'CEP/CES library.'
+ __url__ = 'https://github.com/openSUSE/cepces/'
+-__version__ = '0.3.7'
++__version__ = '0.3.8'
+ __author__ = 'Daniel Uvehag'
+ __author_email__ = 'daniel.uvehag@gmail.com'
+ __license__ = 'GPLv3'
+Index: cepces-0.3.8/selinux/cepces.te
+===================================================================
+--- cepces-0.3.8.orig/selinux/cepces.te	2023-02-15 21:58:32.000000000 +0100
++++ cepces-0.3.8/selinux/cepces.te	2024-01-25 16:47:06.118006940 +0100
+@@ -1,4 +1,4 @@
+-policy_module(cepces, 0.3.7)
++policy_module(cepces, 0.3.8)
+ 
+ require {
+     type certmonger_t;

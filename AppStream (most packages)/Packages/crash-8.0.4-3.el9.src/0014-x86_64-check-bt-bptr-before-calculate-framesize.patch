@@ -1,0 +1,65 @@
+From 53d2577cef98b76b122aade94349637a11e06138 Mon Sep 17 00:00:00 2001
+From: Tao Liu <ltao@redhat.com>
+Date: Tue, 26 Dec 2023 09:19:28 +0800
+Subject: [PATCH 14/14] x86_64: check bt->bptr before calculate framesize
+
+Previously the value of bt->bptr is not checked, which may led to a
+wrong prev_sp and framesize. As a result, bt->stackbuf[] will be
+accessed out of range, and segfault.
+
+Before:
+  crash> set debug 1
+  crash> bt
+  ...snip...
+  --- <NMI exception stack> ---
+   #8 [ffffffff9a603e10] __switch_to_asm at ffffffff99800214
+  rsp: ffffffff9a603e10 textaddr: ffffffff99800214 -> spo: 0 bpo: 0 spr: 0 bpr: 0 type: 0 end: 0
+   #9 [ffffffff9a603e40] __schedule at ffffffff9960dfb1
+  rsp: ffffffff9a603e40 textaddr: ffffffff9960dfb1 -> spo: 16 bpo: -16 spr: 4 bpr: 1 type: 0 end: 0
+  rsp: ffffffff9a603e40 rbp: ffffb9ca076e7ca8 prev_sp: ffffb9ca076e7cb8 framesize: 1829650024
+  Segmentation fault (core dumped)
+
+  (gdb) p/x bt->stackbase
+  $1 = 0xffffffff9a600000
+  (gdb) p/x bt->stacktop
+  $2 = 0xffffffff9a604000
+
+After:
+  crash> set debug 1
+  crash> bt
+  ...snip...
+  --- <NMI exception stack> ---
+   #8 [ffffffff9a603e10] __switch_to_asm at ffffffff99800214
+  rsp: ffffffff9a603e10 textaddr: ffffffff99800214 -> spo: 0 bpo: 0 spr: 0 bpr: 0 type: 0 end: 0
+   #9 [ffffffff9a603e40] __schedule at ffffffff9960dfb1
+  rsp: ffffffff9a603e40 textaddr: ffffffff9960dfb1 -> spo: 16 bpo: -16 spr: 4 bpr: 1 type: 0 end: 0
+   #10 [ffffffff9a603e98] schedule_idle at ffffffff9960e87c
+  rsp: ffffffff9a603e98 textaddr: ffffffff9960e87c -> spo: 8 bpo: 0 spr: 5 bpr: 0 type: 0 end: 0
+  rsp: ffffffff9a603e98 prev_sp: ffffffff9a603ea8 framesize: 0
+  ...snip...
+
+Check bt->bptr value before calculate framesize. Only bt->bptr within
+the range of bt->stackbase and bt->stacktop will be regarded as valid.
+
+Signed-off-by: Tao Liu <ltao@redhat.com>
+Signed-off-by: Lianbo Jiang <lijiang@redhat.com>
+---
+ x86_64.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/x86_64.c b/x86_64.c
+index 42ade4817ad9..f59991f8c4c5 100644
+--- a/x86_64.c
++++ b/x86_64.c
+@@ -8649,7 +8649,7 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp, char *stack_
+ 				if (CRASHDEBUG(1))
+ 					fprintf(fp, "rsp: %lx prev_sp: %lx framesize: %d\n",
+ 							rsp, prev_sp, framesize);
+-			} else if ((korc->sp_reg == ORC_REG_BP) && bt->bptr) {
++			} else if ((korc->sp_reg == ORC_REG_BP) && bt->bptr && INSTACK(bt->bptr, bt)) {
+ 				prev_sp = bt->bptr + korc->sp_offset;
+ 				framesize = (prev_sp - (rsp + 8) - 8);
+ 				if (CRASHDEBUG(1))
+-- 
+2.41.0
+

@@ -1,0 +1,47 @@
+From c15da07526291a5c357010cb4aaf4bde6151e642 Mon Sep 17 00:00:00 2001
+From: Johan Erlandsson <johan.erlandsson@sony.com>
+Date: Wed, 19 Apr 2023 11:26:04 +0200
+Subject: [PATCH 06/14] use NR_SWAPCACHE when nr_swapper_spaces isn't available
+
+In 5.12 the following change was introduced:
+b6038942480e ("mm: memcg: add swapcache stat for memcg v2")
+
+Then the variable 'nr_swapper_spaces' is not read (unless
+CONFIG_DEBUG_VM=y).  In GKI builds this variable is then optimized
+out. But the same change provided a new way to obtain the same
+information, using NR_SWAPCACHE.
+
+Reported-by: xueguolun <xueguolun@xiaomi.com>
+Signed-off-by: Johan Erlandsson <johan.erlandsson@sony.com>
+Signed-off-by: Lianbo Jiang <lijiang@redhat.com>
+---
+ memory.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/memory.c b/memory.c
+index 791194a405d4..b84e974a3325 100644
+--- a/memory.c
++++ b/memory.c
+@@ -8486,7 +8486,7 @@ dump_kmeminfo(void)
+ 	ulong hugetlb_total_pages, hugetlb_total_free_pages = 0;
+ 	int done_hugetlb_calc = 0; 
+ 	long nr_file_pages, nr_slab;
+-	ulong swapper_space_nrpages;
++	long swapper_space_nrpages;
+ 	ulong pct;
+ 	uint tmp;
+ 	struct meminfo meminfo;
+@@ -8609,7 +8609,9 @@ dump_kmeminfo(void)
+ 		char *swapper_space = GETBUF(SIZE(address_space));
+ 
+ 		swapper_space_nrpages = 0;
+-		if (symbol_exists("nr_swapper_spaces") &&
++		if (dump_vm_stat("NR_SWAPCACHE", &swapper_space_nrpages, 0)) {
++			;
++		} else if (symbol_exists("nr_swapper_spaces") &&
+ 			(len = get_array_length("nr_swapper_spaces",
+ 				NULL, 0))) {
+ 			char *nr_swapper_space =
+-- 
+2.41.0
+

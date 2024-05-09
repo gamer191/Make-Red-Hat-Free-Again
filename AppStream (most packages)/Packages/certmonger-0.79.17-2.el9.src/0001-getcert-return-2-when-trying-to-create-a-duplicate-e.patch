@@ -1,0 +1,54 @@
+From 4ef80a8365e746d514110520c76d23433d1a378b Mon Sep 17 00:00:00 2001
+From: Rob Crittenden <rcritten@redhat.com>
+Date: Mon, 22 Jan 2024 09:44:30 -0500
+Subject: [PATCH 1/2] getcert: return 2 when trying to create a duplicate entry
+
+This affects the add-ca, request and start-tracking commands.
+
+Returning a unique return code will make scripting easier.
+
+Fixes: https://www.pagure.io/certmonger/issue/269
+
+Signed-off-by: Rob Crittenden <rcritten@redhat.com>
+---
+ src/getcert.1.in | 9 +++++++++
+ src/getcert.c    | 3 +++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/src/getcert.1.in b/src/getcert.1.in
+index 4adfc925..754a8836 100644
+--- a/src/getcert.1.in
++++ b/src/getcert.1.in
+@@ -43,6 +43,15 @@ All commands can take either the \fB\-s\fR or \fB\-S\fR arguments, which instruc
+ bus, if no value is set.  By default, \fIgetcert\fR consults the @CM_DBUS_NAME@
+ service attached to the system bus.
+ 
++.SH "EXIT STATUS"
++The exit status is 0 on success, nonzero on error.
++
++0 Success
++
++1 Error
++
++2 Duplicate entry
++
+ .SH BUGS
+ Please file tickets for any that you find at https://fedorahosted.org/certmonger/
+ 
+diff --git a/src/getcert.c b/src/getcert.c
+index 77fa5367..81b4bc8d 100644
+--- a/src/getcert.c
++++ b/src/getcert.c
+@@ -497,6 +497,9 @@ send_req(DBusMessage *req, int verbose)
+ 			printf(_("No response received from %s service.\n"),
+ 			       CM_DBUS_NAME);
+ 		}
++		if (strcmp(err.name, "org.fedorahosted.certmonger.duplicate") == 0) {
++			exit(2);
++		}
+ 		exit(1);
+ 	}
+ 	dbus_message_unref(req);
+-- 
+2.42.0
+

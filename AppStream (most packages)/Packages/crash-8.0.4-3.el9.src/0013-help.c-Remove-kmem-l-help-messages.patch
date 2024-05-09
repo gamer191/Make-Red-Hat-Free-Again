@@ -1,0 +1,36 @@
+From 38435c3acec075b076353ca28f557a0dfe1341c3 Mon Sep 17 00:00:00 2001
+From: Li Zhijian <lizhijian@fujitsu.com>
+Date: Fri, 15 Dec 2023 10:44:21 +0800
+Subject: [PATCH 13/14] help.c: Remove "kmem -l" help messages
+
+"kmem -l" option has existed when crash git project initialization, but
+its help message was not accurate (extra arguments a|i|ic|id was missing).
+
+In addition, those symbols required by the -l option were for very old
+kernels, at least 2.6 kernels don't contain them.  Also, this option has
+not been fixed for a long time.
+
+Instead of document this option, hide it from help messages.
+
+Signed-off-by: Li Zhijian <lizhijian@fujitsu.com>
+Signed-off-by: Lianbo Jiang <lijiang@redhat.com>
+---
+ help.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/help.c b/help.c
+index cc7ab20e343e..d80e843703c1 100644
+--- a/help.c
++++ b/help.c
+@@ -6888,8 +6888,6 @@ char *help_kmem[] = {
+ "            members of the associated page struct are displayed.",
+ "   address  when used with -c, the address must be a page pointer address;",
+ "            the page_hash_table entry containing the page is displayed.",
+-"   address  when used with -l, the address must be a page pointer address;",
+-"            the page address is displayed if it is contained with the list.",
+ "   address  when used with -v, the address can be a mapped kernel virtual",
+ "            address or physical address; the mapped region containing the",
+ "            address is displayed.\n",
+-- 
+2.41.0
+

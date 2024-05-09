@@ -1,0 +1,168 @@
+From d65e5d3eae0dd06a5308a5cb00c05fee60594093 Mon Sep 17 00:00:00 2001
+From: Kazuhito Hagio <k-hagio-ab@nec.com>
+Date: Mon, 20 Nov 2023 13:22:56 +0900
+Subject: [PATCH 02/14] Fix typos in offset_table and missing "help -o" items
+
+A few of zram related members in the offset_table have typos and
+irregular naming rule, also they are not present in the "help -o"
+output.  Let's fix these.
+
+Signed-off-by: Kazuhito Hagio <k-hagio-ab@nec.com>
+Signed-off-by: Lianbo Jiang <lijiang@redhat.com>
+---
+ defs.h     |  8 ++++----
+ diskdump.c | 24 ++++++++++++------------
+ memory.c   |  2 +-
+ symbols.c  | 12 ++++++++++++
+ 4 files changed, 29 insertions(+), 17 deletions(-)
+
+diff --git a/defs.h b/defs.h
+index 2cae5b61e589..5218a94fe4a4 100644
+--- a/defs.h
++++ b/defs.h
+@@ -2112,13 +2112,13 @@ struct offset_table {                    /* stash of commonly-used offsets */
+ 	long bpf_prog_aux_name;
+ 	long page_private;
+ 	long swap_info_struct_bdev;
+-	long zram_mempoll;
++	long zram_mem_pool;
+ 	long zram_compressor;
+-	long zram_table_flag;
+-	long zspoll_size_class;
++	long zram_table_entry_flags;
++	long zs_pool_size_class;
+ 	long size_class_size;
+ 	long gendisk_private_data;
+-	long zram_table_entry;
++	long zram_table_entry;	/* unused; but cannot remove */
+ 	long module_core_size_rw;
+ 	long module_core_size_rx;
+ 	long module_init_size_rw;
+diff --git a/diskdump.c b/diskdump.c
+index 25054d96313e..f20f3ac519a1 100644
+--- a/diskdump.c
++++ b/diskdump.c
+@@ -2765,15 +2765,15 @@ zram_init(void)
+ {
+ 	long zram_flag_shift;
+ 
+-	MEMBER_OFFSET_INIT(zram_mempoll, "zram", "mem_pool");
++	MEMBER_OFFSET_INIT(zram_mem_pool, "zram", "mem_pool");
+ 	MEMBER_OFFSET_INIT(zram_compressor, "zram", "compressor");
+ 	if (INVALID_MEMBER(zram_compressor))
+ 		MEMBER_OFFSET_INIT(zram_comp_algs, "zram", "comp_algs");
+-	MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "flags");
+-	if (INVALID_MEMBER(zram_table_flag))
+-		MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "value");
++	MEMBER_OFFSET_INIT(zram_table_entry_flags, "zram_table_entry", "flags");
++	if (INVALID_MEMBER(zram_table_entry_flags))
++		MEMBER_OFFSET_INIT(zram_table_entry_flags, "zram_table_entry", "value");
+ 	STRUCT_SIZE_INIT(zram_table_entry, "zram_table_entry");
+-	MEMBER_OFFSET_INIT(zspoll_size_class, "zs_pool", "size_class");
++	MEMBER_OFFSET_INIT(zs_pool_size_class, "zs_pool", "size_class");
+ 	MEMBER_OFFSET_INIT(size_class_size, "size_class", "size");
+ 	MEMBER_OFFSET_INIT(zspage_huge, "zspage", "huge");
+ 
+@@ -2826,7 +2826,7 @@ zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
+ 	if (zs_magic != ZSPAGE_MAGIC)
+ 		error(FATAL, "zspage magic incorrect: %x\n", zs_magic);
+ 
+-	class = pool + OFFSET(zspoll_size_class);
++	class = pool + OFFSET(zs_pool_size_class);
+ 	class += (class_idx * sizeof(void *));
+ 	readmem(class, KVADDR, &class, sizeof(void *), "size_class", FAULT_ON_ERROR);
+ 	readmem(class + OFFSET(size_class_size), KVADDR,
+@@ -2987,9 +2987,9 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong
+ 	ulong zram, zram_table_entry, sector, index, entry, flags, size,
+ 		outsize, off;
+ 
+-	if (INVALID_MEMBER(zram_mempoll)) {
++	if (INVALID_MEMBER(zram_mem_pool)) {
+ 		zram_init();
+-		if (INVALID_MEMBER(zram_mempoll)) {
++		if (INVALID_MEMBER(zram_mem_pool)) {
+ 			error(WARNING,
+ 			      "Some pages are swapped out to zram. "
+ 			      "Please run mod -s zram.\n");
+@@ -3013,8 +3013,8 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong
+ 	readmem(zram, KVADDR, &zram_table_entry,
+ 		sizeof(void *), "zram_table_entry", FAULT_ON_ERROR);
+ 	zram_table_entry += (index * SIZE(zram_table_entry));
+-	readmem(zram_table_entry + OFFSET(zram_table_flag), KVADDR, &flags,
+-		sizeof(void *), "zram_table_flag", FAULT_ON_ERROR);
++	readmem(zram_table_entry + OFFSET(zram_table_entry_flags), KVADDR, &flags,
++		sizeof(void *), "zram_table_entry.flags", FAULT_ON_ERROR);
+ 	if (VALID_MEMBER(zram_compressor))
+ 		readmem(zram + OFFSET(zram_compressor), KVADDR, name, sizeof(name),
+ 			"zram compressor", FAULT_ON_ERROR);
+@@ -3072,8 +3072,8 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong
+ 		goto out;
+ 	}
+ 
+-	readmem(zram + OFFSET(zram_mempoll), KVADDR, &zram,
+-		sizeof(void *), "zram_mempoll", FAULT_ON_ERROR);
++	readmem(zram + OFFSET(zram_mem_pool), KVADDR, &zram,
++		sizeof(void *), "zram.mem_pool", FAULT_ON_ERROR);
+ 
+ 	obj_addr = zram_object_addr(zram, entry, zram_buf);
+ 	if (obj_addr == NULL) {
+diff --git a/memory.c b/memory.c
+index 86ccec5e2bac..791194a405d4 100644
+--- a/memory.c
++++ b/memory.c
+@@ -519,7 +519,7 @@ vm_init(void)
+         	"swap_info_struct", "old_block_size");
+ 	MEMBER_OFFSET_INIT(swap_info_struct_bdev, "swap_info_struct", "bdev");
+ 
+-	MEMBER_OFFSET_INIT(zspoll_size_class, "zs_pool", "size_class");
++	MEMBER_OFFSET_INIT(zs_pool_size_class, "zs_pool", "size_class");
+ 	MEMBER_OFFSET_INIT(size_class_size, "size_class", "size");
+ 
+ 	MEMBER_OFFSET_INIT(block_device_bd_inode, "block_device", "bd_inode");
+diff --git a/symbols.c b/symbols.c
+index 8e8b4c31d915..176c95026f03 100644
+--- a/symbols.c
++++ b/symbols.c
+@@ -10304,6 +10304,7 @@ dump_offset_table(char *spec, ulong makestruct)
+                 OFFSET(page_active));
+         fprintf(fp, "            page_compound_head: %ld\n",
+                 OFFSET(page_compound_head));
++        fprintf(fp, "                  page_private: %ld\n", OFFSET(page_private));
+ 
+ 	fprintf(fp, "        trace_print_flags_mask: %ld\n",
+ 		OFFSET(trace_print_flags_mask));
+@@ -10330,6 +10331,7 @@ dump_offset_table(char *spec, ulong makestruct)
+ 		OFFSET(swap_info_struct_inuse_pages));
+         fprintf(fp, "swap_info_struct_old_block_size: %ld\n",
+ 		OFFSET(swap_info_struct_old_block_size));
++        fprintf(fp, "         swap_info_struct_bdev: %ld\n", OFFSET(swap_info_struct_bdev));
+ 	fprintf(fp, "         block_device_bd_inode: %ld\n",
+ 		OFFSET(block_device_bd_inode));
+ 	fprintf(fp, "          block_device_bd_list: %ld\n",
+@@ -11359,6 +11361,8 @@ dump_offset_table(char *spec, ulong makestruct)
+ 		OFFSET(gendisk_part0));
+ 	fprintf(fp, "                 gendisk_queue: %ld\n",
+ 		OFFSET(gendisk_queue));
++	fprintf(fp, "          gendisk_private_data: %ld\n", OFFSET(gendisk_private_data));
++
+ 	fprintf(fp, "                 hd_struct_dev: %ld\n",
+ 		OFFSET(hd_struct_dev));
+ 	fprintf(fp, "             hd_struct_dkstats: %ld\n",
+@@ -11765,6 +11769,14 @@ dump_offset_table(char *spec, ulong makestruct)
+ 	fprintf(fp, "            maple_metadata_end: %ld\n", OFFSET(maple_metadata_end));
+ 	fprintf(fp, "            maple_metadata_gap: %ld\n", OFFSET(maple_metadata_gap));
+ 
++	fprintf(fp, "                 zram_mem_pool: %ld\n", OFFSET(zram_mem_pool));
++	fprintf(fp, "               zram_compressor: %ld\n", OFFSET(zram_compressor));
++	fprintf(fp, "                zram_comp_algs: %ld\n", OFFSET(zram_comp_algs));
++	fprintf(fp, "        zram_table_entry_flags: %ld\n", OFFSET(zram_table_entry_flags));
++	fprintf(fp, "            zs_pool_size_class: %ld\n", OFFSET(zs_pool_size_class));
++	fprintf(fp, "               size_class_size: %ld\n", OFFSET(size_class_size));
++	fprintf(fp, "                   zspage_huge: %ld\n", OFFSET(zspage_huge));
++
+ 	fprintf(fp, "\n                    size_table:\n");
+ 	fprintf(fp, "                          page: %ld\n", SIZE(page));
+ 	fprintf(fp, "                    page_flags: %ld\n", SIZE(page_flags));
+-- 
+2.41.0
+
