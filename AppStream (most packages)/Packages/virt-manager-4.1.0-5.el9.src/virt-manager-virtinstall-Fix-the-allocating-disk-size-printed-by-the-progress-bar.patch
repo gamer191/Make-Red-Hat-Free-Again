@@ -1,0 +1,39 @@
+From f68b3667591ab5f9edb9a40f9a7c0c798c923bc4 Mon Sep 17 00:00:00 2001
+From: Toshiki Sonoda <sonoda.toshiki@fujitsu.com>
+Date: Wed, 9 Nov 2022 18:33:56 +0900
+Subject: [PATCH] virtinstall: Fix the allocating disk size printed by the
+ progress bar
+
+When a sparse file is created during a disk allocation,
+virt-install prints not the created disk size but a sparse file size.
+
+Therefore, we fix to print the created disk size during disk allocation
+instead of the size of the sparse file by updating the meter with the
+self.capacity.
+
+Signed-off-by: Toshiki Sonoda <sonoda.toshiki@fujitsu.com>
+Signed-off-by: Haruka Ohata <ohata.haruka@fujitsu.com>
+(cherry picked from commit 39c7a443146433766e4e71e48ab59145c74924b3)
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2156247
+
+Signed-off-by: Jonathon Jongsma <jjongsma@redhat.com>
+---
+ virtinst/storage.py | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/virtinst/storage.py b/virtinst/storage.py
+index 509f5cb06..617b05e0d 100644
+--- a/virtinst/storage.py
++++ b/virtinst/storage.py
+@@ -697,6 +697,7 @@ class StorageVolume(_StorageObject):
+                 log.debug("Using vol create flags=%s", createflags)
+                 vol = self.pool.createXML(xml, createflags)
+ 
++            meter.update(self.capacity)
+             meter.end()
+             log.debug("Storage volume '%s' install complete.", self.name)
+             return vol
+-- 
+2.39.0
+

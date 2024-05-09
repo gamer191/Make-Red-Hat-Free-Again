@@ -1,0 +1,87 @@
+From 91cd135f66b517cf247d031966c2f33343c23aa3 Mon Sep 17 00:00:00 2001
+From: Toshiki Sonoda <sonoda.toshiki@fujitsu.com>
+Date: Wed, 9 Nov 2022 18:33:57 +0900
+Subject: [PATCH] virtinstall: Hide total_size in the progress bar if it
+ doesn't need
+
+virt-install prints the total_size value to the progress bar even if it
+is meaningless.
+This value can be confusing to user, so for execute prosess that doesn't
+copy files (total_size = 0B), we hide the total_size value.
+For example, 'Creating domain...' doesn't need to print the total_size
+value.
+
+Signed-off-by: Toshiki Sonoda <sonoda.toshiki@fujitsu.com>
+Signed-off-by: Haruka Ohata <ohata.haruka@fujitsu.com>
+(cherry picked from commit 6ec00474a659158f20248d6af3771d1a12ddac7b)
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2156247
+
+Signed-off-by: Jonathon Jongsma <jjongsma@redhat.com>
+---
+ tests/data/meter/meter-zero.txt |  4 ++++
+ tests/test_misc.py              | 14 ++++++++++++++
+ virtinst/_progresspriv.py       |  8 ++++++--
+ 3 files changed, 24 insertions(+), 2 deletions(-)
+ create mode 100644 tests/data/meter/meter-zero.txt
+
+diff --git a/tests/data/meter/meter-zero.txt b/tests/data/meter/meter-zero.txt
+new file mode 100644
+index 000000000..fc81f21fd
+--- /dev/null
++++ b/tests/data/meter/meter-zero.txt
+@@ -0,0 +1,4 @@
++
++Meter text test            100% [================]    0 B/s |    0 B  --:-- ETA 
++
++Meter text test                                             |         00:02     
+diff --git a/tests/test_misc.py b/tests/test_misc.py
+index 20f5a626b..2cabc3382 100644
+--- a/tests/test_misc.py
++++ b/tests/test_misc.py
+@@ -224,6 +224,20 @@ def test_misc_meter():
+     out = meter.output.getvalue().replace("\r", "\n")
+     utils.diff_compare(out, os.path.join(utils.DATADIR, "meter", "meter6.txt"))
+ 
++    def _test_meter_zero(m, startval=0, text="Meter text test"):
++        with unittest.mock.patch("time.time", return_value=1.0):
++            m.start(text, startval)
++        with unittest.mock.patch("time.time", return_value=3.0):
++            m.update(0)
++        with unittest.mock.patch("time.time", return_value=3.1):
++            m.end()
++
++    # meter with size 0 and startval size 0
++    meter = _progresspriv.TextMeter(output=io.StringIO())
++    _test_meter_zero(meter, 0)
++    out = meter.output.getvalue().replace("\r", "\n")
++    utils.diff_compare(out, os.path.join(utils.DATADIR, "meter", "meter-zero.txt"))
++
+     # BaseMeter coverage
+     meter = _progresspriv.BaseMeter()
+     _test_meter_values(meter)
+diff --git a/virtinst/_progresspriv.py b/virtinst/_progresspriv.py
+index a035c9c43..207c64796 100644
+--- a/virtinst/_progresspriv.py
++++ b/virtinst/_progresspriv.py
+@@ -247,11 +247,15 @@ class TextMeter(BaseMeter):
+         tl = TerminalLine(8)
+         # For big screens, make it more readable.
+         use_hours = bool(tl.llen > 80)
+-        ui_size = tl.add(' | %5sB' % total_size)
+         ui_time = tl.add('  %s' % format_time(self.re.elapsed_time(),
+                                               use_hours))
+         ui_end, not_done = _term_add_end(tl, self.size, amount_read)
+-        dummy = not_done
++        if not not_done and amount_read == 0:
++            # Doesn't need to print total_size
++            ui_size = tl.add(' | %5s ' % ' ')
++        else:
++            ui_size = tl.add(' | %5sB' % total_size)
++
+         out = '\r%-*.*s%s%s%s\n' % (tl.rest(), tl.rest(), self.text,
+                                     ui_size, ui_time, ui_end)
+         self.output.write(out)
+-- 
+2.39.0
+

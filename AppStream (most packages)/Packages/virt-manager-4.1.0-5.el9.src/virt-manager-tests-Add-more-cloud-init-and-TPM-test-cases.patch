@@ -1,0 +1,653 @@
+From c8d1097fdaf7640c9dc78095076e584d38fbf6e5 Mon Sep 17 00:00:00 2001
+From: Cole Robinson <crobinso@redhat.com>
+Date: Tue, 12 Sep 2023 11:57:27 -0400
+Subject: [PATCH 1/2] tests: Add more cloud-init and TPM test cases
+
+Signed-off-by: Cole Robinson <crobinso@redhat.com>
+
+Resolves: https://issues.redhat.com/browse/RHEL-1705
+
+(cherry picked from commit fca6de3950d41ccc1c4895c42073c840c45f01ab)
+Signed-off-by: Jonathon Jongsma <jjongsma@redhat.com>
+---
+ .../data/capabilities/kvm-aarch64-domcaps.xml |  14 ++
+ .../virt-install-aarch64-cloud-init.xml       | 136 ++++++++++++++++++
+ ...t-install-aarch64-firmware-no-override.xml |   6 +
+ .../compare/virt-install-aarch64-kvm-gic.xml  |   3 +
+ .../virt-install-aarch64-kvm-import.xml       |   3 +
+ .../virt-install-cloud-init-default.xml       | 127 +++++++++++-----
+ .../virt-install-cloud-init-options1.xml      | 131 +++++++++++------
+ tests/test_cli.py                             |   6 +-
+ 8 files changed, 346 insertions(+), 80 deletions(-)
+ create mode 100644 tests/data/cli/compare/virt-install-aarch64-cloud-init.xml
+
+diff --git a/tests/data/capabilities/kvm-aarch64-domcaps.xml b/tests/data/capabilities/kvm-aarch64-domcaps.xml
+index 432bdb537..9c244bbdd 100644
+--- a/tests/data/capabilities/kvm-aarch64-domcaps.xml
++++ b/tests/data/capabilities/kvm-aarch64-domcaps.xml
+@@ -62,6 +62,20 @@
+       <enum name='capsType'/>
+       <enum name='pciBackend'/>
+     </hostdev>
++    <tpm supported='yes'>
++      <enum name='model'>
++        <value>tpm-tis</value>
++      </enum>
++      <enum name='backendModel'>
++        <value>passthrough</value>
++        <value>emulator</value>
++        <value>external</value>
++      </enum>
++      <enum name='backendVersion'>
++        <value>1.2</value>
++        <value>2.0</value>
++      </enum>
++    </tpm>
+   </devices>
+   <features>
+     <gic supported='yes'>
+diff --git a/tests/data/cli/compare/virt-install-aarch64-cloud-init.xml b/tests/data/cli/compare/virt-install-aarch64-cloud-init.xml
+new file mode 100644
+index 000000000..e4a50cf4c
+--- /dev/null
++++ b/tests/data/cli/compare/virt-install-aarch64-cloud-init.xml
+@@ -0,0 +1,136 @@
++<domain type="kvm">
++  <name>fedora28</name>
++  <uuid>00000000-1111-2222-3333-444444444444</uuid>
++  <metadata>
++    <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
++      <libosinfo:os id="http://fedoraproject.org/fedora/28"/>
++    </libosinfo:libosinfo>
++  </metadata>
++  <memory>65536</memory>
++  <currentMemory>65536</currentMemory>
++  <vcpu>2</vcpu>
++  <os>
++    <type arch="aarch64" machine="virt">hvm</type>
++    <loader readonly="yes" type="pflash">/usr/share/AAVMF/AAVMF_CODE.fd</loader>
++    <smbios mode="sysinfo"/>
++  </os>
++  <cpu mode="host-passthrough"/>
++  <clock offset="utc"/>
++  <devices>
++    <emulator>/usr/bin/qemu-system-aarch64</emulator>
++    <disk type="file" device="disk">
++      <driver name="qemu" type="qcow2"/>
++      <source file="/pool-dir/testvol1.img"/>
++      <target dev="vda" bus="virtio"/>
++    </disk>
++    <controller type="usb" model="qemu-xhci" ports="15"/>
++    <controller type="pci" model="pcie-root"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <interface type="bridge">
++      <source bridge="testsuitebr0"/>
++      <mac address="00:11:22:33:44:55"/>
++      <model type="virtio"/>
++    </interface>
++    <console type="pty"/>
++    <channel type="unix">
++      <source mode="bind"/>
++      <target type="virtio" name="org.qemu.guest_agent.0"/>
++    </channel>
++    <tpm>
++      <backend type="emulator"/>
++    </tpm>
++    <memballoon model="virtio"/>
++    <rng model="virtio">
++      <backend model="random">/dev/urandom</backend>
++    </rng>
++    <disk type="file" device="cdrom">
++      <driver name="qemu" type="raw"/>
++      <source file="/VIRTINST-TESTSUITE/cloudinit.iso"/>
++      <target dev="sda" bus="scsi"/>
++      <readonly/>
++    </disk>
++  </devices>
++  <sysinfo type="smbios">
++    <system>
++      <entry name="serial">ds=nocloud</entry>
++    </system>
++  </sysinfo>
++  <on_reboot>destroy</on_reboot>
++</domain>
++<domain type="kvm">
++  <name>fedora28</name>
++  <uuid>00000000-1111-2222-3333-444444444444</uuid>
++  <metadata>
++    <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
++      <libosinfo:os id="http://fedoraproject.org/fedora/28"/>
++    </libosinfo:libosinfo>
++  </metadata>
++  <memory>65536</memory>
++  <currentMemory>65536</currentMemory>
++  <vcpu>2</vcpu>
++  <os>
++    <type arch="aarch64" machine="virt">hvm</type>
++    <loader readonly="yes" type="pflash">/usr/share/AAVMF/AAVMF_CODE.fd</loader>
++    <boot dev="hd"/>
++  </os>
++  <cpu mode="host-passthrough"/>
++  <clock offset="utc"/>
++  <devices>
++    <emulator>/usr/bin/qemu-system-aarch64</emulator>
++    <disk type="file" device="disk">
++      <driver name="qemu" type="qcow2"/>
++      <source file="/pool-dir/testvol1.img"/>
++      <target dev="vda" bus="virtio"/>
++    </disk>
++    <controller type="usb" model="qemu-xhci" ports="15"/>
++    <controller type="pci" model="pcie-root"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <interface type="bridge">
++      <source bridge="testsuitebr0"/>
++      <mac address="00:11:22:33:44:55"/>
++      <model type="virtio"/>
++    </interface>
++    <console type="pty"/>
++    <channel type="unix">
++      <source mode="bind"/>
++      <target type="virtio" name="org.qemu.guest_agent.0"/>
++    </channel>
++    <tpm>
++      <backend type="emulator"/>
++    </tpm>
++    <memballoon model="virtio"/>
++    <rng model="virtio">
++      <backend model="random">/dev/urandom</backend>
++    </rng>
++    <disk type="file" device="cdrom">
++      <target dev="sda" bus="scsi"/>
++      <readonly/>
++    </disk>
++  </devices>
++</domain>
+diff --git a/tests/data/cli/compare/virt-install-aarch64-firmware-no-override.xml b/tests/data/cli/compare/virt-install-aarch64-firmware-no-override.xml
+index b6fe84e67..cef9e6cde 100644
+--- a/tests/data/cli/compare/virt-install-aarch64-firmware-no-override.xml
++++ b/tests/data/cli/compare/virt-install-aarch64-firmware-no-override.xml
+@@ -43,6 +43,9 @@
+       <source mode="bind"/>
+       <target type="virtio" name="org.qemu.guest_agent.0"/>
+     </channel>
++    <tpm>
++      <backend type="emulator"/>
++    </tpm>
+     <memballoon model="virtio"/>
+     <rng model="virtio">
+       <backend model="random">/dev/urandom</backend>
+@@ -95,6 +98,9 @@
+       <source mode="bind"/>
+       <target type="virtio" name="org.qemu.guest_agent.0"/>
+     </channel>
++    <tpm>
++      <backend type="emulator"/>
++    </tpm>
+     <memballoon model="virtio"/>
+     <rng model="virtio">
+       <backend model="random">/dev/urandom</backend>
+diff --git a/tests/data/cli/compare/virt-install-aarch64-kvm-gic.xml b/tests/data/cli/compare/virt-install-aarch64-kvm-gic.xml
+index 92e17eda6..aa31ed9c1 100644
+--- a/tests/data/cli/compare/virt-install-aarch64-kvm-gic.xml
++++ b/tests/data/cli/compare/virt-install-aarch64-kvm-gic.xml
+@@ -56,6 +56,9 @@
+       <source mode="bind"/>
+       <target type="virtio" name="org.qemu.guest_agent.0"/>
+     </channel>
++    <tpm>
++      <backend type="emulator"/>
++    </tpm>
+     <memballoon model="virtio"/>
+     <rng model="virtio">
+       <backend model="random">/dev/urandom</backend>
+diff --git a/tests/data/cli/compare/virt-install-aarch64-kvm-import.xml b/tests/data/cli/compare/virt-install-aarch64-kvm-import.xml
+index 5203cb807..1e4b26e51 100644
+--- a/tests/data/cli/compare/virt-install-aarch64-kvm-import.xml
++++ b/tests/data/cli/compare/virt-install-aarch64-kvm-import.xml
+@@ -51,6 +51,9 @@
+     </channel>
+     <input type="tablet" bus="usb"/>
+     <input type="keyboard" bus="usb"/>
++    <tpm>
++      <backend type="emulator"/>
++    </tpm>
+     <graphics type="vnc" port="-1"/>
+     <video>
+       <model type="virtio"/>
+diff --git a/tests/data/cli/compare/virt-install-cloud-init-default.xml b/tests/data/cli/compare/virt-install-cloud-init-default.xml
+index 0ddc52762..46cff8c09 100644
+--- a/tests/data/cli/compare/virt-install-cloud-init-default.xml
++++ b/tests/data/cli/compare/virt-install-cloud-init-default.xml
+@@ -1,4 +1,4 @@
+-<domain type="test">
++<domain type="kvm">
+   <name>fedora28</name>
+   <uuid>00000000-1111-2222-3333-444444444444</uuid>
+   <metadata>
+@@ -10,41 +10,67 @@
+   <currentMemory>65536</currentMemory>
+   <vcpu>2</vcpu>
+   <os>
+-    <type arch="i686">hvm</type>
++    <type arch="x86_64" machine="q35">hvm</type>
+     <smbios mode="sysinfo"/>
+   </os>
+   <features>
+-    <pae/>
++    <acpi/>
++    <apic/>
+   </features>
+-  <clock offset="utc"/>
++  <cpu mode="host-passthrough"/>
++  <clock offset="utc">
++    <timer name="rtc" tickpolicy="catchup"/>
++    <timer name="pit" tickpolicy="delay"/>
++    <timer name="hpet" present="no"/>
++  </clock>
+   <pm>
+     <suspend-to-mem enabled="no"/>
+     <suspend-to-disk enabled="no"/>
+   </pm>
+   <devices>
+-    <emulator>/usr/bin/test-hv</emulator>
++    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+     <disk type="file" device="disk">
++      <driver name="qemu" type="qcow2"/>
+       <source file="/pool-dir/testvol1.img"/>
+-      <target dev="hda" bus="ide"/>
++      <target dev="vda" bus="virtio"/>
+     </disk>
+-    <controller type="usb" model="ich9-ehci1"/>
+-    <controller type="usb" model="ich9-uhci1">
+-      <master startport="0"/>
+-    </controller>
+-    <controller type="usb" model="ich9-uhci2">
+-      <master startport="2"/>
+-    </controller>
+-    <controller type="usb" model="ich9-uhci3">
+-      <master startport="4"/>
+-    </controller>
+-    <interface type="user">
++    <controller type="usb" model="qemu-xhci" ports="15"/>
++    <controller type="pci" model="pcie-root"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <interface type="bridge">
++      <source bridge="testsuitebr0"/>
+       <mac address="00:11:22:33:44:55"/>
+-      <model type="e1000"/>
++      <model type="virtio"/>
+     </interface>
+     <console type="pty"/>
++    <channel type="unix">
++      <source mode="bind"/>
++      <target type="virtio" name="org.qemu.guest_agent.0"/>
++    </channel>
++    <tpm model="tpm-crb">
++      <backend type="emulator"/>
++    </tpm>
++    <memballoon model="virtio"/>
++    <rng model="virtio">
++      <backend model="random">/dev/urandom</backend>
++    </rng>
+     <disk type="file" device="cdrom">
++      <driver name="qemu" type="raw"/>
+       <source file="/VIRTINST-TESTSUITE/cloudinit.iso"/>
+-      <target dev="hdb" bus="ide"/>
++      <target dev="sda" bus="sata"/>
+       <readonly/>
+     </disk>
+   </devices>
+@@ -55,7 +81,7 @@
+   </sysinfo>
+   <on_reboot>destroy</on_reboot>
+ </domain>
+-<domain type="test">
++<domain type="kvm">
+   <name>fedora28</name>
+   <uuid>00000000-1111-2222-3333-444444444444</uuid>
+   <metadata>
+@@ -67,40 +93,65 @@
+   <currentMemory>65536</currentMemory>
+   <vcpu>2</vcpu>
+   <os>
+-    <type arch="i686">hvm</type>
++    <type arch="x86_64" machine="q35">hvm</type>
+     <boot dev="hd"/>
+   </os>
+   <features>
+-    <pae/>
++    <acpi/>
++    <apic/>
+   </features>
+-  <clock offset="utc"/>
++  <cpu mode="host-passthrough"/>
++  <clock offset="utc">
++    <timer name="rtc" tickpolicy="catchup"/>
++    <timer name="pit" tickpolicy="delay"/>
++    <timer name="hpet" present="no"/>
++  </clock>
+   <pm>
+     <suspend-to-mem enabled="no"/>
+     <suspend-to-disk enabled="no"/>
+   </pm>
+   <devices>
+-    <emulator>/usr/bin/test-hv</emulator>
++    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+     <disk type="file" device="disk">
++      <driver name="qemu" type="qcow2"/>
+       <source file="/pool-dir/testvol1.img"/>
+-      <target dev="hda" bus="ide"/>
++      <target dev="vda" bus="virtio"/>
+     </disk>
+-    <controller type="usb" model="ich9-ehci1"/>
+-    <controller type="usb" model="ich9-uhci1">
+-      <master startport="0"/>
+-    </controller>
+-    <controller type="usb" model="ich9-uhci2">
+-      <master startport="2"/>
+-    </controller>
+-    <controller type="usb" model="ich9-uhci3">
+-      <master startport="4"/>
+-    </controller>
+-    <interface type="user">
++    <controller type="usb" model="qemu-xhci" ports="15"/>
++    <controller type="pci" model="pcie-root"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <interface type="bridge">
++      <source bridge="testsuitebr0"/>
+       <mac address="00:11:22:33:44:55"/>
+-      <model type="e1000"/>
++      <model type="virtio"/>
+     </interface>
+     <console type="pty"/>
++    <channel type="unix">
++      <source mode="bind"/>
++      <target type="virtio" name="org.qemu.guest_agent.0"/>
++    </channel>
++    <tpm model="tpm-crb">
++      <backend type="emulator"/>
++    </tpm>
++    <memballoon model="virtio"/>
++    <rng model="virtio">
++      <backend model="random">/dev/urandom</backend>
++    </rng>
+     <disk type="file" device="cdrom">
+-      <target dev="hdb" bus="ide"/>
++      <target dev="sda" bus="sata"/>
+       <readonly/>
+     </disk>
+   </devices>
+diff --git a/tests/data/cli/compare/virt-install-cloud-init-options1.xml b/tests/data/cli/compare/virt-install-cloud-init-options1.xml
+index 1df73714d..cd5426049 100644
+--- a/tests/data/cli/compare/virt-install-cloud-init-options1.xml
++++ b/tests/data/cli/compare/virt-install-cloud-init-options1.xml
+@@ -4,7 +4,7 @@ chpasswd:
+     root:[SCRUBBLED]
+   expire: True
+ 
+-<domain type="test">
++<domain type="kvm">
+   <name>fedora28</name>
+   <uuid>00000000-1111-2222-3333-444444444444</uuid>
+   <metadata>
+@@ -20,48 +20,74 @@ chpasswd:
+       <entry name="serial">foobar</entry>
+     </system>
+   </sysinfo>
+-  <os>
+-    <type arch="i686">hvm</type>
++  <os firmware="efi">
++    <type arch="x86_64" machine="q35">hvm</type>
+     <smbios mode="sysinfo"/>
+   </os>
+   <features>
+-    <pae/>
++    <acpi/>
++    <apic/>
+   </features>
+-  <clock offset="utc"/>
++  <cpu mode="host-passthrough"/>
++  <clock offset="utc">
++    <timer name="rtc" tickpolicy="catchup"/>
++    <timer name="pit" tickpolicy="delay"/>
++    <timer name="hpet" present="no"/>
++  </clock>
+   <pm>
+     <suspend-to-mem enabled="no"/>
+     <suspend-to-disk enabled="no"/>
+   </pm>
+   <devices>
+-    <emulator>/usr/bin/test-hv</emulator>
++    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+     <disk type="file" device="disk">
++      <driver name="qemu" type="qcow2"/>
+       <source file="/pool-dir/testvol1.img"/>
+-      <target dev="hda" bus="ide"/>
++      <target dev="vda" bus="virtio"/>
+     </disk>
+-    <controller type="usb" model="ich9-ehci1"/>
+-    <controller type="usb" model="ich9-uhci1">
+-      <master startport="0"/>
+-    </controller>
+-    <controller type="usb" model="ich9-uhci2">
+-      <master startport="2"/>
+-    </controller>
+-    <controller type="usb" model="ich9-uhci3">
+-      <master startport="4"/>
+-    </controller>
+-    <interface type="user">
++    <controller type="usb" model="qemu-xhci" ports="15"/>
++    <controller type="pci" model="pcie-root"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <interface type="bridge">
++      <source bridge="testsuitebr0"/>
+       <mac address="00:11:22:33:44:55"/>
+-      <model type="e1000"/>
++      <model type="virtio"/>
+     </interface>
+     <console type="pty"/>
++    <channel type="unix">
++      <source mode="bind"/>
++      <target type="virtio" name="org.qemu.guest_agent.0"/>
++    </channel>
++    <tpm model="tpm-crb">
++      <backend type="emulator"/>
++    </tpm>
++    <memballoon model="virtio"/>
++    <rng model="virtio">
++      <backend model="random">/dev/urandom</backend>
++    </rng>
+     <disk type="file" device="cdrom">
++      <driver name="qemu" type="raw"/>
+       <source file="/VIRTINST-TESTSUITE/cloudinit.iso"/>
+-      <target dev="hdb" bus="ide"/>
++      <target dev="sda" bus="sata"/>
+       <readonly/>
+     </disk>
+   </devices>
+   <on_reboot>destroy</on_reboot>
+ </domain>
+-<domain type="test">
++<domain type="kvm">
+   <name>fedora28</name>
+   <uuid>00000000-1111-2222-3333-444444444444</uuid>
+   <metadata>
+@@ -77,42 +103,67 @@ chpasswd:
+       <entry name="serial">foobar</entry>
+     </system>
+   </sysinfo>
+-  <os>
+-    <type arch="i686">hvm</type>
++  <os firmware="efi">
++    <type arch="x86_64" machine="q35">hvm</type>
+     <boot dev="hd"/>
+     <smbios mode="sysinfo"/>
+   </os>
+   <features>
+-    <pae/>
++    <acpi/>
++    <apic/>
+   </features>
+-  <clock offset="utc"/>
++  <cpu mode="host-passthrough"/>
++  <clock offset="utc">
++    <timer name="rtc" tickpolicy="catchup"/>
++    <timer name="pit" tickpolicy="delay"/>
++    <timer name="hpet" present="no"/>
++  </clock>
+   <pm>
+     <suspend-to-mem enabled="no"/>
+     <suspend-to-disk enabled="no"/>
+   </pm>
+   <devices>
+-    <emulator>/usr/bin/test-hv</emulator>
++    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+     <disk type="file" device="disk">
++      <driver name="qemu" type="qcow2"/>
+       <source file="/pool-dir/testvol1.img"/>
+-      <target dev="hda" bus="ide"/>
++      <target dev="vda" bus="virtio"/>
+     </disk>
+-    <controller type="usb" model="ich9-ehci1"/>
+-    <controller type="usb" model="ich9-uhci1">
+-      <master startport="0"/>
+-    </controller>
+-    <controller type="usb" model="ich9-uhci2">
+-      <master startport="2"/>
+-    </controller>
+-    <controller type="usb" model="ich9-uhci3">
+-      <master startport="4"/>
+-    </controller>
+-    <interface type="user">
++    <controller type="usb" model="qemu-xhci" ports="15"/>
++    <controller type="pci" model="pcie-root"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <controller type="pci" model="pcie-root-port"/>
++    <interface type="bridge">
++      <source bridge="testsuitebr0"/>
+       <mac address="00:11:22:33:44:55"/>
+-      <model type="e1000"/>
++      <model type="virtio"/>
+     </interface>
+     <console type="pty"/>
++    <channel type="unix">
++      <source mode="bind"/>
++      <target type="virtio" name="org.qemu.guest_agent.0"/>
++    </channel>
++    <tpm model="tpm-crb">
++      <backend type="emulator"/>
++    </tpm>
++    <memballoon model="virtio"/>
++    <rng model="virtio">
++      <backend model="random">/dev/urandom</backend>
++    </rng>
+     <disk type="file" device="cdrom">
+-      <target dev="hdb" bus="ide"/>
++      <target dev="sda" bus="sata"/>
+       <readonly/>
+     </disk>
+   </devices>
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index ca8d2340a..c3f7ab2ba 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -1017,8 +1017,9 @@ c = vinst.add_category("misc-install", "--nographics --noautoconsole")
+ c.add_compare("--connect %s --os-variant generic" % (utils.URIs.test_suite), "noargs-fail", use_default_args=False)  # No arguments
+ c.add_compare("--connect %s --os-variant fedora26" % (utils.URIs.test_suite), "osvariant-noargs-fail", use_default_args=False)  # No arguments
+ c.add_compare("--connect %s --os-variant fedora26 --pxe --print-xml" % (utils.URIs.test_suite), "osvariant-defaults-pxe", use_default_args=False)  # No arguments
+-c.add_compare("--disk %(EXISTIMG1)s --os-variant fedora28 --cloud-init", "cloud-init-default", env={"VIRTINST_TEST_SUITE_CLOUDINIT": "1"})  # default --cloud-init behavior is root-password-generate=yes,disable=yes
+-c.add_compare("--disk %(EXISTIMG1)s --os-variant fedora28 --cloud-init root-password-generate=yes,disable=no --sysinfo system.serial=foobar", "cloud-init-options1", env={"VIRTINST_TEST_SUITE_PRINT_CLOUDINIT": "1"})  # --cloud-init root-password-generate, with --sysinfo override
++c.add_valid("--disk %(EXISTIMG1)s --os-variant fedora28 --cloud-init", env={"VIRTINST_TEST_SUITE_CLOUDINIT": "1"})  # default --cloud-init, but without implied --print-xml, to hit some specific code paths
++c.add_compare("--connect %(URI-KVM-X86)s --disk %(EXISTIMG1)s --os-variant fedora28 --cloud-init --tpm default", "cloud-init-default", env={"VIRTINST_TEST_SUITE_CLOUDINIT": "1"})  # default --cloud-init behavior is root-password-generate=yes,disable=yes, forcing tpm
++c.add_compare("--connect %(URI-KVM-X86)s --disk %(EXISTIMG1)s --os-variant fedora28 --cloud-init root-password-generate=yes,disable=no --sysinfo system.serial=foobar --boot uefi", "cloud-init-options1", env={"VIRTINST_TEST_SUITE_PRINT_CLOUDINIT": "1"})  # --cloud-init root-password-generate, with --sysinfo override, with uefi
+ c.add_compare("--disk %(EXISTIMG1)s --os-variant fedora28 --cloud-init root-password-file=%(ADMIN-PASSWORD-FILE)s,root-ssh-key=%(XMLDIR)s/cloudinit/ssh-key.txt,clouduser-ssh-key=%(XMLDIR)s/cloudinit/ssh-key2.txt --boot smbios.mode=none", "cloud-init-options2", env={"VIRTINST_TEST_SUITE_PRINT_CLOUDINIT": "1"})  # --cloud-init root-password-file with smbios.mode override
+ c.add_compare("--disk %(EXISTIMG1)s --os-variant fedora28 --cloud-init ssh-key=%(XMLDIR)s/cloudinit/ssh-key.txt", "cloud-init-options3", env={"VIRTINST_TEST_SUITE_PRINT_CLOUDINIT": "1"})  # --cloud-init ssh-key
+ c.add_compare("--disk %(EXISTIMG1)s --os-variant fedora28 --cloud-init user-data=%(XMLDIR)s/cloudinit/user-data.txt,meta-data=%(XMLDIR)s/cloudinit/meta-data.txt", "cloud-init-options4", env={"VIRTINST_TEST_SUITE_PRINT_CLOUDINIT": "1"})  # --cloud-init user-data=,meta-data=
+@@ -1177,6 +1178,7 @@ c.add_compare("--arch aarch64 --cdrom %(ISO-F26-NETINST)s --boot loader=CODE.fd,
+ c.add_compare("--connect %(URI-KVM-AARCH64)s --disk %(EXISTIMG1)s --import --os-variant fedora21 --panic default --graphics vnc", "aarch64-kvm-import")  # --import test, but also test --panic no-op, and --graphics
+ c.add_compare("--connect %(URI-KVM-AARCH64)s --disk size=1 --os-variant fedora22 --features gic_version=host --network network=default,address.type=pci --controller type=scsi,model=virtio-scsi,address.type=pci", "aarch64-kvm-gic")
+ c.add_compare("--connect %(URI-KVM-AARCH64)s --osinfo fedora30 --arch aarch64 --disk none --pxe --boot firmware=efi", "aarch64-firmware-no-override")
++c.add_compare("--connect %(URI-KVM-AARCH64)s --disk %(EXISTIMG1)s --os-variant fedora28 --cloud-init", "aarch64-cloud-init")
+ 
+ 
+ 
+-- 
+2.41.0
+

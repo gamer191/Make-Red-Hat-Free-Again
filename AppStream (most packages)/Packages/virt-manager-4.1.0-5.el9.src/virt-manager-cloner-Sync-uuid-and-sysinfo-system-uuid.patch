@@ -1,0 +1,98 @@
+From deb27a8c7e1539e687d589edd7ea517018266f77 Mon Sep 17 00:00:00 2001
+From: Cole Robinson <crobinso@redhat.com>
+Date: Sun, 21 Aug 2022 16:21:10 -0400
+Subject: [PATCH] cloner: Sync <uuid> and <sysinfo> system uuid
+
+Otherwise libvirt errors like:
+
+ERROR    UUID mismatch between <uuid> and <sysinfo>
+
+https://bugzilla.redhat.com/show_bug.cgi?id=2038040
+
+Signed-off-by: Cole Robinson <crobinso@redhat.com>
+(cherry picked from commit b0d0516736320315a70f74aff3759fb35dd35d9d)
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2038040
+Signed-off-by: Jonathon Jongsma <jjongsma@redhat.com>
+---
+ tests/data/cli/compare/virt-clone-auto-unmanaged.xml     | 5 +++++
+ tests/data/cli/compare/virt-clone-unmanaged-preserve.xml | 5 +++++
+ tests/data/cli/virtclone/clone-disk.xml                  | 5 +++++
+ virtinst/cloner.py                                       | 6 ++++--
+ 4 files changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/tests/data/cli/compare/virt-clone-auto-unmanaged.xml b/tests/data/cli/compare/virt-clone-auto-unmanaged.xml
+index 21a9a6398..f2043be25 100644
+--- a/tests/data/cli/compare/virt-clone-auto-unmanaged.xml
++++ b/tests/data/cli/compare/virt-clone-auto-unmanaged.xml
+@@ -1,6 +1,11 @@
+ <domain type="test">
+   <name>origtest-clone</name>
+   <uuid>00000000-1111-2222-3333-444444444444</uuid>
++  <sysinfo type="smbios">
++    <system>
++      <entry name="uuid">00000000-1111-2222-3333-444444444444</entry>
++    </system>
++  </sysinfo>
+   <memory>8388608</memory>
+   <currentMemory>2097152</currentMemory>
+   <vcpu>2</vcpu>
+diff --git a/tests/data/cli/compare/virt-clone-unmanaged-preserve.xml b/tests/data/cli/compare/virt-clone-unmanaged-preserve.xml
+index 3bdbbbe36..c003ed3ee 100644
+--- a/tests/data/cli/compare/virt-clone-unmanaged-preserve.xml
++++ b/tests/data/cli/compare/virt-clone-unmanaged-preserve.xml
+@@ -1,6 +1,11 @@
+ <domain type="test">
+   <name>clonetest</name>
+   <uuid>00000000-1111-2222-3333-444444444444</uuid>
++  <sysinfo type="smbios">
++    <system>
++      <entry name="uuid">00000000-1111-2222-3333-444444444444</entry>
++    </system>
++  </sysinfo>
+   <memory>8388608</memory>
+   <currentMemory>2097152</currentMemory>
+   <vcpu>2</vcpu>
+diff --git a/tests/data/cli/virtclone/clone-disk.xml b/tests/data/cli/virtclone/clone-disk.xml
+index da1eb0a63..2f6e916d7 100644
+--- a/tests/data/cli/virtclone/clone-disk.xml
++++ b/tests/data/cli/virtclone/clone-disk.xml
+@@ -1,6 +1,11 @@
+ <domain type='test' id='1'>
+   <name>origtest</name>
+   <uuid>db69fa1f-eef0-e567-3c20-3ef16f10376b</uuid>
++  <sysinfo type='smbios'>
++    <system>
++      <entry name='uuid'>db69fa1f-eef0-e567-3c20-3ef16f10376b</entry>
++    </system>
++  </sysinfo>
+   <memory>8388608</memory>
+   <currentMemory>2097152</currentMemory>
+   <vcpu>2</vcpu>
+diff --git a/virtinst/cloner.py b/virtinst/cloner.py
+index 34a702f91..9334513c5 100644
+--- a/virtinst/cloner.py
++++ b/virtinst/cloner.py
+@@ -352,8 +352,7 @@ class Cloner(object):
+         """
+         self._new_guest.id = None
+         self._new_guest.title = None
+-        self._new_guest.uuid = None
+-        self._new_guest.uuid = Guest.generate_uuid(self.conn)
++        self.set_clone_uuid(Guest.generate_uuid(self.conn))
+ 
+         for dev in self._new_guest.devices.graphics:
+             if dev.port and dev.port != -1:
+@@ -408,6 +407,9 @@ class Cloner(object):
+         Override the new VMs generated UUId
+         """
+         self._new_guest.uuid = uuid
++        for sysinfo in self._new_guest.sysinfo:
++            if sysinfo.system_uuid:
++                sysinfo.system_uuid = uuid
+ 
+     def set_replace(self, val):
+         """
+-- 
+2.38.1
+

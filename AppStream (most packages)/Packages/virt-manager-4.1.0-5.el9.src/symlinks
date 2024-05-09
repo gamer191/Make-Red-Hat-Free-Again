@@ -1,0 +1,5 @@
+data/hicolor icons
+tests/testdriver.xml data/testdriver/testdriver.xml
+tests/data/urldetect/debian/buster/main/installer-arm64 installer-amd64/
+tests/data/urldetect/debian/buster/main/installer-ppc64el installer-amd64/
+tests/data/urldetect/debian/buster/main/installer-s390x installer-amd64/

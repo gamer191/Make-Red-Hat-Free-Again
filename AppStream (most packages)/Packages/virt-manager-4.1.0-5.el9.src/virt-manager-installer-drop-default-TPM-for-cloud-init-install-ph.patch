@@ -1,0 +1,150 @@
+From 7867228f70cd716afe35e9d60a5fc9793c7e7f96 Mon Sep 17 00:00:00 2001
+From: Cole Robinson <crobinso@redhat.com>
+Date: Tue, 12 Sep 2023 12:01:09 -0400
+Subject: [PATCH 2/2] installer: drop default TPM for --cloud-init install
+ phase
+
+When shim in the guest sees unpopulated EFI NVRAM, like when
+we create a new UEFI VM, it invokes fallback.efi to populate
+initial NVRAM boot entries. When the guest also has a TPM device,
+shim will do a one time VM reset. This reset throws off the
+reboot detection that is central to virt-install's install
+process.
+
+The main install case that this will usually be relevant is
+the combo of UEFI and --cloud-init. The latter usually implies
+use of a distro cloud image, which will be using shim, and the
+--cloud-init process requires a multi stage install compared
+to just a plain import install.
+
+For that case, we disable the default TPM device for the first
+boot.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=2133525
+
+Signed-off-by: Cole Robinson <crobinso@redhat.com>
+
+Resolves: https://issues.redhat.com/browse/RHEL-1705
+
+(cherry picked from commit ec434948a8384541c56bfa04e4985f4fc709bc76)
+Signed-off-by: Jonathon Jongsma <jjongsma@redhat.com>
+---
+ .../virt-install-aarch64-cloud-init.xml       |  3 --
+ .../virt-install-cloud-init-options1.xml      |  3 --
+ virtinst/guest.py                             |  2 ++
+ virtinst/install/installer.py                 | 31 +++++++++++++++++--
+ 4 files changed, 31 insertions(+), 8 deletions(-)
+
+diff --git a/tests/data/cli/compare/virt-install-aarch64-cloud-init.xml b/tests/data/cli/compare/virt-install-aarch64-cloud-init.xml
+index e4a50cf4c..18c417662 100644
+--- a/tests/data/cli/compare/virt-install-aarch64-cloud-init.xml
++++ b/tests/data/cli/compare/virt-install-aarch64-cloud-init.xml
+@@ -49,9 +49,6 @@
+       <source mode="bind"/>
+       <target type="virtio" name="org.qemu.guest_agent.0"/>
+     </channel>
+-    <tpm>
+-      <backend type="emulator"/>
+-    </tpm>
+     <memballoon model="virtio"/>
+     <rng model="virtio">
+       <backend model="random">/dev/urandom</backend>
+diff --git a/tests/data/cli/compare/virt-install-cloud-init-options1.xml b/tests/data/cli/compare/virt-install-cloud-init-options1.xml
+index cd5426049..110730dd3 100644
+--- a/tests/data/cli/compare/virt-install-cloud-init-options1.xml
++++ b/tests/data/cli/compare/virt-install-cloud-init-options1.xml
+@@ -71,9 +71,6 @@ chpasswd:
+       <source mode="bind"/>
+       <target type="virtio" name="org.qemu.guest_agent.0"/>
+     </channel>
+-    <tpm model="tpm-crb">
+-      <backend type="emulator"/>
+-    </tpm>
+     <memballoon model="virtio"/>
+     <rng model="virtio">
+       <backend model="random">/dev/urandom</backend>
+diff --git a/virtinst/guest.py b/virtinst/guest.py
+index e66360223..0f5a93d08 100644
+--- a/virtinst/guest.py
++++ b/virtinst/guest.py
+@@ -211,6 +211,7 @@ class Guest(XMLBuilder):
+         self.skip_default_graphics = False
+         self.skip_default_rng = False
+         self.skip_default_tpm = False
++        self.have_default_tpm = False
+         self.x86_cpu_default = self.cpu.SPECIAL_MODE_APP_DEFAULT
+ 
+         # qemu 6.1, fairly new when we added this option, has an unfortunate
+@@ -1060,6 +1061,7 @@ class Guest(XMLBuilder):
+         dev = DeviceTpm(self.conn)
+         dev.type = DeviceTpm.TYPE_EMULATOR
+         self.add_device(dev)
++        self.have_default_tpm = True
+ 
+     def _add_default_memballoon(self):
+         if self.devices.memballoon:
+diff --git a/virtinst/install/installer.py b/virtinst/install/installer.py
+index df74eaffa..c005e77bd 100644
+--- a/virtinst/install/installer.py
++++ b/virtinst/install/installer.py
+@@ -564,13 +564,38 @@ class Installer(object):
+     # guest install handling #
+     ##########################
+ 
+-    def _build_postboot_xml(self, final_xml, meter):
++    def _build_postboot_xml(self, guest_ro, final_xml, meter):
+         initial_guest = Guest(self.conn, parsexml=final_xml)
+         self._alter_bootconfig(initial_guest)
+         self._alter_install_resources(initial_guest, meter)
+         if self.has_cloudinit():
+             initial_guest.set_smbios_serial_cloudinit()
+ 
++            # When shim in the guest sees unpopulated EFI NVRAM, like when
++            # we create a new UEFI VM, it invokes fallback.efi to populate
++            # initial NVRAM boot entries. When the guest also has a TPM device,
++            # shim will do a one time VM reset. This reset throws off the
++            # reboot detection that is central to virt-install's install
++            # process.
++            #
++            # The main install case that this will usually be relevant is
++            # the combo of UEFI and --cloud-init. The latter usually implies
++            # use of a distro cloud image, which will be using shim, and the
++            # --cloud-init process requires a multi stage install compared
++            # to just a plain import install.
++            #
++            # For that case, we disable the default TPM device for the first
++            # boot.
++            if (guest_ro.have_default_tpm and
++                guest_ro.is_uefi() and
++                len(initial_guest.devices.tpm)):
++                log.debug(
++                        "combo of default TPM, UEFI, and cloudinit is "
++                        "used. assuming this VM is using a linux distro "
++                        "cloud image with shim in the boot path. disabling "
++                        "TPM for the first boot")
++                initial_guest.remove_device(initial_guest.devices.tpm[0])
++
+         final_guest = Guest(self.conn, parsexml=final_xml)
+         self._remove_install_cdrom_media(final_guest)
+         self._remove_unattended_install_cdrom_device(final_guest)
+@@ -581,7 +606,8 @@ class Installer(object):
+         initial_xml = None
+         final_xml = guest.get_xml()
+         if self._requires_postboot_xml_changes():
+-            initial_xml, final_xml = self._build_postboot_xml(final_xml, meter)
++            initial_xml, final_xml = self._build_postboot_xml(
++                    guest, final_xml, meter)
+         final_xml = self._pre_reinstall_xml or final_xml
+ 
+         log.debug("Generated initial_xml: %s",
+@@ -680,6 +706,7 @@ class Installer(object):
+         # All installer XML alterations are made on this guest instance,
+         # so the user_guest instance is left intact
+         guest = Guest(self.conn, parsexml=user_guest.get_xml())
++        guest.have_default_tpm = user_guest.have_default_tpm
+ 
+         try:
+             self._prepare(guest, meter)
+-- 
+2.41.0
+
