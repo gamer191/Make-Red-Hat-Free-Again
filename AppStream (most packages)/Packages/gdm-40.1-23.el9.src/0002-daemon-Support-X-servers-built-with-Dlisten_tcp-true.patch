@@ -1,0 +1,327 @@
+From cc67c8de39358031fddc5ca7d8c993271d6606a7 Mon Sep 17 00:00:00 2001
+From: Alan Coopersmith <alan.coopersmith@oracle.com>
+Date: Thu, 7 Oct 2021 18:22:11 -0700
+Subject: [PATCH 2/2] daemon: Support X servers built with -Dlisten_tcp=true
+
+Xorg since version 1.17 doesn't listen to tcp sockets by default
+unless it's explicitly built with -Dlisten_tcp=true.
+
+GDM currently assumes X servers 1.17 and later are always built
+without specifying -Dlisten_tcp=true and doesn't work properly
+otherwise.
+
+This commit enhances GDM to better handle these non-standard builds by
+always passing '-nolisten tcp' on the command line when tcp should
+be disabled, and likewise always passing '-listen tcp' on the command
+line, assuming the X server is new enough to support it, when tcp
+should be enabled.
+
+Related #704
+---
+ daemon/gdm-server.c    | 21 +++++++++++----------
+ daemon/gdm-x-session.c | 12 ++++++------
+ meson.build            |  4 ++--
+ 3 files changed, 19 insertions(+), 18 deletions(-)
+
+diff --git a/daemon/gdm-server.c b/daemon/gdm-server.c
+index 1ba00d45..e5d23521 100644
+--- a/daemon/gdm-server.c
++++ b/daemon/gdm-server.c
+@@ -290,72 +290,73 @@ gdm_server_resolve_command_line (GdmServer  *server,
+                 if (strcmp (arg, "-query") == 0 ||
+                     strcmp (arg, "-indirect") == 0)
+                         query_in_arglist = TRUE;
+         }
+ 
+         argv = g_renew (char *, argv, len + 12);
+         /* shift args down one */
+         for (i = len - 1; i >= 1; i--) {
+                 argv[i+1] = argv[i];
+         }
+ 
+         /* server number is the FIRST argument, before any others */
+         argv[1] = g_strdup (server->display_name);
+         len++;
+ 
+         if (server->auth_file != NULL) {
+                 argv[len++] = g_strdup ("-auth");
+                 argv[len++] = g_strdup (server->auth_file);
+         }
+ 
+         if (server->display_seat_id != NULL) {
+                 argv[len++] = g_strdup ("-seat");
+                 argv[len++] = g_strdup (server->display_seat_id);
+         }
+ 
+         /* If we were compiled with Xserver >= 1.17 we need to specify
+          * '-listen tcp' as the X server dosen't listen on tcp sockets
+          * by default anymore. In older versions we need to pass
+          * -nolisten tcp to disable listening on tcp sockets.
+          */
+-#ifdef HAVE_XSERVER_THAT_DEFAULTS_TO_LOCAL_ONLY
+-        if (!server->disable_tcp && ! query_in_arglist) {
+-                argv[len++] = g_strdup ("-listen");
+-                argv[len++] = g_strdup ("tcp");
+-        }
+-#else
+-        if (server->disable_tcp && ! query_in_arglist) {
+-                argv[len++] = g_strdup ("-nolisten");
+-                argv[len++] = g_strdup ("tcp");
+-        }
++        if (!query_in_arglist) {
++                if (server->disable_tcp) {
++                        argv[len++] = g_strdup ("-nolisten");
++                        argv[len++] = g_strdup ("tcp");
++                }
+ 
++#ifdef HAVE_XSERVER_WITH_LISTEN
++                if (!server->disable_tcp) {
++                        argv[len++] = g_strdup ("-listen");
++                        argv[len++] = g_strdup ("tcp");
++                }
+ #endif
++        }
+ 
+         if (vtarg != NULL && ! gotvtarg) {
+                 argv[len++] = g_strdup (vtarg);
+         }
+ 
+         argv[len++] = NULL;
+ 
+         *argvp = argv;
+         *argcp = len;
+ 
+         return TRUE;
+ }
+ 
+ static void
+ rotate_logs (const char *path,
+              guint       n_copies)
+ {
+         int i;
+ 
+         for (i = n_copies - 1; i > 0; i--) {
+                 char *name_n;
+                 char *name_n1;
+ 
+                 name_n = g_strdup_printf ("%s.%d", path, i);
+                 if (i > 1) {
+                         name_n1 = g_strdup_printf ("%s.%d", path, i - 1);
+                 } else {
+                         name_n1 = g_strdup (path);
+                 }
+ 
+diff --git a/daemon/gdm-x-session.c b/daemon/gdm-x-session.c
+index 5962da57..0b07ab5b 100644
+--- a/daemon/gdm-x-session.c
++++ b/daemon/gdm-x-session.c
+@@ -233,70 +233,70 @@ spawn_x_server (State        *state,
+ 
+         if (g_getenv ("XDG_VTNR") != NULL) {
+                 int vt;
+ 
+                 vt = atoi (g_getenv ("XDG_VTNR"));
+ 
+                 if (vt > 0 && vt < 64) {
+                         vt_string = g_strdup_printf ("vt%d", vt);
+                 }
+         }
+ 
+         display_fd_string = g_strdup_printf ("%d", DISPLAY_FILENO);
+ 
+         g_ptr_array_add (arguments, X_SERVER);
+ 
+         if (vt_string != NULL) {
+                 g_ptr_array_add (arguments, vt_string);
+         }
+ 
+         g_ptr_array_add (arguments, "-displayfd");
+         g_ptr_array_add (arguments, display_fd_string);
+ 
+         g_ptr_array_add (arguments, "-auth");
+         g_ptr_array_add (arguments, auth_file);
+ 
+         /* If we were compiled with Xserver >= 1.17 we need to specify
+          * '-listen tcp' as the X server doesn't listen on tcp sockets
+          * by default anymore. In older versions we need to pass
+          * -nolisten tcp to disable listening on tcp sockets.
+          */
+-#ifdef HAVE_XSERVER_THAT_DEFAULTS_TO_LOCAL_ONLY
+-        if (allow_remote_connections) {
+-                g_ptr_array_add (arguments, "-listen");
+-                g_ptr_array_add (arguments, "tcp");
+-        }
+-#else
+         if (!allow_remote_connections) {
+                 g_ptr_array_add (arguments, "-nolisten");
+                 g_ptr_array_add (arguments, "tcp");
+         }
++
++#ifdef HAVE_XSERVER_WITH_LISTEN
++        if (allow_remote_connections) {
++                g_ptr_array_add (arguments, "-listen");
++                g_ptr_array_add (arguments, "tcp");
++        }
+ #endif
+ 
+         g_ptr_array_add (arguments, "-background");
+         g_ptr_array_add (arguments, "none");
+ 
+         g_ptr_array_add (arguments, "-noreset");
+         g_ptr_array_add (arguments, "-keeptty");
+         g_ptr_array_add (arguments, "-novtswitch");
+ 
+         g_ptr_array_add (arguments, "-verbose");
+         if (state->debug_enabled) {
+                 g_ptr_array_add (arguments, "7");
+         } else {
+                 g_ptr_array_add (arguments, "3");
+         }
+ 
+         if (state->debug_enabled) {
+                 g_ptr_array_add (arguments, "-core");
+         }
+         g_ptr_array_add (arguments, NULL);
+ 
+         subprocess = g_subprocess_launcher_spawnv (launcher,
+                                                    (const char * const *) arguments->pdata,
+                                                    &error);
+         g_free (display_fd_string);
+         g_clear_object (&launcher);
+         g_ptr_array_free (arguments, TRUE);
+ 
+         if (subprocess == NULL) {
+                 g_debug ("could not start X server: %s", error->message);
+diff --git a/meson.build b/meson.build
+index 52ac1941..02d609dc 100644
+--- a/meson.build
++++ b/meson.build
+@@ -44,61 +44,61 @@ glib_min_version = '2.56.0'
+ glib_dep = dependency('glib-2.0', version: '>=' + glib_min_version)
+ gobject_dep = dependency('gobject-2.0', version: '>=' + glib_min_version)
+ gio_dep = dependency('gio-2.0', version: '>=' + glib_min_version)
+ gio_unix_dep = dependency('gio-unix-2.0', version: '>=' + glib_min_version)
+ gtk_dep = dependency('gtk+-3.0', version: '>= 2.91.1')
+ libcanberra_gtk_dep = dependency('libcanberra-gtk3', version: '>= 0.4')
+ accountsservice_dep = dependency('accountsservice', version: '>= 0.6.35')
+ xcb_dep = dependency('xcb')
+ keyutils_dep = dependency('libkeyutils', required: false)
+ libselinux_dep = dependency('libselinux', required: get_option('selinux'))
+ 
+ # udev
+ if udev_dir == ''
+   if udev_dep.found()
+     udev_prefix = udev_dep.get_pkgconfig_variable('udevdir')
+   else
+     udev_prefix = gdm_prefix / 'lib' / 'udev'
+   endif
+   udev_dir = udev_prefix / 'rules.d'
+ endif
+ 
+ # X11
+ x_deps = declare_dependency(
+   dependencies: [
+     dependency('x11'),
+     dependency('xau'),
+   ],
+ )
+ # Xserver 1.17 & later default to -nolisten and require -listen for remote access
+ xserver_deps = dependency('xorg-server', version : '>=1.17', required : false)
+-xserver_nolisten_default = xserver_deps.found()
++xserver_has_listen = xserver_deps.found()
+ find_x_server_script = find_program('build-aux/find-x-server.sh', native: true)
+ find_x_server_out = run_command(find_x_server_script).stdout().strip()
+ if find_x_server_out != ''
+   x_bin = find_x_server_out
+   x_bin_path_split = x_bin.split('/')
+   i = 0
+   x_path = '/'
+   foreach dir : x_bin_path_split
+     if i < x_bin_path_split.length() - 1
+       x_path = x_path / dir
+     endif
+     i = i + 1
+   endforeach
+ else
+   # what to do, what to do, this is wrong, but this just sets the
+   # defaults, perhaps this user is cross compiling or some such
+   x_path = '/usr/bin/X11:/usr/X11R6/bin:/opt/X11R6/bin'
+   x_bin = '/usr/bin/X'
+ endif
+ xdmcp_dep = cc.find_library('Xdmcp', required: get_option('xdmcp'))
+ if xdmcp_dep.found() and get_option('tcp-wrappers')
+   libwrap_dep = cc.find_library('wrap')
+ endif
+ # systemd
+ systemd_dep = dependency('systemd')
+ libsystemd_dep = dependency('libsystemd')
+ if meson.version().version_compare('>= 0.53')
+   systemd_multiseat_x = find_program('systemd-multi-seat-x',
+     required: false,
+     dirs: [
+@@ -200,61 +200,61 @@ conf.set_quoted('SYSCONFDIR', gdm_prefix / get_option('sysconfdir'))
+ conf.set_quoted('BINDIR', gdm_prefix / get_option('bindir'))
+ conf.set_quoted('LIBDIR', gdm_prefix / get_option('libdir'))
+ conf.set_quoted('LIBEXECDIR', gdm_prefix / get_option('libexecdir'))
+ conf.set_quoted('LOGDIR', get_option('log-dir'))
+ conf.set_quoted('DMCONFDIR', dmconfdir)
+ conf.set_quoted('GDMCONFDIR', gdmconfdir)
+ conf.set_quoted('GDM_SCREENSHOT_DIR', gdm_screenshot_dir)
+ conf.set_quoted('GDM_XAUTH_DIR', gdm_xauth_dir)
+ conf.set_quoted('GDM_RAN_ONCE_MARKER_DIR', ran_once_marker_dir)
+ conf.set_quoted('GDM_RUN_DIR', gdm_run_dir)
+ conf.set_quoted('GNOMELOCALEDIR', gdm_prefix / get_option('localedir'))
+ conf.set_quoted('AT_SPI_REGISTRYD_DIR', at_spi_registryd_dir)
+ conf.set_quoted('GDM_PID_FILE', gdm_pid_file)
+ conf.set_quoted('GNOME_SETTINGS_DAEMON_DIR', gnome_settings_daemon_dir)
+ conf.set_quoted('LANG_CONFIG_FILE', lang_config_file)
+ conf.set('HAVE_ADT', have_adt)
+ conf.set('HAVE_UTMP_H', have_utmp_header)
+ conf.set('HAVE_UTMPX_H', have_utmpx_header)
+ conf.set('HAVE_POSIX_GETPWNAM_R', have_posix_getpwnam_r)
+ conf.set('UTMP', utmp_struct)
+ conf.set('HAVE_GETUTXENT', cc.has_function('getutxent'))
+ conf.set('HAVE_UPDWTMP', cc.has_function('updwtmp'))
+ conf.set('HAVE_UPDWTMPX', cc.has_function('updwtmpx'))
+ conf.set('HAVE_LOGIN', cc.has_function('login', args: '-lutil'))
+ conf.set('HAVE_LOGOUT', cc.has_function('logout', args: '-lutil'))
+ conf.set('HAVE_LOGWTMP', cc.has_function('logwtmp', args: '-lutil'))
+ conf.set('HAVE_PAM_SYSLOG', have_pam_syslog)
+ conf.set('HAVE_KEYUTILS', keyutils_dep.found())
+ conf.set('SUPPORTS_PAM_EXTENSIONS', pam_extensions_supported)
+ conf.set('HAVE_SELINUX', libselinux_dep.found())
+-conf.set('HAVE_XSERVER_THAT_DEFAULTS_TO_LOCAL_ONLY', xserver_nolisten_default)
++conf.set('HAVE_XSERVER_WITH_LISTEN', xserver_has_listen)
+ conf.set('ENABLE_USER_DISPLAY_SERVER', get_option('user-display-server'))
+ conf.set('ENABLE_SYSTEMD_JOURNAL', get_option('systemd-journal'))
+ conf.set('ENABLE_WAYLAND_SUPPORT', get_option('wayland-support'))
+ conf.set('ENABLE_PROFILING', get_option('profiling'))
+ conf.set('GDM_INITIAL_VT', get_option('initial-vt'))
+ conf.set_quoted('GDM_DEFAULTS_CONF', gdm_defaults_conf)
+ conf.set_quoted('GDM_CUSTOM_CONF', gdm_custom_conf)
+ conf.set_quoted('GDM_RUNTIME_CONF', gdm_runtime_conf)
+ conf.set_quoted('GDM_SESSION_DEFAULT_PATH', get_option('default-path'))
+ conf.set_quoted('GDM_USERNAME', get_option('user'))
+ conf.set_quoted('GDM_GROUPNAME', get_option('group'))
+ conf.set('HAVE_LIBXDMCP', xdmcp_dep.found())
+ conf.set_quoted('SYSTEMD_X_SERVER', systemd_x_server)
+ conf.set('WITH_PLYMOUTH', plymouth_dep.found())
+ conf.set_quoted('X_SERVER', x_bin)
+ conf.set_quoted('X_PATH', x_path)
+ conf.set('HAVE_UT_UT_HOST', utmp_has_host_field)
+ conf.set('HAVE_UT_UT_PID', utmp_has_pid_field)
+ conf.set('HAVE_UT_UT_ID', utmp_has_id_field)
+ conf.set('HAVE_UT_UT_NAME', utmp_has_name_field)
+ conf.set('HAVE_UT_UT_TYPE', utmp_has_type_field)
+ conf.set('HAVE_UT_UT_EXIT_E_TERMINATION', utmp_has_exit_e_termination_field)
+ conf.set('HAVE_UT_UT_USER', utmp_has_user_field)
+ conf.set('HAVE_UT_UT_TIME', utmp_has_time_field)
+ conf.set('HAVE_UT_UT_TV', utmp_has_tv_field)
+ conf.set('HAVE_UT_UT_SYSLEN', utmp_has_syslen_field)
+ conf.set('ENABLE_IPV6', get_option('ipv6'))
+ configure_file(output: 'config.h', configuration: conf)
+ 
+ # Subdirs
+-- 
+2.34.1
+

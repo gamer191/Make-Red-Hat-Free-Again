@@ -1,0 +1,52 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Tue, 23 Mar 2021 09:32:37 -0700
+Subject: testing-custom-inputrc.patch
+
+;; Backport "Disable bracketed paste mode in GDB tests"
+;; (Tom Tromey)
+
+   commit 1af4c9c4209c3478224f18dfb79dc09567b96705
+   Author: Tom Tromey <tom@tromey.com>
+   Date:   Sat Jan 23 08:52:45 2021 -0700
+
+    Disable bracketed paste mode in GDB tests
+
+    I have a patch to import GNU readline 8.1 into GDB.  However, when
+    running the tests, there were a number of failures due to "bracketed
+    paste mode".  This is a terminal feature that readline 8.1 enables by
+    default.
+
+    The simplest way to work around this was to always make a ".inputrc"
+    for GDB tests that will tell readline to disable brackted paste mode.
+
+    gdb/testsuite/ChangeLog
+    2021-01-23  Tom Tromey  <tom@tromey.com>
+
+            * lib/gdb.exp (default_gdb_init): Set INPUTRC to a cached file.
+
+diff --git a/gdb/testsuite/lib/gdb.exp b/gdb/testsuite/lib/gdb.exp
+--- a/gdb/testsuite/lib/gdb.exp
++++ b/gdb/testsuite/lib/gdb.exp
+@@ -5135,13 +5135,14 @@ proc default_gdb_init { test_file_name } {
+     setenv LC_CTYPE C
+     setenv LANG C
+ 
+-    # Don't let a .inputrc file or an existing setting of INPUTRC mess up
+-    # the test results.  Even if /dev/null doesn't exist on the particular
+-    # platform, the readline library will use the default setting just by
+-    # failing to open the file.  OTOH, opening /dev/null successfully will
+-    # also result in the default settings being used since nothing will be
+-    # read from this file.
+-    setenv INPUTRC "/dev/null"
++    # Don't let a .inputrc file or an existing setting of INPUTRC mess
++    # up the test results.  Certain tests (style tests and TUI tests)
++    # want to set the terminal to a non-"dumb" value, and for those we
++    # want to disable bracketed paste mode.  Versions of Readline
++    # before 8.0 will not understand this and will issue a warning.
++    # We tried using a $if to guard it, but Readline 8.1 had a bug in
++    # its version-comparison code that prevented this for working.
++    setenv INPUTRC [cached_file inputrc "set enable-bracketed-paste off"]
+ 
+     # This disables style output, which would interfere with many
+     # tests.

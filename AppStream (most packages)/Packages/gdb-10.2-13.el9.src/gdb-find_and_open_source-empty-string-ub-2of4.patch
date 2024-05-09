@@ -1,0 +1,475 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Mon, 4 Dec 2023 11:02:16 -0800
+Subject: gdb-find_and_open_source-empty-string-ub-2of4.patch
+
+;; Backport "gdbsupport: add path_join function"
+;; (Simon Marchi)
+
+In this review [1], Eli pointed out that we should be careful when
+concatenating file names to avoid duplicated slashes.  On Windows, a
+double slash at the beginning of a file path has a special meaning.  So
+naively concatenating "/"  and "foo/bar" would give "//foo/bar", which
+would not give the desired results.  We already have a few spots doing:
+
+  if (first_path ends with a slash)
+    path = first_path + second_path
+  else
+    path = first_path + slash + second_path
+
+In general, I think it's nice to avoid superfluous slashes in file
+paths, since they might end up visible to the user and look a bit
+unprofessional.
+
+Introduce the path_join function that can be used to join multiple path
+components together (along with unit tests).
+
+I initially wanted to make it possible to join two absolute paths, to
+support the use case of prepending a sysroot path to a target file path,
+or the prepending the debug-file-directory to a target file path.  But
+the code in solib_find_1 shows that it is more complex than this anyway
+(for example, when the right hand side is a Windows path with a drive
+letter).  So I don't think we need to support that case in path_join.
+That also keeps the implementation simpler.
+
+Change a few spots to use path_join to show how it can be used.  I
+believe that all the spots I changed are guarded by some checks that
+ensure the right hand side operand is not an absolute path.
+
+Regression-tested on Ubuntu 18.04.  Built-tested on Windows, and I also
+ran the new unit-test there.
+
+[1] https://sourceware.org/pipermail/gdb-patches/2022-April/187559.html
+
+Change-Id: I0df889f7e3f644e045f42ff429277b732eb6c752
+
+diff --git a/gdb/Makefile.in b/gdb/Makefile.in
+--- a/gdb/Makefile.in
++++ b/gdb/Makefile.in
+@@ -446,6 +446,7 @@ SELFTESTS_SRCS = \
+ 	unittests/observable-selftests.c \
+ 	unittests/optional-selftests.c \
+ 	unittests/parse-connection-spec-selftests.c \
++	unittests/path-join-selftests.c \
+ 	unittests/ptid-selftests.c \
+ 	unittests/main-thread-selftests.c \
+ 	unittests/mkdir-recursive-selftests.c \
+diff --git a/gdb/buildsym.c b/gdb/buildsym.c
+--- a/gdb/buildsym.c
++++ b/gdb/buildsym.c
+@@ -19,6 +19,7 @@
+ #include "defs.h"
+ #include "buildsym-legacy.h"
+ #include "bfd.h"
++#include "gdbsupport/pathstuff.h"
+ #include "gdb_obstack.h"
+ #include "symtab.h"
+ #include "symfile.h"
+@@ -512,27 +513,22 @@ buildsym_compunit::start_subfile (const char *name)
+ 
+   for (subfile = m_subfiles; subfile; subfile = subfile->next)
+     {
+-      char *subfile_name;
++      std::string subfile_name;
+ 
+       /* If NAME is an absolute path, and this subfile is not, then
+ 	 attempt to create an absolute path to compare.  */
+       if (IS_ABSOLUTE_PATH (name)
+ 	  && !IS_ABSOLUTE_PATH (subfile->name)
+ 	  && subfile_dirname != NULL)
+-	subfile_name = concat (subfile_dirname, SLASH_STRING,
+-			       subfile->name, (char *) NULL);
++	subfile_name = path_join (subfile_dirname, subfile->name);
+       else
+ 	subfile_name = subfile->name;
+ 
+-      if (FILENAME_CMP (subfile_name, name) == 0)
++      if (FILENAME_CMP (subfile_name.c_str (), name) == 0)
+ 	{
+ 	  m_current_subfile = subfile;
+-	  if (subfile_name != subfile->name)
+-	    xfree (subfile_name);
+ 	  return;
+ 	}
+-      if (subfile_name != subfile->name)
+-	xfree (subfile_name);
+     }
+ 
+   /* This subfile is not known.  Add an entry for it.  */
+diff --git a/gdb/dwarf2/line-header.c b/gdb/dwarf2/line-header.c
+--- a/gdb/dwarf2/line-header.c
++++ b/gdb/dwarf2/line-header.c
+@@ -24,6 +24,7 @@
+ #include "dwarf2/read.h"
+ #include "complaints.h"
+ #include "filenames.h"
++#include "gdbsupport/pathstuff.h"
+ 
+ void
+ line_header::add_include_dir (const char *include_dir)
+@@ -73,9 +74,7 @@ line_header::file_file_name (int file) const
+ 	{
+ 	  const char *dir = fe->include_dir (this);
+ 	  if (dir != NULL)
+-	    return gdb::unique_xmalloc_ptr<char> (concat (dir, SLASH_STRING,
+-							  fe->name,
+-							  (char *) NULL));
++	    return make_unique_xstrdup (path_join (dir, fe->name).c_str ());
+ 	}
+       return make_unique_xstrdup (fe->name);
+     }
+diff --git a/gdb/dwarf2/read.c b/gdb/dwarf2/read.c
+--- a/gdb/dwarf2/read.c
++++ b/gdb/dwarf2/read.c
+@@ -12782,14 +12782,13 @@ open_dwo_file (dwarf2_per_objfile *per_objfile,
+ 
+   if (comp_dir != NULL)
+     {
+-      gdb::unique_xmalloc_ptr<char> path_to_try
+-	(concat (comp_dir, SLASH_STRING, file_name, (char *) NULL));
++      std::string path_to_try = path_join (comp_dir, file_name);
+ 
+       /* NOTE: If comp_dir is a relative path, this will also try the
+ 	 search path, which seems useful.  */
+-      gdb_bfd_ref_ptr abfd (try_open_dwop_file (per_objfile, path_to_try.get (),
+-						0 /*is_dwp*/,
+-						1 /*search_cwd*/));
++      gdb_bfd_ref_ptr abfd (try_open_dwop_file
++	(per_objfile, path_to_try.c_str (), 0 /*is_dwp*/, 1 /*search_cwd*/));
++
+       if (abfd != NULL)
+ 	return abfd;
+     }
+@@ -20537,7 +20536,7 @@ static const char *
+ psymtab_include_file_name (const struct line_header *lh, const file_entry &fe,
+ 			   const dwarf2_psymtab *pst,
+ 			   const char *comp_dir,
+-			   gdb::unique_xmalloc_ptr<char> *name_holder)
++			   std::string &name_holder)
+ {
+   const char *include_name = fe.name;
+   const char *include_name_to_compare = include_name;
+@@ -20546,7 +20545,7 @@ psymtab_include_file_name (const struct line_header *lh, const file_entry &fe,
+ 
+   const char *dir_name = fe.include_dir (lh);
+ 
+-  gdb::unique_xmalloc_ptr<char> hold_compare;
++  std::string hold_compare;
+   if (!IS_ABSOLUTE_PATH (include_name)
+       && (dir_name != NULL || comp_dir != NULL))
+     {
+@@ -20573,26 +20572,23 @@ psymtab_include_file_name (const struct line_header *lh, const file_entry &fe,
+ 
+       if (dir_name != NULL)
+ 	{
+-	  name_holder->reset (concat (dir_name, SLASH_STRING,
+-				      include_name, (char *) NULL));
+-	  include_name = name_holder->get ();
++	  name_holder = path_join (dir_name, include_name);
++	  include_name = name_holder.c_str ();
+ 	  include_name_to_compare = include_name;
+ 	}
+       if (!IS_ABSOLUTE_PATH (include_name) && comp_dir != NULL)
+ 	{
+-	  hold_compare.reset (concat (comp_dir, SLASH_STRING,
+-				      include_name, (char *) NULL));
+-	  include_name_to_compare = hold_compare.get ();
++	  hold_compare = path_join (comp_dir, include_name);
++	  include_name_to_compare = hold_compare.c_str ();
+ 	}
+     }
+ 
+   pst_filename = pst->filename;
+-  gdb::unique_xmalloc_ptr<char> copied_name;
++  std::string copied_name;
+   if (!IS_ABSOLUTE_PATH (pst_filename) && pst->dirname != NULL)
+     {
+-      copied_name.reset (concat (pst->dirname, SLASH_STRING,
+-				 pst_filename, (char *) NULL));
+-      pst_filename = copied_name.get ();
++      copied_name = path_join (pst->dirname, pst_filename);
++      pst_filename = copied_name.c_str ();
+     }
+ 
+   file_is_pst = FILENAME_CMP (include_name_to_compare, pst_filename) == 0;
+@@ -21303,10 +21299,10 @@ dwarf_decode_lines (struct line_header *lh, const char *comp_dir,
+       for (auto &file_entry : lh->file_names ())
+         if (file_entry.included_p == 1)
+           {
+-	    gdb::unique_xmalloc_ptr<char> name_holder;
++	    std::string name_holder;
+ 	    const char *include_name =
+ 	      psymtab_include_file_name (lh, file_entry, pst,
+-					 comp_dir, &name_holder);
++					 comp_dir, name_holder);
+ 	    if (include_name != NULL)
+               dwarf2_create_include_psymtab (include_name, pst, objfile);
+           }
+@@ -21360,7 +21356,7 @@ static void
+ dwarf2_start_subfile (struct dwarf2_cu *cu, const char *filename,
+ 		      const char *dirname)
+ {
+-  gdb::unique_xmalloc_ptr<char> copy;
++  std::string copy;
+ 
+   /* In order not to lose the line information directory,
+      we concatenate it to the filename when it makes sense.
+@@ -21371,8 +21367,8 @@ dwarf2_start_subfile (struct dwarf2_cu *cu, const char *filename,
+ 
+   if (!IS_ABSOLUTE_PATH (filename) && dirname != NULL)
+     {
+-      copy.reset (concat (dirname, SLASH_STRING, filename, (char *) NULL));
+-      filename = copy.get ();
++      copy = path_join (dirname, filename);
++      filename = copy.c_str ();
+     }
+ 
+   cu->get_builder ()->start_subfile (filename);
+diff --git a/gdb/macrotab.c b/gdb/macrotab.c
+--- a/gdb/macrotab.c
++++ b/gdb/macrotab.c
+@@ -18,6 +18,7 @@
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+ 
+ #include "defs.h"
++#include "gdbsupport/pathstuff.h"
+ #include "gdb_obstack.h"
+ #include "splay-tree.h"
+ #include "filenames.h"
+@@ -1071,5 +1072,5 @@ macro_source_fullname (struct macro_source_file *file)
+   if (comp_dir == NULL || IS_ABSOLUTE_PATH (file->filename))
+     return file->filename;
+ 
+-  return std::string (comp_dir) + SLASH_STRING + file->filename;
++  return path_join (comp_dir, file->filename);
+ }
+diff --git a/gdb/testsuite/gdb.mi/mi-fullname-deleted.exp b/gdb/testsuite/gdb.mi/mi-fullname-deleted.exp
+--- a/gdb/testsuite/gdb.mi/mi-fullname-deleted.exp
++++ b/gdb/testsuite/gdb.mi/mi-fullname-deleted.exp
+@@ -36,6 +36,12 @@ if { [regsub {^(/[^/]+)/} $srcfileabs {\1subst/} srcfileabssubst] != 1
+     return -1
+ }
+ 
++# Generate a regular expression which to match $srcfileabs with
++# or without the doubled slash.  This is used by the substituted
++# fullname test.
++set srcfileabssubst_regexp [string_to_regexp $srcfileabssubst]
++regsub {//} $srcfileabssubst_regexp {\0?} srcfileabssubst_regexp
++
+ set f [open $srcfileabs "w"]
+ puts $f "int main (void) { return 0; }"
+ close $f
+@@ -54,7 +60,7 @@ mi_gdb_test "-interpreter-exec console \"set substitute-path ${initdir} ${initdi
+ 
+ mi_gdb_test "-file-list-exec-source-file" ".*\",fullname=\".*\".*" "fullname present"
+ 
+-mi_gdb_test "-file-list-exec-source-file" ".*\",fullname=\"[string_to_regexp $srcfileabssubst]\".*" "substituted fullname"
++mi_gdb_test "-file-list-exec-source-file" ".*\",fullname=\"$srcfileabssubst_regexp\".*" "substituted fullname"
+ 
+ # Test compare_filenames_for_search does not falsely use absolute filename as
+ # a relative one.
+diff --git a/gdb/unittests/path-join-selftests.c b/gdb/unittests/path-join-selftests.c
+new file mode 100644
+--- /dev/null
++++ b/gdb/unittests/path-join-selftests.c
+@@ -0,0 +1,73 @@
++/* Self tests for path_join for GDB, the GNU debugger.
++
++   Copyright (C) 2022 Free Software Foundation, Inc.
++
++   This file is part of GDB.
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
++
++#include "defs.h"
++#include "gdbsupport/pathstuff.h"
++#include "gdbsupport/selftest.h"
++
++namespace selftests {
++namespace path_join {
++
++template <typename ...Args>
++static void
++test_one (const char *expected, Args... paths)
++{
++  std::string actual = ::path_join (paths...);
++
++  SELF_CHECK (actual == expected);
++}
++
++/* Test path_join.  */
++
++static void
++test ()
++{
++  test_one ("/foo/bar", "/foo", "bar");
++  test_one ("/bar", "/", "bar");
++  test_one ("foo/bar/", "foo", "bar", "");
++  test_one ("foo", "", "foo");
++  test_one ("foo/bar", "foo", "", "bar");
++  test_one ("foo/", "foo", "");
++  test_one ("foo/", "foo/", "");
++
++  test_one ("D:/foo/bar", "D:/foo", "bar");
++  test_one ("D:/foo/bar", "D:/foo/", "bar");
++
++#if defined(_WIN32)
++  /* The current implementation doesn't recognize backslashes as directory
++     separators on Unix-like systems, so only run these tests on Windows.  If
++     we ever switch our implementation to use std::filesystem::path, they
++     should work anywhere, in theory.  */
++  test_one ("D:\\foo/bar", "D:\\foo", "bar");
++  test_one ("D:\\foo\\bar", "D:\\foo\\", "bar");
++  test_one ("\\\\server\\dir\\file", "\\\\server\\dir\\", "file");
++  test_one ("\\\\server\\dir/file", "\\\\server\\dir", "file");
++#endif /* _WIN32 */
++}
++
++}
++}
++
++void _initialize_path_join_selftests ();
++void
++_initialize_path_join_selftests ()
++{
++  selftests::register_test ("path_join",
++			    selftests::path_join::test);
++}
+diff --git a/gdbsupport/pathstuff.cc b/gdbsupport/pathstuff.cc
+--- a/gdbsupport/pathstuff.cc
++++ b/gdbsupport/pathstuff.cc
+@@ -87,7 +87,6 @@ gdb_realpath_keepfile (const char *filename)
+ {
+   const char *base_name = lbasename (filename);
+   char *dir_name;
+-  char *result;
+ 
+   /* Extract the basename of filename, and return immediately
+      a copy of filename if it does not contain any directory prefix.  */
+@@ -116,12 +115,7 @@ gdb_realpath_keepfile (const char *filename)
+      directory separator, avoid doubling it.  */
+   gdb::unique_xmalloc_ptr<char> path_storage = gdb_realpath (dir_name);
+   const char *real_path = path_storage.get ();
+-  if (IS_DIR_SEPARATOR (real_path[strlen (real_path) - 1]))
+-    result = concat (real_path, base_name, (char *) NULL);
+-  else
+-    result = concat (real_path, SLASH_STRING, base_name, (char *) NULL);
+-
+-  return gdb::unique_xmalloc_ptr<char> (result);
++  return make_unique_xstrdup (path_join (real_path, base_name).c_str ());
+ }
+ 
+ /* See gdbsupport/pathstuff.h.  */
+@@ -137,12 +131,7 @@ gdb_abspath (const char *path)
+   if (IS_ABSOLUTE_PATH (path) || current_directory == NULL)
+     return path;
+ 
+-  /* Beware the // my son, the Emacs barfs, the botch that catch...  */
+-  return string_printf
+-    ("%s%s%s", current_directory,
+-     (IS_DIR_SEPARATOR (current_directory[strlen (current_directory) - 1])
+-      ? "" : SLASH_STRING),
+-     path);
++  return path_join (current_directory, path);
+ }
+ 
+ /* See gdbsupport/pathstuff.h.  */
+@@ -197,6 +186,29 @@ child_path (const char *parent, const char *child)
+ 
+ /* See gdbsupport/pathstuff.h.  */
+ 
++std::string
++path_join (gdb::array_view<const gdb::string_view> paths)
++{
++  std::string ret;
++
++  for (int i = 0; i < paths.size (); ++i)
++    {
++      const gdb::string_view path = paths[i];
++
++      if (i > 0)
++	gdb_assert (!IS_ABSOLUTE_PATH (path));
++
++      if (!ret.empty () && !IS_DIR_SEPARATOR (ret.back ()))
++	  ret += '/';
++
++      ret.append (path.begin (), path.end ());
++    }
++
++  return ret;
++}
++
++/* See gdbsupport/pathstuff.h.  */
++
+ bool
+ contains_dir_separator (const char *path)
+ {
+@@ -226,7 +238,7 @@ get_standard_cache_dir ()
+     {
+       /* Make sure the path is absolute and tilde-expanded.  */
+       std::string abs = gdb_abspath (xdg_cache_home);
+-      return string_printf ("%s/gdb", abs.c_str ());
++      return path_join (abs.c_str (), "gdb");
+     }
+ #endif
+ 
+@@ -235,7 +247,7 @@ get_standard_cache_dir ()
+     {
+       /* Make sure the path is absolute and tilde-expanded.  */
+       std::string abs = gdb_abspath (home);
+-      return string_printf ("%s/" HOME_CACHE_DIR "/gdb", abs.c_str ());
++      return path_join (abs.c_str (), HOME_CACHE_DIR, "gdb");
+     }
+ 
+   return {};
+diff --git a/gdbsupport/pathstuff.h b/gdbsupport/pathstuff.h
+--- a/gdbsupport/pathstuff.h
++++ b/gdbsupport/pathstuff.h
+@@ -21,6 +21,7 @@
+ #define COMMON_PATHSTUFF_H
+ 
+ #include "gdbsupport/byte-vector.h"
++#include "gdbsupport/array-view.h"
+ 
+ /* Path utilities.  */
+ 
+@@ -57,6 +58,28 @@ extern std::string gdb_abspath (const char *path);
+ 
+ extern const char *child_path (const char *parent, const char *child);
+ 
++/* Join elements in PATHS into a single path.
++
++   The first element can be absolute or relative.  All the others must be
++   relative.  */
++
++extern std::string path_join (gdb::array_view<const gdb::string_view> paths);
++
++/* Same as the above, but accept paths as distinct parameters.  */
++
++template<typename ...Args>
++std::string
++path_join (Args... paths)
++{
++  /* It doesn't make sense to join less than two paths.  */
++  gdb_static_assert (sizeof... (Args) >= 2);
++
++  std::array<gdb::string_view, sizeof... (Args)> views
++    { gdb::string_view (paths)... };
++
++  return path_join (gdb::array_view<const gdb::string_view> (views));
++}
++
+ /* Return whether PATH contains a directory separator character.  */
+ 
+ extern bool contains_dir_separator (const char *path);

@@ -1,0 +1,103 @@
+From aa1c4a7708df2edbc12f2ada7249208aef586d1e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Tue, 8 Jun 2021 20:45:00 +0200
+Subject: [PATCH] data: Disable network configuration on login screen
+
+---
+ data/meson.build            | 10 ++++++++++
+ data/org.gnome.gdm.rules.in |  8 ++++++++
+ 2 files changed, 18 insertions(+)
+ create mode 100644 data/org.gnome.gdm.rules.in
+
+diff --git a/data/meson.build b/data/meson.build
+index 7c5222ea..20d39a36 100644
+--- a/data/meson.build
++++ b/data/meson.build
+@@ -130,60 +130,70 @@ pam_data_files_map = {
+   ],
+   'arch': [
+     'gdm-autologin',
+     'gdm-launch-environment',
+     'gdm-fingerprint',
+     'gdm-smartcard',
+     'gdm-password',
+   ],
+   'none': [],
+   # We should no longer have 'autodetect' at this point
+ }
+ 
+ pam_data_files = pam_data_files_map[default_pam_config]
+ pam_prefix = (get_option('pam-prefix') != '')? get_option('pam-prefix') : get_option('sysconfdir')
+ foreach _pam_filename : pam_data_files
+   install_data('pam-@0@/@1@.pam'.format(default_pam_config, _pam_filename),
+     rename: _pam_filename,
+     install_dir: pam_prefix / 'pam.d',
+   )
+ endforeach
+ 
+ gdm_rules = configure_file(
+   input: '61-gdm.rules.in',
+   output: '@BASENAME@',
+   configuration: {
+     'libexecdir': gdm_prefix / get_option('libexecdir'),
+   },
+   install_dir: udev_dir,
+ )
+ 
++# Polkit rules
++polkit_rules = configure_file(
++  input: 'org.gnome.gdm.rules.in',
++  output: '@BASENAME@',
++  configuration: {
++    'GDM_USERNAME': get_option('user'),
++  },
++  install_dir: get_option('datadir') / 'polkit-1' / 'rules.d',
++)
++
+ # DBus service files
+ service_config = configuration_data()
+ service_config.set('sbindir', gdm_prefix / get_option('sbindir'))
+ service_config.set('GDM_INITIAL_VT', get_option('initial-vt'))
+ service_config.set('LANG_CONFIG_FILE', lang_config_file)
+ if plymouth_dep.found()
+   service_config.set('PLYMOUTH_QUIT_SERVICE', 'plymouth-quit.service')
+ else
+   service_config.set('PLYMOUTH_QUIT_SERVICE', '')
+ endif
+ 
+ if get_option('systemdsystemunitdir') != ''
+   systemd_systemunitdir = get_option('systemdsystemunitdir')
+ else
+   systemd_systemunitdir = systemd_dep.get_pkgconfig_variable('systemdsystemunitdir')
+ endif
+ 
+ if get_option('systemduserunitdir') != ''
+   systemd_userunitdir = get_option('systemduserunitdir')
+ else
+   systemd_userunitdir = systemd_dep.get_pkgconfig_variable('systemduserunitdir',
+                                                            define_variable: ['prefix', get_option('prefix')])
+ endif
+ 
+ configure_file(
+   input: 'gdm.service.in',
+   output: '@BASENAME@',
+   configuration: service_config,
+   install_dir: systemd_systemunitdir,
+   format: 'cmake'
+diff --git a/data/org.gnome.gdm.rules.in b/data/org.gnome.gdm.rules.in
+new file mode 100644
+index 00000000..09544f11
+--- /dev/null
++++ b/data/org.gnome.gdm.rules.in
+@@ -0,0 +1,8 @@
++polkit.addRule(function(action, subject) {
++    if (action.id == "org.freedesktop.NetworkManager.network-control" &&
++        subject.user == "@GDM_USERNAME@") {
++            return polkit.Result.NO;
++    }
++
++    return polkit.Result.NOT_HANDLED;
++});
+-- 
+2.32.0
+

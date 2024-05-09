@@ -1,0 +1,27 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Lu=C3=ADs=20Ferreira?= <contact@lsferreira.net>
+Date: Thu, 23 Sep 2021 11:33:47 -0400
+Subject: libiberty-rhbz-2132600-prevent-buffer-overflow.patch
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+;; Backport libiberty: prevent buffer overflow when decoding user input
+;; (Luís Ferreira, RHBZ2132600)
+
+libiberty/
+	* d-demangle.c (dlang_symbol_backref): Ensure strlen of
+	string is less than length computed by dlang_number.
+
+diff --git a/libiberty/d-demangle.c b/libiberty/d-demangle.c
+--- a/libiberty/d-demangle.c
++++ b/libiberty/d-demangle.c
+@@ -380,7 +380,7 @@ dlang_symbol_backref (string *decl, const char *mangled,
+ 
+   /* Must point to a simple identifier.  */
+   backref = dlang_number (backref, &len);
+-  if (backref == NULL)
++  if (backref == NULL || strlen (backref) < len)
+     return NULL;
+ 
+   backref = dlang_lname (decl, backref, len);

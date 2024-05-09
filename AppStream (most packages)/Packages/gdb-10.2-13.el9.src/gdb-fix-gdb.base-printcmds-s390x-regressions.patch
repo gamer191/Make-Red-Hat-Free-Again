@@ -1,0 +1,71 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Tom de Vries <tdevries@suse.de>
+Date: Mon, 12 Dec 2022 15:21:33 +0100
+Subject: gdb-fix-gdb.base-printcmds-s390x-regressions.patch
+
+;; Backport "[gdb/testsuite] Fix PR20630 regression test in gdb.base/printcmds.exp"
+;; (Tom de Vries)
+
+On s390x-linux, I run into:
+...
+(gdb) print {unsigned char}{65}^M
+$749 = 0 '\000'^M
+(gdb) FAIL: gdb.base/printcmds.exp: print {unsigned char}{65}
+...
+
+In contrast, on x86_64-linux, we have:
+...
+(gdb) print {unsigned char}{65}^M
+$749 = 65 'A'^M
+(gdb) PASS: gdb.base/printcmds.exp: print {unsigned char}{65}
+...
+
+The first problem here is that the test is supposed to be a regression test
+for PR20630, which can be reproduced (for an unfixed gdb) like this:
+...
+(gdb) p {unsigned char[]}{0x17}
+gdbtypes.c:4641: internal-error: copy_type: \
+  Assertion `TYPE_OBJFILE_OWNED (type)' failed.
+...
+but it's not due to insufficient quoting (note the dropped '[]').
+
+That's easy to fix, but after that we have on s390 (big endian):
+...
+(gdb) print {unsigned char[]}{65}^M
+$749 = ""^M
+...
+and on x86_64 (little endian):
+...
+(gdb) print {unsigned char[]}{65}^M
+$749 = "A"^M
+...
+
+Fix this by using 0xffffffff, such that in both cases we have:
+...
+(gdb) print {unsigned char[]}{0xffffffff}^M
+$749 = "\377\377\377\377"^M
+...
+
+Tested on x86_64-linux and s390x-linux.
+
+diff --git a/gdb/testsuite/gdb.base/printcmds.exp b/gdb/testsuite/gdb.base/printcmds.exp
+--- a/gdb/testsuite/gdb.base/printcmds.exp
++++ b/gdb/testsuite/gdb.base/printcmds.exp
+@@ -717,6 +717,7 @@ proc test_print_string_constants {} {
+ }
+ 
+ proc test_print_array_constants {} {
++    global hex
+ 
+     if [target_info exists gdb,cannot_call_functions] {
+ 	unsupported "this target can not call functions"
+@@ -735,7 +736,8 @@ proc test_print_array_constants {} {
+     gdb_test "print *&{4,5,6}\[1\]"	"Attempt to take address of value not located in memory."
+ 
+     # This used to cause a crash.
+-    gdb_test "print {unsigned char[]}{65}" " = 65 'A'"
++    set val [string_to_regexp {"\377\377\377\377"}]
++    gdb_test "print {unsigned char\[\]}{0xffffffff}" " = $val"
+ }
+ 
+ proc test_print_enums {} {

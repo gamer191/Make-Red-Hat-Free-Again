@@ -1,0 +1,96 @@
+From 0e467e3fb32d9e2a7499069699527638eb2c2be1 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Thu, 7 Oct 2021 15:34:27 -0400
+Subject: [PATCH 5/5] local-display-factory: Don't crash if Xorg and Wayland
+ are both unavailable
+
+At the moment if Wayland doesn't work, the login screen will fall back
+to Xorg, and if Xorg doesn't work the login screen will fall back to
+Wayland.
+
+But if the fall back choice is disabled explicitly, GDM will just crash.
+
+This commit fixes the crash.
+
+Closes: https://gitlab.gnome.org/GNOME/gdm/-/issues/739
+---
+ daemon/gdm-local-display-factory.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/daemon/gdm-local-display-factory.c b/daemon/gdm-local-display-factory.c
+index eba38671..120847f9 100644
+--- a/daemon/gdm-local-display-factory.c
++++ b/daemon/gdm-local-display-factory.c
+@@ -651,62 +651,67 @@ ensure_display_for_seat (GdmLocalDisplayFactory *factory,
+         gdm_settings_direct_get_boolean (GDM_KEY_XORG_ENABLE, &xorg_enabled);
+ 
+         preferred_display_server = get_preferred_display_server (factory);
+ 
+         if (g_strcmp0 (preferred_display_server, "none") == 0) {
+                g_debug ("GdmLocalDisplayFactory: Preferred display server is none, so not creating display");
+                return;
+         }
+ 
+         ret = sd_seat_can_graphical (seat_id);
+ 
+         if (ret < 0) {
+                 g_critical ("Failed to query CanGraphical information for seat %s", seat_id);
+                 return;
+         }
+ 
+         if (ret == 0) {
+                 g_debug ("GdmLocalDisplayFactory: System doesn't currently support graphics");
+                 seat_supports_graphics = FALSE;
+         } else {
+                 g_debug ("GdmLocalDisplayFactory: System supports graphics");
+                 seat_supports_graphics = TRUE;
+         }
+ 
+         if (g_strcmp0 (seat_id, "seat0") == 0) {
+                 is_seat0 = TRUE;
+ 
+                 falling_back = factory->num_failures > 0;
+                 session_types = gdm_local_display_factory_get_session_types (factory, falling_back);
+ 
+-                g_debug ("GdmLocalDisplayFactory: New displays on seat0 will use %s%s",
+-                         session_types[0], falling_back? " fallback" : "");
++                if (session_types == NULL) {
++                        g_debug ("GdmLocalDisplayFactory: Both Wayland and Xorg are unavailable");
++                        seat_supports_graphics = FALSE;
++                } else {
++                        g_debug ("GdmLocalDisplayFactory: New displays on seat0 will use %s%s",
++                                 session_types[0], falling_back? " fallback" : "");
++                }
+         } else {
+                 is_seat0 = FALSE;
+ 
+                 g_debug ("GdmLocalDisplayFactory: New displays on seat %s will use X11 fallback", seat_id);
+                 /* Force legacy X11 for all auxiliary seats */
+                 seat_supports_graphics = TRUE;
+                 session_types = g_strdupv ((char **) legacy_session_types);
+         }
+ 
+         /* For seat0, we have a fallback logic to still try starting it after
+          * SEAT0_GRAPHICS_CHECK_TIMEOUT seconds. i.e. we simply continue even if
+          * CanGraphical is unset.
+          * This is ugly, but it means we'll come up eventually in some
+          * scenarios where no master device is present.
+          * Note that we'll force an X11 fallback even though there might be
+          * cases where an wayland capable device is present and simply not marked as
+          * master-of-seat. In these cases, this should likely be fixed in the
+          * udev rules.
+          *
+          * At the moment, systemd always sets CanGraphical for non-seat0 seats.
+          * This is because non-seat0 seats are defined by having master-of-seat
+          * set. This means we can avoid the fallback check for non-seat0 seats,
+          * which simplifies the code.
+          */
+         if (is_seat0) {
+                 if (!seat_supports_graphics) {
+                         if (!factory->seat0_graphics_check_timed_out) {
+                                 if (factory->seat0_graphics_check_timeout_id == 0) {
+                                         g_debug ("GdmLocalDisplayFactory: seat0 doesn't yet support graphics.  Waiting %d seconds to try again.", SEAT0_GRAPHICS_CHECK_TIMEOUT);
+                                         factory->seat0_graphics_check_timeout_id = g_timeout_add_seconds (SEAT0_GRAPHICS_CHECK_TIMEOUT,
+-- 
+2.34.1
+

@@ -1,0 +1,113 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Wed, 6 Dec 2023 07:19:49 -0800
+Subject: gdb-find_and_open_source-empty-string-ub-4of4.patch
+
+;; Backport "gdbsupport: change path_join parameter to
+;; array_view<const char *>"
+;; (Simon Marchi)
+
+When a GDB built with -D_GLIBCXX_DEBUG=1 reads a binary with a single
+character name, we hit this assertion failure:
+
+    $ ./gdb -q --data-directory=data-directory -nx ./x
+    /usr/include/c++/12.1.0/string_view:239: constexpr const std::basic_string_view<_CharT, _Traits>::value_type& std::basic_string_view<_CharT, _Traits>::operator[](size_type) const [with _CharT = char; _Traits = std::char_traits<char>; const_reference = const char&; size_type = long unsigned int]: Assertion '__pos < this->_M_len' failed.
+
+The backtrace:
+
+    #3  0x00007ffff6c0f002 in std::__glibcxx_assert_fail (file=<optimized out>, line=<optimized out>, function=<optimized out>, condition=<optimized out>) at /usr/src/debug/gcc/libstdc++-v3/src/c++11/debug.cc:60
+    #4  0x000055555da8a864 in std::basic_string_view<char, std::char_traits<char> >::operator[] (this=0x7fffffffcc30, __pos=1) at /usr/include/c++/12.1.0/string_view:239
+    #5  0x00005555609dcb88 in path_join[abi:cxx11](gdb::array_view<std::basic_string_view<char, std::char_traits<char> > const>) (paths=...) at /home/simark/src/binutils-gdb/gdbsupport/pathstuff.cc:203
+    #6  0x000055555e0443f4 in path_join<char const*, char const*> () at /home/simark/src/binutils-gdb/gdb/../gdbsupport/pathstuff.h:84
+    #7  0x00005555609dc336 in gdb_realpath_keepfile[abi:cxx11](char const*) (filename=0x6060000a8d40 "/home/simark/build/binutils-gdb-one-target/gdb/./x") at /home/simark/src/binutils-gdb/gdbsupport/pathstuff.cc:122
+    #8  0x000055555ebd2794 in exec_file_attach (filename=0x7fffffffe0f9 "./x", from_tty=1) at /home/simark/src/binutils-gdb/gdb/exec.c:471
+    #9  0x000055555f2b3fb0 in catch_command_errors (command=0x55555ebd1ab6 <exec_file_attach(char const*, int)>, arg=0x7fffffffe0f9 "./x", from_tty=1, do_bp_actions=false) at /home/simark/src/binutils-gdb/gdb/main.c:513
+    #10 0x000055555f2b7e11 in captured_main_1 (context=0x7fffffffdb60) at /home/simark/src/binutils-gdb/gdb/main.c:1209
+    #11 0x000055555f2b9144 in captured_main (data=0x7fffffffdb60) at /home/simark/src/binutils-gdb/gdb/main.c:1319
+    #12 0x000055555f2b9226 in gdb_main (args=0x7fffffffdb60) at /home/simark/src/binutils-gdb/gdb/main.c:1344
+    #13 0x000055555d938c5e in main (argc=5, argv=0x7fffffffdcf8) at /home/simark/src/binutils-gdb/gdb/gdb.c:32
+
+The problem is this line in path_join:
+
+    gdb_assert (strlen (path) == 0 || !IS_ABSOLUTE_PATH (path));
+
+... where `path` is "x".  IS_ABSOLUTE_PATH eventually calls
+HAS_DRIVE_SPEC_1:
+
+    #define HAS_DRIVE_SPEC_1(dos_based, f)                  \
+      ((f)[0] && ((f)[1] == ':') && (dos_based))
+
+This macro accesses indices 0 and 1 of the input string.  However, `f`
+is a string_view of length 1, so it's incorrect to try to access index
+1.  We know that the string_view's underlying object is a null-terminated
+string, so in practice there's no harm.  But as far as the string_view
+is concerned, index 1 is considered out of bounds.
+
+This patch makes the easy fix, that is to change the path_join parameter
+from a vector of to a vector of `const char *`.  Another solution would
+be to introduce a non-standard gdb::cstring_view class, which would be a
+view over a null-terminated string.  With that class, it would be
+correct to access index 1, it would yield the NUL character.  If there
+is interest in having this class (it has been mentioned a few times in
+the past) I can do it and use it here.
+
+This was found by running tests such as gdb.ada/arrayidx.exp, which
+produce 1-char long filenames, so adding a new test is not necessary.
+
+Change-Id: Ia41a16c7243614636b18754fd98a41860756f7af
+
+diff --git a/gdbsupport/pathstuff.cc b/gdbsupport/pathstuff.cc
+--- a/gdbsupport/pathstuff.cc
++++ b/gdbsupport/pathstuff.cc
+@@ -187,21 +187,21 @@ child_path (const char *parent, const char *child)
+ /* See gdbsupport/pathstuff.h.  */
+ 
+ std::string
+-path_join (gdb::array_view<const gdb::string_view> paths)
++path_join (gdb::array_view<const char *> paths)
+ {
+   std::string ret;
+ 
+   for (int i = 0; i < paths.size (); ++i)
+     {
+-      const gdb::string_view path = paths[i];
++      const char *path = paths[i];
+ 
+       if (i > 0)
+-	gdb_assert (!IS_ABSOLUTE_PATH (path));
++	gdb_assert (strlen (path) == 0 || !IS_ABSOLUTE_PATH (path));
+ 
+       if (!ret.empty () && !IS_DIR_SEPARATOR (ret.back ()))
+ 	  ret += '/';
+ 
+-      ret.append (path.begin (), path.end ());
++      ret.append (path);
+     }
+ 
+   return ret;
+diff --git a/gdbsupport/pathstuff.h b/gdbsupport/pathstuff.h
+--- a/gdbsupport/pathstuff.h
++++ b/gdbsupport/pathstuff.h
+@@ -63,7 +63,7 @@ extern const char *child_path (const char *parent, const char *child);
+    The first element can be absolute or relative.  All the others must be
+    relative.  */
+ 
+-extern std::string path_join (gdb::array_view<const gdb::string_view> paths);
++extern std::string path_join (gdb::array_view<const char *> paths);
+ 
+ /* Same as the above, but accept paths as distinct parameters.  */
+ 
+@@ -74,10 +74,10 @@ path_join (Args... paths)
+   /* It doesn't make sense to join less than two paths.  */
+   gdb_static_assert (sizeof... (Args) >= 2);
+ 
+-  std::array<gdb::string_view, sizeof... (Args)> views
+-    { gdb::string_view (paths)... };
++  std::array<const char *, sizeof... (Args)> path_array
++    { paths... };
+ 
+-  return path_join (gdb::array_view<const gdb::string_view> (views));
++  return path_join (gdb::array_view<const char *> (path_array));
+ }
+ 
+ /* Return whether PATH contains a directory separator character.  */

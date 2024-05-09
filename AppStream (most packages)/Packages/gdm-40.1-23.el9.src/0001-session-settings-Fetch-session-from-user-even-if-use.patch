@@ -1,0 +1,89 @@
+From 8a29f79124f38e2106b263bacb6b5ab4cdb255d0 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Wed, 9 Mar 2022 10:46:21 -0500
+Subject: [PATCH] session-settings: Fetch session from user even if user isn't
+ cached
+
+Now that accountsservice supports session templates, GDM can't assume
+that no-cache file means, there's nothing worth reading.
+
+Unfortunately, GDM does exactly that. It bypasses fetching the users
+session if it doesn't think the user has one.
+
+This commit removes that no-longer-correct optimization.
+---
+ daemon/gdm-session-settings.c | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/daemon/gdm-session-settings.c b/daemon/gdm-session-settings.c
+index 5b64cb65..fbf6897b 100644
+--- a/daemon/gdm-session-settings.c
++++ b/daemon/gdm-session-settings.c
+@@ -270,64 +270,60 @@ gdm_session_settings_new (void)
+         GdmSessionSettings *settings;
+ 
+         settings = g_object_new (GDM_TYPE_SESSION_SETTINGS,
+                                  NULL);
+ 
+         return settings;
+ }
+ 
+ gboolean
+ gdm_session_settings_is_loaded (GdmSessionSettings  *settings)
+ {
+         if (settings->priv->user == NULL) {
+                 return FALSE;
+         }
+ 
+         return act_user_is_loaded (settings->priv->user);
+ }
+ 
+ static void
+ load_settings_from_user (GdmSessionSettings *settings)
+ {
+         const char *session_name;
+         const char *session_type;
+         const char *language_name;
+ 
+         if (!act_user_is_loaded (settings->priv->user)) {
+                 g_warning ("GdmSessionSettings: trying to load user settings from unloaded user");
+                 return;
+         }
+ 
+-        /* if the user doesn't have saved state, they don't have any settings worth reading */
+-        if (!act_user_get_saved (settings->priv->user))
+-                goto out;
+-
+         session_type = act_user_get_session_type (settings->priv->user);
+         session_name = act_user_get_session (settings->priv->user);
+ 
+         g_debug ("GdmSessionSettings: saved session is %s (type %s)", session_name, session_type);
+ 
+         if (session_type != NULL && session_type[0] != '\0') {
+                 gdm_session_settings_set_session_type (settings, session_type);
+         }
+ 
+         if (session_name != NULL && session_name[0] != '\0') {
+                 gdm_session_settings_set_session_name (settings, session_name);
+         }
+ 
+         language_name = act_user_get_language (settings->priv->user);
+ 
+         g_debug ("GdmSessionSettings: saved language is %s", language_name);
+         if (language_name != NULL && language_name[0] != '\0') {
+                 gdm_session_settings_set_language_name (settings, language_name);
+         }
+ 
+ out:
+         g_object_notify (G_OBJECT (settings), "is-loaded");
+ }
+ 
+ static void
+ on_user_is_loaded_changed (ActUser            *user,
+                            GParamSpec         *pspec,
+                            GdmSessionSettings *settings)
+ {
+         if (act_user_is_loaded (settings->priv->user)) {
+-- 
+2.34.1
+

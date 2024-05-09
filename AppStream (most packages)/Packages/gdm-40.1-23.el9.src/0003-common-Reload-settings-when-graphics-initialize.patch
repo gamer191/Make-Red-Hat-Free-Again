@@ -1,0 +1,155 @@
+From a9928bfcc9c6d81d60e047b7838d4107835b8f89 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Tue, 15 Feb 2022 14:33:22 -0500
+Subject: [PATCH 3/4] common: Reload settings when graphics initialize
+
+If GDM starts faster than graphics initialize, then the
+udev rules that write out /run/gdm/custom.conf might get
+run too late for GDM to notice.
+
+This commit changes GDM to reread its config after graphicals
+initialization completes.
+
+https://gitlab.gnome.org/GNOME/gdm/-/issues/763
+---
+ daemon/gdm-local-display-factory.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/daemon/gdm-local-display-factory.c b/daemon/gdm-local-display-factory.c
+index 0b1d3482..8bca8ce9 100644
+--- a/daemon/gdm-local-display-factory.c
++++ b/daemon/gdm-local-display-factory.c
+@@ -1023,64 +1023,66 @@ on_seat_properties_changed (GDBusConnection *connection,
+         g_autoptr(GVariant) changed_prop = NULL;
+         g_autofree const gchar **invalidated_props = NULL;
+         gboolean changed = FALSE;
+         int ret;
+ 
+         /* Extract seat id, i.e. the last element of the object path. */
+         seat = strrchr (object_path, '/');
+         if (seat == NULL)
+                 return;
+         seat += 1;
+ 
+         /* Valid seat IDs must start with seat, i.e. ignore "auto" */
+         if (!g_str_has_prefix (seat, "seat"))
+                 return;
+ 
+         g_variant_get (parameters, "(s@a{sv}^a&s)", NULL, &changed_props, &invalidated_props);
+ 
+         changed_prop = g_variant_lookup_value (changed_props, "CanGraphical", NULL);
+         if (changed_prop)
+                 changed = TRUE;
+         if (!changed && g_strv_contains (invalidated_props, "CanGraphical"))
+                 changed = TRUE;
+ 
+         if (!changed)
+                 return;
+ 
+         ret = sd_seat_can_graphical (seat);
+         if (ret < 0)
+                 return;
+ 
+-        if (ret != 0)
++        if (ret != 0) {
++                gdm_settings_direct_reload ();
+                 ensure_display_for_seat (GDM_LOCAL_DISPLAY_FACTORY (user_data), seat);
+-        else
++        } else {
+                 delete_display (GDM_LOCAL_DISPLAY_FACTORY (user_data), seat);
++        }
+ }
+ 
+ static gboolean
+ lookup_by_session_id (const char *id,
+                       GdmDisplay *display,
+                       gpointer    user_data)
+ {
+         const char *looking_for = user_data;
+         const char *current;
+ 
+         current = gdm_display_get_session_id (display);
+         return g_strcmp0 (current, looking_for) == 0;
+ }
+ 
+ static gboolean
+ lookup_by_tty (const char *id,
+               GdmDisplay *display,
+               gpointer    user_data)
+ {
+         const char *tty_to_find = user_data;
+         g_autofree char *tty_to_check = NULL;
+         const char *session_id;
+         int ret;
+ 
+         session_id = gdm_display_get_session_id (display);
+ 
+         if (!session_id)
+                 return FALSE;
+ 
+         ret = sd_session_get_tty (session_id, &tty_to_check);
+@@ -1260,60 +1262,61 @@ on_vt_changed (GIOChannel    *source,
+         }
+ 
+         g_debug ("GdmLocalDisplayFactory: creating new display on seat0 because of VT change");
+ 
+         ensure_display_for_seat (factory, "seat0");
+ 
+         return G_SOURCE_CONTINUE;
+ }
+ #endif
+ 
+ #ifdef HAVE_UDEV
+ static void
+ on_uevent (GUdevClient *client,
+            const char  *action,
+            GUdevDevice *device,
+            GdmLocalDisplayFactory *factory)
+ {
+         if (!g_udev_device_get_device_file (device))
+                 return;
+ 
+         if (g_strcmp0 (action, "add") != 0 &&
+             g_strcmp0 (action, "change") != 0)
+                 return;
+ 
+         if (!udev_is_settled (factory))
+                 return;
+ 
+         g_signal_handler_disconnect (factory->gudev_client, factory->uevent_handler_id);
+         factory->uevent_handler_id = 0;
+ 
++        gdm_settings_direct_reload ();
+         ensure_display_for_seat (factory, "seat0");
+ }
+ #endif
+ 
+ static void
+ gdm_local_display_factory_start_monitor (GdmLocalDisplayFactory *factory)
+ {
+         g_autoptr (GIOChannel) io_channel = NULL;
+         const char *subsystems[] = { "drm", NULL };
+ 
+         factory->seat_new_id = g_dbus_connection_signal_subscribe (factory->connection,
+                                                                          "org.freedesktop.login1",
+                                                                          "org.freedesktop.login1.Manager",
+                                                                          "SeatNew",
+                                                                          "/org/freedesktop/login1",
+                                                                          NULL,
+                                                                          G_DBUS_SIGNAL_FLAGS_NONE,
+                                                                          on_seat_new,
+                                                                          g_object_ref (factory),
+                                                                          g_object_unref);
+         factory->seat_removed_id = g_dbus_connection_signal_subscribe (factory->connection,
+                                                                              "org.freedesktop.login1",
+                                                                              "org.freedesktop.login1.Manager",
+                                                                              "SeatRemoved",
+                                                                              "/org/freedesktop/login1",
+                                                                              NULL,
+                                                                              G_DBUS_SIGNAL_FLAGS_NONE,
+                                                                              on_seat_removed,
+                                                                              g_object_ref (factory),
+                                                                              g_object_unref);
+-- 
+2.34.1
+

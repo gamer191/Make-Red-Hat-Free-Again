@@ -1,0 +1,325 @@
+From 9261fcd05667fc5f8b81880577e41a566db821a8 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Wed, 15 Sep 2021 11:23:17 -0400
+Subject: [PATCH] local-display-factory: Don't try to respawn displays on
+ shutdown
+
+At the moment in the shutdown path we may try to respawn displays
+that just got killed.
+
+The respawning happens when things are half torn down leading to
+crashes.
+
+This commit makes sure we turn off the respawn logic in the shutdown
+path.
+---
+ daemon/gdm-local-display-factory.c | 11 ++++++++++-
+ daemon/gdm-manager.c               |  2 ++
+ 2 files changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/daemon/gdm-local-display-factory.c b/daemon/gdm-local-display-factory.c
+index 141d64c6..bca41f6e 100644
+--- a/daemon/gdm-local-display-factory.c
++++ b/daemon/gdm-local-display-factory.c
+@@ -46,60 +46,62 @@
+ #define GDM_LOCAL_DISPLAY_FACTORY_DBUS_PATH GDM_DBUS_PATH "/LocalDisplayFactory"
+ #define GDM_MANAGER_DBUS_NAME               "org.gnome.DisplayManager.LocalDisplayFactory"
+ 
+ #define MAX_DISPLAY_FAILURES 5
+ #define WAIT_TO_FINISH_TIMEOUT 10 /* seconds */
+ #define SEAT0_GRAPHICS_CHECK_TIMEOUT 10 /* seconds */
+ 
+ struct _GdmLocalDisplayFactory
+ {
+         GdmDisplayFactory              parent;
+ 
+         GdmDBusLocalDisplayFactory *skeleton;
+         GDBusConnection *connection;
+         GHashTable      *used_display_numbers;
+ 
+         /* FIXME: this needs to be per seat? */
+         guint            num_failures;
+ 
+         guint            seat_new_id;
+         guint            seat_removed_id;
+         guint            seat_properties_changed_id;
+ 
+         gboolean         seat0_graphics_check_timed_out;
+         guint            seat0_graphics_check_timeout_id;
+ 
+ #if defined(ENABLE_USER_DISPLAY_SERVER)
+         unsigned int     active_vt;
+         guint            active_vt_watch_id;
+         guint            wait_to_finish_timeout_id;
+ #endif
++
++        gboolean         is_started;
+ };
+ 
+ enum {
+         PROP_0,
+ };
+ 
+ static void     gdm_local_display_factory_class_init    (GdmLocalDisplayFactoryClass *klass);
+ static void     gdm_local_display_factory_init          (GdmLocalDisplayFactory      *factory);
+ static void     gdm_local_display_factory_finalize      (GObject                     *object);
+ 
+ static void     ensure_display_for_seat                 (GdmLocalDisplayFactory      *factory,
+                                                          const char                  *seat_id);
+ 
+ static void     on_display_status_changed               (GdmDisplay                  *display,
+                                                          GParamSpec                  *arg1,
+                                                          GdmLocalDisplayFactory      *factory);
+ 
+ static gboolean gdm_local_display_factory_sync_seats    (GdmLocalDisplayFactory *factory);
+ static gpointer local_display_factory_object = NULL;
+ static gboolean lookup_by_session_id (const char *id,
+                                       GdmDisplay *display,
+                                       gpointer    user_data);
+ 
+ G_DEFINE_TYPE (GdmLocalDisplayFactory, gdm_local_display_factory, GDM_TYPE_DISPLAY_FACTORY)
+ 
+ GQuark
+ gdm_local_display_factory_error_quark (void)
+ {
+         static GQuark ret = 0;
+         if (ret == 0) {
+@@ -416,60 +418,64 @@ on_session_registered_cb (GObject *gobject,
+                           GParamSpec *pspec,
+                           gpointer user_data)
+ {
+         GdmDisplay *display = GDM_DISPLAY (gobject);
+         GdmLocalDisplayFactory *factory = GDM_LOCAL_DISPLAY_FACTORY (user_data);
+         gboolean registered;
+ 
+         g_object_get (display, "session-registered", &registered, NULL);
+ 
+         if (!registered)
+                 return;
+ 
+         g_debug ("GdmLocalDisplayFactory: session registered on display, looking for any background displays to kill");
+ 
+         finish_waiting_displays_on_seat (factory, "seat0");
+ }
+ 
+ static void
+ on_display_status_changed (GdmDisplay             *display,
+                            GParamSpec             *arg1,
+                            GdmLocalDisplayFactory *factory)
+ {
+         int              status;
+         int              num;
+         char            *seat_id = NULL;
+         char            *session_type = NULL;
+         char            *session_class = NULL;
+         gboolean         is_initial = TRUE;
+         gboolean         is_local = TRUE;
+ 
++
++        if (!factory->is_started)
++                return;
++
+         num = -1;
+         gdm_display_get_x11_display_number (display, &num, NULL);
+ 
+         g_object_get (display,
+                       "seat-id", &seat_id,
+                       "is-initial", &is_initial,
+                       "is-local", &is_local,
+                       "session-type", &session_type,
+                       "session-class", &session_class,
+                       NULL);
+ 
+         status = gdm_display_get_status (display);
+ 
+         g_debug ("GdmLocalDisplayFactory: display status changed: %d", status);
+         switch (status) {
+         case GDM_DISPLAY_FINISHED:
+                 /* remove the display number from factory->used_display_numbers
+                    so that it may be reused */
+                 if (num != -1) {
+                         g_hash_table_remove (factory->used_display_numbers, GUINT_TO_POINTER (num));
+                 }
+                 gdm_display_factory_queue_purge_displays (GDM_DISPLAY_FACTORY (factory));
+ 
+                 /* if this is a local display, do a full resync.  Only
+                  * seats without displays will get created anyway.  This
+                  * ensures we get a new login screen when the user logs out,
+                  * if there isn't one.
+                  */
+                 if (is_local && g_strcmp0 (session_class, "greeter") != 0) {
+                         /* reset num failures */
+@@ -1204,99 +1210,102 @@ on_display_added (GdmDisplayStore        *display_store,
+ 
+         display = gdm_display_store_lookup (display_store, id);
+ 
+         if (display != NULL) {
+                 g_signal_connect_object (display, "notify::status",
+                                          G_CALLBACK (on_display_status_changed),
+                                          factory,
+                                          0);
+ 
+                 g_object_weak_ref (G_OBJECT (display), (GWeakNotify)on_display_disposed, factory);
+         }
+ }
+ 
+ static void
+ on_display_removed (GdmDisplayStore        *display_store,
+                     GdmDisplay             *display,
+                     GdmLocalDisplayFactory *factory)
+ {
+         g_signal_handlers_disconnect_by_func (display, G_CALLBACK (on_display_status_changed), factory);
+         g_object_weak_unref (G_OBJECT (display), (GWeakNotify)on_display_disposed, factory);
+ }
+ 
+ static gboolean
+ gdm_local_display_factory_start (GdmDisplayFactory *base_factory)
+ {
+         GdmLocalDisplayFactory *factory = GDM_LOCAL_DISPLAY_FACTORY (base_factory);
+         GdmDisplayStore *store;
+ 
+         g_return_val_if_fail (GDM_IS_LOCAL_DISPLAY_FACTORY (factory), FALSE);
+ 
++        factory->is_started = TRUE;
++
+         store = gdm_display_factory_get_display_store (GDM_DISPLAY_FACTORY (factory));
+ 
+         g_signal_connect_object (G_OBJECT (store),
+                                  "display-added",
+                                  G_CALLBACK (on_display_added),
+                                  factory,
+                                  0);
+ 
+         g_signal_connect_object (G_OBJECT (store),
+                                  "display-removed",
+                                  G_CALLBACK (on_display_removed),
+                                  factory,
+                                  0);
+ 
+         gdm_local_display_factory_start_monitor (factory);
+         return gdm_local_display_factory_sync_seats (factory);
+ }
+ 
+ static gboolean
+ gdm_local_display_factory_stop (GdmDisplayFactory *base_factory)
+ {
+         GdmLocalDisplayFactory *factory = GDM_LOCAL_DISPLAY_FACTORY (base_factory);
+         GdmDisplayStore *store;
+ 
+         g_return_val_if_fail (GDM_IS_LOCAL_DISPLAY_FACTORY (factory), FALSE);
+ 
+         gdm_local_display_factory_stop_monitor (factory);
+ 
+         store = gdm_display_factory_get_display_store (GDM_DISPLAY_FACTORY (factory));
+ 
+         g_signal_handlers_disconnect_by_func (G_OBJECT (store),
+                                               G_CALLBACK (on_display_added),
+                                               factory);
+         g_signal_handlers_disconnect_by_func (G_OBJECT (store),
+                                               G_CALLBACK (on_display_removed),
+                                               factory);
+-
+         g_clear_handle_id (&factory->seat0_graphics_check_timeout_id, g_source_remove);
+ 
++        factory->is_started = FALSE;
++
+         return TRUE;
+ }
+ 
+ static void
+ gdm_local_display_factory_set_property (GObject       *object,
+                                         guint          prop_id,
+                                         const GValue  *value,
+                                         GParamSpec    *pspec)
+ {
+         switch (prop_id) {
+         default:
+                 G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+                 break;
+         }
+ }
+ 
+ static void
+ gdm_local_display_factory_get_property (GObject    *object,
+                                         guint       prop_id,
+                                         GValue     *value,
+                                         GParamSpec *pspec)
+ {
+         switch (prop_id) {
+         default:
+                 G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+                 break;
+         }
+ }
+ 
+ static gboolean
+diff --git a/daemon/gdm-manager.c b/daemon/gdm-manager.c
+index 4c2752fe..cc61efc9 100644
+--- a/daemon/gdm-manager.c
++++ b/daemon/gdm-manager.c
+@@ -2741,60 +2741,62 @@ unexport_display (const char *id,
+                   GdmDisplay *display,
+                   GdmManager *manager)
+ {
+         if (!g_dbus_connection_is_closed (manager->priv->connection))
+                 g_dbus_object_manager_server_unexport (manager->priv->object_manager, id);
+ }
+ 
+ static void
+ finish_display (const char *id,
+                 GdmDisplay *display,
+                 GdmManager *manager)
+ {
+         gdm_display_stop_greeter_session (display);
+         if (gdm_display_get_status (display) == GDM_DISPLAY_MANAGED)
+                 gdm_display_unmanage (display);
+         gdm_display_finish (display);
+ }
+ 
+ static void
+ gdm_manager_dispose (GObject *object)
+ {
+         GdmManager *manager;
+ 
+         g_return_if_fail (object != NULL);
+         g_return_if_fail (GDM_IS_MANAGER (object));
+ 
+         manager = GDM_MANAGER (object);
+ 
+         g_return_if_fail (manager->priv != NULL);
+ 
++        gdm_manager_stop (manager);
++
+         g_clear_weak_pointer (&manager->priv->automatic_login_display);
+ 
+ #ifdef HAVE_LIBXDMCP
+         g_clear_object (&manager->priv->xdmcp_factory);
+ #endif
+         g_clear_object (&manager->priv->local_factory);
+         g_clear_pointer (&manager->priv->open_reauthentication_requests,
+                          g_hash_table_unref);
+         g_clear_pointer (&manager->priv->transient_sessions,
+                          g_hash_table_unref);
+ 
+         g_list_foreach (manager->priv->user_sessions,
+                         (GFunc) gdm_session_close,
+                         NULL);
+         g_list_free_full (manager->priv->user_sessions, (GDestroyNotify) g_object_unref);
+         manager->priv->user_sessions = NULL;
+ 
+         g_signal_handlers_disconnect_by_func (G_OBJECT (manager->priv->display_store),
+                                               G_CALLBACK (on_display_added),
+                                               manager);
+         g_signal_handlers_disconnect_by_func (G_OBJECT (manager->priv->display_store),
+                                               G_CALLBACK (on_display_removed),
+                                               manager);
+ 
+         if (!g_dbus_connection_is_closed (manager->priv->connection)) {
+                 gdm_display_store_foreach (manager->priv->display_store,
+                                            (GdmDisplayStoreFunc)unexport_display,
+                                            manager);
+                 g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (manager));
+         }
+-- 
+2.32.0
+

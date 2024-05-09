@@ -1,0 +1,58 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Fri, 19 Mar 2021 11:07:11 -0700
+Subject: gdb-rhbz1941080-fix-gdbserver-hang.patch
+
+;; Backport change which fixes gdbserver testing hang on f34 and rawhide.
+
+Fix potential hang during gdbserver testing
+
+We're currently seeing testing of native-extended-gdbserver hang while
+testing the x86_64 architecture on both Fedora 34 and Fedora Rawhide.
+The test responsible for the hang is gdb.threads/fork-plus-threads.exp.
+
+While there is clearly a problem/bug with this test on F34 and
+Rawhide, it's also the case that testing should not hang.  This commit
+prevents the hang by waiting with the "-nowait" flag in
+close_gdbserver.
+
+The -nowait flag is also used in the kill_wait_spawned_process proc in
+gdb/testsuite/lib/gdb.exp, so there is precedent for doing this.
+
+There are also 15 other uses of "wait -i" scattered throughout the
+test suite.  While it's tempting to change these to also use the
+-nowait flag, I think it might be safer to defer doing so until we
+actually see a problem.
+
+I've tested this patch on Fedora 32, 33, 34, and Rawhide.  Results are
+comparable on Fedora 32 and 33.  On Fedora 34 and Rawhide, with this
+commit in place, testing completes when the target_board is
+native-extended-gdbserver.  On those OSes, when not using this commit,
+testing usually hangs due to a problem with
+gdb.threads/fork-plus-threads.exp.  I've also tested on all of the
+mentioned OSes with target_board=native-gdbserver; for that testing,
+I achieved comparable results over a number of runs.  (Unfortunately
+results are rarely identical due to racy tests.)
+
+gdb/testsuite/ChangeLog:
+
+	* lib/gdbserver-support.exp (gdbserver_exit): Use the
+	"-nowait" flag when waiting for gdbserver to exit.
+
+diff --git a/gdb/testsuite/lib/gdbserver-support.exp b/gdb/testsuite/lib/gdbserver-support.exp
+--- a/gdb/testsuite/lib/gdbserver-support.exp
++++ b/gdb/testsuite/lib/gdbserver-support.exp
+@@ -418,7 +418,12 @@ proc close_gdbserver {} {
+     verbose "Quitting GDBserver"
+ 
+     catch "close -i $server_spawn_id"
+-    catch "wait -i $server_spawn_id"
++
++    # If gdbserver misbehaves, and ignores the close, waiting for it
++    # without the -nowait flag will cause testing to hang.  Passing
++    # -nowait makes expect tell Tcl to wait for the process in the
++    # background.
++    catch "wait -nowait -i $server_spawn_id"
+     unset server_spawn_id
+ }
+ 

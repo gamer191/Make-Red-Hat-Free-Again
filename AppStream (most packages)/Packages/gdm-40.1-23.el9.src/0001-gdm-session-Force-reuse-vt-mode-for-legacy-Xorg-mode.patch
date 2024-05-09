@@ -1,0 +1,88 @@
+From bcab8852cf7249a2220f6c737f7bb8a17b99249a Mon Sep 17 00:00:00 2001
+From: rpm-build <rpm-build>
+Date: Mon, 27 Nov 2023 15:29:09 -0500
+Subject: [PATCH] gdm-session: Force reuse vt mode for legacy Xorg mode
+
+In the legacy Xorg mode, the X session and user session are
+supposed to use the same VT.
+
+Unfortunately, right now GDM thinks they will use different
+VTs and that breaks PreferredDisplayServer=legacy-xorg.
+
+This commit fixes that.
+---
+ daemon/gdm-session.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/daemon/gdm-session.c b/daemon/gdm-session.c
+index 9f68166..43e3ea6 100644
+--- a/daemon/gdm-session.c
++++ b/daemon/gdm-session.c
+@@ -3343,60 +3343,64 @@ gdm_session_bypasses_xsession (GdmSession *self)
+                 if (error) {
+                         bypasses_xsession = FALSE;
+                         g_error_free (error);
+                         goto out;
+                 }
+         }
+ 
+ out:
+         if (bypasses_xsession) {
+                 g_debug ("GdmSession: Session %s bypasses Xsession wrapper script", filename);
+         }
+         g_free (filename);
+         return bypasses_xsession;
+ }
+ 
+ GdmSessionDisplayMode
+ gdm_session_get_display_mode (GdmSession *self)
+ {
+         g_debug ("GdmSession: type %s, program? %s, seat %s",
+                  self->session_type,
+                  self->is_program_session? "yes" : "no",
+                  self->display_seat_id);
+ 
+         /* Non-seat0 sessions share their X server with their login screen
+          * for now.
+          */
+         if (g_strcmp0 (self->display_seat_id, "seat0") != 0) {
+                 return GDM_SESSION_DISPLAY_MODE_REUSE_VT;
+         }
+ 
++        if (self->display_x11_authority_file != NULL) {
++                return GDM_SESSION_DISPLAY_MODE_REUSE_VT;
++        }
++
+ #ifdef ENABLE_USER_DISPLAY_SERVER
+         /* All other cases (wayland login screen, X login screen,
+          * wayland user session, X user session) use the NEW_VT
+          * display mode.  That display mode means that GDM allocates
+          * a new VT and jumps to it before starting the session. The
+          * session is expected to use logind to gain access to the
+          * display and input devices.
+          *
+          * GDM also has a LOGIND_MANAGED display mode which we can't
+          * use yet. The difference between it and NEW_VT, is with it,
+          * GDM doesn't do any VT handling at all, expecting the session
+          * and logind to do everything.  The problem is, for wayland
+          * sessions it will cause flicker until * this bug is fixed:
+          *
+          * https://bugzilla.gnome.org/show_bug.cgi?id=745141
+          *
+          * Likewise, for X sessions it's problematic because
+          *   1) X doesn't call TakeControl before switching VTs
+          *   2) X doesn't support getting started "in the background"
+          *   right now.  It will die with an error if logind devices
+          *   are paused when handed out.
+          */
+         return GDM_SESSION_DISPLAY_MODE_NEW_VT;
+ #else
+ 
+ #ifdef ENABLE_WAYLAND_SUPPORT
+         /* Wayland sessions are for now assumed to run in a
+          * mutter-launch-like environment, so we allocate
+          * a new VT for them. */
+         if (g_strcmp0 (self->session_type, "wayland") == 0) {
+-- 
+2.41.0
+

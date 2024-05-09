@@ -1,0 +1,28 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Andreas Krebbel <krebbel@linux.ibm.com>
+Date: Wed, 7 Jul 2021 14:05:00 +0200
+Subject: gdb-rhbz2012819-ibmz-update-5of5.patch
+
+;; IBM Z: Add another arch14 instruction
+;; (Andreas Krebbel, RHBZ 2012819)
+
+opcodes/
+
+	* opcodes/s390-opc.txt: Add qpaci.
+
+gas/
+
+	* testsuite/gas/s390/zarch-arch14.d: Add qpaci.
+	* testsuite/gas/s390/zarch-arch14.s: Add qpaci.
+
+(cherry picked from commit e4cc3b47ec2c4bdb1892db7e9759f90576742f31)
+
+diff --git a/opcodes/s390-opc.txt b/opcodes/s390-opc.txt
+--- a/opcodes/s390-opc.txt
++++ b/opcodes/s390-opc.txt
+@@ -2044,3 +2044,5 @@ b98B rdp RRF_RURR2 " " arch14 zarch optparm
+ eb0000000071 lpswey SIY_RD " " arch14 zarch
+ b200 lbear S_RD " " arch14 zarch
+ b201 stbear S_RD " " arch14 zarch
++
++b28f qpaci S_RD " " arch14 zarch

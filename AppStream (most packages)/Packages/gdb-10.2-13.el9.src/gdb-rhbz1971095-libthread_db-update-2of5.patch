@@ -1,0 +1,148 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Wed, 9 Jun 2021 18:07:45 -0700
+Subject: gdb-rhbz1971095-libthread_db-update-2of5.patch
+
+;; Backport "libthread_db initialization changes related to upcoming
+;; glibc-2.34"
+;; (Kevin Buettner, RH BZ 19710950
+
+This commit makes some adjustments to accomodate the upcoming
+glibc-2.34 release.  Beginning with glibc-2.34, functionality formerly
+contained in libpthread has been moved to libc.  For the time being,
+libpthread.so still exists in the file system, but it won't show up in
+ldd output and therefore won't be able to trigger initialization of
+libthread_db related code.  E.g...
+
+Fedora 34 / glibc-2.33.9000:
+
+[kev@f34-2 gdb]$ ldd testsuite/outputs/gdb.threads/tls/tls
+	linux-vdso.so.1 (0x00007ffcf94fa000)
+	libstdc++.so.6 => /lib64/libstdc++.so.6 (0x00007ff0ba9af000)
+	libm.so.6 => /lib64/libm.so.6 (0x00007ff0ba8d4000)
+	libgcc_s.so.1 => /lib64/libgcc_s.so.1 (0x00007ff0ba8b9000)
+	libc.so.6 => /lib64/libc.so.6 (0x00007ff0ba6c6000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007ff0babf0000)
+
+Fedora 34 / glibc-2.33:
+
+[kev@f34-1 gdb]$ ldd testsuite/outputs/gdb.threads/tls/tls
+	linux-vdso.so.1 (0x00007fff32dc0000)
+	libpthread.so.0 => /lib64/libpthread.so.0 (0x00007f815f6de000)
+	libstdc++.so.6 => /lib64/libstdc++.so.6 (0x00007f815f4bf000)
+	libm.so.6 => /lib64/libm.so.6 (0x00007f815f37b000)
+	libgcc_s.so.1 => /lib64/libgcc_s.so.1 (0x00007f815f360000)
+	libc.so.6 => /lib64/libc.so.6 (0x00007f815f191000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007f815f721000)
+
+Note that libpthread is missing from the ldd output for the
+glibc-2.33.9000 machine.
+
+This means that (unless we happen to think of some entirely different
+mechanism), we'll now need to potentially match "libc" in addition to
+"libpthread" as libraries which might be thread libraries.  This
+accounts for the change made in solib.c.  Note that the new code
+attempts to match "/libc." via strstr().  That trailing dot (".")
+avoids inadvertently matching libraries such as libcrypt (and
+all the other many libraries which begin with "libc").
+
+To avoid attempts to load libthread_db when encountering older
+versions of libc, we now attempt to find "pthread_create" (which is a
+symbol that we'd expect to be in any pthread library) in the
+associated objfile.  This accounts for the changes in
+linux-thread-db.c.
+
+I think that other small adjustments will need to be made elsewhere
+too.  I've been working through regressions on my glibc-2.33.9000
+machine; I've fixed some fairly "obvious" changes in the testsuite
+(which are in other commits).  For the rest, it's not yet clear to me
+whether the handful of remaining failures represent a problem in glibc
+or gdb.  I'm still investigating, however, I'll note that these are
+problems that I only see on my glibc-2.33.9000 machine.
+
+gdb/ChangeLog:
+
+	* solib.c (libpthread_name_p): Match "libc" in addition
+	to "libpthread".
+	* linux-thread-db.c (libpthread_objfile_p): New function.
+	(libpthread_name_p): Adjust preexisting callers to use
+	libpthread_objfile_p().
+
+diff --git a/gdb/linux-thread-db.c b/gdb/linux-thread-db.c
+--- a/gdb/linux-thread-db.c
++++ b/gdb/linux-thread-db.c
+@@ -800,6 +800,24 @@ check_thread_db (struct thread_db_info *info, bool log_progress)
+   return test_passed;
+ }
+ 
++/* Predicate which tests whether objfile OBJ refers to the library
++   containing pthread related symbols.  Historically, this library has
++   been named in such a way that looking for "libpthread" in the name
++   was sufficient to identify it.  As of glibc-2.34, the C library
++   (libc) contains the thread library symbols.  Therefore we check
++   that the name matches a possible thread library, but we also check
++   that it contains at least one of the symbols (pthread_create) that
++   we'd expect to find in the thread library.  */
++
++static bool
++libpthread_objfile_p (objfile *obj)
++{
++  return (libpthread_name_p (objfile_name (obj))
++          && lookup_minimal_symbol ("pthread_create",
++	                            NULL,
++				    obj).minsym != NULL);
++}
++
+ /* Attempt to initialize dlopen()ed libthread_db, described by INFO.
+    Return true on success.
+    Failure could happen if libthread_db does not have symbols we expect,
+@@ -1072,7 +1090,7 @@ try_thread_db_load_from_pdir (const char *subdir)
+     return false;
+ 
+   for (objfile *obj : current_program_space->objfiles ())
+-    if (libpthread_name_p (objfile_name (obj)))
++    if (libpthread_objfile_p (obj))
+       {
+ 	if (try_thread_db_load_from_pdir_1 (obj, subdir))
+ 	  return true;
+@@ -1181,7 +1199,7 @@ static bool
+ has_libpthread (void)
+ {
+   for (objfile *obj : current_program_space->objfiles ())
+-    if (libpthread_name_p (objfile_name (obj)))
++    if (libpthread_objfile_p (obj))
+       return true;
+ 
+   return false;
+@@ -1295,7 +1313,7 @@ thread_db_new_objfile (struct objfile *objfile)
+ 	 of the list of shared libraries to load, and in an app of several
+ 	 thousand shared libraries, this can otherwise be painful.  */
+       && ((objfile->flags & OBJF_MAINLINE) != 0
+-	  || libpthread_name_p (objfile_name (objfile))))
++	  || libpthread_objfile_p (objfile)))
+     check_for_thread_db ();
+ }
+ 
+diff --git a/gdb/solib.c b/gdb/solib.c
+--- a/gdb/solib.c
++++ b/gdb/solib.c
+@@ -906,12 +906,17 @@ Do you need \"set solib-search-path\" or \"set sysroot\"?"),
+ 
+    Uses a fairly simplistic heuristic approach where we check
+    the file name against "/libpthread".  This can lead to false
+-   positives, but this should be good enough in practice.  */
++   positives, but this should be good enough in practice.
++
++   As of glibc-2.34, functions formerly residing in libpthread have
++   been moved to libc, so "/libc." needs to be checked too.  (Matching
++   the "." will avoid matching libraries such as libcrypt.) */
+ 
+ bool
+ libpthread_name_p (const char *name)
+ {
+-  return (strstr (name, "/libpthread") != NULL);
++  return (strstr (name, "/libpthread") != NULL
++          || strstr (name, "/libc.") != NULL );
+ }
+ 
+ /* Return non-zero if SO is the libpthread shared library.  */

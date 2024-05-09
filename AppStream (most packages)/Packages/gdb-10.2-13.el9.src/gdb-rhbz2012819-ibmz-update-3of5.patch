@@ -1,0 +1,84 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Andreas Krebbel <krebbel@linux.ibm.com>
+Date: Mon, 15 Feb 2021 14:20:00 +0100
+Subject: gdb-rhbz2012819-ibmz-update-3of5.patch
+
+;; IBM Z: Implement instruction set extensions
+;; (Andreas Krebbel, RHBZ 2012819)
+
+opcodes/
+
+        * s390-mkopc.c (main): Accept arch14 as cpu string.
+        * s390-opc.txt: Add new arch14 instructions.
+
+include/
+
+        * opcode/s390.h (enum s390_opcode_cpu_val): Add
+        S390_OPCODE_ARCH14.
+
+gas/
+
+        * config/tc-s390.c (s390_parse_cpu): New entry for arch14.
+        * doc/c-s390.texi: Document arch14 march option.
+        * testsuite/gas/s390/s390.exp: Run the arch14 related tests.
+        * testsuite/gas/s390/zarch-arch14.d: New test.
+        * testsuite/gas/s390/zarch-arch14.s: New test.
+
+diff --git a/include/opcode/s390.h b/include/opcode/s390.h
+--- a/include/opcode/s390.h
++++ b/include/opcode/s390.h
+@@ -44,6 +44,7 @@ enum s390_opcode_cpu_val
+     S390_OPCODE_Z13,
+     S390_OPCODE_ARCH12,
+     S390_OPCODE_ARCH13,
++    S390_OPCODE_ARCH14,
+     S390_OPCODE_MAXCPU
+   };
+ 
+diff --git a/opcodes/s390-mkopc.c b/opcodes/s390-mkopc.c
+--- a/opcodes/s390-mkopc.c
++++ b/opcodes/s390-mkopc.c
+@@ -381,6 +381,8 @@ main (void)
+       else if (strcmp (cpu_string, "z15") == 0
+ 	       || strcmp (cpu_string, "arch13") == 0)
+ 	min_cpu = S390_OPCODE_ARCH13;
++      else if (strcmp (cpu_string, "arch14") == 0)
++	min_cpu = S390_OPCODE_ARCH14;
+       else {
+ 	fprintf (stderr, "Couldn't parse cpu string %s\n", cpu_string);
+ 	exit (1);
+diff --git a/opcodes/s390-opc.txt b/opcodes/s390-opc.txt
+--- a/opcodes/s390-opc.txt
++++ b/opcodes/s390-opc.txt
+@@ -2016,3 +2016,31 @@ e60000000052 vcvbg VRR_RV0UU "vector convert to binary 64 bit" arch13 zarch optp
+ # Message Security Assist Extension 9
+ 
+ b93a kdsa RRE_RR "compute digital signature authentication" arch13 zarch
++
++
++# arch14 instructions
++
++e60000000074 vschp VRR_VVV0U0U " " arch14 zarch
++e60000002074 vschsp VRR_VVV0U0 " " arch14 zarch
++e60000003074 vschdp VRR_VVV0U0 " " arch14 zarch
++e60000004074 vschxp VRR_VVV0U0 " " arch14 zarch
++e6000000007c vscshp VRR_VVV " " arch14 zarch
++e6000000007d vcsph VRR_VVV0U0 " " arch14 zarch
++e60000000051 vclzdp VRR_VV0U2 " " arch14 zarch
++e60000000070 vpkzr VRI_VVV0UU2 " " arch14 zarch
++e60000000072 vsrpr VRI_VVV0UU2 " " arch14 zarch
++e60000000054 vupkzh VRR_VV0U2 " " arch14 zarch
++e6000000005c vupkzl VRR_VV0U2 " " arch14 zarch
++
++b93b nnpa RRE_00 " " arch14 zarch
++e60000000056 vclfnh VRR_VV0UU2 " " arch14 zarch
++e6000000005e vclfnl VRR_VV0UU2 " " arch14 zarch
++e60000000075 vcrnf VRR_VVV0UU " " arch14 zarch
++e6000000005d vcfn VRR_VV0UU2 " " arch14 zarch
++e60000000055 vcnf VRR_VV0UU2 " " arch14 zarch
++
++b98B rdp RRF_RURR2 " " arch14 zarch optparm
++
++eb0000000071 lpswey SIY_URD " " arch14 zarch
++b200 lbear S_RD " " arch14 zarch
++b201 stbear S_RD " " arch14 zarch

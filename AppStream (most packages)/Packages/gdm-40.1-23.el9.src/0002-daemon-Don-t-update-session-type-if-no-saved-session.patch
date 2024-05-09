@@ -1,0 +1,109 @@
+From b09ab8a73d5a4133f72846d529bbbfb7802ca535 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Mon, 6 Sep 2021 08:40:46 -0400
+Subject: [PATCH 2/5] daemon: Don't update session type if no saved session
+
+At the moment we always set the session type when the session name
+is read. But users don't always have a session type specified.
+
+If they don't, then don't set the session type.
+
+https://gitlab.gnome.org/GNOME/gdm/-/merge_requests/153
+---
+ daemon/gdm-session.c | 23 +++++++++++++----------
+ 1 file changed, 13 insertions(+), 10 deletions(-)
+
+diff --git a/daemon/gdm-session.c b/daemon/gdm-session.c
+index 2b941e5e..b54687d5 100644
+--- a/daemon/gdm-session.c
++++ b/daemon/gdm-session.c
+@@ -995,73 +995,76 @@ worker_on_reauthenticated (GdmDBusWorker          *worker,
+ static void
+ worker_on_saved_language_name_read (GdmDBusWorker          *worker,
+                                     const char             *language_name,
+                                     GdmSessionConversation *conversation)
+ {
+         GdmSession *self = conversation->session;
+ 
+         if (strlen (language_name) > 0) {
+                 g_free (self->saved_language);
+                 self->saved_language = g_strdup (language_name);
+ 
+                 if (self->greeter_interface != NULL) {
+                         gdm_dbus_greeter_emit_default_language_name_changed (self->greeter_interface,
+                                                                              language_name);
+                 }
+         }
+ }
+ 
+ static void
+ worker_on_saved_session_name_read (GdmDBusWorker          *worker,
+                                    const char             *session_name,
+                                    GdmSessionConversation *conversation)
+ {
+         GdmSession *self = conversation->session;
+ 
+         if (! get_session_command_for_name (self, session_name, self->saved_session_type, NULL)) {
+                 /* ignore sessions that don't exist */
+                 g_debug ("GdmSession: not using invalid .dmrc session: %s", session_name);
+                 g_free (self->saved_session);
+                 self->saved_session = NULL;
+-        } else if (strcmp (session_name,
+-                   get_default_session_name (self)) != 0) {
+-                g_free (self->saved_session);
+-                self->saved_session = g_strdup (session_name);
+-
+-                if (self->greeter_interface != NULL) {
+-                        gdm_dbus_greeter_emit_default_session_name_changed (self->greeter_interface,
+-                                                                            session_name);
++                update_session_type (self);
++        } else {
++                if (strcmp (session_name,
++                            get_default_session_name (self)) != 0) {
++                        g_free (self->saved_session);
++                        self->saved_session = g_strdup (session_name);
++
++                        if (self->greeter_interface != NULL) {
++                                gdm_dbus_greeter_emit_default_session_name_changed (self->greeter_interface,
++                                                                                    session_name);
++                        }
+                 }
++                if (self->saved_session_type != NULL)
++                        set_session_type (self, self->saved_session_type);
+         }
+ 
+-        update_session_type (self);
+-
+ }
+ 
+ static void
+ worker_on_saved_session_type_read (GdmDBusWorker          *worker,
+                                    const char             *session_type,
+                                    GdmSessionConversation *conversation)
+ {
+         GdmSession *self = conversation->session;
+ 
+         g_free (self->saved_session_type);
+         self->saved_session_type = g_strdup (session_type);
+ }
+ 
+ static GdmSessionConversation *
+ find_conversation_by_pid (GdmSession *self,
+                           GPid        pid)
+ {
+         GHashTableIter iter;
+         gpointer key, value;
+ 
+         g_hash_table_iter_init (&iter, self->conversations);
+         while (g_hash_table_iter_next (&iter, &key, &value)) {
+                 GdmSessionConversation *conversation;
+ 
+                 conversation = (GdmSessionConversation *) value;
+ 
+                 if (conversation->worker_pid == pid) {
+                         return conversation;
+                 }
+         }
+-- 
+2.34.1
+

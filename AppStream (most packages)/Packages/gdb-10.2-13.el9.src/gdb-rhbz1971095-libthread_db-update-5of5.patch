@@ -1,0 +1,85 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Wed, 9 Jun 2021 19:52:08 -0700
+Subject: gdb-rhbz1971095-libthread_db-update-5of5.patch
+
+;; Backport "mi-sym-info.exp: Increase timeout for 114-symbol-info-functions"
+;; (Kevin Buettner, RH BZ 1971095)
+
+Loading libc.so's symbols increased the amount of time needed for
+114-symbol-info-function to fetch symbols, causing a timeout during my
+testing.  I enclosed the entire block with a "with_timeout_factor 4",
+which fixes the problem for me.  (Using 2 also fixed it for me, but it
+might not be enough when running this test on slower machines.)
+
+gdb/testsuite/ChangeLog:
+
+	* gdb.mi/mi-sym-info.exp (114-symbol-info-function test): Increase
+	timeout.
+
+diff --git a/gdb/testsuite/gdb.mi/mi-sym-info.exp b/gdb/testsuite/gdb.mi/mi-sym-info.exp
+--- a/gdb/testsuite/gdb.mi/mi-sym-info.exp
++++ b/gdb/testsuite/gdb.mi/mi-sym-info.exp
+@@ -122,33 +122,35 @@ gdb_test_multiple $cmd $testname -prompt "${mi_gdb_prompt}$" {
+ # (from the symbol table).  There's often so much output output from
+ # this command that we overflow expect's buffers, avoid this by
+ # fetching the output piece by piece.
+-set testname "List all functions"
+-set cmd "114-symbol-info-functions --include-nondebug"
+-set state 0
+-gdb_test_multiple $cmd ${testname} -prompt "${mi_gdb_prompt}$" {
+-    -re "114\\^done,symbols=\{" {
+-	if { $state == 0 } { set state 1 }
+-	exp_continue
+-    }
+-    -re "debug=\\\[${symtab_re}" {
+-	if { $state == 1 } { set state 2 }
+-	exp_continue
+-    }
+-    -re ",${symtab_re}" {
+-	exp_continue
+-    }
+-    -re "\\\],nondebug=\\\[" {
+-	if { $state == 2 } { set state 3 }
+-	exp_continue
+-    }
+-    -re "\{address=${qstr},name=${qstr}\}," {
+-	exp_continue
+-    }
+-    -re "\{address=${qstr},name=${qstr}\}\\\]\}\r\n${mi_gdb_prompt}$" {
+-	if { $state == 3 } {
+-	    pass $gdb_test_name
+-	} else {
+-	    fail $gdb_test_name
++with_timeout_factor 4 {
++    set testname "List all functions"
++    set cmd "114-symbol-info-functions --include-nondebug"
++    set state 0
++    gdb_test_multiple $cmd ${testname} -prompt "${mi_gdb_prompt}$" {
++	-re "114\\^done,symbols=\{" {
++	    if { $state == 0 } { set state 1 }
++	    exp_continue
++	}
++	-re "debug=\\\[${symtab_re}" {
++	    if { $state == 1 } { set state 2 }
++	    exp_continue
++	}
++	-re ",${symtab_re}" {
++	    exp_continue
++	}
++	-re "\\\],nondebug=\\\[" {
++	    if { $state == 2 } { set state 3 }
++	    exp_continue
++	}
++	-re "\{address=${qstr},name=${qstr}\}," {
++	    exp_continue
++	}
++	-re "\{address=${qstr},name=${qstr}\}\\\]\}\r\n${mi_gdb_prompt}$" {
++	    if { $state == 3 } {
++		pass $gdb_test_name
++	    } else {
++		fail $gdb_test_name
++	    }
+ 	}
+     }
+ }

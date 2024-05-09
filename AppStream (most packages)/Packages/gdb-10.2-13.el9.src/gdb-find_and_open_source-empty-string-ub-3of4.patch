@@ -1,0 +1,47 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Tue, 5 Dec 2023 08:47:16 -0800
+Subject: gdb-find_and_open_source-empty-string-ub-3of4.patch
+
+;; Backport "Fix undefined behaviour dereferencing empty string"
+;; (Magne Hov, RHEL-17631)
+
+When a source file's dirname is solely made up of directory separators
+we end up trying to dereference the last character of an empty string
+with std::string::back, which results in undefined behaviour. A typical
+use case where this can happen is when the root directory "/" is used as
+a compilation directory.
+
+With libstdc++.so.6.0.28 we get no out-of-bounds checks and the byte
+preceding the storage of the empty string is returned. The character
+value of this byte depends on heap implementation and usage, but when
+this byte happens to hold the value of the directory separator character
+we go on to call std::string::pop_back on the empty string which results
+in an out_of_range exception which terminates GDB.
+
+Fix this by using path_join. prepare_path_for_appending ensures that the
+filename component is relative.
+
+The testsuite has been run before and after the change and no
+regressions were found.
+
+diff --git a/gdb/source.c b/gdb/source.c
+--- a/gdb/source.c
++++ b/gdb/source.c
+@@ -1111,15 +1111,7 @@ find_and_open_source (const char *filename,
+ 	 helpful if part of the compilation directory was removed,
+ 	 e.g. using gcc's -fdebug-prefix-map, and we have added the missing
+ 	 prefix to source_path.  */
+-      std::string cdir_filename (dirname);
+-
+-      /* Remove any trailing directory separators.  */
+-      while (IS_DIR_SEPARATOR (cdir_filename.back ()))
+-	cdir_filename.pop_back ();
+-
+-      /* Add our own directory separator.  */
+-      cdir_filename.append (SLASH_STRING);
+-      cdir_filename.append (filename_start);
++      std::string cdir_filename = path_join (dirname, filename_start);
+ 
+       result = openp (path, OPF_SEARCH_IN_PATH | OPF_RETURN_REALPATH,
+ 		      cdir_filename.c_str (), OPEN_MODE, fullname);

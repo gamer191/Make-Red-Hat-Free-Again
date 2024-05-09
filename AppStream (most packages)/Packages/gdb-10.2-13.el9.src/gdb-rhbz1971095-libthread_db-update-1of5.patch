@@ -1,0 +1,306 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Simon Marchi <simon.marchi@polymtl.ca>
+Date: Tue, 8 Jun 2021 16:50:53 -0400
+Subject: gdb-rhbz1971095-libthread_db-update-1of5.patch
+
+;; Backport "gdb: try to load libthread_db only after reading all
+;; shared libraries when attaching / handling a fork child"
+;; (Simon Marchi, RH BZ 1971095)
+
+When trying to attach to a pthread process on a Linux system with glibc 2.33,
+we get:
+
+    $ ./gdb -q -nx --data-directory=data-directory -p 1472010
+    Attaching to process 1472010
+    [New LWP 1472013]
+    [New LWP 1472014]
+    [New LWP 1472015]
+    Error while reading shared library symbols for /usr/lib/libpthread.so.0:
+    Cannot find user-level thread for LWP 1472015: generic error
+    0x00007ffff6d3637f in poll () from /usr/lib/libc.so.6
+    (gdb)
+
+When attaching to a process (or handling a fork child, an operation very
+similar to attaching), GDB reads the shared library list from the
+process.  For each shared library (if "set auto-solib-add" is on), it
+reads its symbols and calls the "new_objfile" observable.
+
+The libthread-db code monitors this observable, and if it sees an
+objfile named somewhat like "libpthread.so" go by, it tries to load
+libthread_db.so in the GDB process itself.  libthread_db knows how to
+navigate libpthread's data structures to get information about the
+existing threads.
+
+To locate these data structures, libthread_db calls ps_pglobal_lookup
+(implemented in proc-service.c), passing in a symbol name and expecting
+an address in return.
+
+Before glibc 2.33, libthread_db always asked for symbols found in
+libpthread.  There was no ordering problem: since we were always trying
+to load libthread_db in reaction to processing libpthread (and reading
+in its symbols) and libthread_db only asked symbols from libpthread, the
+requested symbols could always be found.  Starting with glibc 2.33,
+libthread_db now asks for a symbol name that can be found in
+/lib/ld-linux-x86-64.so.2 (_rtld_global).  And the ordering in which GDB
+reads the shared libraries from the inferior when attaching is
+unfortunate, in that libpthread is processed before ld-linux.  So when
+loading libthread_db in reaction to processing libpthread, and
+libthread_db requests the symbol that is from ld-linux, GDB is not yet
+able to supply it.
+
+That problematic symbol lookup happens in the thread_from_lwp function,
+when we call td_ta_map_lwp2thr_p, and an exception is thrown at this
+point:
+
+    #0  0x00007ffff6681012 in __cxxabiv1::__cxa_throw (obj=0x60e000006100, tinfo=0x555560033b50 <typeinfo for gdb_exception_error>, dest=0x55555d9404bc <gdb_exception_error::~gdb_exception_error()>) at /build/gcc/src/gcc/libstdc++-v3/libsupc++/eh_throw.cc:78
+    #1  0x000055555e5d3734 in throw_it(return_reason, errors, const char *, typedef __va_list_tag __va_list_tag *) (reason=RETURN_ERROR, error=GENERIC_ERROR, fmt=0x55555f0c5360 "Cannot find user-level thread for LWP %ld: %s", ap=0x7fffffffaae0) at /home/simark/src/binutils-gdb/gdbsupport/common-exceptions.cc:200
+    #2  0x000055555e5d37d4 in throw_verror (error=GENERIC_ERROR, fmt=0x55555f0c5360 "Cannot find user-level thread for LWP %ld: %s", ap=0x7fffffffaae0) at /home/simark/src/binutils-gdb/gdbsupport/common-exceptions.cc:208
+    #3  0x000055555e0b0ed2 in verror (string=0x55555f0c5360 "Cannot find user-level thread for LWP %ld: %s", args=0x7fffffffaae0) at /home/simark/src/binutils-gdb/gdb/utils.c:171
+    #4  0x000055555e5e898a in error (fmt=0x55555f0c5360 "Cannot find user-level thread for LWP %ld: %s") at /home/simark/src/binutils-gdb/gdbsupport/errors.cc:43
+    #5  0x000055555d06b4bc in thread_from_lwp (stopped=0x617000035d80, ptid=...) at /home/simark/src/binutils-gdb/gdb/linux-thread-db.c:418
+    #6  0x000055555d07040d in try_thread_db_load_1 (info=0x60c000011140) at /home/simark/src/binutils-gdb/gdb/linux-thread-db.c:912
+    #7  0x000055555d071103 in try_thread_db_load (library=0x55555f0c62a0 "libthread_db.so.1", check_auto_load_safe=false) at /home/simark/src/binutils-gdb/gdb/linux-thread-db.c:1014
+    #8  0x000055555d072168 in try_thread_db_load_from_sdir () at /home/simark/src/binutils-gdb/gdb/linux-thread-db.c:1091
+    #9  0x000055555d072d1c in thread_db_load_search () at /home/simark/src/binutils-gdb/gdb/linux-thread-db.c:1146
+    #10 0x000055555d07365c in thread_db_load () at /home/simark/src/binutils-gdb/gdb/linux-thread-db.c:1203
+    #11 0x000055555d07373e in check_for_thread_db () at /home/simark/src/binutils-gdb/gdb/linux-thread-db.c:1246
+    #12 0x000055555d0738ab in thread_db_new_objfile (objfile=0x61300000c0c0) at /home/simark/src/binutils-gdb/gdb/linux-thread-db.c:1275
+    #13 0x000055555bd10740 in std::__invoke_impl<void, void (*&)(objfile*), objfile*> (__f=@0x616000068d88: 0x55555d073745 <thread_db_new_objfile(objfile*)>) at /usr/include/c++/10.2.0/bits/invoke.h:60
+    #14 0x000055555bd02096 in std::__invoke_r<void, void (*&)(objfile*), objfile*> (__fn=@0x616000068d88: 0x55555d073745 <thread_db_new_objfile(objfile*)>) at /usr/include/c++/10.2.0/bits/invoke.h:153
+    #15 0x000055555bce0392 in std::_Function_handler<void (objfile*), void (*)(objfile*)>::_M_invoke(std::_Any_data const&, objfile*&&) (__functor=..., __args#0=@0x7fffffffb4a0: 0x61300000c0c0) at /usr/include/c++/10.2.0/bits/std_function.h:291
+    #16 0x000055555d3595c0 in std::function<void (objfile*)>::operator()(objfile*) const (this=0x616000068d88, __args#0=0x61300000c0c0) at /usr/include/c++/10.2.0/bits/std_function.h:622
+    #17 0x000055555d356b7f in gdb::observers::observable<objfile*>::notify (this=0x555566727020 <gdb::observers::new_objfile>, args#0=0x61300000c0c0) at /home/simark/src/binutils-gdb/gdb/../gdbsupport/observable.h:106
+    #18 0x000055555da3f228 in symbol_file_add_with_addrs (abfd=0x61200001ccc0, name=0x6190000d9090 "/usr/lib/libpthread.so.0", add_flags=..., addrs=0x7fffffffbc10, flags=..., parent=0x0) at /home/simark/src/binutils-gdb/gdb/symfile.c:1131
+    #19 0x000055555da3f763 in symbol_file_add_from_bfd (abfd=0x61200001ccc0, name=0x6190000d9090 "/usr/lib/libpthread.so.0", add_flags=<error reading variable: Cannot access memory at address 0xffffffffffffffb0>, addrs=0x7fffffffbc10, flags=<error reading variable: Cannot access memory at address 0xffffffffffffffc0>, parent=0x0) at /home/simark/src/binutils-gdb/gdb/symfile.c:1167
+    #20 0x000055555d95f9fa in solib_read_symbols (so=0x6190000d8e80, flags=...) at /home/simark/src/binutils-gdb/gdb/solib.c:681
+    #21 0x000055555d96233d in solib_add (pattern=0x0, from_tty=0, readsyms=1) at /home/simark/src/binutils-gdb/gdb/solib.c:987
+    #22 0x000055555d93646e in enable_break (info=0x608000008f20, from_tty=0) at /home/simark/src/binutils-gdb/gdb/solib-svr4.c:2238
+    #23 0x000055555d93cfc0 in svr4_solib_create_inferior_hook (from_tty=0) at /home/simark/src/binutils-gdb/gdb/solib-svr4.c:3049
+    #24 0x000055555d96610d in solib_create_inferior_hook (from_tty=0) at /home/simark/src/binutils-gdb/gdb/solib.c:1195
+    #25 0x000055555cdee318 in post_create_inferior (from_tty=0) at /home/simark/src/binutils-gdb/gdb/infcmd.c:318
+    #26 0x000055555ce00e6e in setup_inferior (from_tty=0) at /home/simark/src/binutils-gdb/gdb/infcmd.c:2439
+    #27 0x000055555ce59c34 in handle_one (event=...) at /home/simark/src/binutils-gdb/gdb/infrun.c:4887
+    #28 0x000055555ce5cd00 in stop_all_threads () at /home/simark/src/binutils-gdb/gdb/infrun.c:5064
+    #29 0x000055555ce7f0da in stop_waiting (ecs=0x7fffffffd170) at /home/simark/src/binutils-gdb/gdb/infrun.c:8006
+    #30 0x000055555ce67f5c in handle_signal_stop (ecs=0x7fffffffd170) at /home/simark/src/binutils-gdb/gdb/infrun.c:6062
+    #31 0x000055555ce63653 in handle_inferior_event (ecs=0x7fffffffd170) at /home/simark/src/binutils-gdb/gdb/infrun.c:5727
+    #32 0x000055555ce4f297 in fetch_inferior_event () at /home/simark/src/binutils-gdb/gdb/infrun.c:4105
+    #33 0x000055555cdbe3bf in inferior_event_handler (event_type=INF_REG_EVENT) at /home/simark/src/binutils-gdb/gdb/inf-loop.c:42
+    #34 0x000055555d018047 in handle_target_event (error=0, client_data=0x0) at /home/simark/src/binutils-gdb/gdb/linux-nat.c:4060
+    #35 0x000055555e5ea77e in handle_file_event (file_ptr=0x60600008b1c0, ready_mask=1) at /home/simark/src/binutils-gdb/gdbsupport/event-loop.cc:575
+    #36 0x000055555e5eb09c in gdb_wait_for_event (block=0) at /home/simark/src/binutils-gdb/gdbsupport/event-loop.cc:701
+    #37 0x000055555e5e8d19 in gdb_do_one_event () at /home/simark/src/binutils-gdb/gdbsupport/event-loop.cc:212
+    #38 0x000055555dd6e0d4 in wait_sync_command_done () at /home/simark/src/binutils-gdb/gdb/top.c:528
+    #39 0x000055555dd6e372 in maybe_wait_sync_command_done (was_sync=0) at /home/simark/src/binutils-gdb/gdb/top.c:545
+    #40 0x000055555d0ec7c8 in catch_command_errors (command=0x55555ce01bb8 <attach_command(char const*, int)>, arg=0x7fffffffe28d "1472010", from_tty=1, do_bp_actions=false) at /home/simark/src/binutils-gdb/gdb/main.c:452
+    #41 0x000055555d0f03ad in captured_main_1 (context=0x7fffffffdd10) at /home/simark/src/binutils-gdb/gdb/main.c:1149
+    #42 0x000055555d0f1239 in captured_main (data=0x7fffffffdd10) at /home/simark/src/binutils-gdb/gdb/main.c:1232
+    #43 0x000055555d0f1315 in gdb_main (args=0x7fffffffdd10) at /home/simark/src/binutils-gdb/gdb/main.c:1257
+    #44 0x000055555bb70cf9 in main (argc=7, argv=0x7fffffffde88) at /home/simark/src/binutils-gdb/gdb/gdb.c:32
+
+The exception is caught here:
+
+    #0  __cxxabiv1::__cxa_begin_catch (exc_obj_in=0x60e0000060e0) at /build/gcc/src/gcc/libstdc++-v3/libsupc++/eh_catch.cc:84
+    #1  0x000055555d95fded in solib_read_symbols (so=0x6190000d8e80, flags=...) at /home/simark/src/binutils-gdb/gdb/solib.c:689
+    #2  0x000055555d96233d in solib_add (pattern=0x0, from_tty=0, readsyms=1) at /home/simark/src/binutils-gdb/gdb/solib.c:987
+    #3  0x000055555d93646e in enable_break (info=0x608000008f20, from_tty=0) at /home/simark/src/binutils-gdb/gdb/solib-svr4.c:2238
+    #4  0x000055555d93cfc0 in svr4_solib_create_inferior_hook (from_tty=0) at /home/simark/src/binutils-gdb/gdb/solib-svr4.c:3049
+    #5  0x000055555d96610d in solib_create_inferior_hook (from_tty=0) at /home/simark/src/binutils-gdb/gdb/solib.c:1195
+    #6  0x000055555cdee318 in post_create_inferior (from_tty=0) at /home/simark/src/binutils-gdb/gdb/infcmd.c:318
+    #7  0x000055555ce00e6e in setup_inferior (from_tty=0) at /home/simark/src/binutils-gdb/gdb/infcmd.c:2439
+    #8  0x000055555ce59c34 in handle_one (event=...) at /home/simark/src/binutils-gdb/gdb/infrun.c:4887
+    #9  0x000055555ce5cd00 in stop_all_threads () at /home/simark/src/binutils-gdb/gdb/infrun.c:5064
+    #10 0x000055555ce7f0da in stop_waiting (ecs=0x7fffffffd170) at /home/simark/src/binutils-gdb/gdb/infrun.c:8006
+    #11 0x000055555ce67f5c in handle_signal_stop (ecs=0x7fffffffd170) at /home/simark/src/binutils-gdb/gdb/infrun.c:6062
+    #12 0x000055555ce63653 in handle_inferior_event (ecs=0x7fffffffd170) at /home/simark/src/binutils-gdb/gdb/infrun.c:5727
+    #13 0x000055555ce4f297 in fetch_inferior_event () at /home/simark/src/binutils-gdb/gdb/infrun.c:4105
+    #14 0x000055555cdbe3bf in inferior_event_handler (event_type=INF_REG_EVENT) at /home/simark/src/binutils-gdb/gdb/inf-loop.c:42
+    #15 0x000055555d018047 in handle_target_event (error=0, client_data=0x0) at /home/simark/src/binutils-gdb/gdb/linux-nat.c:4060
+    #16 0x000055555e5ea77e in handle_file_event (file_ptr=0x60600008b1c0, ready_mask=1) at /home/simark/src/binutils-gdb/gdbsupport/event-loop.cc:575
+    #17 0x000055555e5eb09c in gdb_wait_for_event (block=0) at /home/simark/src/binutils-gdb/gdbsupport/event-loop.cc:701
+    #18 0x000055555e5e8d19 in gdb_do_one_event () at /home/simark/src/binutils-gdb/gdbsupport/event-loop.cc:212
+    #19 0x000055555dd6e0d4 in wait_sync_command_done () at /home/simark/src/binutils-gdb/gdb/top.c:528
+    #20 0x000055555dd6e372 in maybe_wait_sync_command_done (was_sync=0) at /home/simark/src/binutils-gdb/gdb/top.c:545
+    #21 0x000055555d0ec7c8 in catch_command_errors (command=0x55555ce01bb8 <attach_command(char const*, int)>, arg=0x7fffffffe28d "1472010", from_tty=1, do_bp_actions=false) at /home/simark/src/binutils-gdb/gdb/main.c:452
+    #22 0x000055555d0f03ad in captured_main_1 (context=0x7fffffffdd10) at /home/simark/src/binutils-gdb/gdb/main.c:1149
+    #23 0x000055555d0f1239 in captured_main (data=0x7fffffffdd10) at /home/simark/src/binutils-gdb/gdb/main.c:1232
+    #24 0x000055555d0f1315 in gdb_main (args=0x7fffffffdd10) at /home/simark/src/binutils-gdb/gdb/main.c:1257
+    #25 0x000055555bb70cf9 in main (argc=7, argv=0x7fffffffde88) at /home/simark/src/binutils-gdb/gdb/gdb.c:32
+
+Catching the exception at this point means that the thread_db_info
+object for this inferior will be left in place, despite the failure to
+load libthread_db.  This means that there won't be further attempts at
+loading libthread_db, because thread_db_load will think that
+libthread_db is already loaded for this inferior and will always exit
+early.  To fix this, add a try/catch around calling try_thread_db_load_1
+in try_thread_db_load, such that if some exception is thrown while
+trying to load libthread_db, we reset / delete the thread_db_info for
+that inferior.  That alone makes attach work fine again, because
+check_for_thread_db is called again in the thread_db_inferior_created
+observer (that happens after we learned about all shared libraries and
+their symbols), and libthread_db is successfully loaded then.
+
+When attaching, I think that the inferior_created observer is a good
+place to try to load libthread_db: it is called once everything has
+stabilized, when we learned about all shared libraries.
+
+The only problem then is that when we first try (and fail) to load
+libthread_db, in reaction to learning about libpthread, we show this
+warning:
+
+    warning: Unable to find libthread_db matching inferior's thread library, thread debugging will not be available.
+
+This is misleading, because we do succeed in loading it later.  So when
+attaching, I think we shouldn't try to load libthread_db in reaction to
+the new_objfile events, we should wait until we have learned about all
+shared libraries (using the inferior_created observable).  To do so, add
+an `in_initial_library_scan` flag to struct inferior.  This flag is used
+to postpone loading libthread_db if we are attaching or handling a fork
+child.
+
+When debugging remotely with GDBserver, the same problem happens, except
+that the qSymbol mechanism (allowing the remote side to ask GDB for
+symbols values) is involved.  The fix there is the same idea, we make
+GDB wait until all shared libraries and their symbols are known before
+sending out a qSymbol packet.  This way, we never present the remote
+side a state where libpthread.so's symbols are known but ld-linux's
+symbols aren't.
+
+gdb/ChangeLog:
+
+	* inferior.h (class inferior) <in_initial_library_scan>: New.
+	* infcmd.c (post_create_inferior): Set in_initial_library_scan.
+	* infrun.c (follow_fork_inferior): Likewise.
+	* linux-thread-db.c (try_thread_db_load): Catch exception thrown
+	by try_thread_db_load_1
+	(thread_db_load): Return early if in_initial_library_scan is
+	set.
+	* remote.c (remote_new_objfile): Return early if
+	in_initial_library_scan is set.
+
+Change-Id: I7a279836cfbb2b362b4fde11b196b4aab82f5efb
+
+diff --git a/gdb/infcmd.c b/gdb/infcmd.c
+--- a/gdb/infcmd.c
++++ b/gdb/infcmd.c
+@@ -313,6 +313,10 @@ post_create_inferior (struct target_ops *target, int from_tty)
+       const unsigned solib_add_generation
+ 	= current_program_space->solib_add_generation;
+ 
++      scoped_restore restore_in_initial_library_scan
++	= make_scoped_restore (&current_inferior ()->in_initial_library_scan,
++			       true);
++
+       /* Create the hooks to handle shared library load and unload
+ 	 events.  */
+       solib_create_inferior_hook (from_tty);
+diff --git a/gdb/inferior.h b/gdb/inferior.h
+--- a/gdb/inferior.h
++++ b/gdb/inferior.h
+@@ -511,6 +511,10 @@ class inferior : public refcounted_object
+      architecture/description.  */
+   bool needs_setup = false;
+ 
++  /* True when we are reading the library list of the inferior during an
++     attach or handling a fork child.  */
++  bool in_initial_library_scan = false;
++
+   /* Private data used by the target vector implementation.  */
+   std::unique_ptr<private_inferior> priv;
+ 
+diff --git a/gdb/infrun.c b/gdb/infrun.c
+--- a/gdb/infrun.c
++++ b/gdb/infrun.c
+@@ -540,6 +540,9 @@ holding the child stopped.  Try \"set detach-on-fork\" or \
+ 		 breakpoint.  If a "cloned-VM" event was propagated
+ 		 better throughout the core, this wouldn't be
+ 		 required.  */
++	      scoped_restore restore_in_initial_library_scan
++		= make_scoped_restore (&child_inf->in_initial_library_scan,
++				       true);
+ 	      solib_create_inferior_hook (0);
+ 	    }
+ 	}
+@@ -675,6 +678,8 @@ holding the child stopped.  Try \"set detach-on-fork\" or \
+ 	     shared libraries, and install the solib event breakpoint.
+ 	     If a "cloned-VM" event was propagated better throughout
+ 	     the core, this wouldn't be required.  */
++	  scoped_restore restore_in_initial_library_scan
++	    = make_scoped_restore (&child_inf->in_initial_library_scan, true);
+ 	  solib_create_inferior_hook (0);
+ 	}
+ 
+diff --git a/gdb/linux-thread-db.c b/gdb/linux-thread-db.c
+--- a/gdb/linux-thread-db.c
++++ b/gdb/linux-thread-db.c
+@@ -1012,8 +1012,17 @@ try_thread_db_load (const char *library, bool check_auto_load_safe)
+   if (strchr (library, '/') != NULL)
+     info->filename = gdb_realpath (library).release ();
+ 
+-  if (try_thread_db_load_1 (info))
+-    return true;
++  try
++    {
++      if (try_thread_db_load_1 (info))
++	return true;
++    }
++  catch (const gdb_exception_error &except)
++    {
++      if (libthread_db_debug)
++	exception_fprintf (gdb_stdlog, except,
++			   "Warning: While trying to load libthread_db: ");
++    }
+ 
+   /* This library "refused" to work on current inferior.  */
+   delete_thread_db_info (current_inferior ()->process_target (),
+@@ -1184,10 +1193,15 @@ has_libpthread (void)
+ static bool
+ thread_db_load (void)
+ {
+-  struct thread_db_info *info;
++  inferior *inf = current_inferior ();
+ 
+-  info = get_thread_db_info (current_inferior ()->process_target (),
+-			     inferior_ptid.pid ());
++  /* When attaching / handling fork child, don't try loading libthread_db
++     until we know about all shared libraries.  */
++  if (inf->in_initial_library_scan)
++    return false;
++
++  thread_db_info *info = get_thread_db_info (inf->process_target (),
++					     inferior_ptid.pid ());
+ 
+   if (info != NULL)
+     return true;
+diff --git a/gdb/remote.c b/gdb/remote.c
+--- a/gdb/remote.c
++++ b/gdb/remote.c
+@@ -14299,8 +14299,26 @@ remote_new_objfile (struct objfile *objfile)
+ {
+   remote_target *remote = get_current_remote_target ();
+ 
+-  if (remote != NULL)			/* Have a remote connection.  */
+-    remote->remote_check_symbols ();
++  /* First, check whether the current inferior's process target is a remote
++     target.  */
++  if (remote == nullptr)
++    return;
++
++  /* When we are attaching or handling a fork child and the shared library
++     subsystem reads the list of loaded libraries, we receive new objfile
++     events in between each found library.  The libraries are read in an
++     undefined order, so if we gave the remote side a chance to look up
++     symbols between each objfile, we might give it an inconsistent picture
++     of the inferior.  It could appear that a library A appears loaded but
++     a library B does not, even though library A requires library B.  That
++     would present a state that couldn't normally exist in the inferior.
++
++     So, skip these events, we'll give the remote a chance to look up symbols
++     once all the loaded libraries and their symbols are known to GDB.  */
++    if (current_inferior ()->in_initial_library_scan)
++      return;
++
++  remote->remote_check_symbols ();
+ }
+ 
+ /* Pull all the tracepoints defined on the target and create local

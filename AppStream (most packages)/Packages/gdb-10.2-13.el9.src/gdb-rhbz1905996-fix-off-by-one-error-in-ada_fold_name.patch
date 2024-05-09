@@ -1,0 +1,82 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Tue, 8 Dec 2020 14:07:45 -0700
+Subject: gdb-rhbz1905996-fix-off-by-one-error-in-ada_fold_name.patch
+
+;; Fix off-by-one error in ada_fold_name.patch (RH BZ 1905996)
+;; Upstream patch proposal: https://sourceware.org/pipermail/gdb-patches/2020-December/173935.html
+;; =fedoratest
+
+Fix off-by-one error in ada_fold_name
+
+I'm seeing a libstdc++ assertion failure when running GDB's "maint selftest"
+command when GDB is configured with the following CFLAGS and CXXFLAGS as
+part of the configure line:
+
+  CFLAGS='-D_GLIBCXX_DEBUG -g3 -O0' CXXFLAGS='-D_GLIBCXX_DEBUG -g3 -O0'
+
+This is what I see when running the self tests:
+
+(gdb) maint selftest
+Running selftest aarch64-analyze-prologue.
+Running selftest aarch64-process-record.
+Running selftest arm-record.
+Running selftest arm_analyze_prologue.
+Running selftest array_view.
+Running selftest child_path.
+Running selftest cli_utils.
+Running selftest command_structure_invariants.
+Running selftest copy_bitwise.
+Running selftest copy_integer_to_size.
+Running selftest cp_remove_params.
+Running selftest cp_symbol_name_matches.
+Running selftest dw2_expand_symtabs_matching.
+/usr/include/c++/11/string_view:211: constexpr const value_type& std::basic_string_view<_CharT, _Traits>::operator[](std::basic_string_view<_CharT, _Traits>::size_type) const [with _CharT = char; _Traits = std::char_traits<char>; std::basic_string_view<_CharT, _Traits>::const_reference = const char&; std::basic_string_view<_CharT, _Traits>::size_type = long unsigned int]: Assertion '__pos < this->_M_len' failed.
+Aborted (core dumped)
+
+Here's a partial stack trace:
+
+  #0  0x00007ffff6ef6262 in raise () from /lib64/libc.so.6
+  #1  0x00007ffff6edf8a4 in abort () from /lib64/libc.so.6
+  #2  0x00000000004249bf in std::__replacement_assert (
+      __file=0xef7480 "/usr/include/c++/11/string_view", __line=211,
+      __function=0xef7328 "constexpr const value_type& std::basic_string_view<_CharT, _Traits>::operator[](std::basic_string_view<_CharT, _Traits>::size_type) const [with _CharT = char; _Traits = std::char_traits<char>; std::ba"...,
+      __condition=0xef7311 "__pos < this->_M_len")
+      at /usr/include/c++/11/x86_64-redhat-linux/bits/c++config.h:2624
+  #3  0x0000000000451737 in std::basic_string_view<char, std::char_traits<char> >::operator[] (this=0x7fffffffc200, __pos=8)
+      at /usr/include/c++/11/string_view:211
+  #4  0x00000000004329f5 in ada_fold_name (name="function")
+      at /ironwood1/sourceware-git/rawhide-master/bld/../../worktree-master/gdb/ada-lang.c:988
+
+And, looking at frame #4...
+
+(top-gdb) up 4
+    at /ironwood1/sourceware-git/rawhide-master/bld/../../worktree-master/gdb/ada-lang.c:988
+988		fold_buffer[i] = tolower (name[i]);
+(top-gdb) p i
+$1 = 8
+(top-gdb) p name.size()
+$2 = 8
+
+My patch adjusts the comparison to only copy name.size() characters
+from the string.  I've added a separate statement for NUL character
+termination of fold_buffer[].
+
+gdb/ChangeLog:
+
+	* ada-lang.c (ada_fold_name): Fix off-by-one error.
+
+diff --git a/gdb/ada-lang.c b/gdb/ada-lang.c
+--- a/gdb/ada-lang.c
++++ b/gdb/ada-lang.c
+@@ -1006,8 +1006,9 @@ ada_fold_name (gdb::string_view name)
+     {
+       int i;
+ 
+-      for (i = 0; i <= len; i += 1)
++      for (i = 0; i < len; i += 1)
+         fold_buffer[i] = tolower (name[i]);
++      fold_buffer[i] = '\0';
+     }
+ 
+   return fold_buffer;

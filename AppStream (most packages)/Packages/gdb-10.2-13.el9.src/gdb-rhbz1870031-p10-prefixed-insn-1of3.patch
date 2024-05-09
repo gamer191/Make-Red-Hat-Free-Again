@@ -1,0 +1,89 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Thu, 6 May 2021 14:12:00 -0400
+Subject: gdb-rhbz1870031-p10-prefixed-insn-1of3.patch
+
+;; Backport "displaced stepping across addpcis/lnia"
+;; (Will Schmidt, RHBZ 1870031)
+
+   commit e3d528d7e6a6b863d30aaecf74adf8c78286f84c
+   Author: Will Schmidt <will_schmidt@vnet.ibm.com>
+   Date:   Mon Apr 12 13:35:54 2021 -0500
+
+    [PATCH, rs6000, v3][PR gdb/27525] displaced stepping across addpcis/lnia.
+
+      This addresses PR gdb/27525.     The lnia and other variations
+    of the addpcis instruction write the value of the NIA into a target register.
+    If we are single-stepping across a breakpoint, the instruction is executed
+    from a displaced location, and thusly the written value of the PC/NIA
+    will be incorrect.   The changes here will measure the displacement
+    offset, and adjust the target register value to compensate.
+
+    YYYY-MM-DD  Will Schmidt  <will_schmidt@vnet.ibm.com>
+
+    gdb/ChangeLog:
+
+            * rs6000-tdep.c (ppc_displaced_step_fixup): Update to handle
+            the addpcis/lnia instruction.
+
+    gdb/testsuite/ChangeLog:
+
+            * gdb.arch/powerpc-addpcis.exp: Testcase harness to
+            exercise single-stepping over subpcis,lnia,addpcis instructions
+            with displacement.
+            * gdb.arch/powerpc-addpcis.s: Testcase with stream
+            of addpcis/lnia/subpcis instructions.
+            * gdb.arch/powerpc-lnia.exp: Testcase harness to exercise
+            single-stepping over lnia instructions with displacement.
+            * gdb.arch/powerpc-lnia.s: Testcase with stream of
+            lnia instructions.
+
+diff --git a/gdb/rs6000-tdep.c b/gdb/rs6000-tdep.c
+--- a/gdb/rs6000-tdep.c
++++ b/gdb/rs6000-tdep.c
+@@ -836,6 +836,12 @@ typedef BP_MANIPULATION_ENDIAN (little_breakpoint, big_breakpoint)
+ #define STHCX_INSTRUCTION 0x7c0005ad
+ #define STQCX_INSTRUCTION 0x7c00016d
+ 
++/* Instruction masks for single-stepping of addpcis/lnia.  */
++#define ADDPCIS_INSN            0x4c000004
++#define ADDPCIS_INSN_MASK       0xfc00003e
++#define ADDPCIS_TARGET_REGISTER 0x03F00000
++#define ADDPCIS_INSN_REGSHIFT   21
++
+ /* Check if insn is one of the Load And Reserve instructions used for atomic
+    sequences.  */
+ #define IS_LOAD_AND_RESERVE_INSN(insn)	((insn & LOAD_AND_RESERVE_MASK) == LWARX_INSTRUCTION \
+@@ -923,8 +929,31 @@ ppc_displaced_step_fixup (struct gdbarch *gdbarch,
+ 			paddress (gdbarch, from), paddress (gdbarch, to));
+ 
+ 
++  /* Handle the addpcis/lnia instruction.  */
++  if ((insn & ADDPCIS_INSN_MASK) == ADDPCIS_INSN)
++    {
++      LONGEST displaced_offset;
++      ULONGEST current_val;
++      /* Measure the displacement.  */
++      displaced_offset = from - to;
++      /* Identify the target register that was updated by the instruction.  */
++      int regnum = (insn & ADDPCIS_TARGET_REGISTER) >> ADDPCIS_INSN_REGSHIFT;
++      /* Read and update the target value.  */
++      regcache_cooked_read_unsigned (regs, regnum , &current_val);
++      if (debug_displaced)
++	fprintf_unfiltered (gdb_stdlog,
++			    "displaced: {ppc} addpcis target regnum %d was "
++			    "0x%lx now 0x%lx",
++			    regnum, current_val,
++			    current_val + displaced_offset);
++      regcache_cooked_write_unsigned (regs, regnum,
++					current_val + displaced_offset);
++      /* point the PC back at the non-displaced instruction.  */
++      regcache_cooked_write_unsigned (regs, gdbarch_pc_regnum (gdbarch),
++				    from + offset);
++    }
+   /* Handle PC-relative branch instructions.  */
+-  if (opcode == B_INSN || opcode == BC_INSN || opcode == BXL_INSN)
++  else if (opcode == B_INSN || opcode == BC_INSN || opcode == BXL_INSN)
+     {
+       ULONGEST current_pc;
+ 

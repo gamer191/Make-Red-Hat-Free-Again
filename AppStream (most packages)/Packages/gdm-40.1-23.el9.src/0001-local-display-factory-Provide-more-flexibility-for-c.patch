@@ -1,0 +1,2452 @@
+From a8f8a5ee422d6ae3d87c1fba351313a5d98ded6e Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Fri, 16 Jul 2021 12:34:57 -0400
+Subject: [PATCH] local-display-factory: Provide more flexibility for
+ configuring display server
+
+There's currently a way to disable wayland, but no way to disable Xorg.
+We currently prefer wayland if it's not disabled, but have no way to
+prefer Xorg without disabling wayland entirely.
+
+There's currently no way use legacy Xorg support at all if user display
+server support is enabled at a build time.
+
+This commit adds more flexibility to display server selection. It adds
+two new keys: XorgEnable and and PreferredDisplayServer.
+
+XorgEnable=false disables Xorg support entirely on seat 0.
+
+PreferredDisplayServer can be set to "wayland", "xorg", "legacy-xorg" or
+"none" to select which display server is used by default. If it's set to
+"wayland", it will fall back to "xorg". If it's set to "xorg" it will
+fall back to "wayland".
+---
+ common/gdm-settings-keys.h         |   2 +
+ daemon/gdm-display.c               |  36 +++++
+ daemon/gdm-launch-environment.c    |   9 ++
+ daemon/gdm-local-display-factory.c | 224 ++++++++++++++++++++++++-----
+ daemon/gdm-manager.c               |  22 ++-
+ daemon/gdm-session.c               | 115 ++++++++-------
+ data/gdm.schemas.in                |  10 ++
+ libgdm/gdm-sessions.c              |  72 +++++++---
+ 8 files changed, 366 insertions(+), 124 deletions(-)
+
+diff --git a/common/gdm-settings-keys.h b/common/gdm-settings-keys.h
+index f0059b5cf..87685d3cd 100644
+--- a/common/gdm-settings-keys.h
++++ b/common/gdm-settings-keys.h
+@@ -6,59 +6,61 @@
+  * modify it under the terms of the GNU Library General Public
+  * License as published by the Free Software Foundation; either
+  * version 2 of the License, or (at your option) any later version.
+  *
+  * This library is distributed in the hope that it will be useful,
+  * but WITHOUT ANY WARRANTY; without even the implied warranty of
+  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  * Library General Public License for more details.
+  *
+  * You should have received a copy of the GNU Library General Public
+  * License along with this library; if not, write to the
+  * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+  * Boston, MA 02110-1301, USA.
+  */
+ 
+ #ifndef _GDM_SETTINGS_KEYS_H
+ #define _GDM_SETTINGS_KEYS_H
+ 
+ #include <glib.h>
+ 
+ G_BEGIN_DECLS
+ 
+ #define GDM_KEY_USER "daemon/User"
+ #define GDM_KEY_GROUP "daemon/Group"
+ #define GDM_KEY_AUTO_LOGIN_ENABLE "daemon/AutomaticLoginEnable"
+ #define GDM_KEY_AUTO_LOGIN_USER "daemon/AutomaticLogin"
+ #define GDM_KEY_TIMED_LOGIN_ENABLE "daemon/TimedLoginEnable"
+ #define GDM_KEY_TIMED_LOGIN_USER "daemon/TimedLogin"
+ #define GDM_KEY_TIMED_LOGIN_DELAY "daemon/TimedLoginDelay"
+ #define GDM_KEY_INITIAL_SETUP_ENABLE "daemon/InitialSetupEnable"
++#define GDM_KEY_PREFERRED_DISPLAY_SERVER "daemon/PreferredDisplayServer"
+ #define GDM_KEY_WAYLAND_ENABLE "daemon/WaylandEnable"
++#define GDM_KEY_XORG_ENABLE "daemon/XorgEnable"
+ 
+ #define GDM_KEY_DEBUG "debug/Enable"
+ 
+ #define GDM_KEY_INCLUDE "greeter/Include"
+ #define GDM_KEY_EXCLUDE "greeter/Exclude"
+ #define GDM_KEY_INCLUDE_ALL "greeter/IncludeAll"
+ 
+ #define GDM_KEY_DISALLOW_TCP "security/DisallowTCP"
+ #define GDM_KEY_ALLOW_REMOTE_AUTOLOGIN "security/AllowRemoteAutoLogin"
+ 
+ #define GDM_KEY_XDMCP_ENABLE "xdmcp/Enable"
+ #define GDM_KEY_SHOW_LOCAL_GREETER "xdmcp/ShowLocalGreeter"
+ #define GDM_KEY_MAX_PENDING "xdmcp/MaxPending"
+ #define GDM_KEY_MAX_SESSIONS "xdmcp/MaxSessions"
+ #define GDM_KEY_MAX_WAIT "xdmcp/MaxWait"
+ #define GDM_KEY_DISPLAYS_PER_HOST "xdmcp/DisplaysPerHost"
+ #define GDM_KEY_UDP_PORT "xdmcp/Port"
+ #define GDM_KEY_INDIRECT "xdmcp/HonorIndirect"
+ #define GDM_KEY_MAX_WAIT_INDIRECT "xdmcp/MaxWaitIndirect"
+ #define GDM_KEY_PING_INTERVAL "xdmcp/PingIntervalSeconds"
+ #define GDM_KEY_WILLING "xdmcp/Willing"
+ 
+ #define GDM_KEY_MULTICAST "chooser/Multicast"
+ #define GDM_KEY_MULTICAST_ADDR "chooser/MulticastAddr"
+ 
+ G_END_DECLS
+ 
+ #endif /* _GDM_SETTINGS_KEYS_H */
+diff --git a/daemon/gdm-display.c b/daemon/gdm-display.c
+index 3a260923a..46d5a7732 100644
+--- a/daemon/gdm-display.c
++++ b/daemon/gdm-display.c
+@@ -66,83 +66,86 @@ typedef struct _GdmDisplayPrivate
+         char                 *x11_display_name;
+         int                   status;
+         time_t                creation_time;
+ 
+         char                 *x11_cookie;
+         gsize                 x11_cookie_size;
+         GdmDisplayAccessFile *access_file;
+ 
+         guint                 finish_idle_id;
+ 
+         xcb_connection_t     *xcb_connection;
+         int                   xcb_screen_number;
+ 
+         GDBusConnection      *connection;
+         GdmDisplayAccessFile *user_access_file;
+ 
+         GdmDBusDisplay       *display_skeleton;
+         GDBusObjectSkeleton  *object_skeleton;
+ 
+         GDBusProxy           *accountsservice_proxy;
+ 
+         /* this spawns and controls the greeter session */
+         GdmLaunchEnvironment *launch_environment;
+ 
+         guint                 is_local : 1;
+         guint                 is_initial : 1;
+         guint                 allow_timed_login : 1;
+         guint                 have_existing_user_accounts : 1;
+         guint                 doing_initial_setup : 1;
+         guint                 session_registered : 1;
++
++        GStrv                 supported_session_types;
+ } GdmDisplayPrivate;
+ 
+ enum {
+         PROP_0,
+         PROP_ID,
+         PROP_STATUS,
+         PROP_SEAT_ID,
+         PROP_SESSION_ID,
+         PROP_SESSION_CLASS,
+         PROP_SESSION_TYPE,
+         PROP_REMOTE_HOSTNAME,
+         PROP_X11_DISPLAY_NUMBER,
+         PROP_X11_DISPLAY_NAME,
+         PROP_X11_COOKIE,
+         PROP_X11_AUTHORITY_FILE,
+         PROP_IS_CONNECTED,
+         PROP_IS_LOCAL,
+         PROP_LAUNCH_ENVIRONMENT,
+         PROP_IS_INITIAL,
+         PROP_ALLOW_TIMED_LOGIN,
+         PROP_HAVE_EXISTING_USER_ACCOUNTS,
+         PROP_DOING_INITIAL_SETUP,
+         PROP_SESSION_REGISTERED,
++        PROP_SUPPORTED_SESSION_TYPES,
+ };
+ 
+ static void     gdm_display_class_init  (GdmDisplayClass *klass);
+ static void     gdm_display_init        (GdmDisplay      *self);
+ static void     gdm_display_finalize    (GObject         *object);
+ static void     queue_finish            (GdmDisplay      *self);
+ static void     _gdm_display_set_status (GdmDisplay *self,
+                                          int         status);
+ static gboolean wants_initial_setup (GdmDisplay *self);
+ G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (GdmDisplay, gdm_display, G_TYPE_OBJECT)
+ 
+ GQuark
+ gdm_display_error_quark (void)
+ {
+         static GQuark ret = 0;
+         if (ret == 0) {
+                 ret = g_quark_from_static_string ("gdm_display_error");
+         }
+ 
+         return ret;
+ }
+ 
+ time_t
+ gdm_display_get_creation_time (GdmDisplay *self)
+ {
+         GdmDisplayPrivate *priv;
+ 
+         g_return_val_if_fail (GDM_IS_DISPLAY (self), 0);
+ 
+         priv = gdm_display_get_instance_private (self);
+@@ -883,116 +886,136 @@ _gdm_display_set_launch_environment (GdmDisplay           *self,
+ 
+         priv = gdm_display_get_instance_private (self);
+ 
+         g_clear_object (&priv->launch_environment);
+ 
+         priv->launch_environment = g_object_ref (launch_environment);
+ }
+ 
+ static void
+ _gdm_display_set_is_initial (GdmDisplay     *self,
+                              gboolean        initial)
+ {
+         GdmDisplayPrivate *priv;
+ 
+         priv = gdm_display_get_instance_private (self);
+         g_debug ("GdmDisplay: initial: %s", initial? "yes" : "no");
+         priv->is_initial = initial;
+ }
+ 
+ static void
+ _gdm_display_set_allow_timed_login (GdmDisplay     *self,
+                                     gboolean        allow_timed_login)
+ {
+         GdmDisplayPrivate *priv;
+ 
+         priv = gdm_display_get_instance_private (self);
+         g_debug ("GdmDisplay: allow timed login: %s", allow_timed_login? "yes" : "no");
+         priv->allow_timed_login = allow_timed_login;
+ }
+ 
++static void
++_gdm_display_set_supported_session_types (GdmDisplay         *self,
++                                          const char * const *supported_session_types)
++
++{
++        GdmDisplayPrivate *priv;
++        g_autofree char *supported_session_types_string = NULL;
++
++        if (supported_session_types != NULL)
++                supported_session_types_string = g_strjoinv (":", (GStrv) supported_session_types);
++
++        priv = gdm_display_get_instance_private (self);
++        g_debug ("GdmDisplay: supported session types: %s", supported_session_types_string);
++        g_strfreev (priv->supported_session_types);
++        priv->supported_session_types = g_strdupv ((GStrv) supported_session_types);
++}
++
+ static void
+ gdm_display_set_property (GObject        *object,
+                           guint           prop_id,
+                           const GValue   *value,
+                           GParamSpec     *pspec)
+ {
+         GdmDisplay *self;
+ 
+         self = GDM_DISPLAY (object);
+ 
+         switch (prop_id) {
+         case PROP_ID:
+                 _gdm_display_set_id (self, g_value_get_string (value));
+                 break;
+         case PROP_STATUS:
+                 _gdm_display_set_status (self, g_value_get_int (value));
+                 break;
+         case PROP_SEAT_ID:
+                 _gdm_display_set_seat_id (self, g_value_get_string (value));
+                 break;
+         case PROP_SESSION_ID:
+                 _gdm_display_set_session_id (self, g_value_get_string (value));
+                 break;
+         case PROP_SESSION_CLASS:
+                 _gdm_display_set_session_class (self, g_value_get_string (value));
+                 break;
+         case PROP_SESSION_TYPE:
+                 _gdm_display_set_session_type (self, g_value_get_string (value));
+                 break;
+         case PROP_REMOTE_HOSTNAME:
+                 _gdm_display_set_remote_hostname (self, g_value_get_string (value));
+                 break;
+         case PROP_X11_DISPLAY_NUMBER:
+                 _gdm_display_set_x11_display_number (self, g_value_get_int (value));
+                 break;
+         case PROP_X11_DISPLAY_NAME:
+                 _gdm_display_set_x11_display_name (self, g_value_get_string (value));
+                 break;
+         case PROP_X11_COOKIE:
+                 _gdm_display_set_x11_cookie (self, g_value_get_string (value));
+                 break;
+         case PROP_IS_LOCAL:
+                 _gdm_display_set_is_local (self, g_value_get_boolean (value));
+                 break;
+         case PROP_ALLOW_TIMED_LOGIN:
+                 _gdm_display_set_allow_timed_login (self, g_value_get_boolean (value));
+                 break;
+         case PROP_LAUNCH_ENVIRONMENT:
+                 _gdm_display_set_launch_environment (self, g_value_get_object (value));
+                 break;
+         case PROP_IS_INITIAL:
+                 _gdm_display_set_is_initial (self, g_value_get_boolean (value));
+                 break;
+         case PROP_SESSION_REGISTERED:
+                 _gdm_display_set_session_registered (self, g_value_get_boolean (value));
+                 break;
++        case PROP_SUPPORTED_SESSION_TYPES:
++                _gdm_display_set_supported_session_types (self, g_value_get_boxed (value));
++                break;
+         default:
+                 G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+                 break;
+         }
+ }
+ 
+ static void
+ gdm_display_get_property (GObject        *object,
+                           guint           prop_id,
+                           GValue         *value,
+                           GParamSpec     *pspec)
+ {
+         GdmDisplay *self;
+         GdmDisplayPrivate *priv;
+ 
+         self = GDM_DISPLAY (object);
+         priv = gdm_display_get_instance_private (self);
+ 
+         switch (prop_id) {
+         case PROP_ID:
+                 g_value_set_string (value, priv->id);
+                 break;
+         case PROP_STATUS:
+                 g_value_set_int (value, priv->status);
+                 break;
+         case PROP_SEAT_ID:
+                 g_value_set_string (value, priv->seat_id);
+                 break;
+         case PROP_SESSION_ID:
+                 g_value_set_string (value, priv->session_id);
+@@ -1017,60 +1040,63 @@ gdm_display_get_property (GObject        *object,
+                 break;
+         case PROP_X11_AUTHORITY_FILE:
+                 g_value_take_string (value,
+                                      priv->access_file?
+                                      gdm_display_access_file_get_path (priv->access_file) : NULL);
+                 break;
+         case PROP_IS_LOCAL:
+                 g_value_set_boolean (value, priv->is_local);
+                 break;
+         case PROP_IS_CONNECTED:
+                 g_value_set_boolean (value, priv->xcb_connection != NULL);
+                 break;
+         case PROP_LAUNCH_ENVIRONMENT:
+                 g_value_set_object (value, priv->launch_environment);
+                 break;
+         case PROP_IS_INITIAL:
+                 g_value_set_boolean (value, priv->is_initial);
+                 break;
+         case PROP_HAVE_EXISTING_USER_ACCOUNTS:
+                 g_value_set_boolean (value, priv->have_existing_user_accounts);
+                 break;
+         case PROP_DOING_INITIAL_SETUP:
+                 g_value_set_boolean (value, priv->doing_initial_setup);
+                 break;
+         case PROP_SESSION_REGISTERED:
+                 g_value_set_boolean (value, priv->session_registered);
+                 break;
+         case PROP_ALLOW_TIMED_LOGIN:
+                 g_value_set_boolean (value, priv->allow_timed_login);
+                 break;
++        case PROP_SUPPORTED_SESSION_TYPES:
++                g_value_set_boxed (value, priv->supported_session_types);
++                break;
+         default:
+                 G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+                 break;
+         }
+ }
+ 
+ static gboolean
+ handle_get_id (GdmDBusDisplay        *skeleton,
+                GDBusMethodInvocation *invocation,
+                GdmDisplay            *self)
+ {
+         char *id;
+ 
+         gdm_display_get_id (self, &id, NULL);
+ 
+         gdm_dbus_display_complete_get_id (skeleton, invocation, id);
+ 
+         g_free (id);
+         return TRUE;
+ }
+ 
+ static gboolean
+ handle_get_remote_hostname (GdmDBusDisplay        *skeleton,
+                             GDBusMethodInvocation *invocation,
+                             GdmDisplay            *self)
+ {
+         char *hostname;
+ 
+         gdm_display_get_remote_hostname (self, &hostname, NULL);
+ 
+@@ -1202,60 +1228,61 @@ gdm_display_constructor (GType                  type,
+         priv = gdm_display_get_instance_private (self);
+ 
+         g_free (priv->id);
+         priv->id = g_strdup_printf ("/org/gnome/DisplayManager/Displays/%lu",
+                                           (gulong) self);
+ 
+         res = register_display (self);
+         if (! res) {
+                 g_warning ("Unable to register display with system bus");
+         }
+ 
+         return G_OBJECT (self);
+ }
+ 
+ static void
+ gdm_display_dispose (GObject *object)
+ {
+         GdmDisplay *self;
+         GdmDisplayPrivate *priv;
+ 
+         self = GDM_DISPLAY (object);
+         priv = gdm_display_get_instance_private (self);
+ 
+         g_debug ("GdmDisplay: Disposing display");
+ 
+         if (priv->finish_idle_id != 0) {
+                 g_source_remove (priv->finish_idle_id);
+                 priv->finish_idle_id = 0;
+         }
+         g_clear_object (&priv->launch_environment);
++        g_clear_pointer (&priv->supported_session_types, g_strfreev);
+ 
+         g_warn_if_fail (priv->status != GDM_DISPLAY_MANAGED);
+         g_warn_if_fail (priv->user_access_file == NULL);
+         g_warn_if_fail (priv->access_file == NULL);
+ 
+         G_OBJECT_CLASS (gdm_display_parent_class)->dispose (object);
+ }
+ 
+ static void
+ gdm_display_class_init (GdmDisplayClass *klass)
+ {
+         GObjectClass   *object_class = G_OBJECT_CLASS (klass);
+ 
+         object_class->get_property = gdm_display_get_property;
+         object_class->set_property = gdm_display_set_property;
+         object_class->constructor = gdm_display_constructor;
+         object_class->dispose = gdm_display_dispose;
+         object_class->finalize = gdm_display_finalize;
+ 
+         klass->prepare = gdm_display_real_prepare;
+ 
+         g_object_class_install_property (object_class,
+                                          PROP_ID,
+                                          g_param_spec_string ("id",
+                                                               "id",
+                                                               "id",
+                                                               NULL,
+                                                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+         g_object_class_install_property (object_class,
+                                          PROP_REMOTE_HOSTNAME,
+@@ -1362,60 +1389,68 @@ gdm_display_class_init (GdmDisplayClass *klass)
+                                          PROP_DOING_INITIAL_SETUP,
+                                          g_param_spec_boolean ("doing-initial-setup",
+                                                                NULL,
+                                                                NULL,
+                                                                FALSE,
+                                                                G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+         g_object_class_install_property (object_class,
+                                          PROP_SESSION_REGISTERED,
+                                          g_param_spec_boolean ("session-registered",
+                                                                NULL,
+                                                                NULL,
+                                                                FALSE,
+                                                                G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+ 
+         g_object_class_install_property (object_class,
+                                          PROP_LAUNCH_ENVIRONMENT,
+                                          g_param_spec_object ("launch-environment",
+                                                               NULL,
+                                                               NULL,
+                                                               GDM_TYPE_LAUNCH_ENVIRONMENT,
+                                                               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+         g_object_class_install_property (object_class,
+                                          PROP_STATUS,
+                                          g_param_spec_int ("status",
+                                                            "status",
+                                                            "status",
+                                                            -1,
+                                                            G_MAXINT,
+                                                            GDM_DISPLAY_UNMANAGED,
+                                                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
++
++        g_object_class_install_property (object_class,
++                                         PROP_SUPPORTED_SESSION_TYPES,
++                                         g_param_spec_boxed ("supported-session-types",
++                                                             "supported session types",
++                                                             "supported session types",
++                                                             G_TYPE_STRV,
++                                                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+ }
+ 
+ static void
+ gdm_display_init (GdmDisplay *self)
+ {
+         GdmDisplayPrivate *priv;
+ 
+         priv = gdm_display_get_instance_private (self);
+ 
+         priv->creation_time = time (NULL);
+ }
+ 
+ static void
+ gdm_display_finalize (GObject *object)
+ {
+         GdmDisplay *self;
+         GdmDisplayPrivate *priv;
+ 
+         g_return_if_fail (object != NULL);
+         g_return_if_fail (GDM_IS_DISPLAY (object));
+ 
+         self = GDM_DISPLAY (object);
+         priv = gdm_display_get_instance_private (self);
+ 
+         g_return_if_fail (priv != NULL);
+ 
+         g_debug ("GdmDisplay: Finalizing display: %s", priv->id);
+         g_free (priv->id);
+         g_free (priv->seat_id);
+         g_free (priv->session_class);
+@@ -1694,60 +1729,61 @@ gdm_display_start_greeter_session (GdmDisplay *self)
+                                  G_CALLBACK (on_launch_environment_session_opened),
+                                  self, 0);
+         g_signal_connect_object (priv->launch_environment,
+                                  "started",
+                                  G_CALLBACK (on_launch_environment_session_started),
+                                  self, 0);
+         g_signal_connect_object (priv->launch_environment,
+                                  "stopped",
+                                  G_CALLBACK (on_launch_environment_session_stopped),
+                                  self, 0);
+         g_signal_connect_object (priv->launch_environment,
+                                  "exited",
+                                  G_CALLBACK (on_launch_environment_session_exited),
+                                  self, 0);
+         g_signal_connect_object (priv->launch_environment,
+                                  "died",
+                                  G_CALLBACK (on_launch_environment_session_died),
+                                  self, 0);
+ 
+         if (auth_file != NULL) {
+                 g_object_set (priv->launch_environment,
+                               "x11-authority-file", auth_file,
+                               NULL);
+         }
+ 
+         gdm_launch_environment_start (priv->launch_environment);
+ 
+         session = gdm_launch_environment_get_session (priv->launch_environment);
+         g_object_set (G_OBJECT (session),
+                       "display-is-initial", priv->is_initial,
++                      "supported-session-types", priv->supported_session_types,
+                       NULL);
+ 
+         g_free (display_name);
+         g_free (seat_id);
+         g_free (hostname);
+         g_free (auth_file);
+ }
+ 
+ void
+ gdm_display_stop_greeter_session (GdmDisplay *self)
+ {
+         GdmDisplayPrivate *priv;
+ 
+         priv = gdm_display_get_instance_private (self);
+ 
+         if (priv->launch_environment != NULL) {
+ 
+                 g_signal_handlers_disconnect_by_func (priv->launch_environment,
+                                                       G_CALLBACK (on_launch_environment_session_opened),
+                                                       self);
+                 g_signal_handlers_disconnect_by_func (priv->launch_environment,
+                                                       G_CALLBACK (on_launch_environment_session_started),
+                                                       self);
+                 g_signal_handlers_disconnect_by_func (priv->launch_environment,
+                                                       G_CALLBACK (on_launch_environment_session_stopped),
+                                                       self);
+                 g_signal_handlers_disconnect_by_func (priv->launch_environment,
+                                                       G_CALLBACK (on_launch_environment_session_exited),
+                                                       self);
+                 g_signal_handlers_disconnect_by_func (priv->launch_environment,
+diff --git a/daemon/gdm-launch-environment.c b/daemon/gdm-launch-environment.c
+index 87a1c5ffe..14ecfac2d 100644
+--- a/daemon/gdm-launch-environment.c
++++ b/daemon/gdm-launch-environment.c
+@@ -134,60 +134,61 @@ static GHashTable *
+ build_launch_environment (GdmLaunchEnvironment *launch_environment,
+                           gboolean              start_session)
+ {
+         GHashTable    *hash;
+         struct passwd *pwent;
+         static const char *const optional_environment[] = {
+                 "GI_TYPELIB_PATH",
+                 "LANG",
+                 "LANGUAGE",
+                 "LC_ADDRESS",
+                 "LC_ALL",
+                 "LC_COLLATE",
+                 "LC_CTYPE",
+                 "LC_IDENTIFICATION",
+                 "LC_MEASUREMENT",
+                 "LC_MESSAGES",
+                 "LC_MONETARY",
+                 "LC_NAME",
+                 "LC_NUMERIC",
+                 "LC_PAPER",
+                 "LC_TELEPHONE",
+                 "LC_TIME",
+                 "LD_LIBRARY_PATH",
+                 "PATH",
+                 "WINDOWPATH",
+                 "XCURSOR_PATH",
+                 "XDG_CONFIG_DIRS",
+                 NULL
+         };
+         char *system_data_dirs;
++        g_auto (GStrv) supported_session_types = NULL;
+         int i;
+ 
+         /* create a hash table of current environment, then update keys has necessary */
+         hash = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+ 
+         for (i = 0; optional_environment[i] != NULL; i++) {
+                 if (g_getenv (optional_environment[i]) == NULL) {
+                         continue;
+                 }
+ 
+                 g_hash_table_insert (hash,
+                                      g_strdup (optional_environment[i]),
+                                      g_strdup (g_getenv (optional_environment[i])));
+         }
+ 
+         if (launch_environment->priv->x11_authority_file != NULL)
+                 g_hash_table_insert (hash, g_strdup ("XAUTHORITY"), g_strdup (launch_environment->priv->x11_authority_file));
+ 
+         if (launch_environment->priv->session_mode != NULL) {
+                 g_hash_table_insert (hash, g_strdup ("GNOME_SHELL_SESSION_MODE"), g_strdup (launch_environment->priv->session_mode));
+ 
+ 		if (strcmp (launch_environment->priv->session_mode, INITIAL_SETUP_SESSION_MODE) != 0) {
+ 			/* gvfs is needed for fetching remote avatars in the initial setup. Disable it otherwise. */
+ 			g_hash_table_insert (hash, g_strdup ("GVFS_DISABLE_FUSE"), g_strdup ("1"));
+ 			g_hash_table_insert (hash, g_strdup ("GIO_USE_VFS"), g_strdup ("local"));
+ 			g_hash_table_insert (hash, g_strdup ("GVFS_REMOTE_VOLUME_MONITOR_IGNORE"), g_strdup ("1"));
+ 
+ 			/* The locked down dconf profile should not be used for the initial setup session.
+ 			 * This allows overridden values from the user profile to take effect.
+ 			 */
+@@ -217,60 +218,68 @@ build_launch_environment (GdmLaunchEnvironment *launch_environment,
+         }
+ 
+         if (start_session && launch_environment->priv->x11_display_seat_id != NULL) {
+                 char *seat_id;
+ 
+                 seat_id = launch_environment->priv->x11_display_seat_id;
+ 
+                 g_hash_table_insert (hash, g_strdup ("GDM_SEAT_ID"), g_strdup (seat_id));
+         }
+ 
+         g_hash_table_insert (hash, g_strdup ("RUNNING_UNDER_GDM"), g_strdup ("true"));
+ 
+         /* Now populate XDG_DATA_DIRS from env.d if we're running initial setup; this allows
+          * e.g. Flatpak apps to be recognized by gnome-shell.
+          */
+         if (g_strcmp0 (launch_environment->priv->session_mode, INITIAL_SETUP_SESSION_MODE) == 0)
+                 gdm_load_env_d (load_env_func, get_var_cb, hash);
+ 
+         /* Prepend our own XDG_DATA_DIRS value */
+         system_data_dirs = g_strdup (g_hash_table_lookup (hash, "XDG_DATA_DIRS"));
+         if (!system_data_dirs)
+                 system_data_dirs = g_strjoinv (":", (char **) g_get_system_data_dirs ());
+ 
+         g_hash_table_insert (hash,
+                              g_strdup ("XDG_DATA_DIRS"),
+                              g_strdup_printf ("%s:%s",
+                                               DATADIR "/gdm/greeter",
+                                               system_data_dirs));
+         g_free (system_data_dirs);
+ 
++        g_object_get (launch_environment->priv->session,
++                      "supported-session-types",
++                      &supported_session_types,
++                      NULL);
++        g_hash_table_insert (hash,
++                             g_strdup ("GDM_SUPPORTED_SESSION_TYPES"),
++                             g_strjoinv (":", supported_session_types));
++
+         return hash;
+ }
+ 
+ static void
+ on_session_setup_complete (GdmSession        *session,
+                            const char        *service_name,
+                            GdmLaunchEnvironment *launch_environment)
+ {
+         GHashTable       *hash;
+         GHashTableIter    iter;
+         gpointer          key, value;
+ 
+         hash = build_launch_environment (launch_environment, TRUE);
+ 
+         g_hash_table_iter_init (&iter, hash);
+         while (g_hash_table_iter_next (&iter, &key, &value)) {
+                 gdm_session_set_environment_variable (launch_environment->priv->session, key, value);
+         }
+         g_hash_table_destroy (hash);
+ }
+ 
+ static void
+ on_session_opened (GdmSession           *session,
+                    const char           *service_name,
+                    const char           *session_id,
+                    GdmLaunchEnvironment *launch_environment)
+ {
+         launch_environment->priv->session_id = g_strdup (session_id);
+ 
+         g_signal_emit (G_OBJECT (launch_environment), signals [OPENED], 0);
+diff --git a/daemon/gdm-local-display-factory.c b/daemon/gdm-local-display-factory.c
+index 8a4ef06cd..141d64c6b 100644
+--- a/daemon/gdm-local-display-factory.c
++++ b/daemon/gdm-local-display-factory.c
+@@ -156,126 +156,225 @@ take_next_display_number (GdmLocalDisplayFactory *factory)
+ 
+         g_debug ("GdmLocalDisplayFactory: Found the following X displays:");
+         for (l = list; l != NULL; l = l->next) {
+                 g_debug ("GdmLocalDisplayFactory: %u", GPOINTER_TO_UINT (l->data));
+         }
+ 
+         for (l = list; l != NULL; l = l->next) {
+                 guint32 num;
+                 num = GPOINTER_TO_UINT (l->data);
+ 
+                 /* always fill zero */
+                 if (l->prev == NULL && num != 0) {
+                         ret = 0;
+                         break;
+                 }
+                 /* now find the first hole */
+                 if (l->next == NULL || GPOINTER_TO_UINT (l->next->data) != (num + 1)) {
+                         ret = num + 1;
+                         break;
+                 }
+         }
+  out:
+ 
+         /* now reserve this number */
+         g_debug ("GdmLocalDisplayFactory: Reserving X display: %u", ret);
+         g_hash_table_insert (factory->used_display_numbers, GUINT_TO_POINTER (ret), NULL);
+ 
+         return ret;
+ }
+ 
++static char *
++get_preferred_display_server (GdmLocalDisplayFactory *factory)
++{
++        g_autofree gchar *preferred_display_server = NULL;
++        gboolean wayland_enabled = FALSE, xorg_enabled = FALSE;
++
++        gdm_settings_direct_get_boolean (GDM_KEY_WAYLAND_ENABLE, &wayland_enabled);
++        gdm_settings_direct_get_boolean (GDM_KEY_XORG_ENABLE, &xorg_enabled);
++
++        if (wayland_enabled && !xorg_enabled) {
++                return g_strdup ("wayland");
++        }
++
++        if (!wayland_enabled && !xorg_enabled) {
++                return g_strdup ("none");
++        }
++
++        gdm_settings_direct_get_string (GDM_KEY_PREFERRED_DISPLAY_SERVER, &preferred_display_server);
++
++        if (g_strcmp0 (preferred_display_server, "wayland") == 0) {
++                if (wayland_enabled)
++                        return g_strdup (preferred_display_server);
++                else
++                        return g_strdup ("xorg");
++        }
++
++        if (g_strcmp0 (preferred_display_server, "xorg") == 0) {
++                if (xorg_enabled)
++                        return g_strdup (preferred_display_server);
++                else
++                        return g_strdup ("wayland");
++        }
++
++        if (g_strcmp0 (preferred_display_server, "legacy-xorg") == 0) {
++                if (xorg_enabled)
++                        return g_strdup (preferred_display_server);
++        }
++
++        return g_strdup ("none");
++}
++
++static const char *
++gdm_local_display_factory_get_session_type (GdmLocalDisplayFactory *factory,
++                                            gboolean                should_fall_back)
++{
++        const char *session_types[3] = { NULL };
++        gsize i, session_type_index = 0;
++        g_autofree gchar *preferred_display_server = NULL;
++
++        preferred_display_server = get_preferred_display_server (factory);
++
++        if (g_strcmp0 (preferred_display_server, "wayland") != 0 &&
++            g_strcmp0 (preferred_display_server, "xorg") != 0)
++              return NULL;
++
++        for (i = 0; i < G_N_ELEMENTS (session_types) - 1; i++) {
++#ifdef ENABLE_WAYLAND_SUPPORT
++            if (i > 0 ||
++                g_strcmp0 (preferred_display_server, "wayland") == 0) {
++                    gboolean wayland_enabled = FALSE;
++                    if (gdm_settings_direct_get_boolean (GDM_KEY_WAYLAND_ENABLE, &wayland_enabled)) {
++                            if (wayland_enabled && g_file_test ("/usr/bin/Xwayland", G_FILE_TEST_IS_EXECUTABLE)) {
++                                    session_types[i] = "wayland";
++                                    continue;
++                            }
++                    }
++            }
++#endif
++
++            if (i > 0 ||
++                g_strcmp0 (preferred_display_server, "xorg") == 0) {
++                    gboolean xorg_enabled = FALSE;
++                    if (gdm_settings_direct_get_boolean (GDM_KEY_XORG_ENABLE, &xorg_enabled)) {
++                            if (xorg_enabled && g_file_test ("/usr/bin/Xorg", G_FILE_TEST_IS_EXECUTABLE)) {
++                                    session_types[i] = "x11";
++                                    continue;
++                            }
++                    }
++            }
++        }
++
++        if (should_fall_back)
++                session_type_index++;
++
++        return session_types[session_type_index];
++}
++
+ static void
+ on_display_disposed (GdmLocalDisplayFactory *factory,
+                      GdmDisplay             *display)
+ {
+         g_debug ("GdmLocalDisplayFactory: Display %p disposed", display);
+ }
+ 
+ static void
+ store_display (GdmLocalDisplayFactory *factory,
+                GdmDisplay             *display)
+ {
+         GdmDisplayStore *store;
+ 
+         store = gdm_display_factory_get_display_store (GDM_DISPLAY_FACTORY (factory));
+         gdm_display_store_add (store, display);
+ }
+ 
+-static gboolean
+-gdm_local_display_factory_use_wayland (void)
+-{
+-#ifdef ENABLE_WAYLAND_SUPPORT
+-        gboolean wayland_enabled = FALSE;
+-        if (gdm_settings_direct_get_boolean (GDM_KEY_WAYLAND_ENABLE, &wayland_enabled)) {
+-                if (wayland_enabled && g_file_test ("/usr/bin/Xwayland", G_FILE_TEST_IS_EXECUTABLE) )
+-                        return TRUE;
+-        }
+-#endif
+-        return FALSE;
+-}
+-
+ /*
+   Example:
+   dbus-send --system --dest=org.gnome.DisplayManager \
+   --type=method_call --print-reply --reply-timeout=2000 \
+   /org/gnome/DisplayManager/Manager \
+   org.gnome.DisplayManager.Manager.GetDisplays
+ */
+ gboolean
+ gdm_local_display_factory_create_transient_display (GdmLocalDisplayFactory *factory,
+                                                     char                  **id,
+                                                     GError                **error)
+ {
+         gboolean         ret;
+         GdmDisplay      *display = NULL;
+         gboolean         is_initial = FALSE;
++        const char      *session_type;
++        g_autofree gchar *preferred_display_server = NULL;
+ 
+         g_return_val_if_fail (GDM_IS_LOCAL_DISPLAY_FACTORY (factory), FALSE);
+ 
+         ret = FALSE;
+ 
+         g_debug ("GdmLocalDisplayFactory: Creating transient display");
+ 
+-#ifdef ENABLE_USER_DISPLAY_SERVER
+-        display = gdm_local_display_new ();
+-        if (gdm_local_display_factory_use_wayland ())
+-                g_object_set (G_OBJECT (display), "session-type", "wayland", NULL);
+-        is_initial = TRUE;
+-#else
+-        if (display == NULL) {
+-                guint32 num;
++        preferred_display_server = get_preferred_display_server (factory);
+ 
+-                num = take_next_display_number (factory);
++#ifdef ENABLE_USER_DISPLAY_SERVER
++        if (g_strcmp0 (preferred_display_server, "wayland") == 0 ||
++            g_strcmp0 (preferred_display_server, "xorg") == 0) {
++                session_type = gdm_local_display_factory_get_session_type (factory, FALSE);
++
++                if (session_type == NULL) {
++                        g_set_error_literal (error,
++                                             GDM_DISPLAY_ERROR,
++                                             GDM_DISPLAY_ERROR_GENERAL,
++                                             "Both Wayland and Xorg are unavailable");
++                        return FALSE;
++                }
+ 
+-                display = gdm_legacy_display_new (num);
++                display = gdm_local_display_new ();
++                g_object_set (G_OBJECT (display), "session-type", session_type, NULL);
++                is_initial = TRUE;
+         }
+ #endif
++        if (g_strcmp0 (preferred_display_server, "legacy-xorg") == 0) {
++                if (display == NULL) {
++                        guint32 num;
++
++                        num = take_next_display_number (factory);
++
++                        display = gdm_legacy_display_new (num);
++                }
++        }
++
++        if (display == NULL) {
++                g_set_error_literal (error,
++                                     GDM_DISPLAY_ERROR,
++                                     GDM_DISPLAY_ERROR_GENERAL,
++                                     "Invalid preferred display server configured");
++                return FALSE;
++        }
+ 
+         g_object_set (display,
+                       "seat-id", "seat0",
+                       "allow-timed-login", FALSE,
+                       "is-initial", is_initial,
+                       NULL);
+ 
+         store_display (factory, display);
+ 
+         if (! gdm_display_manage (display)) {
+                 display = NULL;
+                 goto out;
+         }
+ 
+         if (! gdm_display_get_id (display, id, NULL)) {
+                 display = NULL;
+                 goto out;
+         }
+ 
+         ret = TRUE;
+  out:
+         /* ref either held by store or not at all */
+         g_object_unref (display);
+ 
+         return ret;
+ }
+ 
+ static void
+ finish_display_on_seat_if_waiting (GdmDisplayStore *display_store,
+                                    GdmDisplay      *display,
+@@ -454,190 +553,239 @@ lookup_prepared_display_by_seat_id (const char *id,
+         return lookup_by_seat_id (id, display, user_data);
+ }
+ 
+ static int
+ on_seat0_graphics_check_timeout (gpointer user_data)
+ {
+         GdmLocalDisplayFactory *factory = user_data;
+ 
+         factory->seat0_graphics_check_timeout_id = 0;
+ 
+         /* Simply try to re-add seat0. If it is there already (i.e. CanGraphical
+          * turned TRUE, then we'll find it and it will not be created again).
+          */
+         factory->seat0_graphics_check_timed_out = TRUE;
+         ensure_display_for_seat (factory, "seat0");
+ 
+         return G_SOURCE_REMOVE;
+ }
+ 
+ static void
+ ensure_display_for_seat (GdmLocalDisplayFactory *factory,
+                          const char             *seat_id)
+ {
+         int ret;
+         gboolean seat_supports_graphics;
+         gboolean is_seat0;
+         const char *session_type = "wayland";
+         GdmDisplayStore *store;
+         GdmDisplay      *display = NULL;
+         g_autofree char *login_session_id = NULL;
++        gboolean wayland_enabled = FALSE, xorg_enabled = FALSE;
++        g_autofree gchar *preferred_display_server = NULL;
++        gboolean falling_back;
++
++        gdm_settings_direct_get_boolean (GDM_KEY_WAYLAND_ENABLE, &wayland_enabled);
++        gdm_settings_direct_get_boolean (GDM_KEY_XORG_ENABLE, &xorg_enabled);
++
++        preferred_display_server = get_preferred_display_server (factory);
++
++        if (g_strcmp0 (preferred_display_server, "none") == 0) {
++               g_debug ("GdmLocalDisplayFactory: Preferred display server is none, so not creating display");
++               return;
++        }
+ 
+         ret = sd_seat_can_graphical (seat_id);
+ 
+         if (ret < 0) {
+                 g_critical ("Failed to query CanGraphical information for seat %s", seat_id);
+                 return;
+         }
+ 
+         if (ret == 0) {
+                 g_debug ("GdmLocalDisplayFactory: System doesn't currently support graphics");
+                 seat_supports_graphics = FALSE;
+         } else {
+                 g_debug ("GdmLocalDisplayFactory: System supports graphics");
+                 seat_supports_graphics = TRUE;
+         }
+ 
+         if (g_strcmp0 (seat_id, "seat0") == 0) {
+                 is_seat0 = TRUE;
+ 
+-                /* If we've failed, or are explicitly told to, fall back to legacy X11 support
+-                 */
+-                if (factory->num_failures > 0 || !gdm_local_display_factory_use_wayland ()) {
+-                        session_type = NULL;
+-                        g_debug ("GdmLocalDisplayFactory: New displays on seat0 will use X11 fallback");
+-                } else {
+-                        g_debug ("GdmLocalDisplayFactory: New displays on seat0 will use wayland");
+-                }
++                falling_back = factory->num_failures > 0;
++                session_type = gdm_local_display_factory_get_session_type (factory, falling_back);
++
++                g_debug ("GdmLocalDisplayFactory: New displays on seat0 will use %s%s",
++                         session_type, falling_back? " fallback" : "");
+         } else {
+                 is_seat0 = FALSE;
+ 
+                 g_debug ("GdmLocalDisplayFactory: New displays on seat %s will use X11 fallback", seat_id);
+                 /* Force legacy X11 for all auxiliary seats */
+                 seat_supports_graphics = TRUE;
+-                session_type = NULL;
++                session_type = "x11";
+         }
+ 
+         /* For seat0, we have a fallback logic to still try starting it after
+          * SEAT0_GRAPHICS_CHECK_TIMEOUT seconds. i.e. we simply continue even if
+          * CanGraphical is unset.
+          * This is ugly, but it means we'll come up eventually in some
+          * scenarios where no master device is present.
+          * Note that we'll force an X11 fallback even though there might be
+          * cases where an wayland capable device is present and simply not marked as
+          * master-of-seat. In these cases, this should likely be fixed in the
+          * udev rules.
+          *
+          * At the moment, systemd always sets CanGraphical for non-seat0 seats.
+          * This is because non-seat0 seats are defined by having master-of-seat
+          * set. This means we can avoid the fallback check for non-seat0 seats,
+          * which simplifies the code.
+          */
+         if (is_seat0) {
+                 if (!seat_supports_graphics) {
+                         if (!factory->seat0_graphics_check_timed_out) {
+                                 if (factory->seat0_graphics_check_timeout_id == 0) {
+                                         g_debug ("GdmLocalDisplayFactory: seat0 doesn't yet support graphics.  Waiting %d seconds to try again.", SEAT0_GRAPHICS_CHECK_TIMEOUT);
+                                         factory->seat0_graphics_check_timeout_id = g_timeout_add_seconds (SEAT0_GRAPHICS_CHECK_TIMEOUT,
+                                                                                                           on_seat0_graphics_check_timeout,
+                                                                                                           factory);
+ 
+                                 } else {
+                                         /* It is not yet time to force X11 fallback. */
+                                         g_debug ("GdmLocalDisplayFactory: seat0 display requested when there is no graphics support before graphics check timeout.");
+                                 }
+ 
+                                 return;
+                         }
+ 
+                         g_debug ("GdmLocalDisplayFactory: Assuming we can use seat0 for X11 even though system says it doesn't support graphics!");
+                         g_debug ("GdmLocalDisplayFactory: This might indicate an issue where the framebuffer device is not tagged as master-of-seat in udev.");
+                         seat_supports_graphics = TRUE;
+-                        session_type = NULL;
++                        session_type = "x11";
++                        wayland_enabled = FALSE;
+                 } else {
+                         g_clear_handle_id (&factory->seat0_graphics_check_timeout_id, g_source_remove);
+                 }
+         }
+ 
+         if (!seat_supports_graphics)
+                 return;
+ 
+-        g_debug ("GdmLocalDisplayFactory: %s login display for seat %s requested",
+-                 session_type? : "X11", seat_id);
++        if (session_type != NULL)
++                g_debug ("GdmLocalDisplayFactory: %s login display for seat %s requested",
++                         session_type, seat_id);
++        else if (g_strcmp0 (preferred_display_server, "legacy-xorg") == 0)
++                g_debug ("GdmLocalDisplayFactory: Legacy Xorg login display for seat %s requested",
++                         seat_id);
++
+         store = gdm_display_factory_get_display_store (GDM_DISPLAY_FACTORY (factory));
+ 
+         if (is_seat0)
+                 display = gdm_display_store_find (store, lookup_prepared_display_by_seat_id, (gpointer) seat_id);
+         else
+                 display = gdm_display_store_find (store, lookup_by_seat_id, (gpointer) seat_id);
+ 
+         /* Ensure we don't create the same display more than once */
+         if (display != NULL) {
+                 g_debug ("GdmLocalDisplayFactory: display already created");
+                 return;
+         }
+ 
+         /* If we already have a login window, switch to it */
+         if (gdm_get_login_window_session_id (seat_id, &login_session_id)) {
+                 GdmDisplay *display;
+ 
+                 display = gdm_display_store_find (store,
+                                                   lookup_by_session_id,
+                                                   (gpointer) login_session_id);
+                 if (display != NULL &&
+                     (gdm_display_get_status (display) == GDM_DISPLAY_MANAGED ||
+                      gdm_display_get_status (display) == GDM_DISPLAY_WAITING_TO_FINISH)) {
+                         g_object_set (G_OBJECT (display), "status", GDM_DISPLAY_MANAGED, NULL);
+                         g_debug ("GdmLocalDisplayFactory: session %s found, activating.",
+                                  login_session_id);
+                         gdm_activate_session_by_id (factory->connection, seat_id, login_session_id);
+                         return;
+                 }
+         }
+ 
+         g_debug ("GdmLocalDisplayFactory: Adding display on seat %s", seat_id);
+ 
+ #ifdef ENABLE_USER_DISPLAY_SERVER
+-        if (is_seat0) {
+-                display = gdm_local_display_new ();
+-                if (session_type != NULL) {
++        if (g_strcmp0 (preferred_display_server, "wayland") == 0 ||
++            g_strcmp0 (preferred_display_server, "xorg") == 0) {
++                if (is_seat0) {
++                        g_autoptr (GPtrArray) supported_session_types = NULL;
++
++                        if (session_type == NULL) {
++                                g_warning ("GdmLocalDisplayFactory: Both Wayland and Xorg sessions are unavailable");
++                                return;
++                        }
++
++                        supported_session_types = g_ptr_array_new ();
++
++                        if (g_strcmp0 (preferred_display_server, "wayland") == 0) {
++                                if (wayland_enabled)
++                                        g_ptr_array_add (supported_session_types, "wayland");
++                        } else {
++                                if (xorg_enabled)
++                                        g_ptr_array_add (supported_session_types, "x11");
++                        }
++
++                        if (!falling_back) {
++                                if (g_strcmp0 (preferred_display_server, "wayland") == 0) {
++                                        if (xorg_enabled)
++                                                g_ptr_array_add (supported_session_types, "x11");
++                                } else {
++                                        if (wayland_enabled)
++                                                g_ptr_array_add (supported_session_types, "wayland");
++                                }
++                        }
++
++                        g_ptr_array_add (supported_session_types, NULL);
++
++                        display = gdm_local_display_new ();
+                         g_object_set (G_OBJECT (display), "session-type", session_type, NULL);
++                        g_object_set (G_OBJECT (display), "supported-session-types", supported_session_types->pdata, NULL);
+                 }
+         }
+ #endif
+ 
+         if (display == NULL) {
+                 guint32 num;
++                const char *supported_session_types[] = { "x11", NULL };
+ 
+                 num = take_next_display_number (factory);
+ 
+                 display = gdm_legacy_display_new (num);
++                g_object_set (G_OBJECT (display), "supported-session-types", supported_session_types, NULL);
+         }
+ 
+         g_object_set (display, "seat-id", seat_id, NULL);
+         g_object_set (display, "is-initial", is_seat0, NULL);
+ 
+         store_display (factory, display);
+ 
+         /* let store own the ref */
+         g_object_unref (display);
+ 
+         if (! gdm_display_manage (display)) {
+                 gdm_display_unmanage (display);
+         }
+ 
+         return;
+ }
+ 
+ static void
+ delete_display (GdmLocalDisplayFactory *factory,
+                 const char             *seat_id) {
+ 
+         GdmDisplayStore *store;
+ 
+         g_debug ("GdmLocalDisplayFactory: Removing used_display_numbers on seat %s", seat_id);
+ 
+         store = gdm_display_factory_get_display_store (GDM_DISPLAY_FACTORY (factory));
+         gdm_display_store_foreach_remove (store, lookup_by_seat_id, (gpointer) seat_id);
+ }
+ 
+ static gboolean
+diff --git a/daemon/gdm-manager.c b/daemon/gdm-manager.c
+index 9c10adff3..4c2752fee 100644
+--- a/daemon/gdm-manager.c
++++ b/daemon/gdm-manager.c
+@@ -1306,74 +1306,75 @@ get_automatic_login_details (GdmManager *manager,
+                 *usernamep = username;
+         } else {
+                 g_free (username);
+         }
+ 
+         return enabled;
+ }
+ 
+ static const char *
+ get_username_for_greeter_display (GdmManager *manager,
+                                   GdmDisplay *display)
+ {
+         gboolean doing_initial_setup = FALSE;
+ 
+         g_object_get (G_OBJECT (display),
+                       "doing-initial-setup", &doing_initial_setup,
+                       NULL);
+ 
+         if (doing_initial_setup) {
+                 return INITIAL_SETUP_USERNAME;
+         } else {
+                 return GDM_USERNAME;
+         }
+ }
+ 
+ static void
+ set_up_automatic_login_session (GdmManager *manager,
+                                 GdmDisplay *display)
+ {
+         GdmSession *session;
+-        char       *display_session_type = NULL;
++        g_auto (GStrv) supported_session_types = NULL;
+ 
+         /* 0 is root user; since the daemon talks to the session object
+          * directly, itself, for automatic login
+          */
+         create_user_session_for_display (manager, display, 0);
+         session = get_user_session_for_display (display);
+ 
+         g_object_get (G_OBJECT (display),
+-                      "session-type", &display_session_type,
++                      "supported-session-types", &supported_session_types,
+                       NULL);
+ 
+         g_object_set (G_OBJECT (session),
+                       "display-is-initial", FALSE,
++                      "supported-session-types", supported_session_types,
+                       NULL);
+ 
+         g_debug ("GdmManager: Starting automatic login conversation");
+         gdm_session_start_conversation (session, "gdm-autologin");
+ }
+ 
+ static void
+ set_up_chooser_session (GdmManager *manager,
+                         GdmDisplay *display)
+ {
+         const char *allowed_user;
+         struct passwd *passwd_entry;
+ 
+         allowed_user = get_username_for_greeter_display (manager, display);
+ 
+         if (!gdm_get_pwent_for_name (allowed_user, &passwd_entry)) {
+                 g_warning ("GdmManager: couldn't look up username %s",
+                            allowed_user);
+                 gdm_display_unmanage (display);
+                 gdm_display_finish (display);
+                 return;
+         }
+ 
+         gdm_display_start_greeter_session (display);
+ }
+ 
+ static void
+ set_up_greeter_session (GdmManager *manager,
+                         GdmDisplay *display)
+ {
+@@ -2278,87 +2279,85 @@ on_session_reauthentication_started (GdmSession *session,
+ 
+         if (invocation != NULL) {
+                 g_hash_table_steal (manager->priv->open_reauthentication_requests,
+                                     source_tag);
+                 gdm_dbus_manager_complete_open_reauthentication_channel (GDM_DBUS_MANAGER (manager),
+                                                                          invocation,
+                                                                          address);
+         }
+ }
+ 
+ static void
+ clean_user_session (GdmSession *session)
+ {
+         g_object_set_data (G_OBJECT (session), "gdm-display", NULL);
+         g_object_unref (session);
+ }
+ 
+ static void
+ create_user_session_for_display (GdmManager *manager,
+                                  GdmDisplay *display,
+                                  uid_t       allowed_user)
+ {
+         GdmSession *session;
+         gboolean    display_is_local = FALSE;
+         char       *display_name = NULL;
+         char       *display_device = NULL;
+         char       *remote_hostname = NULL;
+         char       *display_auth_file = NULL;
+         char       *display_seat_id = NULL;
+         char       *display_id = NULL;
+-#if defined(ENABLE_WAYLAND_SUPPORT) && defined(ENABLE_USER_DISPLAY_SERVER)
+-        g_autofree char *display_session_type = NULL;
+-        gboolean    greeter_is_wayland;
+-#endif
++        g_auto (GStrv) supported_session_types = NULL;
+ 
+         g_object_get (G_OBJECT (display),
+                       "id", &display_id,
+                       "x11-display-name", &display_name,
+                       "is-local", &display_is_local,
+                       "remote-hostname", &remote_hostname,
+                       "x11-authority-file", &display_auth_file,
+                       "seat-id", &display_seat_id,
+-#if defined(ENABLE_WAYLAND_SUPPORT) && defined(ENABLE_USER_DISPLAY_SERVER)
+-                      "session-type", &display_session_type,
+-#endif
++                      "supported-session-types", &supported_session_types,
+                       NULL);
+         display_device = get_display_device (manager, display);
+ 
+         session = gdm_session_new (GDM_SESSION_VERIFICATION_MODE_LOGIN,
+                                    allowed_user,
+                                    display_name,
+                                    remote_hostname,
+                                    display_device,
+                                    display_seat_id,
+                                    display_auth_file,
+                                    display_is_local,
+                                    NULL);
++        g_object_set (G_OBJECT (session),
++                      "supported-session-types", supported_session_types,
++                      NULL);
+ 
+         g_debug ("GdmSession: Created user session for user %d on display %s (seat %s)",
+                  (int) allowed_user,
+                  display_id,
+                  display_seat_id);
+ 
+         g_free (display_name);
+         g_free (remote_hostname);
+         g_free (display_auth_file);
+         g_free (display_seat_id);
+ 
+         g_signal_connect (session,
+                           "reauthentication-started",
+                           G_CALLBACK (on_session_reauthentication_started),
+                           manager);
+         g_signal_connect (session,
+                           "reauthenticated",
+                           G_CALLBACK (on_session_reauthenticated),
+                           manager);
+         g_signal_connect (session,
+                           "client-ready-for-session-to-start",
+                           G_CALLBACK (on_session_client_ready_for_session_to_start),
+                           manager);
+         g_signal_connect (session,
+                           "client-connected",
+                           G_CALLBACK (on_session_client_connected),
+                           manager);
+         g_signal_connect (session,
+                           "client-disconnected",
+                           G_CALLBACK (on_session_client_disconnected),
+@@ -2378,65 +2377,60 @@ create_user_session_for_display (GdmManager *manager,
+         g_signal_connect (session,
+                           "authentication-failed",
+                           G_CALLBACK (on_session_authentication_failed),
+                           manager);
+         g_signal_connect (session,
+                           "session-opened",
+                           G_CALLBACK (on_user_session_opened),
+                           manager);
+         g_signal_connect (session,
+                           "session-started",
+                           G_CALLBACK (on_user_session_started),
+                           manager);
+         g_signal_connect (session,
+                           "session-start-failed",
+                           G_CALLBACK (on_session_start_failed),
+                           manager);
+         g_signal_connect (session,
+                           "session-exited",
+                           G_CALLBACK (on_user_session_exited),
+                           manager);
+         g_signal_connect (session,
+                           "session-died",
+                           G_CALLBACK (on_user_session_died),
+                           manager);
+         g_object_set_data (G_OBJECT (session), "gdm-display", display);
+         g_object_set_data_full (G_OBJECT (display),
+                                 "gdm-user-session",
+                                 session,
+                                 (GDestroyNotify)
+                                 clean_user_session);
+-
+-#if defined(ENABLE_WAYLAND_SUPPORT) && defined(ENABLE_USER_DISPLAY_SERVER)
+-        greeter_is_wayland = g_strcmp0 (display_session_type, "wayland") == 0;
+-        g_object_set (G_OBJECT (session), "ignore-wayland", !greeter_is_wayland, NULL);
+-#endif
+ }
+ 
+ static void
+ on_display_added (GdmDisplayStore *display_store,
+                   const char      *id,
+                   GdmManager      *manager)
+ {
+         GdmDisplay *display;
+ 
+         display = gdm_display_store_lookup (display_store, id);
+ 
+         if (display != NULL) {
+                 g_dbus_object_manager_server_export (manager->priv->object_manager,
+                                                      gdm_display_get_object_skeleton (display));
+ 
+                 g_signal_connect (display, "notify::status",
+                                   G_CALLBACK (on_display_status_changed),
+                                   manager);
+                 g_signal_emit (manager, signals[DISPLAY_ADDED], 0, id);
+         }
+ }
+ 
+ GQuark
+ gdm_manager_error_quark (void)
+ {
+         static GQuark ret = 0;
+         if (ret == 0) {
+                 ret = g_quark_from_static_string ("gdm_manager_error");
+         }
+ 
+diff --git a/daemon/gdm-session.c b/daemon/gdm-session.c
+index a010cecf5..2b941e5e1 100644
+--- a/daemon/gdm-session.c
++++ b/daemon/gdm-session.c
+@@ -106,84 +106,81 @@ struct _GdmSession
+         GdmDBusUserVerifier   *user_verifier_interface;
+         GHashTable            *user_verifier_extensions;
+         GdmDBusGreeter        *greeter_interface;
+         GdmDBusRemoteGreeter  *remote_greeter_interface;
+         GdmDBusChooser        *chooser_interface;
+ 
+         GList               *pending_worker_connections;
+         GList               *outside_connections;
+ 
+         GPid                 session_pid;
+ 
+         /* object lifetime scope */
+         char                *session_type;
+         char                *display_name;
+         char                *display_hostname;
+         char                *display_device;
+         char                *display_seat_id;
+         char                *display_x11_authority_file;
+         gboolean             display_is_local;
+ 
+         GdmSessionVerificationMode verification_mode;
+ 
+         uid_t                allowed_user;
+ 
+         char                *fallback_session_name;
+ 
+         GDBusServer         *worker_server;
+         GDBusServer         *outside_server;
+         GHashTable          *environment;
+ 
++        GStrv                supported_session_types;
++
+         guint32              is_program_session : 1;
+         guint32              display_is_initial : 1;
+-#ifdef ENABLE_WAYLAND_SUPPORT
+-        guint32              ignore_wayland : 1;
+-#endif
+ };
+ 
+ enum {
+         PROP_0,
+         PROP_VERIFICATION_MODE,
+         PROP_ALLOWED_USER,
+         PROP_DISPLAY_NAME,
+         PROP_DISPLAY_HOSTNAME,
+         PROP_DISPLAY_IS_LOCAL,
+         PROP_DISPLAY_IS_INITIAL,
+         PROP_SESSION_TYPE,
+         PROP_DISPLAY_DEVICE,
+         PROP_DISPLAY_SEAT_ID,
+         PROP_DISPLAY_X11_AUTHORITY_FILE,
+         PROP_USER_X11_AUTHORITY_FILE,
+         PROP_CONVERSATION_ENVIRONMENT,
+-#ifdef ENABLE_WAYLAND_SUPPORT
+-        PROP_IGNORE_WAYLAND,
+-#endif
++        PROP_SUPPORTED_SESSION_TYPES,
+ };
+ 
+ enum {
+         CONVERSATION_STARTED = 0,
+         CONVERSATION_STOPPED,
+         SETUP_COMPLETE,
+         CANCELLED,
+         HOSTNAME_SELECTED,
+         CLIENT_REJECTED,
+         CLIENT_CONNECTED,
+         CLIENT_DISCONNECTED,
+         CLIENT_READY_FOR_SESSION_TO_START,
+         DISCONNECTED,
+         AUTHENTICATION_FAILED,
+         VERIFICATION_COMPLETE,
+         SESSION_OPENED,
+         SESSION_OPENED_FAILED,
+         SESSION_STARTED,
+         SESSION_START_FAILED,
+         SESSION_EXITED,
+         SESSION_DIED,
+         REAUTHENTICATION_STARTED,
+         REAUTHENTICATED,
+         LAST_SIGNAL
+ };
+ 
+ #ifdef ENABLE_WAYLAND_SUPPORT
+ static gboolean gdm_session_is_wayland_session (GdmSession *self);
+ #endif
+ static void update_session_type (GdmSession *self);
+@@ -320,109 +317,117 @@ on_establish_credentials_cb (GdmDBusWorker *proxy,
+             g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                 return;
+ 
+         self = g_object_ref (conversation->session);
+         service_name = g_strdup (conversation->service_name);
+ 
+         if (worked) {
+                 switch (self->verification_mode) {
+                 case GDM_SESSION_VERIFICATION_MODE_LOGIN:
+                 case GDM_SESSION_VERIFICATION_MODE_CHOOSER:
+                         gdm_session_open_session (self, service_name);
+                         break;
+                 case GDM_SESSION_VERIFICATION_MODE_REAUTHENTICATE:
+                         if (self->user_verifier_interface != NULL) {
+                                 gdm_dbus_user_verifier_emit_verification_complete (self->user_verifier_interface,
+                                                                                    service_name);
+                                 g_signal_emit (self, signals[VERIFICATION_COMPLETE], 0, service_name);
+                         }
+                         break;
+                 default:
+                         break;
+                 }
+         } else {
+                 report_and_stop_conversation (self, service_name, error);
+         }
+ 
+         g_free (service_name);
+         g_object_unref (self);
+ }
+ 
++static gboolean
++supports_session_type (GdmSession *self,
++                       const char *session_type)
++{
++        if (session_type == NULL)
++                return TRUE;
++
++        return g_strv_contains ((const char * const *) self->supported_session_types,
++                                session_type);
++}
++
+ static char **
+ get_system_session_dirs (GdmSession *self,
+                          const char *type)
+ {
+         GArray *search_array = NULL;
+         char **search_dirs;
+-        int i;
++        int i, j;
+         const gchar * const *system_data_dirs = g_get_system_data_dirs ();
+ 
+         static const char *x_search_dirs[] = {
+                 "/etc/X11/sessions/",
+                 DMCONFDIR "/Sessions/",
+                 DATADIR "/gdm/BuiltInSessions/",
+                 DATADIR "/xsessions/",
+         };
+ 
+         static const char *wayland_search_dir = DATADIR "/wayland-sessions/";
+ 
+         search_array = g_array_new (TRUE, TRUE, sizeof (char *));
+ 
+-        if (type == NULL || g_str_equal (type, "x11")) {
+-                for (i = 0; system_data_dirs[i]; i++) {
+-                        gchar *dir = g_build_filename (system_data_dirs[i], "xsessions", NULL);
+-                        g_array_append_val (search_array, dir);
++        for (j = 0; self->supported_session_types[j] != NULL; j++) {
++                const char *supported_type = self->supported_session_types[j];
++
++                if (g_str_equal (supported_type, "x11") &&
++                    (type == NULL || g_str_equal (type, supported_type))) {
++                        for (i = 0; system_data_dirs[i]; i++) {
++                                gchar *dir = g_build_filename (system_data_dirs[i], "xsessions", NULL);
++                                g_array_append_val (search_array, dir);
++                        }
++
++                        g_array_append_vals (search_array, x_search_dirs, G_N_ELEMENTS (x_search_dirs));
+                 }
+ 
+-                g_array_append_vals (search_array, x_search_dirs, G_N_ELEMENTS (x_search_dirs));
+-        }
+ 
+ #ifdef ENABLE_WAYLAND_SUPPORT
+-        if (!self->ignore_wayland &&
+-            (type == NULL || g_str_equal (type, "wayland"))) {
+-#ifdef ENABLE_USER_DISPLAY_SERVER
+-                g_array_prepend_val (search_array, wayland_search_dir);
++                if (g_str_equal (supported_type, "wayland") &&
++                    (type == NULL || g_str_equal (type, supported_type))) {
++                        for (i = 0; system_data_dirs[i]; i++) {
++                                gchar *dir = g_build_filename (system_data_dirs[i], "wayland-sessions", NULL);
++                                g_array_append_val (search_array, dir);
++                        }
+ 
+-                for (i = 0; system_data_dirs[i]; i++) {
+-                        gchar *dir = g_build_filename (system_data_dirs[i], "wayland-sessions", NULL);
+-                        g_array_insert_val (search_array, i, dir);
++                        g_array_append_val (search_array, wayland_search_dir);
+                 }
+-#else
+-                for (i = 0; system_data_dirs[i]; i++) {
+-                        gchar *dir = g_build_filename (system_data_dirs[i], "wayland-sessions", NULL);
+-                        g_array_append_val (search_array, dir);
+-                }
+-
+-                g_array_append_val (search_array, wayland_search_dir);
+ #endif
+         }
+-#endif
+ 
+         search_dirs = g_strdupv ((char **) search_array->data);
+ 
+         g_array_free (search_array, TRUE);
+ 
+         return search_dirs;
+ }
+ 
+ static gboolean
+ is_prog_in_path (const char *prog)
+ {
+         char    *f;
+         gboolean ret;
+ 
+         f = g_find_program_in_path (prog);
+         ret = (f != NULL);
+         g_free (f);
+         return ret;
+ }
+ 
+ static GKeyFile *
+ load_key_file_for_file (GdmSession   *self,
+                         const char   *file,
+                         const char   *type,
+                         char        **full_path)
+ {
+         GKeyFile   *key_file;
+         GError     *error = NULL;
+         gboolean    res;
+         char      **search_dirs;
+@@ -444,60 +449,66 @@ load_key_file_for_file (GdmSession   *self,
+                         g_debug ("GdmSession: %s", error->message);
+                         g_error_free (error);
+                 }
+                 g_key_file_free (key_file);
+                 key_file = NULL;
+         }
+ 
+         g_strfreev (search_dirs);
+ 
+         return key_file;
+ }
+ 
+ static gboolean
+ get_session_command_for_file (GdmSession  *self,
+                               const char  *file,
+                               const char  *type,
+                               char       **command)
+ {
+         GKeyFile   *key_file;
+         GError     *error;
+         char       *exec;
+         gboolean    ret;
+         gboolean    res;
+ 
+         exec = NULL;
+         ret = FALSE;
+         if (command != NULL) {
+                 *command = NULL;
+         }
+ 
++        if (!supports_session_type (self, type)) {
++                g_debug ("GdmSession: ignoring %s session command request for file '%s'",
++                         type, file);
++                goto out;
++        }
++
+         g_debug ("GdmSession: getting session command for file '%s'", file);
+         key_file = load_key_file_for_file (self, file, type, NULL);
+         if (key_file == NULL) {
+                 goto out;
+         }
+ 
+         error = NULL;
+         res = g_key_file_get_boolean (key_file,
+                                       G_KEY_FILE_DESKTOP_GROUP,
+                                       G_KEY_FILE_DESKTOP_KEY_HIDDEN,
+                                       &error);
+         if (error == NULL && res) {
+                 g_debug ("GdmSession: Session %s is marked as hidden", file);
+                 goto out;
+         }
+ 
+         exec = g_key_file_get_string (key_file,
+                                       G_KEY_FILE_DESKTOP_GROUP,
+                                       G_KEY_FILE_DESKTOP_KEY_TRY_EXEC,
+                                       NULL);
+         if (exec != NULL) {
+                 res = is_prog_in_path (exec);
+                 g_free (exec);
+                 exec = NULL;
+ 
+                 if (! res) {
+                         g_debug ("GdmSession: Command not found: %s",
+                                  G_KEY_FILE_DESKTOP_KEY_TRY_EXEC);
+                         goto out;
+                 }
+@@ -2230,68 +2241,72 @@ close_conversation (GdmSessionConversation *conversation)
+ 
+         if (conversation->worker_manager_interface != NULL) {
+                 unexport_worker_manager_interface (self, conversation->worker_manager_interface);
+                 g_clear_object (&conversation->worker_manager_interface);
+         }
+ 
+         if (conversation->worker_proxy != NULL) {
+                 GDBusConnection *connection = g_dbus_proxy_get_connection (G_DBUS_PROXY (conversation->worker_proxy));
+                 g_dbus_connection_close_sync (connection, NULL, NULL);
+         }
+ }
+ 
+ static void
+ stop_conversation (GdmSessionConversation *conversation)
+ {
+         close_conversation (conversation);
+ 
+         conversation->is_stopping = TRUE;
+         gdm_session_worker_job_stop (conversation->job);
+ }
+ 
+ static void
+ stop_conversation_now (GdmSessionConversation *conversation)
+ {
+         close_conversation (conversation);
+ 
+         gdm_session_worker_job_stop_now (conversation->job);
+         g_clear_object (&conversation->job);
+ }
+ 
+-#ifdef ENABLE_WAYLAND_SUPPORT
+ void
+-gdm_session_set_ignore_wayland (GdmSession *self,
+-                                gboolean    ignore_wayland)
++gdm_session_set_supported_session_types (GdmSession         *self,
++                                         const char * const *supported_session_types)
+ {
+-        self->ignore_wayland = ignore_wayland;
++        const char * const session_types[] = { "wayland", "x11", NULL };
++        g_strfreev (self->supported_session_types);
++
++        if (supported_session_types == NULL)
++                self->supported_session_types = g_strdupv ((GStrv) session_types);
++        else
++                self->supported_session_types = g_strdupv ((GStrv) supported_session_types);
+ }
+-#endif
+ 
+ gboolean
+ gdm_session_start_conversation (GdmSession *self,
+                                 const char *service_name)
+ {
+         GdmSessionConversation *conversation;
+ 
+         g_return_val_if_fail (GDM_IS_SESSION (self), FALSE);
+ 
+         conversation = g_hash_table_lookup (self->conversations,
+                                             service_name);
+ 
+         if (conversation != NULL) {
+                 if (!conversation->is_stopping) {
+                         g_warning ("GdmSession: conversation %s started more than once", service_name);
+                         return FALSE;
+                 }
+                 g_debug ("GdmSession: stopping old conversation %s", service_name);
+                 gdm_session_worker_job_stop_now (conversation->job);
+                 g_object_unref (conversation->job);
+                 conversation->job = NULL;
+         }
+ 
+         g_debug ("GdmSession: starting conversation %s for session (%p)", service_name, self);
+ 
+         conversation = start_conversation (self, service_name);
+ 
+         g_hash_table_insert (self->conversations,
+                              g_strdup (service_name), conversation);
+         return TRUE;
+@@ -3162,69 +3177,69 @@ gdm_session_get_session_id (GdmSession *self)
+ 
+ const char *
+ gdm_session_get_conversation_session_id (GdmSession *self,
+                                          const char *service_name)
+ {
+         GdmSessionConversation *conversation;
+ 
+         g_return_val_if_fail (GDM_IS_SESSION (self), NULL);
+ 
+         conversation = find_conversation_by_name (self, service_name);
+ 
+         if (conversation == NULL) {
+                 return NULL;
+         }
+ 
+         return conversation->session_id;
+ }
+ 
+ static char *
+ get_session_filename (GdmSession *self)
+ {
+         return g_strdup_printf ("%s.desktop", get_session_name (self));
+ }
+ 
+ #ifdef ENABLE_WAYLAND_SUPPORT
+ static gboolean
+ gdm_session_is_wayland_session (GdmSession *self)
+ {
+         GKeyFile   *key_file;
+         gboolean    is_wayland_session = FALSE;
+-        char       *filename;
+-        char       *full_path = NULL;
++        char            *filename;
++        g_autofree char *full_path = NULL;
+ 
+         g_return_val_if_fail (self != NULL, FALSE);
+         g_return_val_if_fail (GDM_IS_SESSION (self), FALSE);
+ 
+         filename = get_session_filename (self);
+ 
+-        key_file = load_key_file_for_file (self, filename, "wayland", &full_path);
++        key_file = load_key_file_for_file (self, filename, NULL, &full_path);
+ 
+         if (key_file == NULL) {
+                 goto out;
+         }
+ 
+         if (full_path != NULL && strstr (full_path, "/wayland-sessions/") != NULL) {
+                 is_wayland_session = TRUE;
+         }
+         g_debug ("GdmSession: checking if file '%s' is wayland session: %s", filename, is_wayland_session? "yes" : "no");
+ 
+ out:
+         g_clear_pointer (&key_file, g_key_file_free);
+         g_free (filename);
+         return is_wayland_session;
+ }
+ #endif
+ 
+ static void
+ update_session_type (GdmSession *self)
+ {
+ #ifdef ENABLE_WAYLAND_SUPPORT
+         gboolean is_wayland_session = FALSE;
+ 
+         is_wayland_session = gdm_session_is_wayland_session (self);
+ 
+         if (is_wayland_session) {
+                 set_session_type (self, "wayland");
+         } else {
+                 set_session_type (self, NULL);
+         }
+@@ -3513,140 +3528,138 @@ gdm_session_set_property (GObject      *object,
+         case PROP_DISPLAY_HOSTNAME:
+                 set_display_hostname (self, g_value_get_string (value));
+                 break;
+         case PROP_DISPLAY_DEVICE:
+                 set_display_device (self, g_value_get_string (value));
+                 break;
+         case PROP_DISPLAY_SEAT_ID:
+                 set_display_seat_id (self, g_value_get_string (value));
+                 break;
+         case PROP_USER_X11_AUTHORITY_FILE:
+                 set_user_x11_authority_file (self, g_value_get_string (value));
+                 break;
+         case PROP_DISPLAY_X11_AUTHORITY_FILE:
+                 set_display_x11_authority_file (self, g_value_get_string (value));
+                 break;
+         case PROP_DISPLAY_IS_LOCAL:
+                 set_display_is_local (self, g_value_get_boolean (value));
+                 break;
+         case PROP_DISPLAY_IS_INITIAL:
+                 set_display_is_initial (self, g_value_get_boolean (value));
+                 break;
+         case PROP_VERIFICATION_MODE:
+                 set_verification_mode (self, g_value_get_enum (value));
+                 break;
+         case PROP_ALLOWED_USER:
+                 set_allowed_user (self, g_value_get_uint (value));
+                 break;
+         case PROP_CONVERSATION_ENVIRONMENT:
+                 set_conversation_environment (self, g_value_get_pointer (value));
+                 break;
+-#ifdef ENABLE_WAYLAND_SUPPORT
+-        case PROP_IGNORE_WAYLAND:
+-                gdm_session_set_ignore_wayland (self, g_value_get_boolean (value));
++        case PROP_SUPPORTED_SESSION_TYPES:
++                gdm_session_set_supported_session_types (self, g_value_get_boxed (value));
+                 break;
+-#endif
+         default:
+                 G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+                 break;
+         }
+ }
+ 
+ static void
+ gdm_session_get_property (GObject    *object,
+                           guint       prop_id,
+                           GValue     *value,
+                           GParamSpec *pspec)
+ {
+         GdmSession *self;
+ 
+         self = GDM_SESSION (object);
+ 
+         switch (prop_id) {
+         case PROP_SESSION_TYPE:
+                 g_value_set_string (value, self->session_type);
+                 break;
+         case PROP_DISPLAY_NAME:
+                 g_value_set_string (value, self->display_name);
+                 break;
+         case PROP_DISPLAY_HOSTNAME:
+                 g_value_set_string (value, self->display_hostname);
+                 break;
+         case PROP_DISPLAY_DEVICE:
+                 g_value_set_string (value, self->display_device);
+                 break;
+         case PROP_DISPLAY_SEAT_ID:
+                 g_value_set_string (value, self->display_seat_id);
+                 break;
+         case PROP_USER_X11_AUTHORITY_FILE:
+                 g_value_set_string (value, self->user_x11_authority_file);
+                 break;
+         case PROP_DISPLAY_X11_AUTHORITY_FILE:
+                 g_value_set_string (value, self->display_x11_authority_file);
+                 break;
+         case PROP_DISPLAY_IS_LOCAL:
+                 g_value_set_boolean (value, self->display_is_local);
+                 break;
+         case PROP_DISPLAY_IS_INITIAL:
+                 g_value_set_boolean (value, self->display_is_initial);
+                 break;
+         case PROP_VERIFICATION_MODE:
+                 g_value_set_enum (value, self->verification_mode);
+                 break;
+         case PROP_ALLOWED_USER:
+                 g_value_set_uint (value, self->allowed_user);
+                 break;
+         case PROP_CONVERSATION_ENVIRONMENT:
+                 g_value_set_pointer (value, self->environment);
+                 break;
+-#ifdef ENABLE_WAYLAND_SUPPORT
+-        case PROP_IGNORE_WAYLAND:
+-                g_value_set_boolean (value, self->ignore_wayland);
++        case PROP_SUPPORTED_SESSION_TYPES:
++                g_value_set_boxed (value, self->supported_session_types);
+                 break;
+-#endif
+         default:
+                 G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+                 break;
+         }
+ }
+ 
+ static void
+ gdm_session_dispose (GObject *object)
+ {
+         GdmSession *self;
+ 
+         self = GDM_SESSION (object);
+ 
+         g_debug ("GdmSession: Disposing session");
+ 
+         gdm_session_close (self);
+ 
++        g_clear_pointer (&self->supported_session_types,
++                         g_strfreev);
+         g_clear_pointer (&self->conversations,
+                          g_hash_table_unref);
+ 
+         g_clear_object (&self->user_verifier_interface);
+         g_clear_pointer (&self->user_verifier_extensions,
+                          g_hash_table_unref);
+         g_clear_object (&self->greeter_interface);
+         g_clear_object (&self->remote_greeter_interface);
+         g_clear_object (&self->chooser_interface);
+ 
+         g_free (self->display_name);
+         self->display_name = NULL;
+ 
+         g_free (self->display_hostname);
+         self->display_hostname = NULL;
+ 
+         g_free (self->display_device);
+         self->display_device = NULL;
+ 
+         g_free (self->display_seat_id);
+         self->display_seat_id = NULL;
+ 
+         g_free (self->display_x11_authority_file);
+         self->display_x11_authority_file = NULL;
+ 
+         g_strfreev (self->conversation_environment);
+         self->conversation_environment = NULL;
+ 
+         if (self->worker_server != NULL) {
+                 g_dbus_server_stop (self->worker_server);
+@@ -4007,69 +4020,67 @@ gdm_session_class_init (GdmSessionClass *session_class)
+                                          PROP_DISPLAY_X11_AUTHORITY_FILE,
+                                          g_param_spec_string ("display-x11-authority-file",
+                                                               "display x11 authority file",
+                                                               "display x11 authority file",
+                                                               NULL,
+                                                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+         /* not construct only */
+         g_object_class_install_property (object_class,
+                                          PROP_USER_X11_AUTHORITY_FILE,
+                                          g_param_spec_string ("user-x11-authority-file",
+                                                               "",
+                                                               "",
+                                                               NULL,
+                                                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+         g_object_class_install_property (object_class,
+                                          PROP_DISPLAY_DEVICE,
+                                          g_param_spec_string ("display-device",
+                                                               "display device",
+                                                               "display device",
+                                                               NULL,
+                                                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+ 
+         g_object_class_install_property (object_class,
+                                          PROP_DISPLAY_SEAT_ID,
+                                          g_param_spec_string ("display-seat-id",
+                                                               "display seat id",
+                                                               "display seat id",
+                                                               NULL,
+                                                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+ 
+-#ifdef ENABLE_WAYLAND_SUPPORT
+         g_object_class_install_property (object_class,
+-                                         PROP_IGNORE_WAYLAND,
+-                                         g_param_spec_boolean ("ignore-wayland",
+-                                                               "ignore wayland",
+-                                                               "ignore wayland",
+-                                                               FALSE,
+-                                                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+-#endif
++                                         PROP_SUPPORTED_SESSION_TYPES,
++                                         g_param_spec_boxed ("supported-session-types",
++                                                             "supported session types",
++                                                             "supported session types",
++                                                             G_TYPE_STRV,
++                                                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+ 
+         /* Ensure we can resolve errors */
+         gdm_dbus_error_ensure (GDM_SESSION_WORKER_ERROR);
+ }
+ 
+ GdmSession *
+ gdm_session_new (GdmSessionVerificationMode  verification_mode,
+                  uid_t                       allowed_user,
+                  const char                 *display_name,
+                  const char                 *display_hostname,
+                  const char                 *display_device,
+                  const char                 *display_seat_id,
+                  const char                 *display_x11_authority_file,
+                  gboolean                    display_is_local,
+                  const char * const         *environment)
+ {
+         GdmSession *self;
+ 
+         self = g_object_new (GDM_TYPE_SESSION,
+                              "verification-mode", verification_mode,
+                              "allowed-user", (guint) allowed_user,
+                              "display-name", display_name,
+                              "display-hostname", display_hostname,
+                              "display-device", display_device,
+                              "display-seat-id", display_seat_id,
+                              "display-x11-authority-file", display_x11_authority_file,
+                              "display-is-local", display_is_local,
+                              "conversation-environment", environment,
+                              NULL);
+ 
+diff --git a/data/gdm.schemas.in b/data/gdm.schemas.in
+index 255bff023..a1035f95e 100644
+--- a/data/gdm.schemas.in
++++ b/data/gdm.schemas.in
+@@ -25,65 +25,75 @@
+     <schema>
+       <key>daemon/AutomaticLoginEnable</key>
+       <signature>b</signature>
+       <default>false</default>
+     </schema>
+     <schema>
+       <key>daemon/AutomaticLogin</key>
+       <signature>s</signature>
+       <default></default>
+     </schema>
+     <schema>
+       <key>daemon/TimedLoginEnable</key>
+       <signature>b</signature>
+       <default>false</default>
+     </schema>
+     <schema>
+       <key>daemon/TimedLogin</key>
+       <signature>s</signature>
+       <default></default>
+     </schema>
+     <schema>
+       <key>daemon/TimedLoginDelay</key>
+       <signature>i</signature>
+       <default>30</default>
+     </schema>
+     <schema>
+       <key>daemon/InitialSetupEnable</key>
+       <signature>b</signature>
+       <default>true</default>
+     </schema>
++    <schema>
++      <key>daemon/PreferredDisplayServer</key>
++      <signature>s</signature>
++      <default>wayland</default>
++    </schema>
+     <schema>
+       <key>daemon/WaylandEnable</key>
+       <signature>b</signature>
+       <default>true</default>
+     </schema>
++    <schema>
++      <key>daemon/XorgEnable</key>
++      <signature>b</signature>
++      <default>true</default>
++    </schema>
+     <schema>
+       <key>security/AllowRemoteAutoLogin</key>
+       <signature>b</signature>
+       <default>false</default>
+     </schema>
+ 
+     <schema>
+       <key>debug/Enable</key>
+       <signature>b</signature>
+       <default>false</default>
+     </schema>
+ 
+     <schema>
+       <key>security/DisallowTCP</key>
+       <signature>b</signature>
+       <default>true</default>
+     </schema>
+     <schema>
+       <key>xdmcp/Enable</key>
+       <signature>b</signature>
+       <default>false</default>
+     </schema>
+     <schema>
+       <key>xdmcp/ShowLocalGreeter</key>
+       <signature>b</signature>
+       <default>true</default>
+     </schema>
+     <schema>
+       <key>xdmcp/MaxPending</key>
+       <signature>i</signature>
+diff --git a/libgdm/gdm-sessions.c b/libgdm/gdm-sessions.c
+index a13225050..f078e04b8 100644
+--- a/libgdm/gdm-sessions.c
++++ b/libgdm/gdm-sessions.c
+@@ -163,171 +163,203 @@ load_session_file (const char              *id,
+ 
+ static gboolean
+ remove_duplicate_sessions (gpointer key,
+                            gpointer value,
+                            gpointer user_data)
+ {
+         gboolean already_known;
+         GHashTable *names_seen_before;
+         GdmSessionFile *session;
+ 
+         names_seen_before = (GHashTable *) user_data;
+         session = (GdmSessionFile *) value;
+         already_known = !g_hash_table_add (names_seen_before, session->translated_name);
+ 
+         if (already_known)
+                 g_debug ("GdmSession: Removing %s (%s) as we already have a session by this name",
+                          session->id,
+                          session->path);
+ 
+         return already_known;
+ }
+ 
+ static void
+ collect_sessions_from_directory (const char *dirname)
+ {
+         GDir       *dir;
+         const char *filename;
+ 
+         gboolean is_x11 = g_getenv ("WAYLAND_DISPLAY") == NULL &&
+                           g_getenv ("RUNNING_UNDER_GDM") != NULL;
++        gboolean is_wayland = g_getenv ("WAYLAND_DISPLAY") != NULL &&
++                              g_getenv ("RUNNING_UNDER_GDM") != NULL;
+ 
+         /* FIXME: add file monitor to directory */
+ 
+         dir = g_dir_open (dirname, 0, NULL);
+         if (dir == NULL) {
+                 return;
+         }
+ 
+         while ((filename = g_dir_read_name (dir))) {
+                 char *id;
+                 char *full_path;
+ 
+                 if (! g_str_has_suffix (filename, ".desktop")) {
+                         continue;
+                 }
+ 
+-                if (is_x11 && g_str_has_suffix (filename, "-xorg.desktop")) {
+-                        char *base_name = g_strndup (filename, strlen (filename) - strlen ("-xorg.desktop"));
+-                        char *fallback_name = g_strconcat (base_name, ".desktop", NULL);
+-                        g_free (base_name);
+-                        char *fallback_path = g_build_filename (dirname, fallback_name, NULL);
+-                        g_free (fallback_name);
+-                        if (g_file_test (fallback_path, G_FILE_TEST_EXISTS)) {
+-                                g_free (fallback_path);
+-                                g_debug ("Running under X11, ignoring %s", filename);
+-                                continue;
++                if (is_wayland) {
++                        if (g_str_has_suffix (filename, "-wayland.desktop")) {
++                                g_autofree char *base_name = g_strndup (filename, strlen (filename) - strlen ("-wayland.desktop"));
++                                g_autofree char *other_name = g_strconcat (base_name, ".desktop", NULL);
++                                g_autofree char *other_path = g_build_filename (dirname, other_name, NULL);
++
++                                if (g_file_test (other_path, G_FILE_TEST_EXISTS)) {
++                                        g_debug ("Running under Wayland, ignoring %s", filename);
++                                        continue;
++                                }
++                        } else {
++                                g_autofree char *base_name = g_strndup (filename, strlen (filename) - strlen (".desktop"));
++                                g_autofree char *other_name = g_strdup_printf ("%s-xorg.desktop", base_name);
++                                g_autofree char *other_path = g_build_filename (dirname, other_name, NULL);
++
++                                if (g_file_test (other_path, G_FILE_TEST_EXISTS)) {
++                                        g_debug ("Running under Wayland, ignoring %s", filename);
++                                        continue;
++                                }
++                        }
++                } else if (is_x11) {
++                        if (g_str_has_suffix (filename, "-xorg.desktop")) {
++                                g_autofree char *base_name = g_strndup (filename, strlen (filename) - strlen ("-xorg.desktop"));
++                                g_autofree char *other_name = g_strconcat (base_name, ".desktop", NULL);
++                                g_autofree char *other_path = g_build_filename (dirname, other_name, NULL);
++
++                                if (g_file_test (other_path, G_FILE_TEST_EXISTS)) {
++                                        g_debug ("Running under X11, ignoring %s", filename);
++                                        continue;
++                                }
++                        } else {
++                                g_autofree char *base_name = g_strndup (filename, strlen (filename) - strlen (".desktop"));
++                                g_autofree char *other_name = g_strdup_printf ("%s-wayland.desktop", base_name);
++                                g_autofree char *other_path = g_build_filename (dirname, other_name, NULL);
++
++                                if (g_file_test (other_path, G_FILE_TEST_EXISTS)) {
++                                        g_debug ("Running under X11, ignoring %s", filename);
++                                        continue;
++                                }
+                         }
+-                        g_free (fallback_path);
+                 }
+ 
+                 id = g_strndup (filename, strlen (filename) - strlen (".desktop"));
+ 
+                 full_path = g_build_filename (dirname, filename, NULL);
+ 
+                 load_session_file (id, full_path);
+ 
+                 g_free (id);
+                 g_free (full_path);
+         }
+ 
+         g_dir_close (dir);
+ }
+ 
+ static void
+ collect_sessions (void)
+ {
+         g_autoptr(GHashTable) names_seen_before = NULL;
+         g_autoptr(GPtrArray) xorg_search_array = NULL;
+         g_autoptr(GPtrArray) wayland_search_array = NULL;
+         gchar      *session_dir = NULL;
+         int         i;
+         const char *xorg_search_dirs[] = {
+                 "/etc/X11/sessions/",
+                 DMCONFDIR "/Sessions/",
+                 DATADIR "/gdm/BuiltInSessions/",
+                 DATADIR "/xsessions/",
+         };
++        g_auto (GStrv) supported_session_types = NULL;
++
++        supported_session_types = g_strsplit (g_getenv ("GDM_SUPPORTED_SESSION_TYPES"), ":", -1);
+ 
+         names_seen_before = g_hash_table_new (g_str_hash, g_str_equal);
+         xorg_search_array = g_ptr_array_new_with_free_func (g_free);
+ 
+         const gchar * const *system_data_dirs = g_get_system_data_dirs ();
+ 
+         for (i = 0; system_data_dirs[i]; i++) {
+                 session_dir = g_build_filename (system_data_dirs[i], "xsessions", NULL);
+                 g_ptr_array_add (xorg_search_array, session_dir);
+         }
+ 
+         for (i = 0; i < G_N_ELEMENTS (xorg_search_dirs); i++) {
+                 g_ptr_array_add (xorg_search_array, g_strdup (xorg_search_dirs[i]));
+         }
+ 
+ #ifdef ENABLE_WAYLAND_SUPPORT
+         const char *wayland_search_dirs[] = {
+                 DATADIR "/wayland-sessions/",
+         };
+ 
+         wayland_search_array = g_ptr_array_new_with_free_func (g_free);
+ 
+         for (i = 0; system_data_dirs[i]; i++) {
+                 session_dir = g_build_filename (system_data_dirs[i], "wayland-sessions", NULL);
+                 g_ptr_array_add (wayland_search_array, session_dir);
+         }
+ 
+         for (i = 0; i < G_N_ELEMENTS (wayland_search_dirs); i++) {
+                 g_ptr_array_add (wayland_search_array, g_strdup (wayland_search_dirs[i]));
+         }
+ #endif
+ 
+         if (gdm_available_sessions_map == NULL) {
+                 gdm_available_sessions_map = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                                     g_free, (GDestroyNotify)gdm_session_file_free);
+         }
+ 
+-        for (i = 0; i < xorg_search_array->len; i++) {
+-                collect_sessions_from_directory (g_ptr_array_index (xorg_search_array, i));
++        if (!supported_session_types || g_strv_contains ((const char * const *) supported_session_types, "x11")) {
++                for (i = 0; i < xorg_search_array->len; i++) {
++                        collect_sessions_from_directory (g_ptr_array_index (xorg_search_array, i));
++                }
+         }
+ 
+ #ifdef ENABLE_WAYLAND_SUPPORT
+ #ifdef ENABLE_USER_DISPLAY_SERVER
+-        if (g_getenv ("WAYLAND_DISPLAY") == NULL && g_getenv ("RUNNING_UNDER_GDM") != NULL) {
+-                goto out;
++        if (!supported_session_types  || g_strv_contains ((const char * const *) supported_session_types, "wayland")) {
++                for (i = 0; i < wayland_search_array->len; i++) {
++                        collect_sessions_from_directory (g_ptr_array_index (wayland_search_array, i));
++                }
+         }
+ #endif
+-
+-        for (i = 0; i < wayland_search_array->len; i++) {
+-                collect_sessions_from_directory (g_ptr_array_index (wayland_search_array, i));
+-        }
+ #endif
+ 
+-out:
+         g_hash_table_foreach_remove (gdm_available_sessions_map,
+                                      remove_duplicate_sessions,
+                                      names_seen_before);
+ }
+ 
+ static gint
+ compare_session_ids (gconstpointer  a,
+                      gconstpointer  b)
+ {
+         GdmSessionFile *session_a, *session_b;
+         session_a = (GdmSessionFile *) g_hash_table_lookup (gdm_available_sessions_map, a);
+         session_b = (GdmSessionFile *) g_hash_table_lookup (gdm_available_sessions_map, b);
+ 
+         if (session_a == NULL)
+                 return -1;
+ 
+         if (session_b == NULL)
+                 return 1;
+ 
+         return g_strcmp0 (session_a->translated_name, session_b->translated_name);
+ }
+ 
+ /**
+  * gdm_get_session_ids:
+  *
+  * Reads /usr/share/xsessions and other relevant places for possible sessions
+  * to log into and returns the complete list.
+  *
+  * Returns: (transfer full): a %NULL terminated list of session ids
+  */
+-- 
+2.31.1
+

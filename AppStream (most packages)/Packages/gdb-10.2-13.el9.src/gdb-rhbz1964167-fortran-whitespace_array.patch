@@ -1,0 +1,137 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Mon, 24 May 2021 17:07:36 -0700
+Subject: gdb-rhbz1964167-fortran-whitespace_array.patch
+
+;; [fortran] Backport Andrew Burgess's commit which eliminates undesirable
+;; whitespace when printing arrays.
+
+gdb/fortran: Change whitespace when printing arrays
+
+This commit makes the whitespace usage when printing Fortran arrays
+more consistent, and more inline with how we print C arrays.
+
+Currently a 2 dimensional Fotran array is printed like this, I find
+the marked whitespace unpleasant:
+
+  (( 1, 2, 3) ( 4, 5, 6) )
+    ^          ^        ^
+
+After this commit the same array is printed like this:
+
+  ((1, 2, 3) (4, 5, 6))
+
+Which seems more inline with how we print C arrays, in the case of C
+arrays we don't add extra whitespace before the first element.
+
+gdb/ChangeLog:
+
+	* f-valprint.c (f77_print_array_1): Adjust printing of whitespace
+	for arrays.
+
+gdb/testsuite/ChangeLog:
+
+	* gdb.fortran/array-slices.exp: Update expected results.
+	* gdb.fortran/class-allocatable-array.exp: Likewise.
+	* gdb.fortran/multi-dim.exp: Likewise.
+	* gdb.fortran/vla-type.exp: Likewise.
+	* gdb.mi/mi-vla-fortran.exp: Likewise.
+
+diff --git a/gdb/f-valprint.c b/gdb/f-valprint.c
+--- a/gdb/f-valprint.c
++++ b/gdb/f-valprint.c
+@@ -137,14 +137,17 @@ f77_print_array_1 (int nss, int ndimensions, struct type *type,
+ 	    (TYPE_TARGET_TYPE (type), value_contents_for_printing_const (val)
+ 	     + offs, addr + offs);
+ 
+-	  fprintf_filtered (stream, "( ");
++	  fprintf_filtered (stream, "(");
+ 	  f77_print_array_1 (nss + 1, ndimensions, value_type (subarray),
+ 			     value_contents_for_printing (subarray),
+ 			     value_embedded_offset (subarray),
+ 			     value_address (subarray),
+ 			     stream, recurse, subarray, options, elts);
+ 	  offs += byte_stride;
+-	  fprintf_filtered (stream, ") ");
++	  fprintf_filtered (stream, ")");
++
++	  if (i < upperbound)
++	    fprintf_filtered (stream, " ");
+ 	}
+       if (*elts >= options->print_max && i < upperbound)
+ 	fprintf_filtered (stream, "...");
+diff --git a/gdb/testsuite/gdb.fortran/array-slices.exp b/gdb/testsuite/gdb.fortran/array-slices.exp
+--- a/gdb/testsuite/gdb.fortran/array-slices.exp
++++ b/gdb/testsuite/gdb.fortran/array-slices.exp
+@@ -38,14 +38,14 @@ gdb_breakpoint [gdb_get_line_number "Final Breakpoint"]
+ 
+ set array_contents \
+     [list \
+-	 " = \\(\\( 1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\) \\( 11, 12, 13, 14, 15, 16, 17, 18, 19, 20\\) \\( 21, 22, 23, 24, 25, 26, 27, 28, 29, 30\\) \\( 31, 32, 33, 34, 35, 36, 37, 38, 39, 40\\) \\( 41, 42, 43, 44, 45, 46, 47, 48, 49, 50\\) \\( 51, 52, 53, 54, 55, 56, 57, 58, 59, 60\\) \\( 61, 62, 63, 64, 65, 66, 67, 68, 69, 70\\) \\( 71, 72, 73, 74, 75, 76, 77, 78, 79, 80\\) \\( 81, 82, 83, 84, 85, 86, 87, 88, 89, 90\\) \\( 91, 92, 93, 94, 95, 96, 97, 98, 99, 100\\) \\)" \
+-	 " = \\(\\( 1, 2, 3, 4, 5\\) \\( 11, 12, 13, 14, 15\\) \\( 21, 22, 23, 24, 25\\) \\( 31, 32, 33, 34, 35\\) \\( 41, 42, 43, 44, 45\\) \\)" \
+-	 " = \\(\\( 1, 3, 5, 7, 9\\) \\( 21, 23, 25, 27, 29\\) \\( 41, 43, 45, 47, 49\\) \\( 61, 63, 65, 67, 69\\) \\( 81, 83, 85, 87, 89\\) \\)" \
+-	 " = \\(\\( 1, 4, 7, 10\\) \\( 21, 24, 27, 30\\) \\( 41, 44, 47, 50\\) \\( 61, 64, 67, 70\\) \\( 81, 84, 87, 90\\) \\)" \
+-	 " = \\(\\( 1, 5, 9\\) \\( 31, 35, 39\\) \\( 61, 65, 69\\) \\( 91, 95, 99\\) \\)" \
+-	 " = \\(\\( -26, -25, -24, -23, -22, -21, -20, -19, -18, -17\\) \\( -19, -18, -17, -16, -15, -14, -13, -12, -11, -10\\) \\( -12, -11, -10, -9, -8, -7, -6, -5, -4, -3\\) \\( -5, -4, -3, -2, -1, 0, 1, 2, 3, 4\\) \\( 2, 3, 4, 5, 6, 7, 8, 9, 10, 11\\) \\( 9, 10, 11, 12, 13, 14, 15, 16, 17, 18\\) \\( 16, 17, 18, 19, 20, 21, 22, 23, 24, 25\\) \\( 23, 24, 25, 26, 27, 28, 29, 30, 31, 32\\) \\( 30, 31, 32, 33, 34, 35, 36, 37, 38, 39\\) \\( 37, 38, 39, 40, 41, 42, 43, 44, 45, 46\\) \\)" \
+-	 " = \\(\\( -26, -25, -24, -23, -22, -21\\) \\( -19, -18, -17, -16, -15, -14\\) \\( -12, -11, -10, -9, -8, -7\\) \\)" \
+-	 " = \\(\\( -26, -24, -22, -20, -18\\) \\( -5, -3, -1, 1, 3\\) \\( 16, 18, 20, 22, 24\\) \\( 37, 39, 41, 43, 45\\) \\)" ]
++	 " = \\(\\(1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\) \\(11, 12, 13, 14, 15, 16, 17, 18, 19, 20\\) \\(21, 22, 23, 24, 25, 26, 27, 28, 29, 30\\) \\(31, 32, 33, 34, 35, 36, 37, 38, 39, 40\\) \\(41, 42, 43, 44, 45, 46, 47, 48, 49, 50\\) \\(51, 52, 53, 54, 55, 56, 57, 58, 59, 60\\) \\(61, 62, 63, 64, 65, 66, 67, 68, 69, 70\\) \\(71, 72, 73, 74, 75, 76, 77, 78, 79, 80\\) \\(81, 82, 83, 84, 85, 86, 87, 88, 89, 90\\) \\(91, 92, 93, 94, 95, 96, 97, 98, 99, 100\\)\\)" \
++	 " = \\(\\(1, 2, 3, 4, 5\\) \\(11, 12, 13, 14, 15\\) \\(21, 22, 23, 24, 25\\) \\(31, 32, 33, 34, 35\\) \\(41, 42, 43, 44, 45\\)\\)" \
++	 " = \\(\\(1, 3, 5, 7, 9\\) \\(21, 23, 25, 27, 29\\) \\(41, 43, 45, 47, 49\\) \\(61, 63, 65, 67, 69\\) \\(81, 83, 85, 87, 89\\)\\)" \
++	 " = \\(\\(1, 4, 7, 10\\) \\(21, 24, 27, 30\\) \\(41, 44, 47, 50\\) \\(61, 64, 67, 70\\) \\(81, 84, 87, 90\\)\\)" \
++	 " = \\(\\(1, 5, 9\\) \\(31, 35, 39\\) \\(61, 65, 69\\) \\(91, 95, 99\\)\\)" \
++	 " = \\(\\(-26, -25, -24, -23, -22, -21, -20, -19, -18, -17\\) \\(-19, -18, -17, -16, -15, -14, -13, -12, -11, -10\\) \\(-12, -11, -10, -9, -8, -7, -6, -5, -4, -3\\) \\(-5, -4, -3, -2, -1, 0, 1, 2, 3, 4\\) \\(2, 3, 4, 5, 6, 7, 8, 9, 10, 11\\) \\(9, 10, 11, 12, 13, 14, 15, 16, 17, 18\\) \\(16, 17, 18, 19, 20, 21, 22, 23, 24, 25\\) \\(23, 24, 25, 26, 27, 28, 29, 30, 31, 32\\) \\(30, 31, 32, 33, 34, 35, 36, 37, 38, 39\\) \\(37, 38, 39, 40, 41, 42, 43, 44, 45, 46\\)\\)" \
++	 " = \\(\\(-26, -25, -24, -23, -22, -21\\) \\(-19, -18, -17, -16, -15, -14\\) \\(-12, -11, -10, -9, -8, -7\\)\\)" \
++	 " = \\(\\(-26, -24, -22, -20, -18\\) \\(-5, -3, -1, 1, 3\\) \\(16, 18, 20, 22, 24\\) \\(37, 39, 41, 43, 45\\)\\)" ]
+ 
+ set message_strings \
+     [list \
+diff --git a/gdb/testsuite/gdb.fortran/class-allocatable-array.exp b/gdb/testsuite/gdb.fortran/class-allocatable-array.exp
+--- a/gdb/testsuite/gdb.fortran/class-allocatable-array.exp
++++ b/gdb/testsuite/gdb.fortran/class-allocatable-array.exp
+@@ -40,4 +40,4 @@ gdb_continue_to_breakpoint "Break Here"
+ # cetainly going to fail.
+ gdb_test "print this" " = \\( _data = \[^\r\n\]+, _vptr = \[^\r\n\]+\\)"
+ gdb_test "print this%_data" " = \\(PTR TO -> \\( Type test_type \\)\\) \[^\r\n\]+"
+-gdb_test "print this%_data%b" " = \\(\\( 1, 2, 3\\) \\( 4, 5, 6\\) \\)"
++gdb_test "print this%_data%b" " = \\(\\(1, 2, 3\\) \\(4, 5, 6\\)\\)"
+diff --git a/gdb/testsuite/gdb.fortran/multi-dim.exp b/gdb/testsuite/gdb.fortran/multi-dim.exp
+--- a/gdb/testsuite/gdb.fortran/multi-dim.exp
++++ b/gdb/testsuite/gdb.fortran/multi-dim.exp
+@@ -57,7 +57,7 @@ gdb_test "print foo(3,3,4)" \
+     "print an invalid array index (3,3,4)"
+ 
+ gdb_test "print foo" \
+-    { = \(\( \( 10, 10\) \( 10, 10\) \( 10, 10\) \) \( \( 10, 10\) \( 10, 10\) \( 10, 10\) \) \( \( 10, 10\) \( 10, 10\) \( 10, 10\) \) \( \( 10, 10\) \( 10, 10\) \( 10, 20\) \) \)} \
++    { = \(\(\(10, 10\) \(10, 10\) \(10, 10\)\) \(\(10, 10\) \(10, 10\) \(10, 10\)\) \(\(10, 10\) \(10, 10\) \(10, 10\)\) \(\(10, 10\) \(10, 10\) \(10, 20\)\)\)} \
+     "print full contents of the array"
+ 
+ gdb_breakpoint [gdb_get_line_number "break-variable"]
+diff --git a/gdb/testsuite/gdb.fortran/vla-type.exp b/gdb/testsuite/gdb.fortran/vla-type.exp
+--- a/gdb/testsuite/gdb.fortran/vla-type.exp
++++ b/gdb/testsuite/gdb.fortran/vla-type.exp
+@@ -66,9 +66,9 @@ gdb_test "ptype twov" \
+                      "\\s+$int, allocatable :: ivla1\\\(5,12,99\\\)" \
+                      "\\s+$int, allocatable :: ivla2\\\(9,12\\\)" \
+                      "End Type two" ]
+-gdb_test "print twov" " = \\\( ivla1 = \\\(\\\( \\\( 1, 1, 1, 1, 1\\\)\
+- \\\( 1, 1, 321, 1, 1\\\)\
+- \\\( 1, 1, 1, 1, 1\\\) .*"
++gdb_test "print twov" " = \\\( ivla1 = \\\(\\\(\\\(1, 1, 1, 1, 1\\\)\
++ \\\(1, 1, 321, 1, 1\\\)\
++ \\\(1, 1, 1, 1, 1\\\) .*"
+ 
+ # Check type with attribute at beginn of type
+ gdb_breakpoint [gdb_get_line_number "threev-filled"]
+diff --git a/gdb/testsuite/gdb.mi/mi-vla-fortran.exp b/gdb/testsuite/gdb.mi/mi-vla-fortran.exp
+--- a/gdb/testsuite/gdb.mi/mi-vla-fortran.exp
++++ b/gdb/testsuite/gdb.mi/mi-vla-fortran.exp
+@@ -180,7 +180,7 @@ mi_run_cmd
+ mi_expect_stop "breakpoint-hit" "vla" "" ".*vla.f90" "$bp_lineno" \
+   { "" "disp=\"del\"" } "run to breakpoint at line $bp_lineno"
+ mi_gdb_test "590-data-evaluate-expression pvla2" \
+-  "590\\^done,value=\"\\(\\( 2, 2, 2, 2, 2\\) \\( 2, 2, 2, 2, 2\\) \\)\"" \
++  "590\\^done,value=\"\\(\\(2, 2, 2, 2, 2\\) \\(2, 2, 2, 2, 2\\)\\)\"" \
+   "evaluate associated vla"
+ 
+ mi_create_varobj_checked pvla2_associated pvla2 \

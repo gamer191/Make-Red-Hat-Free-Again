@@ -1,0 +1,122 @@
+From 36b9fd4f6e055e236175979d9a1527df71aeac1f Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Tue, 14 Sep 2021 11:00:33 -0400
+Subject: [PATCH 1/5] xdmcp-display-factory: Set supported session types for
+ XDMCP displays
+
+The lower levels of GDM now expect the session types supported by a
+display to be specified up front.
+
+This commit makes sure XDMCP displays do that.
+---
+ daemon/gdm-xdmcp-display-factory.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/daemon/gdm-xdmcp-display-factory.c b/daemon/gdm-xdmcp-display-factory.c
+index ce8f026e..abb58fae 100644
+--- a/daemon/gdm-xdmcp-display-factory.c
++++ b/daemon/gdm-xdmcp-display-factory.c
+@@ -2104,94 +2104,100 @@ on_display_status_changed (GdmDisplay             *display,
+                 break;
+         case GDM_DISPLAY_MANAGED:
+                 if (session != NULL) {
+                         g_signal_connect_object (G_OBJECT (session),
+                                                  "client-disconnected",
+                                                  G_CALLBACK (on_client_disconnected),
+                                                  display, G_CONNECT_SWAPPED);
+                         g_signal_connect_object (G_OBJECT (session),
+                                                  "disconnected",
+                                                  G_CALLBACK (on_client_disconnected),
+                                                  display, G_CONNECT_SWAPPED);
+                 }
+                 break;
+         default:
+                 g_assert_not_reached ();
+                 break;
+         }
+ 
+         g_clear_object (&launch_environment);
+ }
+ 
+ static GdmDisplay *
+ gdm_xdmcp_display_create (GdmXdmcpDisplayFactory *factory,
+                           const char             *hostname,
+                           GdmAddress             *address,
+                           int                     displaynum)
+ {
+         GdmDisplay      *display;
+         GdmDisplayStore *store;
+         gboolean         use_chooser;
++        const char      *session_types[] = { "x11", NULL };
+ 
+         g_debug ("GdmXdmcpDisplayFactory: Creating xdmcp display for %s:%d",
+                 hostname ? hostname : "(null)", displaynum);
+ 
+         use_chooser = FALSE;
+         if (factory->honor_indirect) {
+                 IndirectClient *ic;
+ 
+                 ic = indirect_client_lookup (factory, address);
+ 
+                 /* This was an indirect thingie and nothing was yet chosen,
+                  * use a chooser */
+                 if (ic != NULL && ic->chosen_address == NULL) {
+                         use_chooser = TRUE;
+                 }
+         }
+ 
+         if (use_chooser) {
+                 display = gdm_xdmcp_chooser_display_new (hostname,
+                                                          displaynum,
+                                                          address,
+                                                          get_next_session_serial (factory));
+                 g_signal_connect (display, "hostname-selected", G_CALLBACK (on_hostname_selected), factory);
+         } else {
+                 display = gdm_xdmcp_display_new (hostname,
+                                                  displaynum,
+                                                  address,
+                                                  get_next_session_serial (factory));
+         }
+ 
+         if (display == NULL) {
+                 goto out;
+         }
+ 
++        g_object_set (G_OBJECT (display),
++                      "session-type", session_types[0],
++                      "supported-session-types", session_types,
++                      NULL);
++
+         if (! gdm_display_prepare (display)) {
+                 gdm_display_unmanage (display);
+                 g_object_unref (display);
+                 display = NULL;
+                 goto out;
+         }
+ 
+         g_signal_connect_after (display,
+                                 "notify::status",
+                                 G_CALLBACK (on_display_status_changed),
+                                 factory);
+ 
+         store = gdm_display_factory_get_display_store (GDM_DISPLAY_FACTORY (factory));
+         gdm_display_store_add (store, display);
+ 
+         factory->num_pending_sessions++;
+  out:
+ 
+         return display;
+ }
+ 
+ static void
+ gdm_xdmcp_send_accept (GdmXdmcpDisplayFactory *factory,
+                        GdmAddress             *address,
+                        CARD32                  session_id,
+                        ARRAY8Ptr               authentication_name,
+                        ARRAY8Ptr               authentication_data,
+                        ARRAY8Ptr               authorization_name,
+                        ARRAY8Ptr               authorization_data)
+ {
+-- 
+2.34.1
+

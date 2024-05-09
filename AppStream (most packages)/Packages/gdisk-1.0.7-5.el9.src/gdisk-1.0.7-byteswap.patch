@@ -1,0 +1,207 @@
+From 49ed9305afae9865d9b748ef419b4f923ae4e86d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Nikola=20Forr=C3=B3?= <nforro@redhat.com>
+Date: Wed, 29 Sep 2021 15:46:37 +0200
+Subject: [PATCH] Fix incorrect byte order of partition names on big-endian
+ systems
+
+---
+ gdisk.8    |  8 ++++++++
+ gptcl.cc   | 11 +++++++++++
+ gptpart.cc | 13 +++++++------
+ gptpart.h  |  1 +
+ gpttext.cc | 20 ++++++++++++++++++++
+ gpttext.h  |  1 +
+ sgdisk.8   |  8 ++++++++
+ 7 files changed, 56 insertions(+), 6 deletions(-)
+
+diff --git a/gdisk.8 b/gdisk.8
+index 62f6bd2..0029b75 100644
+--- a/gdisk.8
++++ b/gdisk.8
+@@ -419,6 +419,14 @@ set features for each partition. \fBgdisk\fR supports four attributes:
+ aren't translated into anything useful. In practice, most OSes seem to
+ ignore these attributes.
+ 
++.TP 
++.B b
++Swap the byte order for the name of the specified partition. Some
++partitioning tools, including GPT fdisk 1.0.7 and earlier, can write the
++partition name in the wrong byte order on big-endian computers, such as the
++IBM s390 mainframes and PowerPC-based Macs. This feature corrects this
++problem.
++
+ .TP 
+ .B c
+ Change partition GUID. You can enter a custom unique GUID for a partition
+diff --git a/gptcl.cc b/gptcl.cc
+index 2304091..65a99e9 100644
+--- a/gptcl.cc
++++ b/gptcl.cc
+@@ -64,6 +64,7 @@ int GPTDataCL::DoOptions(int argc, char* argv[]) {
+    GPTData secondDevice;
+    int opt, numOptions = 0, saveData = 0, neverSaveData = 0;
+    int partNum = 0, newPartNum = -1, saveNonGPT = 1, retval = 0, pretend = 0;
++   int byteSwapPartNum = 0;
+    uint64_t low, high, startSector, endSector, sSize, mainTableLBA;
+    uint64_t temp; // temporary variable; free to use in any case
+    char *device;
+@@ -76,6 +77,7 @@ int GPTDataCL::DoOptions(int argc, char* argv[]) {
+           "list|[partnum:show|or|nand|xor|=|set|clear|toggle|get[:bitnum|hexbitmask]]"},
+       {"set-alignment", 'a', POPT_ARG_INT, &alignment, 'a', "set sector alignment", "value"},
+       {"backup", 'b', POPT_ARG_STRING, &backupFile, 'b', "backup GPT to file", "file"},
++      {"byte-swap-name", 'B',  POPT_ARG_INT, &byteSwapPartNum, 'B', "byte-swap partition's name", "partnum"},
+       {"change-name", 'c', POPT_ARG_STRING, &partName, 'c', "change partition's name", "partnum:name"},
+       {"recompute-chs", 'C', POPT_ARG_NONE, NULL, 'C', "recompute CHS values in protective/hybrid MBR", ""},
+       {"delete", 'd', POPT_ARG_INT, &deletePartNum, 'd', "delete a partition", "partnum"},
+@@ -191,6 +193,15 @@ int GPTDataCL::DoOptions(int argc, char* argv[]) {
+                case 'a':
+                   SetAlignment(alignment);
+                   break;
++               case 'B':
++                  if (IsUsedPartNum(byteSwapPartNum - 1)) {
++                     partitions[byteSwapPartNum - 1].ReverseNameBytes();
++                     cout << "Changed partition " << byteSwapPartNum << "'s name to "
++                          << partitions[byteSwapPartNum - 1].GetDescription() << "\n";
++                     JustLooking(0);
++                     saveData = 1;
++                  }
++                  break;
+                case 'b':
+                   SaveGPTBackup(backupFile);
+                   free(backupFile);
+diff --git a/gptpart.cc b/gptpart.cc
+index b268cf0..b83254d 100644
+--- a/gptpart.cc
++++ b/gptpart.cc
+@@ -242,7 +242,6 @@ void GPTPart::SetName(const string & theName) {
+       // then to utf16le
+       if ( uni < 0x10000 ) {
+          name[ pos ] = (uint16_t) uni ;
+-         if ( ! IsLittleEndian() ) ReverseBytes( name + pos , 2 ) ;
+          pos ++ ;
+       } // if
+       else {
+@@ -252,10 +251,8 @@ void GPTPart::SetName(const string & theName) {
+          } // if
+          uni -= 0x10000 ;
+          name[ pos ] = (uint16_t)( uni >> 10 ) | 0xd800 ;
+-         if ( ! IsLittleEndian() ) ReverseBytes( name + pos , 2 ) ;
+          pos ++ ;
+          name[ pos ] = (uint16_t)( uni & 0x3ff ) | 0xdc00 ;
+-         if ( ! IsLittleEndian() ) ReverseBytes( name + pos , 2 ) ;
+          pos ++ ;
+       }
+    } // for
+@@ -415,14 +412,18 @@ int GPTPart::DoTheyOverlap(const GPTPart & other) {
+ // Reverse the bytes of integral data types and of the UTF-16LE name;
+ // used on big-endian systems.
+ void GPTPart::ReversePartBytes(void) {
+-   int i;
+-
+    ReverseBytes(&firstLBA, 8);
+    ReverseBytes(&lastLBA, 8);
+    ReverseBytes(&attributes, 8);
++   ReverseNameBytes();
++} // GPTPart::ReversePartBytes()
++
++void GPTPart::ReverseNameBytes(void) {
++   int i;
++
+    for (i = 0; i < NAME_SIZE; i ++ )
+       ReverseBytes(name + i, 2);
+-} // GPTPart::ReverseBytes()
++} // GPTPart::ReverseNameBytes()
+ 
+ /****************************************
+  * Functions requiring user interaction *
+diff --git a/gptpart.h b/gptpart.h
+index fac514e..51bfb38 100644
+--- a/gptpart.h
++++ b/gptpart.h
+@@ -94,6 +94,7 @@ class GPTPart {
+       void BlankPartition(void); // empty partition of data
+       int DoTheyOverlap(const GPTPart & other); // returns 1 if there's overlap
+       void ReversePartBytes(void); // reverse byte order of all integer fields
++      void ReverseNameBytes(void); // reverse byte order of partition's name field
+ 
+       // Functions requiring user interaction
+       void ChangeType(void); // Change the type code
+diff --git a/gpttext.cc b/gpttext.cc
+index ea34444..a5f0fd8 100644
+--- a/gpttext.cc
++++ b/gpttext.cc
+@@ -341,6 +341,22 @@ int GPTDataTextUI::SetName(uint32_t partNum) {
+    return retval;
+ } // GPTDataTextUI::SetName()
+ 
++// Enable the user to byte-swap the name of the partition. Used to correct
++// partition names damaged by incorrect byte order, as could be created by
++// GPT fdisk 1.0.7 and earlier on big-endian systems, and perhaps other tools.
++void GPTDataTextUI::ReverseName(uint32_t partNum) {
++   int swapBytes;
++
++   cout << "Current name is: " << partitions[partNum].GetDescription() << "\n";
++   partitions[partNum].ReverseNameBytes();
++   cout << "Byte-swapped name is: " << partitions[partNum].GetDescription() << "\n";
++   cout << "Do you want to byte-swap the name? ";
++   swapBytes = (GetYN() == 'Y');
++   // Already swapped for display, so undo if necessary....
++   if (!swapBytes)
++      partitions[partNum].ReverseNameBytes();
++} // GPTDataTextUI::ReverseName()
++
+ // Ask user for two partition numbers and swap them in the table. Note that
+ // this just reorders table entries; it doesn't adjust partition layout on
+ // the disk.
+@@ -799,6 +815,9 @@ void GPTDataTextUI::ExpertsMenu(string filename) {
+             else
+                cout << "No partitions\n";
+             break;
++         case 'b': case 'B':
++            ReverseName(GetPartNum());
++            break;
+          case 'c': case 'C':
+             ChangeUniqueGuid();
+             break;
+@@ -896,6 +915,7 @@ void GPTDataTextUI::ExpertsMenu(string filename) {
+ 
+ void GPTDataTextUI::ShowExpertCommands(void) {
+    cout << "a\tset attributes\n";
++   cout << "b\tbyte-swap a partition's name\n";
+    cout << "c\tchange partition GUID\n";
+    cout << "d\tdisplay the sector alignment value\n";
+    cout << "e\trelocate backup data structures to the end of the disk\n";
+diff --git a/gpttext.h b/gpttext.h
+index afe4651..6bd22cf 100644
+--- a/gpttext.h
++++ b/gpttext.h
+@@ -49,6 +49,7 @@ class GPTDataTextUI : public GPTData {
+       void ChangeUniqueGuid(void);
+       void SetAttributes(uint32_t partNum);
+       int SetName(uint32_t partNum);
++      void ReverseName(uint32_t partNum);
+       int SwapPartitions(void);
+       int DestroyGPTwPrompt(void); // Returns 1 if user proceeds
+       void ShowDetails(void);
+diff --git a/sgdisk.8 b/sgdisk.8
+index 59a3d3c..3fb7ae6 100644
+--- a/sgdisk.8
++++ b/sgdisk.8
+@@ -182,6 +182,14 @@ backup will reflect your changes. If the GPT data structures are damaged,
+ the backup may not accurately reflect the damaged state; instead, they
+ will reflect GPT fdisk's first\-pass interpretation of the GPT.
+ 
++.TP 
++.B \-B, \-\-byte\-swap\-name=partnum
++Swap the byte order for the name of the specified partition. Some
++partitioning tools, including GPT fdisk 1.0.7 and earlier, can write the
++partition name in the wrong byte order on big-endian computers, such as the
++IBM s390 mainframes and PowerPC-based Macs. This feature corrects this
++problem.
++
+ .TP 
+ .B \-c, \-\-change\-name=partnum:name
+ Change the GPT name of a partition. This name is encoded as a UTF\-16
+-- 
+2.32.0
+

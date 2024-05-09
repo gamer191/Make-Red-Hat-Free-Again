@@ -1,0 +1,88 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Simon Marchi <simon.marchi@efficios.com>
+Date: Tue, 4 May 2021 11:20:09 -0400
+Subject: gdb-flexible-array-member-expected-pattern.patch
+
+;; Backport "adjust gdb.python/flexible-array-member.exp expected pattern"
+;; (Simon Marchi)
+
+The `Type.range ()` tests in gdb.python/flexible-array-member.exp pass
+when the test is compiled with gcc 9 or later, but not with gcc 8 or
+earlier:
+
+    $ make check TESTS="gdb.python/flexible-array-member.exp" RUNTESTFLAGS="CC_FOR_TARGET='gcc-8'"
+
+    python print(zs['items'].type.range())^M
+    (0, 0)^M
+    (gdb) FAIL: gdb.python/flexible-array-member.exp: python print(zs['items'].type.range())
+    python print(zso['items'].type.range())^M
+    (0, 0)^M
+    (gdb) FAIL: gdb.python/flexible-array-member.exp: python print(zso['items'].type.range())
+
+The value that we get for the upper bound of a flexible array member
+declared with a "0" size is 0 with gcc <= 8 and is -1 for gcc >= 9.
+This is due to different debug info.  For this member, gcc 8 does:
+
+    0x000000d5:   DW_TAG_array_type
+                    DW_AT_type [DW_FORM_ref4]       (0x00000034 "int")
+                    DW_AT_sibling [DW_FORM_ref4]    (0x000000e4)
+
+    0x000000de:     DW_TAG_subrange_type
+                      DW_AT_type [DW_FORM_ref4]     (0x0000002d "long unsigned int")
+
+For the same type, gcc 9 does:
+
+    0x000000d5:   DW_TAG_array_type
+                    DW_AT_type [DW_FORM_ref4]       (0x00000034 "int")
+                    DW_AT_sibling [DW_FORM_ref4]    (0x000000e5)
+
+    0x000000de:     DW_TAG_subrange_type
+                      DW_AT_type [DW_FORM_ref4]     (0x0000002d "long unsigned int")
+                      DW_AT_count [DW_FORM_data1]   (0x00)
+
+Ideally, GDB would present a consistent and documented value for an
+array member declared with size 0, regardless of how the debug info
+looks like.  But for now, just change the test to accept the two
+values, to get rid of the failure and make the test in sync
+
+I also realized (by looking at the py-type.exp test) that calling the
+fields method on an array type yields one field representing the "index"
+of the array.  The type of that field is of type range
+(gdb.TYPE_CODE_RANGE).  When calling `.range()` on that range type, it
+yields the same range tuple as when calling `.range()` on the array type
+itself.  For completeness, add some tests to access the range tuple
+through that range type as well.
+
+gdb/testsuite/ChangeLog:
+
+	* gdb.python/flexible-array-member.exp: Adjust expected range
+	value for member declared with 0 size.  Test accessing range
+	tuple through range type.
+
+Change-Id: Ie4e06d99fe9315527f04577888f48284d649ca4c
+
+diff --git a/gdb/testsuite/gdb.python/flexible-array-member.exp b/gdb/testsuite/gdb.python/flexible-array-member.exp
+--- a/gdb/testsuite/gdb.python/flexible-array-member.exp
++++ b/gdb/testsuite/gdb.python/flexible-array-member.exp
+@@ -76,9 +76,17 @@ gdb_test "python print(zso\['items'\] == zso\['items'\]\[0\].address)" "True"
+ gdb_test "python print(zso\['items'\]\[0\].address + 1 == zso\['items'\]\[1\].address)" "True"
+ 
+ # Verify the range attribute.  It looks a bit inconsistent that the high bound
+-# is sometimes 0, sometimes -1, but that's what GDB produces today, so that's
+-# what we test.
++# is sometimes 0, sometimes -1.  It depends on the way the flexible array
++# member is specified and on the compiler version (the debug info is
++# different).  But that's what GDB produces today, so that's what we test.
+ 
+ gdb_test "python print(ns\['items'\].type.range())" "\\(0, 0\\)"
+-gdb_test "python print(zs\['items'\].type.range())" "\\(0, -1\\)"
+-gdb_test "python print(zso\['items'\].type.range())" "\\(0, -1\\)"
++gdb_test "python print(zs\['items'\].type.range())" "\\(0, (0|-1)\\)"
++gdb_test "python print(zso\['items'\].type.range())" "\\(0, (0|-1)\\)"
++
++# Test the same thing, but going explicitly through the array index's range
++# type.
++
++gdb_test "python print(ns\['items'\].type.fields()\[0\].type.range())" "\\(0, 0\\)"
++gdb_test "python print(zs\['items'\].type.fields()\[0\].type.range())" "\\(0, (0|-1)\\)"
++gdb_test "python print(zso\['items'\].type.fields()\[0\].type.range())" "\\(0, (0|-1)\\)"

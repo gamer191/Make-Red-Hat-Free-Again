@@ -1,0 +1,787 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Mon, 24 May 2021 17:00:17 -0700
+Subject: gdb-rhbz1964167-move-fortran-expr-handling.patch
+
+;; [fortran] Backport Andrew Burgess's commit which moves Fortran
+;; expression handling to f-lang.c.
+
+gdb/fortran: Move Fortran expression handling into f-lang.c
+
+The Fortran specific OP_F77_UNDETERMINED_ARGLIST is currently handled
+in the generic expression handling code.  There's no reason why this
+should be the case, so this commit moves handling of this into Fortran
+specific files.
+
+There should be no user visible changes after this commit.
+
+gdb/ChangeLog:
+
+	* eval.c: Remove 'f-lang.h' include.
+	(value_f90_subarray): Moved to f-lang.c.
+	(eval_call): Renamed to...
+	(evaluate_subexp_do_call): ...this, is no longer static, header
+	comment moved into header file.
+	(evaluate_funcall): Update call to eval_call.
+	(skip_undetermined_arglist): Moved to f-lang.c.
+	(fortran_value_subarray): Likewise.
+	(evaluate_subexp_standard): OP_F77_UNDETERMINED_ARGLIST handling
+	moved to evaluate_subexp_f.
+	(calc_f77_array_dims): Moved to f-lang.c
+	* expprint.c (print_subexp_funcall): New function.
+	(print_subexp_standard): OP_F77_UNDETERMINED_ARGLIST handling
+	moved to print_subexp_f, OP_FUNCALL uses new function.
+	(dump_subexp_body_funcall): New function.
+	(dump_subexp_body_standard): OP_F77_UNDETERMINED_ARGLIST handling
+	moved to dump_subexp_f, OP_FUNCALL uses new function.
+	* expression.h (evaluate_subexp_do_call): Declare.
+	* f-lang.c (value_f90_subarray): Moved from eval.c.
+	(skip_undetermined_arglist): Likewise.
+	(calc_f77_array_dims): Likewise.
+	(fortran_value_subarray): Likewise.
+	(evaluate_subexp_f): Add OP_F77_UNDETERMINED_ARGLIST support.
+	(operator_length_f): Likewise.
+	(print_subexp_f): Likewise.
+	(dump_subexp_body_f): Likewise.
+	* fortran-operator.def (OP_F77_UNDETERMINED_ARGLIST): Move
+	declaration of this operation to here.
+	* parse.c (operator_length_standard): OP_F77_UNDETERMINED_ARGLIST
+	support moved to operator_length_f.
+	* parser-defs.h (dump_subexp_body_funcall): Declare.
+	(print_subexp_funcall): Declare.
+	* std-operator.def (OP_F77_UNDETERMINED_ARGLIST): Moved to
+	fortran-operator.def.
+
+diff --git a/gdb/eval.c b/gdb/eval.c
+--- a/gdb/eval.c
++++ b/gdb/eval.c
+@@ -26,7 +26,6 @@
+ #include "frame.h"
+ #include "gdbthread.h"
+ #include "language.h"		/* For CAST_IS_CONVERSION.  */
+-#include "f-lang.h"		/* For array bound stuff.  */
+ #include "cp-abi.h"
+ #include "infcall.h"
+ #include "objc-lang.h"
+@@ -371,32 +370,6 @@ init_array_element (struct value *array, struct value *element,
+   return index;
+ }
+ 
+-static struct value *
+-value_f90_subarray (struct value *array,
+-		    struct expression *exp, int *pos, enum noside noside)
+-{
+-  int pc = (*pos) + 1;
+-  LONGEST low_bound, high_bound;
+-  struct type *range = check_typedef (value_type (array)->index_type ());
+-  enum range_type range_type
+-    = (enum range_type) longest_to_int (exp->elts[pc].longconst);
+- 
+-  *pos += 3;
+-
+-  if (range_type == LOW_BOUND_DEFAULT || range_type == BOTH_BOUND_DEFAULT)
+-    low_bound = range->bounds ()->low.const_val ();
+-  else
+-    low_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+-
+-  if (range_type == HIGH_BOUND_DEFAULT || range_type == BOTH_BOUND_DEFAULT)
+-    high_bound = range->bounds ()->high.const_val ();
+-  else
+-    high_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+-
+-  return value_slice (array, low_bound, high_bound - low_bound + 1);
+-}
+-
+-
+ /* Promote value ARG1 as appropriate before performing a unary operation
+    on this argument.
+    If the result is not appropriate for any particular language then it
+@@ -749,17 +722,13 @@ eval_skip_value (expression *exp)
+   return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+ }
+ 
+-/* Evaluate a function call.  The function to be called is in
+-   ARGVEC[0] and the arguments passed to the function are in
+-   ARGVEC[1..NARGS].  FUNCTION_NAME is the name of the function, if
+-   known.  DEFAULT_RETURN_TYPE is used as the function's return type
+-   if the return type is unknown.  */
++/* See expression.h.  */
+ 
+-static value *
+-eval_call (expression *exp, enum noside noside,
+-	   int nargs, value **argvec,
+-	   const char *function_name,
+-	   type *default_return_type)
++value *
++evaluate_subexp_do_call (expression *exp, enum noside noside,
++			 int nargs, value **argvec,
++			 const char *function_name,
++			 type *default_return_type)
+ {
+   if (argvec[0] == NULL)
+     error (_("Cannot evaluate function -- may be inlined"));
+@@ -1230,20 +1199,8 @@ evaluate_funcall (type *expect_type, expression *exp, int *pos,
+       /* Nothing to be done; argvec already correctly set up.  */
+     }
+ 
+-  return eval_call (exp, noside, nargs, argvec, var_func_name, expect_type);
+-}
+-
+-/* Helper for skipping all the arguments in an undetermined argument list.
+-   This function was designed for use in the OP_F77_UNDETERMINED_ARGLIST
+-   case of evaluate_subexp_standard as multiple, but not all, code paths
+-   require a generic skip.  */
+-
+-static void
+-skip_undetermined_arglist (int nargs, struct expression *exp, int *pos,
+-			   enum noside noside)
+-{
+-  for (int i = 0; i < nargs; ++i)
+-    evaluate_subexp (nullptr, exp, pos, noside);
++  return evaluate_subexp_do_call (exp, noside, nargs, argvec,
++				  var_func_name, expect_type);
+ }
+ 
+ /* Return true if type is integral or reference to integral */
+@@ -1260,67 +1217,6 @@ is_integral_or_integral_reference (struct type *type)
+ 	  && is_integral_type (TYPE_TARGET_TYPE (type)));
+ }
+ 
+-/* Called from evaluate_subexp_standard to perform array indexing, and
+-   sub-range extraction, for Fortran.  As well as arrays this function
+-   also handles strings as they can be treated like arrays of characters.
+-   ARRAY is the array or string being accessed.  EXP, POS, and NOSIDE are
+-   as for evaluate_subexp_standard, and NARGS is the number of arguments
+-   in this access (e.g. 'array (1,2,3)' would be NARGS 3).  */
+-
+-static struct value *
+-fortran_value_subarray (struct value *array, struct expression *exp,
+-			int *pos, int nargs, enum noside noside)
+-{
+-  if (exp->elts[*pos].opcode == OP_RANGE)
+-    return value_f90_subarray (array, exp, pos, noside);
+-
+-  if (noside == EVAL_SKIP)
+-    {
+-      skip_undetermined_arglist (nargs, exp, pos, noside);
+-      /* Return the dummy value with the correct type.  */
+-      return array;
+-    }
+-
+-  LONGEST subscript_array[MAX_FORTRAN_DIMS];
+-  int ndimensions = 1;
+-  struct type *type = check_typedef (value_type (array));
+-
+-  if (nargs > MAX_FORTRAN_DIMS)
+-    error (_("Too many subscripts for F77 (%d Max)"), MAX_FORTRAN_DIMS);
+-
+-  ndimensions = calc_f77_array_dims (type);
+-
+-  if (nargs != ndimensions)
+-    error (_("Wrong number of subscripts"));
+-
+-  gdb_assert (nargs > 0);
+-
+-  /* Now that we know we have a legal array subscript expression let us
+-     actually find out where this element exists in the array.  */
+-
+-  /* Take array indices left to right.  */
+-  for (int i = 0; i < nargs; i++)
+-    {
+-      /* Evaluate each subscript; it must be a legal integer in F77.  */
+-      value *arg2 = evaluate_subexp_with_coercion (exp, pos, noside);
+-
+-      /* Fill in the subscript array.  */
+-      subscript_array[i] = value_as_long (arg2);
+-    }
+-
+-  /* Internal type of array is arranged right to left.  */
+-  for (int i = nargs; i > 0; i--)
+-    {
+-      struct type *array_type = check_typedef (value_type (array));
+-      LONGEST index = subscript_array[i - 1];
+-
+-      array = value_subscripted_rvalue (array, index,
+-					f77_get_lowerbound (array_type));
+-    }
+-
+-  return array;
+-}
+-
+ struct value *
+ evaluate_subexp_standard (struct type *expect_type,
+ 			  struct expression *exp, int *pos,
+@@ -1335,7 +1231,6 @@ evaluate_subexp_standard (struct type *expect_type,
+   struct type *type;
+   int nargs;
+   struct value **argvec;
+-  int code;
+   int ix;
+   long mem_offset;
+   struct type **arg_types;
+@@ -1976,84 +1871,6 @@ evaluate_subexp_standard (struct type *expect_type,
+     case OP_FUNCALL:
+       return evaluate_funcall (expect_type, exp, pos, noside);
+ 
+-    case OP_F77_UNDETERMINED_ARGLIST:
+-
+-      /* Remember that in F77, functions, substring ops and 
+-         array subscript operations cannot be disambiguated 
+-         at parse time.  We have made all array subscript operations, 
+-         substring operations as well as function calls  come here 
+-         and we now have to discover what the heck this thing actually was.
+-         If it is a function, we process just as if we got an OP_FUNCALL.  */
+-
+-      nargs = longest_to_int (exp->elts[pc + 1].longconst);
+-      (*pos) += 2;
+-
+-      /* First determine the type code we are dealing with.  */
+-      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+-      type = check_typedef (value_type (arg1));
+-      code = type->code ();
+-
+-      if (code == TYPE_CODE_PTR)
+-	{
+-	  /* Fortran always passes variable to subroutines as pointer.
+-	     So we need to look into its target type to see if it is
+-	     array, string or function.  If it is, we need to switch
+-	     to the target value the original one points to.  */ 
+-	  struct type *target_type = check_typedef (TYPE_TARGET_TYPE (type));
+-
+-	  if (target_type->code () == TYPE_CODE_ARRAY
+-	      || target_type->code () == TYPE_CODE_STRING
+-	      || target_type->code () == TYPE_CODE_FUNC)
+-	    {
+-	      arg1 = value_ind (arg1);
+-	      type = check_typedef (value_type (arg1));
+-	      code = type->code ();
+-	    }
+-	} 
+-
+-      switch (code)
+-	{
+-	case TYPE_CODE_ARRAY:
+-	case TYPE_CODE_STRING:
+-	  return fortran_value_subarray (arg1, exp, pos, nargs, noside);
+-
+-	case TYPE_CODE_PTR:
+-	case TYPE_CODE_FUNC:
+-	case TYPE_CODE_INTERNAL_FUNCTION:
+-	  /* It's a function call.  */
+-	  /* Allocate arg vector, including space for the function to be
+-	     called in argvec[0] and a terminating NULL.  */
+-	  argvec = (struct value **)
+-	    alloca (sizeof (struct value *) * (nargs + 2));
+-	  argvec[0] = arg1;
+-	  tem = 1;
+-	  for (; tem <= nargs; tem++)
+-	    {
+-	      argvec[tem] = evaluate_subexp_with_coercion (exp, pos, noside);
+-	      /* Arguments in Fortran are passed by address.  Coerce the
+-		 arguments here rather than in value_arg_coerce as otherwise
+-		 the call to malloc to place the non-lvalue parameters in
+-		 target memory is hit by this Fortran specific logic.  This
+-		 results in malloc being called with a pointer to an integer
+-		 followed by an attempt to malloc the arguments to malloc in
+-		 target memory.  Infinite recursion ensues.  */
+-	      if (code == TYPE_CODE_PTR || code == TYPE_CODE_FUNC)
+-		{
+-		  bool is_artificial
+-		    = TYPE_FIELD_ARTIFICIAL (value_type (arg1), tem - 1);
+-		  argvec[tem] = fortran_argument_convert (argvec[tem],
+-							  is_artificial);
+-		}
+-	    }
+-	  argvec[tem] = 0;	/* signal end of arglist */
+-	  if (noside == EVAL_SKIP)
+-	    return eval_skip_value (exp);
+-	  return eval_call (exp, noside, nargs, argvec, NULL, expect_type);
+-
+-	default:
+-	  error (_("Cannot perform substring on this type"));
+-	}
+-
+     case OP_COMPLEX:
+       /* We have a complex number, There should be 2 floating 
+          point numbers that compose it.  */
+@@ -3346,27 +3163,3 @@ parse_and_eval_type (char *p, int length)
+     error (_("Internal error in eval_type."));
+   return expr->elts[1].type;
+ }
+-
+-/* Return the number of dimensions for a Fortran array or string.  */
+-
+-int
+-calc_f77_array_dims (struct type *array_type)
+-{
+-  int ndimen = 1;
+-  struct type *tmp_type;
+-
+-  if ((array_type->code () == TYPE_CODE_STRING))
+-    return 1;
+-
+-  if ((array_type->code () != TYPE_CODE_ARRAY))
+-    error (_("Can't get dimensions for a non-array type"));
+-
+-  tmp_type = array_type;
+-
+-  while ((tmp_type = TYPE_TARGET_TYPE (tmp_type)))
+-    {
+-      if (tmp_type->code () == TYPE_CODE_ARRAY)
+-	++ndimen;
+-    }
+-  return ndimen;
+-}
+diff --git a/gdb/expprint.c b/gdb/expprint.c
+--- a/gdb/expprint.c
++++ b/gdb/expprint.c
+@@ -53,6 +53,25 @@ print_subexp (struct expression *exp, int *pos,
+   exp->language_defn->la_exp_desc->print_subexp (exp, pos, stream, prec);
+ }
+ 
++/* See parser-defs.h.  */
++
++void
++print_subexp_funcall (struct expression *exp, int *pos,
++		      struct ui_file *stream)
++{
++  (*pos) += 2;
++  unsigned nargs = longest_to_int (exp->elts[*pos].longconst);
++  print_subexp (exp, pos, stream, PREC_SUFFIX);
++  fputs_filtered (" (", stream);
++  for (unsigned tem = 0; tem < nargs; tem++)
++    {
++      if (tem != 0)
++	fputs_filtered (", ", stream);
++      print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
++    }
++  fputs_filtered (")", stream);
++}
++
+ /* Standard implementation of print_subexp for use in language_defn
+    vectors.  */
+ void
+@@ -187,18 +206,7 @@ print_subexp_standard (struct expression *exp, int *pos,
+       return;
+ 
+     case OP_FUNCALL:
+-    case OP_F77_UNDETERMINED_ARGLIST:
+-      (*pos) += 2;
+-      nargs = longest_to_int (exp->elts[pc + 1].longconst);
+-      print_subexp (exp, pos, stream, PREC_SUFFIX);
+-      fputs_filtered (" (", stream);
+-      for (tem = 0; tem < nargs; tem++)
+-	{
+-	  if (tem != 0)
+-	    fputs_filtered (", ", stream);
+-	  print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
+-	}
+-      fputs_filtered (")", stream);
++      print_subexp_funcall (exp, pos, stream);
+       return;
+ 
+     case OP_NAME:
+@@ -796,6 +804,22 @@ dump_subexp_body (struct expression *exp, struct ui_file *stream, int elt)
+   return exp->language_defn->la_exp_desc->dump_subexp_body (exp, stream, elt);
+ }
+ 
++/* See parser-defs.h.  */
++
++int
++dump_subexp_body_funcall (struct expression *exp,
++			  struct ui_file *stream, int elt)
++{
++  int nargs = longest_to_int (exp->elts[elt].longconst);
++  fprintf_filtered (stream, "Number of args: %d", nargs);
++  elt += 2;
++
++  for (int i = 1; i <= nargs + 1; i++)
++    elt = dump_subexp (exp, stream, elt);
++
++  return elt;
++}
++
+ /* Default value for subexp_body in exp_descriptor vector.  */
+ 
+ int
+@@ -931,18 +955,7 @@ dump_subexp_body_standard (struct expression *exp,
+       elt += 2;
+       break;
+     case OP_FUNCALL:
+-    case OP_F77_UNDETERMINED_ARGLIST:
+-      {
+-	int i, nargs;
+-
+-	nargs = longest_to_int (exp->elts[elt].longconst);
+-
+-	fprintf_filtered (stream, "Number of args: %d", nargs);
+-	elt += 2;
+-
+-	for (i = 1; i <= nargs + 1; i++)
+-	  elt = dump_subexp (exp, stream, elt);
+-      }
++      elt = dump_subexp_body_funcall (exp, stream, elt);
+       break;
+     case OP_ARRAY:
+       {
+diff --git a/gdb/expression.h b/gdb/expression.h
+--- a/gdb/expression.h
++++ b/gdb/expression.h
+@@ -155,6 +155,18 @@ enum noside
+ extern struct value *evaluate_subexp_standard
+   (struct type *, struct expression *, int *, enum noside);
+ 
++/* Evaluate a function call.  The function to be called is in ARGVEC[0] and
++   the arguments passed to the function are in ARGVEC[1..NARGS].
++   FUNCTION_NAME is the name of the function, if known.
++   DEFAULT_RETURN_TYPE is used as the function's return type if the return
++   type is unknown.  */
++
++extern struct value *evaluate_subexp_do_call (expression *exp,
++					      enum noside noside,
++					      int nargs, value **argvec,
++					      const char *function_name,
++					      type *default_return_type);
++
+ /* From expprint.c */
+ 
+ extern void print_expression (struct expression *, struct ui_file *);
+diff --git a/gdb/f-lang.c b/gdb/f-lang.c
+--- a/gdb/f-lang.c
++++ b/gdb/f-lang.c
+@@ -114,6 +114,134 @@ enum f_primitive_types {
+   nr_f_primitive_types
+ };
+ 
++/* Called from fortran_value_subarray to take a slice of an array or a
++   string.  ARRAY is the array or string to be accessed.  EXP, POS, and
++   NOSIDE are as for evaluate_subexp_standard.  Return a value that is a
++   slice of the array.  */
++
++static struct value *
++value_f90_subarray (struct value *array,
++		    struct expression *exp, int *pos, enum noside noside)
++{
++  int pc = (*pos) + 1;
++  LONGEST low_bound, high_bound;
++  struct type *range = check_typedef (value_type (array)->index_type ());
++  enum range_type range_type
++    = (enum range_type) longest_to_int (exp->elts[pc].longconst);
++
++  *pos += 3;
++
++  if (range_type == LOW_BOUND_DEFAULT || range_type == BOTH_BOUND_DEFAULT)
++    low_bound = range->bounds ()->low.const_val ();
++  else
++    low_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
++
++  if (range_type == HIGH_BOUND_DEFAULT || range_type == BOTH_BOUND_DEFAULT)
++    high_bound = range->bounds ()->high.const_val ();
++  else
++    high_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
++
++  return value_slice (array, low_bound, high_bound - low_bound + 1);
++}
++
++/* Helper for skipping all the arguments in an undetermined argument list.
++   This function was designed for use in the OP_F77_UNDETERMINED_ARGLIST
++   case of evaluate_subexp_standard as multiple, but not all, code paths
++   require a generic skip.  */
++
++static void
++skip_undetermined_arglist (int nargs, struct expression *exp, int *pos,
++			   enum noside noside)
++{
++  for (int i = 0; i < nargs; ++i)
++    evaluate_subexp (nullptr, exp, pos, noside);
++}
++
++/* Return the number of dimensions for a Fortran array or string.  */
++
++int
++calc_f77_array_dims (struct type *array_type)
++{
++  int ndimen = 1;
++  struct type *tmp_type;
++
++  if ((array_type->code () == TYPE_CODE_STRING))
++    return 1;
++
++  if ((array_type->code () != TYPE_CODE_ARRAY))
++    error (_("Can't get dimensions for a non-array type"));
++
++  tmp_type = array_type;
++
++  while ((tmp_type = TYPE_TARGET_TYPE (tmp_type)))
++    {
++      if (tmp_type->code () == TYPE_CODE_ARRAY)
++	++ndimen;
++    }
++  return ndimen;
++}
++
++/* Called from evaluate_subexp_standard to perform array indexing, and
++   sub-range extraction, for Fortran.  As well as arrays this function
++   also handles strings as they can be treated like arrays of characters.
++   ARRAY is the array or string being accessed.  EXP, POS, and NOSIDE are
++   as for evaluate_subexp_standard, and NARGS is the number of arguments
++   in this access (e.g. 'array (1,2,3)' would be NARGS 3).  */
++
++static struct value *
++fortran_value_subarray (struct value *array, struct expression *exp,
++			int *pos, int nargs, enum noside noside)
++{
++  if (exp->elts[*pos].opcode == OP_RANGE)
++    return value_f90_subarray (array, exp, pos, noside);
++
++  if (noside == EVAL_SKIP)
++    {
++      skip_undetermined_arglist (nargs, exp, pos, noside);
++      /* Return the dummy value with the correct type.  */
++      return array;
++    }
++
++  LONGEST subscript_array[MAX_FORTRAN_DIMS];
++  int ndimensions = 1;
++  struct type *type = check_typedef (value_type (array));
++
++  if (nargs > MAX_FORTRAN_DIMS)
++    error (_("Too many subscripts for F77 (%d Max)"), MAX_FORTRAN_DIMS);
++
++  ndimensions = calc_f77_array_dims (type);
++
++  if (nargs != ndimensions)
++    error (_("Wrong number of subscripts"));
++
++  gdb_assert (nargs > 0);
++
++  /* Now that we know we have a legal array subscript expression let us
++     actually find out where this element exists in the array.  */
++
++  /* Take array indices left to right.  */
++  for (int i = 0; i < nargs; i++)
++    {
++      /* Evaluate each subscript; it must be a legal integer in F77.  */
++      value *arg2 = evaluate_subexp_with_coercion (exp, pos, noside);
++
++      /* Fill in the subscript array.  */
++      subscript_array[i] = value_as_long (arg2);
++    }
++
++  /* Internal type of array is arranged right to left.  */
++  for (int i = nargs; i > 0; i--)
++    {
++      struct type *array_type = check_typedef (value_type (array));
++      LONGEST index = subscript_array[i - 1];
++
++      array = value_subscripted_rvalue (array, index,
++					f77_get_lowerbound (array_type));
++    }
++
++  return array;
++}
++
+ /* Special expression evaluation cases for Fortran.  */
+ 
+ static struct value *
+@@ -285,6 +413,87 @@ evaluate_subexp_f (struct type *expect_type, struct expression *exp,
+ 				   TYPE_LENGTH (type));
+       return value_from_longest (builtin_type (exp->gdbarch)->builtin_int,
+ 				 TYPE_LENGTH (TYPE_TARGET_TYPE (type)));
++
++
++    case OP_F77_UNDETERMINED_ARGLIST:
++      /* Remember that in F77, functions, substring ops and array subscript
++         operations cannot be disambiguated at parse time.  We have made
++         all array subscript operations, substring operations as well as
++         function calls come here and we now have to discover what the heck
++         this thing actually was.  If it is a function, we process just as
++         if we got an OP_FUNCALL.  */
++      int nargs = longest_to_int (exp->elts[pc + 1].longconst);
++      (*pos) += 2;
++
++      /* First determine the type code we are dealing with.  */
++      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
++      type = check_typedef (value_type (arg1));
++      enum type_code code = type->code ();
++
++      if (code == TYPE_CODE_PTR)
++	{
++	  /* Fortran always passes variable to subroutines as pointer.
++	     So we need to look into its target type to see if it is
++	     array, string or function.  If it is, we need to switch
++	     to the target value the original one points to.  */
++	  struct type *target_type = check_typedef (TYPE_TARGET_TYPE (type));
++
++	  if (target_type->code () == TYPE_CODE_ARRAY
++	      || target_type->code () == TYPE_CODE_STRING
++	      || target_type->code () == TYPE_CODE_FUNC)
++	    {
++	      arg1 = value_ind (arg1);
++	      type = check_typedef (value_type (arg1));
++	      code = type->code ();
++	    }
++	}
++
++      switch (code)
++	{
++	case TYPE_CODE_ARRAY:
++	case TYPE_CODE_STRING:
++	  return fortran_value_subarray (arg1, exp, pos, nargs, noside);
++
++	case TYPE_CODE_PTR:
++	case TYPE_CODE_FUNC:
++	case TYPE_CODE_INTERNAL_FUNCTION:
++	  {
++	    /* It's a function call.  Allocate arg vector, including
++	    space for the function to be called in argvec[0] and a
++	    termination NULL.  */
++	    struct value **argvec = (struct value **)
++	      alloca (sizeof (struct value *) * (nargs + 2));
++	    argvec[0] = arg1;
++	    int tem = 1;
++	    for (; tem <= nargs; tem++)
++	      {
++		argvec[tem] = evaluate_subexp_with_coercion (exp, pos, noside);
++		/* Arguments in Fortran are passed by address.  Coerce the
++		   arguments here rather than in value_arg_coerce as
++		   otherwise the call to malloc to place the non-lvalue
++		   parameters in target memory is hit by this Fortran
++		   specific logic.  This results in malloc being called
++		   with a pointer to an integer followed by an attempt to
++		   malloc the arguments to malloc in target memory.
++		   Infinite recursion ensues.  */
++		if (code == TYPE_CODE_PTR || code == TYPE_CODE_FUNC)
++		  {
++		    bool is_artificial
++		      = TYPE_FIELD_ARTIFICIAL (value_type (arg1), tem - 1);
++		    argvec[tem] = fortran_argument_convert (argvec[tem],
++							    is_artificial);
++		  }
++	      }
++	    argvec[tem] = 0;	/* signal end of arglist */
++	    if (noside == EVAL_SKIP)
++	      return eval_skip_value (exp);
++	    return evaluate_subexp_do_call (exp, noside, nargs, argvec, NULL,
++					    expect_type);
++	  }
++
++	default:
++	  error (_("Cannot perform substring on this type"));
++	}
+     }
+ 
+   /* Should be unreachable.  */
+@@ -318,6 +527,11 @@ operator_length_f (const struct expression *exp, int pc, int *oplenp,
+       oplen = 1;
+       args = 2;
+       break;
++
++    case OP_F77_UNDETERMINED_ARGLIST:
++      oplen = 3;
++      args = 1 + longest_to_int (exp->elts[pc - 2].longconst);
++      break;
+     }
+ 
+   *oplenp = oplen;
+@@ -390,6 +604,10 @@ print_subexp_f (struct expression *exp, int *pos,
+     case BINOP_FORTRAN_MODULO:
+       print_binop_subexp_f (exp, pos, stream, prec, "MODULO");
+       return;
++
++    case OP_F77_UNDETERMINED_ARGLIST:
++      print_subexp_funcall (exp, pos, stream);
++      return;
+     }
+ }
+ 
+@@ -432,6 +650,9 @@ dump_subexp_body_f (struct expression *exp,
+     case BINOP_FORTRAN_MODULO:
+       operator_length_f (exp, (elt + 1), &oplen, &nargs);
+       break;
++
++    case OP_F77_UNDETERMINED_ARGLIST:
++      return dump_subexp_body_funcall (exp, stream, elt);
+     }
+ 
+   elt += oplen;
+diff --git a/gdb/fortran-operator.def b/gdb/fortran-operator.def
+--- a/gdb/fortran-operator.def
++++ b/gdb/fortran-operator.def
+@@ -17,6 +17,14 @@
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+ 
++/* This is EXACTLY like OP_FUNCALL but is semantically different.
++   In F77, array subscript expressions, substring expressions and
++   function calls are all exactly the same syntactically.  They
++   may only be disambiguated at runtime.  Thus this operator,
++   which indicates that we have found something of the form
++   <name> ( <stuff> ).  */
++OP (OP_F77_UNDETERMINED_ARGLIST)
++
+ /* Single operand builtins.  */
+ OP (UNOP_FORTRAN_KIND)
+ OP (UNOP_FORTRAN_FLOOR)
+diff --git a/gdb/parse.c b/gdb/parse.c
+--- a/gdb/parse.c
++++ b/gdb/parse.c
+@@ -817,7 +817,6 @@ operator_length_standard (const struct expression *expr, int endpos,
+       break;
+ 
+     case OP_FUNCALL:
+-    case OP_F77_UNDETERMINED_ARGLIST:
+       oplen = 3;
+       args = 1 + longest_to_int (expr->elts[endpos - 2].longconst);
+       break;
+diff --git a/gdb/parser-defs.h b/gdb/parser-defs.h
+--- a/gdb/parser-defs.h
++++ b/gdb/parser-defs.h
+@@ -338,6 +338,13 @@ extern int dump_subexp (struct expression *, struct ui_file *, int);
+ extern int dump_subexp_body_standard (struct expression *, 
+ 				      struct ui_file *, int);
+ 
++/* Dump (to STREAM) a function call like expression at position ELT in the
++   expression array EXP.  Return a new value for ELT just after the
++   function call expression.  */
++
++extern int dump_subexp_body_funcall (struct expression *exp,
++				     struct ui_file *stream, int elt);
++
+ extern void operator_length (const struct expression *, int, int *, int *);
+ 
+ extern void operator_length_standard (const struct expression *, int, int *,
+@@ -440,6 +447,15 @@ extern void print_subexp (struct expression *, int *, struct ui_file *,
+ extern void print_subexp_standard (struct expression *, int *, 
+ 				   struct ui_file *, enum precedence);
+ 
++/* Print a function call like expression to STREAM.  This is called as a
++   helper function by which point the expression node identifying this as a
++   function call has already been stripped off and POS should point to the
++   number of function call arguments.  EXP is the object containing the
++   list of expression elements.  */
++
++extern void print_subexp_funcall (struct expression *exp, int *pos,
++				  struct ui_file *stream);
++
+ /* Function used to avoid direct calls to fprintf
+    in the code generated by the bison parser.  */
+ 
+diff --git a/gdb/std-operator.def b/gdb/std-operator.def
+--- a/gdb/std-operator.def
++++ b/gdb/std-operator.def
+@@ -168,14 +168,6 @@ OP (OP_FUNCALL)
+    pointer.  This is an Objective C message.  */
+ OP (OP_OBJC_MSGCALL)
+ 
+-/* This is EXACTLY like OP_FUNCALL but is semantically different.
+-   In F77, array subscript expressions, substring expressions and
+-   function calls are all exactly the same syntactically.  They
+-   may only be disambiguated at runtime.  Thus this operator,
+-   which indicates that we have found something of the form
+-   <name> ( <stuff> ).  */
+-OP (OP_F77_UNDETERMINED_ARGLIST)
+-
+ /* OP_COMPLEX takes a type in the following element, followed by another
+    OP_COMPLEX, making three exp_elements.  It is followed by two double
+    args, and converts them into a complex number of the given type.  */

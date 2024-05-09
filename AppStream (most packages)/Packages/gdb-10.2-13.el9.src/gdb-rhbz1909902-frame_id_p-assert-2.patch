@@ -1,0 +1,169 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Pedro Alves <pedro@palves.net>
+Date: Sat, 31 Oct 2020 00:27:18 +0000
+Subject: gdb-rhbz1909902-frame_id_p-assert-2.patch
+
+;; Backport patch #2 which fixes a frame_id_p assertion failure (RH BZ 1909902).
+
+Fix frame cycle detection
+
+The recent commit to make scoped_restore_current_thread's cdtors
+exception free regressed gdb.base/eh_return.exp:
+
+  Breakpoint 1, 0x00000000004012bb in eh2 (gdb/frame.c:641: internal-error: frame_id get_frame_id(frame_info*): Assertion `stashed' failed.
+  A problem internal to GDB has been detected,
+  further debugging may prove unreliable.
+  Quit this debugging session? (y or n) FAIL: gdb.base/eh_return.exp: hit breakpoint (GDB internal error)
+
+That testcase uses __builtin_eh_return and, before the regression, the
+backtrace at eh2 looked like this:
+
+ (gdb) bt
+ #0  0x00000000004006eb in eh2 (p=0x4006ec <continuation>) at src/gdb/testsuite/gdb.base/eh_return.c:54
+ Backtrace stopped: previous frame identical to this frame (corrupt stack?)
+
+That "previous frame identical to this frame" is caught by the cycle
+detection based on frame id.
+
+The assertion failing is this one:
+
+ 638           /* Since this is the first frame in the chain, this should
+ 639              always succeed.  */
+ 640           bool stashed = frame_stash_add (fi);
+ 641           gdb_assert (stashed);
+
+originally added by
+
+  commit f245535cf583ae4ca13b10d47b3c7d3334593ece
+  Author:     Pedro Alves <palves@redhat.com>
+  AuthorDate: Mon Sep 5 18:41:38 2016 +0100
+
+      Fix PR19927: Avoid unwinder recursion if sniffer uses calls parse_and_eval
+
+The assertion is failing because frame #1's frame id was stashed
+before the id of frame #0 is stashed.  The frame id of frame #1 was
+stashed here:
+
+ (top-gdb) bt
+ #0  frame_stash_add (frame=0x1e24c90) at src/gdb/frame.c:276
+ #1  0x0000000000669c1b in get_prev_frame_if_no_cycle (this_frame=0x19f8370) at src/gdb/frame.c:2120
+ #2  0x000000000066a339 in get_prev_frame_always_1 (this_frame=0x19f8370) at src/gdb/frame.c:2303
+ #3  0x000000000066a360 in get_prev_frame_always (this_frame=0x19f8370) at src/gdb/frame.c:2319
+ #4  0x000000000066b56c in get_frame_unwind_stop_reason (frame=0x19f8370) at src/gdb/frame.c:3028
+ #5  0x000000000059f929 in dwarf2_frame_cfa (this_frame=0x19f8370) at src/gdb/dwarf2/frame.c:1462
+ #6  0x00000000005ce434 in dwarf_evaluate_loc_desc::get_frame_cfa (this=0x7fffffffc070) at src/gdb/dwarf2/loc.c:666
+ #7  0x00000000005989a9 in dwarf_expr_context::execute_stack_op (this=0x7fffffffc070, op_ptr=0x1b2a053 "\364\003", op_end=0x1b2a053 "\364\003") at src/gdb/dwarf2/expr.c:1161
+ #8  0x0000000000596af6 in dwarf_expr_context::eval (this=0x7fffffffc070, addr=0x1b2a052 "\234\364\003", len=1) at src/gdb/dwarf2/expr.c:303
+ #9  0x0000000000597b4e in dwarf_expr_context::execute_stack_op (this=0x7fffffffc070, op_ptr=0x1b2a063 "", op_end=0x1b2a063 "") at src/gdb/dwarf2/expr.c:865
+ #10 0x0000000000596af6 in dwarf_expr_context::eval (this=0x7fffffffc070, addr=0x1b2a061 "\221X", len=2) at src/gdb/dwarf2/expr.c:303
+ #11 0x00000000005c8b5a in dwarf2_evaluate_loc_desc_full (type=0x1b564d0, frame=0x19f8370, data=0x1b2a061 "\221X", size=2, per_cu=0x1b28760, per_objfile=0x1a84930, subobj_type=0x1b564d0, subobj_byte_offset=0) at src/gdb/dwarf2/loc.c:2260
+ #12 0x00000000005c9243 in dwarf2_evaluate_loc_desc (type=0x1b564d0, frame=0x19f8370, data=0x1b2a061 "\221X", size=2, per_cu=0x1b28760, per_objfile=0x1a84930) at src/gdb/dwarf2/loc.c:2444
+ #13 0x00000000005cb769 in locexpr_read_variable (symbol=0x1b59840, frame=0x19f8370) at src/gdb/dwarf2/loc.c:3687
+ #14 0x0000000000663137 in language_defn::read_var_value (this=0x122ea60 <c_language_defn>, var=0x1b59840, var_block=0x0, frame=0x19f8370) at src/gdb/findvar.c:618
+ #15 0x0000000000663c3b in read_var_value (var=0x1b59840, var_block=0x0, frame=0x19f8370) at src/gdb/findvar.c:822
+ #16 0x00000000008c7d9f in read_frame_arg (fp_opts=..., sym=0x1b59840, frame=0x19f8370, argp=0x7fffffffc470, entryargp=0x7fffffffc490) at src/gdb/stack.c:542
+ #17 0x00000000008c89cd in print_frame_args (fp_opts=..., func=0x1b597c0, frame=0x19f8370, num=-1, stream=0x1aba860) at src/gdb/stack.c:890
+ #18 0x00000000008c9bf8 in print_frame (fp_opts=..., frame=0x19f8370, print_level=0, print_what=SRC_AND_LOC, print_args=1, sal=...) at src/gdb/stack.c:1394
+ #19 0x00000000008c92b9 in print_frame_info (fp_opts=..., frame=0x19f8370, print_level=0, print_what=SRC_AND_LOC, print_args=1, set_current_sal=1) at src/gdb/stack.c:1119
+ #20 0x00000000008c75f0 in print_stack_frame (frame=0x19f8370, print_level=0, print_what=SRC_AND_LOC, set_current_sal=1) at src/gdb/stack.c:366
+ #21 0x000000000070250b in print_stop_location (ws=0x7fffffffc9e0) at src/gdb/infrun.c:8110
+ #22 0x0000000000702569 in print_stop_event (uiout=0x1a8b9e0, displays=true) at src/gdb/infrun.c:8126
+ #23 0x000000000096d04b in tui_on_normal_stop (bs=0x1bcd1c0, print_frame=1) at src/gdb/tui/tui-interp.c:98
+ ...
+
+Before the commit to make scoped_restore_current_thread's cdtors
+exception free, scoped_restore_current_thread's dtor would call
+get_frame_id on the selected frame, and we use
+scoped_restore_current_thread pervasively.  That had the side effect
+of stashing the frame id of frame #0 before reaching the path shown in
+the backtrace.  I.e., the frame id of frame #0 happened to be stashed
+before the frame id of frame #1.  But that was by chance, not by
+design.
+
+This commit:
+
+  commit 256ae5dbc73d1348850f86ee77a0dc3b04bc7cc0
+  Author:     Kevin Buettner <kevinb@redhat.com>
+  AuthorDate: Mon Oct 31 12:47:42 2016 -0700
+
+      Stash frame id of current frame before stashing frame id for previous frame
+
+Fixed a similar problem, by making sure get_prev_frame computes the
+frame id of the current frame before unwinding the previous frame, so
+that the cycle detection works properly.  That fix misses the scenario
+we're now running against, because if you notice, the backtrace above
+shows that frame #4 calls get_prev_frame_always, not get_prev_frame.
+I.e., nothing is calling get_frame_id on the current frame.
+
+The fix here is to move Kevin's fix down from get_prev_frame to
+get_prev_frame_always.  Or actually, a bit further down to
+get_prev_frame_always_1 -- note that inline_frame_this_id calls
+get_prev_frame_always, so we need to be careful to avoid recursion in
+that scenario.
+
+gdb/ChangeLog:
+
+	* frame.c (get_prev_frame): Move get_frame_id call from here ...
+	(get_prev_frame_always_1): ... to here.
+	* inline-frame.c (inline_frame_this_id): Mention
+	get_prev_frame_always_1 in comment.
+
+Change-Id: Id960c98ab2d072c48a436c3eb160cc4b2a5cfd1d
+
+diff --git a/gdb/frame.c b/gdb/frame.c
+--- a/gdb/frame.c
++++ b/gdb/frame.c
+@@ -2133,6 +2133,23 @@ get_prev_frame_always_1 (struct frame_info *this_frame)
+   if (get_frame_type (this_frame) == INLINE_FRAME)
+     return get_prev_frame_if_no_cycle (this_frame);
+ 
++  /* If this_frame is the current frame, then compute and stash its
++     frame id prior to fetching and computing the frame id of the
++     previous frame.  Otherwise, the cycle detection code in
++     get_prev_frame_if_no_cycle() will not work correctly.  When
++     get_frame_id() is called later on, an assertion error will be
++     triggered in the event of a cycle between the current frame and
++     its previous frame.
++
++     Note we do this after the INLINE_FRAME check above.  That is
++     because the inline frame's frame id computation needs to fetch
++     the frame id of its previous real stack frame.  I.e., we need to
++     avoid recursion in that case.  This is OK since we're sure the
++     inline frame won't create a cycle with the real stack frame.  See
++     inline_frame_this_id.  */
++  if (this_frame->level == 0)
++    get_frame_id (this_frame);
++
+   /* Check that this frame is unwindable.  If it isn't, don't try to
+      unwind to the prev frame.  */
+   this_frame->stop_reason
+@@ -2410,16 +2427,6 @@ get_prev_frame (struct frame_info *this_frame)
+      something should be calling get_selected_frame() or
+      get_current_frame().  */
+   gdb_assert (this_frame != NULL);
+-  
+-  /* If this_frame is the current frame, then compute and stash
+-     its frame id prior to fetching and computing the frame id of the
+-     previous frame.  Otherwise, the cycle detection code in
+-     get_prev_frame_if_no_cycle() will not work correctly.  When
+-     get_frame_id() is called later on, an assertion error will
+-     be triggered in the event of a cycle between the current
+-     frame and its previous frame.  */
+-  if (this_frame->level == 0)
+-    get_frame_id (this_frame);
+ 
+   frame_pc_p = get_frame_pc_if_available (this_frame, &frame_pc);
+ 
+diff --git a/gdb/inline-frame.c b/gdb/inline-frame.c
+--- a/gdb/inline-frame.c
++++ b/gdb/inline-frame.c
+@@ -161,7 +161,8 @@ inline_frame_this_id (struct frame_info *this_frame,
+      real frame's this_id method.  So we must call
+      get_prev_frame_always.  Because we are inlined into some
+      function, there must be previous frames, so this is safe - as
+-     long as we're careful not to create any cycles.  */
++     long as we're careful not to create any cycles.  See related
++     comments in get_prev_frame_always_1.  */
+   *this_id = get_frame_id (get_prev_frame_always (this_frame));
+ 
+   /* We need a valid frame ID, so we need to be based on a valid

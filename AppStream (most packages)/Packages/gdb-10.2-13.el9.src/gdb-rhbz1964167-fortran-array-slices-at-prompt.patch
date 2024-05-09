@@ -1,0 +1,2660 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Mon, 24 May 2021 22:46:21 -0700
+Subject: gdb-rhbz1964167-fortran-array-slices-at-prompt.patch
+
+;; [fortran] Backport Andrew Burgess's commit for Fortran array
+;; slice support
+
+gdb/fortran: Add support for Fortran array slices at the GDB prompt
+
+This commit brings array slice support to GDB.
+
+WARNING: This patch contains a rather big hack which is limited to
+Fortran arrays, this can be seen in gdbtypes.c and f-lang.c.  More
+details on this below.
+
+This patch rewrites two areas of GDB's Fortran support, the code to
+extract an array slice, and the code to print an array.
+
+After this commit a user can, from the GDB prompt, ask for a slice of
+a Fortran array and should get the correct result back.  Slices can
+(optionally) have the lower bound, upper bound, and a stride
+specified.  Slices can also have a negative stride.
+
+Fortran has the concept of repacking array slices.  Within a compiled
+Fortran program if a user passes a non-contiguous array slice to a
+function then the compiler may have to repack the slice, this involves
+copying the elements of the slice to a new area of memory before the
+call, and copying the elements back to the original array after the
+call.  Whether repacking occurs will depend on which version of
+Fortran is being used, and what type of function is being called.
+
+This commit adds support for both packed, and unpacked array slicing,
+with the default being unpacked.
+
+With an unpacked array slice, when the user asks for a slice of an
+array GDB creates a new type that accurately describes where the
+elements of the slice can be found within the original array, a
+value of this type is then returned to the user.  The address of an
+element within the slice will be equal to the address of an element
+within the original array.
+
+A user can choose to select packed array slices instead using:
+
+  (gdb) set fortran repack-array-slices on|off
+  (gdb) show fortran repack-array-slices
+
+With packed array slices GDB creates a new type that reflects how the
+elements of the slice would look if they were laid out in contiguous
+memory, allocates a value of this type, and then fetches the elements
+from the original array and places then into the contents buffer of
+the new value.
+
+One benefit of using packed slices over unpacked slices is the memory
+usage, taking a small slice of N elements from a large array will
+require (in GDB) N * ELEMENT_SIZE bytes of memory, while an unpacked
+array will also include all of the "padding" between the
+non-contiguous elements.  There are new tests added that highlight
+this difference.
+
+There is also a new debugging flag added with this commit that
+introduces these commands:
+
+  (gdb) set debug fortran-array-slicing on|off
+  (gdb) show debug fortran-array-slicing
+
+This prints information about how the array slices are being built.
+
+As both the repacking, and the array printing requires GDB to walk
+through a multi-dimensional Fortran array visiting each element, this
+commit adds the file f-array-walk.h, which introduces some
+infrastructure to support this process.  This means the array printing
+code in f-valprint.c is significantly reduced.
+
+The only slight issue with this commit is the "rather big hack" that I
+mentioned above.  This hack allows us to handle one specific case,
+array slices with negative strides.  This is something that I don't
+believe the current GDB value contents model will allow us to
+correctly handle, and rather than rewrite the value contents code
+right now, I'm hoping to slip this hack in as a work around.
+
+The problem is that, as I see it, the current value contents model
+assumes that an object base address will be the lowest address within
+that object, and that the contents of the object start at this base
+address and occupy the TYPE_LENGTH bytes after that.
+
+( We do have the embedded_offset, which is used for C++ sub-classes,
+such that an object can start at some offset from the content buffer,
+however, the assumption that the object then occupies the next
+TYPE_LENGTH bytes is still true within GDB. )
+
+The problem is that Fortran arrays with a negative stride don't follow
+this pattern.  In this case the base address of the object points to
+the element with the highest address, the contents of the array then
+start at some offset _before_ the base address, and proceed for one
+element _past_ the base address.
+
+As the stride for such an array would be negative then, in theory the
+TYPE_LENGTH for this type would also be negative.  However, in many
+places a value in GDB will degrade to a pointer + length, and the
+length almost always comes from the TYPE_LENGTH.
+
+It is my belief that in order to correctly model this case the value
+content handling of GDB will need to be reworked to split apart the
+value's content buffer (which is a block of memory with a length), and
+the object's in memory base address and length, which could be
+negative.
+
+Things are further complicated because arrays with negative strides
+like this are always dynamic types.  When a value has a dynamic type
+and its base address needs resolving we actually store the address of
+the object within the resolved dynamic type, not within the value
+object itself.
+
+In short I don't currently see an easy path to cleanly support this
+situation within GDB.  And so I believe that leaves two options,
+either add a work around, or catch cases where the user tries to make
+use of a negative stride, or access an array with a negative stride,
+and throw an error.
+
+This patch currently goes with adding a work around, which is that
+when we resolve a dynamic Fortran array type, if the stride is
+negative, then we adjust the base address to point to the lowest
+address required by the array.  The printing and slicing code is aware
+of this adjustment and will correctly slice and print Fortran arrays.
+
+Where this hack will show through to the user is if they ask for the
+address of an array in their program with a negative array stride, the
+address they get from GDB will not match the address that would be
+computed within the Fortran program.
+
+gdb/ChangeLog:
+
+	* Makefile.in (HFILES_NO_SRCDIR): Add f-array-walker.h.
+	* NEWS: Mention new options.
+	* f-array-walker.h: New file.
+	* f-lang.c: Include 'gdbcmd.h' and 'f-array-walker.h'.
+	(repack_array_slices): New static global.
+	(show_repack_array_slices): New function.
+	(fortran_array_slicing_debug): New static global.
+	(show_fortran_array_slicing_debug): New function.
+	(value_f90_subarray): Delete.
+	(skip_undetermined_arglist): Delete.
+	(class fortran_array_repacker_base_impl): New class.
+	(class fortran_lazy_array_repacker_impl): New class.
+	(class fortran_array_repacker_impl): New class.
+	(fortran_value_subarray): Complete rewrite.
+	(set_fortran_list): New static global.
+	(show_fortran_list): Likewise.
+	(_initialize_f_language): Register new commands.
+	(fortran_adjust_dynamic_array_base_address_hack): New function.
+	* f-lang.h (fortran_adjust_dynamic_array_base_address_hack):
+	Declare.
+	* f-valprint.c: Include 'f-array-walker.h'.
+	(class fortran_array_printer_impl): New class.
+	(f77_print_array_1): Delete.
+	(f77_print_array): Delete.
+	(fortran_print_array): New.
+	(f_value_print_inner): Update to call fortran_print_array.
+	* gdbtypes.c: Include 'f-lang.h'.
+	(resolve_dynamic_type_internal): Call
+	fortran_adjust_dynamic_array_base_address_hack.
+
+gdb/testsuite/ChangeLog:
+
+        * gdb.fortran/array-slices-bad.exp: New file.
+        * gdb.fortran/array-slices-bad.f90: New file.
+        * gdb.fortran/array-slices-sub-slices.exp: New file.
+        * gdb.fortran/array-slices-sub-slices.f90: New file.
+        * gdb.fortran/array-slices.exp: Rewrite tests.
+        * gdb.fortran/array-slices.f90: Rewrite tests.
+        * gdb.fortran/vla-sizeof.exp: Correct expected results.
+
+gdb/doc/ChangeLog:
+
+        * gdb.texinfo (Debugging Output): Document 'set/show debug
+        fortran-array-slicing'.
+        (Special Fortran Commands): Document 'set/show fortran
+        repack-array-slices'.
+
+diff --git a/gdb/Makefile.in b/gdb/Makefile.in
+--- a/gdb/Makefile.in
++++ b/gdb/Makefile.in
+@@ -1268,6 +1268,7 @@ HFILES_NO_SRCDIR = \
+ 	expression.h \
+ 	extension.h \
+ 	extension-priv.h \
++	f-array-walker.h \
+ 	f-lang.h \
+ 	fbsd-nat.h \
+ 	fbsd-tdep.h \
+diff --git a/gdb/NEWS b/gdb/NEWS
+--- a/gdb/NEWS
++++ b/gdb/NEWS
+@@ -111,6 +111,19 @@ maintenance print core-file-backed-mappings
+   Prints file-backed mappings loaded from a core file's note section.
+   Output is expected to be similar to that of "info proc mappings".
+ 
++set debug fortran-array-slicing on|off
++show debug fortran-array-slicing
++  Print debugging when taking slices of Fortran arrays.
++
++set fortran repack-array-slices on|off
++show fortran repack-array-slices
++  When taking slices from Fortran arrays and strings, if the slice is
++  non-contiguous within the original value then, when this option is
++  on, the new value will be repacked into a single contiguous value.
++  When this option is off, then the value returned will consist of a
++  descriptor that describes the slice within the memory of the
++  original parent value.
++
+ * Changed commands
+ 
+ alias [-a] [--] ALIAS = COMMAND [DEFAULT-ARGS...]
+diff --git a/gdb/doc/gdb.texinfo b/gdb/doc/gdb.texinfo
+--- a/gdb/doc/gdb.texinfo
++++ b/gdb/doc/gdb.texinfo
+@@ -16919,6 +16919,29 @@ This command prints the values contained in the Fortran @code{COMMON}
+ block whose name is @var{common-name}.  With no argument, the names of
+ all @code{COMMON} blocks visible at the current program location are
+ printed.
++@cindex arrays slices (Fortran)
++@kindex set fortran repack-array-slices
++@kindex show fortran repack-array-slices
++@item set fortran repack-array-slices [on|off]
++@item show fortran repack-array-slices
++When taking a slice from an array, a Fortran compiler can choose to
++either produce an array descriptor that describes the slice in place,
++or it may repack the slice, copying the elements of the slice into a
++new region of memory.
++
++When this setting is on, then @value{GDBN} will also repack array
++slices in some situations.  When this setting is off, then
++@value{GDBN} will create array descriptors for slices that reference
++the original data in place.
++
++@value{GDBN} will never repack an array slice if the data for the
++slice is contiguous within the original array.
++
++@value{GDBN} will always repack string slices if the data for the
++slice is non-contiguous within the original string as @value{GDBN}
++does not support printing non-contiguous strings.
++
++The default for this setting is @code{off}.
+ @end table
+ 
+ @node Pascal
+@@ -26507,6 +26530,16 @@ Show the current state of FreeBSD LWP debugging messages.
+ Turns on or off debugging messages from the FreeBSD native target.
+ @item show debug fbsd-nat
+ Show the current state of FreeBSD native target debugging messages.
++
++@item set debug fortran-array-slicing
++@cindex fortran array slicing debugging info
++Turns on or off display of @value{GDBN} Fortran array slicing
++debugging info.  The default is off.
++
++@item show debug fortran-array-slicing
++Displays the current state of displaying @value{GDBN} Fortran array
++slicing debugging info.
++
+ @item set debug frame
+ @cindex frame debugging info
+ Turns on or off display of @value{GDBN} frame debugging info.  The
+diff --git a/gdb/f-array-walker.h b/gdb/f-array-walker.h
+new file mode 100644
+--- /dev/null
++++ b/gdb/f-array-walker.h
+@@ -0,0 +1,265 @@
++/* Copyright (C) 2020 Free Software Foundation, Inc.
++
++   This file is part of GDB.
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
++
++/* Support classes to wrap up the process of iterating over a
++   multi-dimensional Fortran array.  */
++
++#ifndef F_ARRAY_WALKER_H
++#define F_ARRAY_WALKER_H
++
++#include "defs.h"
++#include "gdbtypes.h"
++#include "f-lang.h"
++
++/* Class for calculating the byte offset for elements within a single
++   dimension of a Fortran array.  */
++class fortran_array_offset_calculator
++{
++public:
++  /* Create a new offset calculator for TYPE, which is either an array or a
++     string.  */
++  explicit fortran_array_offset_calculator (struct type *type)
++  {
++    /* Validate the type.  */
++    type = check_typedef (type);
++    if (type->code () != TYPE_CODE_ARRAY
++	&& (type->code () != TYPE_CODE_STRING))
++      error (_("can only compute offsets for arrays and strings"));
++
++    /* Get the range, and extract the bounds.  */
++    struct type *range_type = type->index_type ();
++    if (!get_discrete_bounds (range_type, &m_lowerbound, &m_upperbound))
++      error ("unable to read array bounds");
++
++    /* Figure out the stride for this array.  */
++    struct type *elt_type = check_typedef (TYPE_TARGET_TYPE (type));
++    m_stride = type->index_type ()->bounds ()->bit_stride ();
++    if (m_stride == 0)
++      m_stride = type_length_units (elt_type);
++    else
++      {
++	struct gdbarch *arch = get_type_arch (elt_type);
++	int unit_size = gdbarch_addressable_memory_unit_size (arch);
++	m_stride /= (unit_size * 8);
++      }
++  };
++
++  /* Get the byte offset for element INDEX within the type we are working
++     on.  There is no bounds checking done on INDEX.  If the stride is
++     negative then we still assume that the base address (for the array
++     object) points to the element with the lowest memory address, we then
++     calculate an offset assuming that index 0 will be the element at the
++     highest address, index 1 the next highest, and so on.  This is not
++     quite how Fortran works in reality; in reality the base address of
++     the object would point at the element with the highest address, and
++     we would index backwards from there in the "normal" way, however,
++     GDB's current value contents model doesn't support having the base
++     address be near to the end of the value contents, so we currently
++     adjust the base address of Fortran arrays with negative strides so
++     their base address points at the lowest memory address.  This code
++     here is part of working around this weirdness.  */
++  LONGEST index_offset (LONGEST index)
++  {
++    LONGEST offset;
++    if (m_stride < 0)
++      offset = std::abs (m_stride) * (m_upperbound - index);
++    else
++      offset = std::abs (m_stride) * (index - m_lowerbound);
++    return offset;
++  }
++
++private:
++
++  /* The stride for the type we are working with.  */
++  LONGEST m_stride;
++
++  /* The upper bound for the type we are working with.  */
++  LONGEST m_upperbound;
++
++  /* The lower bound for the type we are working with.  */
++  LONGEST m_lowerbound;
++};
++
++/* A base class used by fortran_array_walker.  There's no virtual methods
++   here, sub-classes should just override the functions they want in order
++   to specialise the behaviour to their needs.  The functionality
++   provided in these default implementations will visit every array
++   element, but do nothing for each element.  */
++
++struct fortran_array_walker_base_impl
++{
++  /* Called when iterating between the lower and upper bounds of each
++     dimension of the array.  Return true if GDB should continue iterating,
++     otherwise, return false.
++
++     SHOULD_CONTINUE indicates if GDB is going to stop anyway, and should
++     be taken into consideration when deciding what to return.  If
++     SHOULD_CONTINUE is false then this function must also return false,
++     the function is still called though in case extra work needs to be
++     done as part of the stopping process.  */
++  bool continue_walking (bool should_continue)
++  { return should_continue; }
++
++  /* Called when GDB starts iterating over a dimension of the array.  The
++     argument INNER_P is true for the inner most dimension (the dimension
++     containing the actual elements of the array), and false for more outer
++     dimensions.  For a concrete example of how this function is called
++     see the comment on process_element below.  */
++  void start_dimension (bool inner_p)
++  { /* Nothing.  */ }
++
++  /* Called when GDB finishes iterating over a dimension of the array.  The
++     argument INNER_P is true for the inner most dimension (the dimension
++     containing the actual elements of the array), and false for more outer
++     dimensions.  LAST_P is true for the last call at a particular
++     dimension.  For a concrete example of how this function is called
++     see the comment on process_element below.  */
++  void finish_dimension (bool inner_p, bool last_p)
++  { /* Nothing.  */ }
++
++  /* Called when processing the inner most dimension of the array, for
++     every element in the array.  ELT_TYPE is the type of the element being
++     extracted, and ELT_OFF is the offset of the element from the start of
++     array being walked, and LAST_P is true only when this is the last
++     element that will be processed in this dimension.
++
++     Given this two dimensional array ((1, 2) (3, 4)), the calls to
++     start_dimension, process_element, and finish_dimension look like this:
++
++     start_dimension (false);
++       start_dimension (true);
++         process_element (TYPE, OFFSET, false);
++         process_element (TYPE, OFFSET, true);
++       finish_dimension (true, false);
++       start_dimension (true);
++         process_element (TYPE, OFFSET, false);
++         process_element (TYPE, OFFSET, true);
++       finish_dimension (true, true);
++     finish_dimension (false, true);  */
++  void process_element (struct type *elt_type, LONGEST elt_off, bool last_p)
++  { /* Nothing.  */ }
++};
++
++/* A class to wrap up the process of iterating over a multi-dimensional
++   Fortran array.  IMPL is used to specialise what happens as we walk over
++   the array.  See class FORTRAN_ARRAY_WALKER_BASE_IMPL (above) for the
++   methods than can be used to customise the array walk.  */
++template<typename Impl>
++class fortran_array_walker
++{
++  /* Ensure that Impl is derived from the required base class.  This just
++     ensures that all of the required API methods are available and have a
++     sensible default implementation.  */
++  gdb_static_assert ((std::is_base_of<fortran_array_walker_base_impl,Impl>::value));
++
++public:
++  /* Create a new array walker.  TYPE is the type of the array being walked
++     over, and ADDRESS is the base address for the object of TYPE in
++     memory.  All other arguments are forwarded to the constructor of the
++     template parameter class IMPL.  */
++  template <typename ...Args>
++  fortran_array_walker (struct type *type, CORE_ADDR address,
++			Args... args)
++    : m_type (type),
++      m_address (address),
++      m_impl (type, address, args...)
++  {
++    m_ndimensions =  calc_f77_array_dims (m_type);
++  }
++
++  /* Walk the array.  */
++  void
++  walk ()
++  {
++    walk_1 (1, m_type, 0, false);
++  }
++
++private:
++  /* The core of the array walking algorithm.  NSS is the current
++     dimension number being processed, TYPE is the type of this dimension,
++     and OFFSET is the offset (in bytes) for the start of this dimension.  */
++  void
++  walk_1 (int nss, struct type *type, int offset, bool last_p)
++  {
++    /* Extract the range, and get lower and upper bounds.  */
++    struct type *range_type = check_typedef (type)->index_type ();
++    LONGEST lowerbound, upperbound;
++    if (!get_discrete_bounds (range_type, &lowerbound, &upperbound))
++      error ("failed to get range bounds");
++
++    /* CALC is used to calculate the offsets for each element in this
++       dimension.  */
++    fortran_array_offset_calculator calc (type);
++
++    m_impl.start_dimension (nss == m_ndimensions);
++
++    if (nss != m_ndimensions)
++      {
++	/* For dimensions other than the inner most, walk each element and
++	   recurse while peeling off one more dimension of the array.  */
++	for (LONGEST i = lowerbound;
++	     m_impl.continue_walking (i < upperbound + 1);
++	     i++)
++	  {
++	    /* Use the index and the stride to work out a new offset.  */
++	    LONGEST new_offset = offset + calc.index_offset (i);
++
++	    /* Now print the lower dimension.  */
++	    struct type *subarray_type
++	      = TYPE_TARGET_TYPE (check_typedef (type));
++	    walk_1 (nss + 1, subarray_type, new_offset, (i == upperbound));
++	  }
++      }
++    else
++      {
++	/* For the inner most dimension of the array, process each element
++	   within this dimension.  */
++	for (LONGEST i = lowerbound;
++	     m_impl.continue_walking (i < upperbound + 1);
++	     i++)
++	  {
++	    LONGEST elt_off = offset + calc.index_offset (i);
++
++	    struct type *elt_type = check_typedef (TYPE_TARGET_TYPE (type));
++	    if (is_dynamic_type (elt_type))
++	      {
++		CORE_ADDR e_address = m_address + elt_off;
++		elt_type = resolve_dynamic_type (elt_type, {}, e_address);
++	      }
++
++	    m_impl.process_element (elt_type, elt_off, (i == upperbound));
++	  }
++      }
++
++    m_impl.finish_dimension (nss == m_ndimensions, last_p || nss == 1);
++  }
++
++  /* The array type being processed.  */
++  struct type *m_type;
++
++  /* The address in target memory for the object of M_TYPE being
++     processed.  This is required in order to resolve dynamic types.  */
++  CORE_ADDR m_address;
++
++  /* An instance of the template specialisation class.  */
++  Impl m_impl;
++
++  /* The total number of dimensions in M_TYPE.  */
++  int m_ndimensions;
++};
++
++#endif /* F_ARRAY_WALKER_H */
+diff --git a/gdb/f-lang.c b/gdb/f-lang.c
+--- a/gdb/f-lang.c
++++ b/gdb/f-lang.c
+@@ -36,9 +36,36 @@
+ #include "c-lang.h"
+ #include "target-float.h"
+ #include "gdbarch.h"
++#include "gdbcmd.h"
++#include "f-array-walker.h"
+ 
+ #include <math.h>
+ 
++/* Whether GDB should repack array slices created by the user.  */
++static bool repack_array_slices = false;
++
++/* Implement 'show fortran repack-array-slices'.  */
++static void
++show_repack_array_slices (struct ui_file *file, int from_tty,
++			  struct cmd_list_element *c, const char *value)
++{
++  fprintf_filtered (file, _("Repacking of Fortran array slices is %s.\n"),
++		    value);
++}
++
++/* Debugging of Fortran's array slicing.  */
++static bool fortran_array_slicing_debug = false;
++
++/* Implement 'show debug fortran-array-slicing'.  */
++static void
++show_fortran_array_slicing_debug (struct ui_file *file, int from_tty,
++				  struct cmd_list_element *c,
++				  const char *value)
++{
++  fprintf_filtered (file, _("Debugging of Fortran array slicing is %s.\n"),
++		    value);
++}
++
+ /* Local functions */
+ 
+ /* Return the encoding that should be used for the character type
+@@ -114,57 +141,6 @@ enum f_primitive_types {
+   nr_f_primitive_types
+ };
+ 
+-/* Called from fortran_value_subarray to take a slice of an array or a
+-   string.  ARRAY is the array or string to be accessed.  EXP, POS, and
+-   NOSIDE are as for evaluate_subexp_standard.  Return a value that is a
+-   slice of the array.  */
+-
+-static struct value *
+-value_f90_subarray (struct value *array,
+-		    struct expression *exp, int *pos, enum noside noside)
+-{
+-  int pc = (*pos) + 1;
+-  LONGEST low_bound, high_bound, stride;
+-  struct type *range = check_typedef (value_type (array)->index_type ());
+-  enum range_flag range_flag
+-    = (enum range_flag) longest_to_int (exp->elts[pc].longconst);
+-
+-  *pos += 3;
+-
+-  if (range_flag & RANGE_LOW_BOUND_DEFAULT)
+-    low_bound = range->bounds ()->low.const_val ();
+-  else
+-    low_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+-
+-  if (range_flag & RANGE_HIGH_BOUND_DEFAULT)
+-    high_bound = range->bounds ()->high.const_val ();
+-  else
+-    high_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+-
+-  if (range_flag & RANGE_HAS_STRIDE)
+-    stride = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+-  else
+-    stride = 1;
+-
+-  if (stride != 1)
+-    error (_("Fortran array strides are not currently supported"));
+-
+-  return value_slice (array, low_bound, high_bound - low_bound + 1);
+-}
+-
+-/* Helper for skipping all the arguments in an undetermined argument list.
+-   This function was designed for use in the OP_F77_UNDETERMINED_ARGLIST
+-   case of evaluate_subexp_standard as multiple, but not all, code paths
+-   require a generic skip.  */
+-
+-static void
+-skip_undetermined_arglist (int nargs, struct expression *exp, int *pos,
+-			   enum noside noside)
+-{
+-  for (int i = 0; i < nargs; ++i)
+-    evaluate_subexp (nullptr, exp, pos, noside);
+-}
+-
+ /* Return the number of dimensions for a Fortran array or string.  */
+ 
+ int
+@@ -189,6 +165,145 @@ calc_f77_array_dims (struct type *array_type)
+   return ndimen;
+ }
+ 
++/* A class used by FORTRAN_VALUE_SUBARRAY when repacking Fortran array
++   slices.  This is a base class for two alternative repacking mechanisms,
++   one for when repacking from a lazy value, and one for repacking from a
++   non-lazy (already loaded) value.  */
++class fortran_array_repacker_base_impl
++  : public fortran_array_walker_base_impl
++{
++public:
++  /* Constructor, DEST is the value we are repacking into.  */
++  fortran_array_repacker_base_impl (struct value *dest)
++    : m_dest (dest),
++      m_dest_offset (0)
++  { /* Nothing.  */ }
++
++  /* When we start processing the inner most dimension, this is where we
++     will be creating values for each element as we load them and then copy
++     them into the M_DEST value.  Set a value mark so we can free these
++     temporary values.  */
++  void start_dimension (bool inner_p)
++  {
++    if (inner_p)
++      {
++	gdb_assert (m_mark == nullptr);
++	m_mark = value_mark ();
++      }
++  }
++
++  /* When we finish processing the inner most dimension free all temporary
++     value that were created.  */
++  void finish_dimension (bool inner_p, bool last_p)
++  {
++    if (inner_p)
++      {
++	gdb_assert (m_mark != nullptr);
++	value_free_to_mark (m_mark);
++	m_mark = nullptr;
++      }
++  }
++
++protected:
++  /* Copy the contents of array element ELT into M_DEST at the next
++     available offset.  */
++  void copy_element_to_dest (struct value *elt)
++  {
++    value_contents_copy (m_dest, m_dest_offset, elt, 0,
++			 TYPE_LENGTH (value_type (elt)));
++    m_dest_offset += TYPE_LENGTH (value_type (elt));
++  }
++
++  /* The value being written to.  */
++  struct value *m_dest;
++
++  /* The byte offset in M_DEST at which the next element should be
++     written.  */
++  LONGEST m_dest_offset;
++
++  /* Set with a call to VALUE_MARK, and then reset after calling
++     VALUE_FREE_TO_MARK.  */
++  struct value *m_mark = nullptr;
++};
++
++/* A class used by FORTRAN_VALUE_SUBARRAY when repacking Fortran array
++   slices.  This class is specialised for repacking an array slice from a
++   lazy array value, as such it does not require the parent array value to
++   be loaded into GDB's memory; the parent value could be huge, while the
++   slice could be tiny.  */
++class fortran_lazy_array_repacker_impl
++  : public fortran_array_repacker_base_impl
++{
++public:
++  /* Constructor.  TYPE is the type of the slice being loaded from the
++     parent value, so this type will correctly reflect the strides required
++     to find all of the elements from the parent value.  ADDRESS is the
++     address in target memory of value matching TYPE, and DEST is the value
++     we are repacking into.  */
++  explicit fortran_lazy_array_repacker_impl (struct type *type,
++					     CORE_ADDR address,
++					     struct value *dest)
++    : fortran_array_repacker_base_impl (dest),
++      m_addr (address)
++  { /* Nothing.  */ }
++
++  /* Create a lazy value in target memory representing a single element,
++     then load the element into GDB's memory and copy the contents into the
++     destination value.  */
++  void process_element (struct type *elt_type, LONGEST elt_off, bool last_p)
++  {
++    copy_element_to_dest (value_at_lazy (elt_type, m_addr + elt_off));
++  }
++
++private:
++  /* The address in target memory where the parent value starts.  */
++  CORE_ADDR m_addr;
++};
++
++/* A class used by FORTRAN_VALUE_SUBARRAY when repacking Fortran array
++   slices.  This class is specialised for repacking an array slice from a
++   previously loaded (non-lazy) array value, as such it fetches the
++   element values from the contents of the parent value.  */
++class fortran_array_repacker_impl
++  : public fortran_array_repacker_base_impl
++{
++public:
++  /* Constructor.  TYPE is the type for the array slice within the parent
++     value, as such it has stride values as required to find the elements
++     within the original parent value.  ADDRESS is the address in target
++     memory of the value matching TYPE.  BASE_OFFSET is the offset from
++     the start of VAL's content buffer to the start of the object of TYPE,
++     VAL is the parent object from which we are loading the value, and
++     DEST is the value into which we are repacking.  */
++  explicit fortran_array_repacker_impl (struct type *type, CORE_ADDR address,
++					LONGEST base_offset,
++					struct value *val, struct value *dest)
++    : fortran_array_repacker_base_impl (dest),
++      m_base_offset (base_offset),
++      m_val (val)
++  {
++    gdb_assert (!value_lazy (val));
++  }
++
++  /* Extract an element of ELT_TYPE at offset (M_BASE_OFFSET + ELT_OFF)
++     from the content buffer of M_VAL then copy this extracted value into
++     the repacked destination value.  */
++  void process_element (struct type *elt_type, LONGEST elt_off, bool last_p)
++  {
++    struct value *elt
++      = value_from_component (m_val, elt_type, (elt_off + m_base_offset));
++    copy_element_to_dest (elt);
++  }
++
++private:
++  /* The offset into the content buffer of M_VAL to the start of the slice
++     being extracted.  */
++  LONGEST m_base_offset;
++
++  /* The parent value from which we are extracting a slice.  */
++  struct value *m_val;
++};
++
+ /* Called from evaluate_subexp_standard to perform array indexing, and
+    sub-range extraction, for Fortran.  As well as arrays this function
+    also handles strings as they can be treated like arrays of characters.
+@@ -200,51 +315,394 @@ static struct value *
+ fortran_value_subarray (struct value *array, struct expression *exp,
+ 			int *pos, int nargs, enum noside noside)
+ {
+-  if (exp->elts[*pos].opcode == OP_RANGE)
+-    return value_f90_subarray (array, exp, pos, noside);
+-
+-  if (noside == EVAL_SKIP)
++  type *original_array_type = check_typedef (value_type (array));
++  bool is_string_p = original_array_type->code () == TYPE_CODE_STRING;
++
++  /* Perform checks for ARRAY not being available.  The somewhat overly
++     complex logic here is just to keep backward compatibility with the
++     errors that we used to get before FORTRAN_VALUE_SUBARRAY was
++     rewritten.  Maybe a future task would streamline the error messages we
++     get here, and update all the expected test results.  */
++  if (exp->elts[*pos].opcode != OP_RANGE)
+     {
+-      skip_undetermined_arglist (nargs, exp, pos, noside);
+-      /* Return the dummy value with the correct type.  */
+-      return array;
++      if (type_not_associated (original_array_type))
++	error (_("no such vector element (vector not associated)"));
++      else if (type_not_allocated (original_array_type))
++	error (_("no such vector element (vector not allocated)"));
++    }
++  else
++    {
++      if (type_not_associated (original_array_type))
++	error (_("array not associated"));
++      else if (type_not_allocated (original_array_type))
++	error (_("array not allocated"));
+     }
+ 
+-  LONGEST subscript_array[MAX_FORTRAN_DIMS];
+-  int ndimensions = 1;
+-  struct type *type = check_typedef (value_type (array));
++  /* First check that the number of dimensions in the type we are slicing
++     matches the number of arguments we were passed.  */
++  int ndimensions = calc_f77_array_dims (original_array_type);
++  if (nargs != ndimensions)
++    error (_("Wrong number of subscripts"));
+ 
+-  if (nargs > MAX_FORTRAN_DIMS)
+-    error (_("Too many subscripts for F77 (%d Max)"), MAX_FORTRAN_DIMS);
++  /* This will be initialised below with the type of the elements held in
++     ARRAY.  */
++  struct type *inner_element_type;
+ 
+-  ndimensions = calc_f77_array_dims (type);
++  /* Extract the types of each array dimension from the original array
++     type.  We need these available so we can fill in the default upper and
++     lower bounds if the user requested slice doesn't provide that
++     information.  Additionally unpacking the dimensions like this gives us
++     the inner element type.  */
++  std::vector<struct type *> dim_types;
++  {
++    dim_types.reserve (ndimensions);
++    struct type *type = original_array_type;
++    for (int i = 0; i < ndimensions; ++i)
++      {
++	dim_types.push_back (type);
++	type = TYPE_TARGET_TYPE (type);
++      }
++    /* TYPE is now the inner element type of the array, we start the new
++       array slice off as this type, then as we process the requested slice
++       (from the user) we wrap new types around this to build up the final
++       slice type.  */
++    inner_element_type = type;
++  }
+ 
+-  if (nargs != ndimensions)
+-    error (_("Wrong number of subscripts"));
++  /* As we analyse the new slice type we need to understand if the data
++     being referenced is contiguous.  Do decide this we must track the size
++     of an element at each dimension of the new slice array.  Initially the
++     elements of the inner most dimension of the array are the same inner
++     most elements as the original ARRAY.  */
++  LONGEST slice_element_size = TYPE_LENGTH (inner_element_type);
++
++  /* Start off assuming all data is contiguous, this will be set to false
++     if access to any dimension results in non-contiguous data.  */
++  bool is_all_contiguous = true;
++
++  /* The TOTAL_OFFSET is the distance in bytes from the start of the
++     original ARRAY to the start of the new slice.  This is calculated as
++     we process the information from the user.  */
++  LONGEST total_offset = 0;
++
++  /* A structure representing information about each dimension of the
++     resulting slice.  */
++  struct slice_dim
++  {
++    /* Constructor.  */
++    slice_dim (LONGEST l, LONGEST h, LONGEST s, struct type *idx)
++      : low (l),
++	high (h),
++	stride (s),
++	index (idx)
++    { /* Nothing.  */ }
++
++    /* The low bound for this dimension of the slice.  */
++    LONGEST low;
++
++    /* The high bound for this dimension of the slice.  */
++    LONGEST high;
++
++    /* The byte stride for this dimension of the slice.  */
++    LONGEST stride;
++
++    struct type *index;
++  };
++
++  /* The dimensions of the resulting slice.  */
++  std::vector<slice_dim> slice_dims;
++
++  /* Process the incoming arguments.   These arguments are in the reverse
++     order to the array dimensions, that is the first argument refers to
++     the last array dimension.  */
++  if (fortran_array_slicing_debug)
++    debug_printf ("Processing array access:\n");
++  for (int i = 0; i < nargs; ++i)
++    {
++      /* For each dimension of the array the user will have either provided
++	 a ranged access with optional lower bound, upper bound, and
++	 stride, or the user will have supplied a single index.  */
++      struct type *dim_type = dim_types[ndimensions - (i + 1)];
++      if (exp->elts[*pos].opcode == OP_RANGE)
++	{
++	  int pc = (*pos) + 1;
++	  enum range_flag range_flag = (enum range_flag) exp->elts[pc].longconst;
++	  *pos += 3;
++
++	  LONGEST low, high, stride;
++	  low = high = stride = 0;
++
++	  if ((range_flag & RANGE_LOW_BOUND_DEFAULT) == 0)
++	    low = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
++	  else
++	    low = f77_get_lowerbound (dim_type);
++	  if ((range_flag & RANGE_HIGH_BOUND_DEFAULT) == 0)
++	    high = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
++	  else
++	    high = f77_get_upperbound (dim_type);
++	  if ((range_flag & RANGE_HAS_STRIDE) == RANGE_HAS_STRIDE)
++	    stride = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
++	  else
++	    stride = 1;
++
++	  if (stride == 0)
++	    error (_("stride must not be 0"));
++
++	  /* Get information about this dimension in the original ARRAY.  */
++	  struct type *target_type = TYPE_TARGET_TYPE (dim_type);
++	  struct type *index_type = dim_type->index_type ();
++	  LONGEST lb = f77_get_lowerbound (dim_type);
++	  LONGEST ub = f77_get_upperbound (dim_type);
++	  LONGEST sd = index_type->bit_stride ();
++	  if (sd == 0)
++	    sd = TYPE_LENGTH (target_type) * 8;
++
++	  if (fortran_array_slicing_debug)
++	    {
++	      debug_printf ("|-> Range access\n");
++	      std::string str = type_to_string (dim_type);
++	      debug_printf ("|   |-> Type: %s\n", str.c_str ());
++	      debug_printf ("|   |-> Array:\n");
++	      debug_printf ("|   |   |-> Low bound: %ld\n", lb);
++	      debug_printf ("|   |   |-> High bound: %ld\n", ub);
++	      debug_printf ("|   |   |-> Bit stride: %ld\n", sd);
++	      debug_printf ("|   |   |-> Byte stride: %ld\n", sd / 8);
++	      debug_printf ("|   |   |-> Type size: %ld\n",
++			    TYPE_LENGTH (dim_type));
++	      debug_printf ("|   |   '-> Target type size: %ld\n",
++			    TYPE_LENGTH (target_type));
++	      debug_printf ("|   |-> Accessing:\n");
++	      debug_printf ("|   |   |-> Low bound: %ld\n",
++			    low);
++	      debug_printf ("|   |   |-> High bound: %ld\n",
++			    high);
++	      debug_printf ("|   |   '-> Element stride: %ld\n",
++			    stride);
++	    }
++
++	  /* Check the user hasn't asked for something invalid.  */
++	  if (high > ub || low < lb)
++	    error (_("array subscript out of bounds"));
++
++	  /* Calculate what this dimension of the new slice array will look
++	     like.  OFFSET is the byte offset from the start of the
++	     previous (more outer) dimension to the start of this
++	     dimension.  E_COUNT is the number of elements in this
++	     dimension.  REMAINDER is the number of elements remaining
++	     between the last included element and the upper bound.  For
++	     example an access '1:6:2' will include elements 1, 3, 5 and
++	     have a remainder of 1 (element #6).  */
++	  LONGEST lowest = std::min (low, high);
++	  LONGEST offset = (sd / 8) * (lowest - lb);
++	  LONGEST e_count = std::abs (high - low) + 1;
++	  e_count = (e_count + (std::abs (stride) - 1)) / std::abs (stride);
++	  LONGEST new_low = 1;
++	  LONGEST new_high = new_low + e_count - 1;
++	  LONGEST new_stride = (sd * stride) / 8;
++	  LONGEST last_elem = low + ((e_count - 1) * stride);
++	  LONGEST remainder = high - last_elem;
++	  if (low > high)
++	    {
++	      offset += std::abs (remainder) * TYPE_LENGTH (target_type);
++	      if (stride > 0)
++		error (_("incorrect stride and boundary combination"));
++	    }
++	  else if (stride < 0)
++	    error (_("incorrect stride and boundary combination"));
++
++	  /* Is the data within this dimension contiguous?  It is if the
++	     newly computed stride is the same size as a single element of
++	     this dimension.  */
++	  bool is_dim_contiguous = (new_stride == slice_element_size);
++	  is_all_contiguous &= is_dim_contiguous;
++
++	  if (fortran_array_slicing_debug)
++	    {
++	      debug_printf ("|   '-> Results:\n");
++	      debug_printf ("|       |-> Offset = %ld\n", offset);
++	      debug_printf ("|       |-> Elements = %ld\n", e_count);
++	      debug_printf ("|       |-> Low bound = %ld\n", new_low);
++	      debug_printf ("|       |-> High bound = %ld\n", new_high);
++	      debug_printf ("|       |-> Byte stride = %ld\n", new_stride);
++	      debug_printf ("|       |-> Last element = %ld\n", last_elem);
++	      debug_printf ("|       |-> Remainder = %ld\n", remainder);
++	      debug_printf ("|       '-> Contiguous = %s\n",
++			    (is_dim_contiguous ? "Yes" : "No"));
++	    }
++
++	  /* Figure out how big (in bytes) an element of this dimension of
++	     the new array slice will be.  */
++	  slice_element_size = std::abs (new_stride * e_count);
++
++	  slice_dims.emplace_back (new_low, new_high, new_stride,
++				   index_type);
++
++	  /* Update the total offset.  */
++	  total_offset += offset;
++	}
++      else
++	{
++	  /* There is a single index for this dimension.  */
++	  LONGEST index
++	    = value_as_long (evaluate_subexp_with_coercion (exp, pos, noside));
++
++	  /* Get information about this dimension in the original ARRAY.  */
++	  struct type *target_type = TYPE_TARGET_TYPE (dim_type);
++	  struct type *index_type = dim_type->index_type ();
++	  LONGEST lb = f77_get_lowerbound (dim_type);
++	  LONGEST ub = f77_get_upperbound (dim_type);
++	  LONGEST sd = index_type->bit_stride () / 8;
++	  if (sd == 0)
++	    sd = TYPE_LENGTH (target_type);
++
++	  if (fortran_array_slicing_debug)
++	    {
++	      debug_printf ("|-> Index access\n");
++	      std::string str = type_to_string (dim_type);
++	      debug_printf ("|   |-> Type: %s\n", str.c_str ());
++	      debug_printf ("|   |-> Array:\n");
++	      debug_printf ("|   |   |-> Low bound: %ld\n", lb);
++	      debug_printf ("|   |   |-> High bound: %ld\n", ub);
++	      debug_printf ("|   |   |-> Byte stride: %ld\n", sd);
++	      debug_printf ("|   |   |-> Type size: %ld\n", TYPE_LENGTH (dim_type));
++	      debug_printf ("|   |   '-> Target type size: %ld\n",
++			    TYPE_LENGTH (target_type));
++	      debug_printf ("|   '-> Accessing:\n");
++	      debug_printf ("|       '-> Index: %ld\n", index);
++	    }
++
++	  /* If the array has actual content then check the index is in
++	     bounds.  An array without content (an unbound array) doesn't
++	     have a known upper bound, so don't error check in that
++	     situation.  */
++	  if (index < lb
++	      || (dim_type->index_type ()->bounds ()->high.kind () != PROP_UNDEFINED
++		  && index > ub)
++	      || (VALUE_LVAL (array) != lval_memory
++		  && dim_type->index_type ()->bounds ()->high.kind () == PROP_UNDEFINED))
++	    {
++	      if (type_not_associated (dim_type))
++		error (_("no such vector element (vector not associated)"));
++	      else if (type_not_allocated (dim_type))
++		error (_("no such vector element (vector not allocated)"));
++	      else
++		error (_("no such vector element"));
++	    }
+ 
+-  gdb_assert (nargs > 0);
++	  /* Calculate using the type stride, not the target type size.  */
++	  LONGEST offset = sd * (index - lb);
++	  total_offset += offset;
++	}
++    }
+ 
+-  /* Now that we know we have a legal array subscript expression let us
+-     actually find out where this element exists in the array.  */
++  if (noside == EVAL_SKIP)
++    return array;
+ 
+-  /* Take array indices left to right.  */
+-  for (int i = 0; i < nargs; i++)
++  /* Build a type that represents the new array slice in the target memory
++     of the original ARRAY, this type makes use of strides to correctly
++     find only those elements that are part of the new slice.  */
++  struct type *array_slice_type = inner_element_type;
++  for (const auto &d : slice_dims)
+     {
+-      /* Evaluate each subscript; it must be a legal integer in F77.  */
+-      value *arg2 = evaluate_subexp_with_coercion (exp, pos, noside);
++      /* Create the range.  */
++      dynamic_prop p_low, p_high, p_stride;
++
++      p_low.set_const_val (d.low);
++      p_high.set_const_val (d.high);
++      p_stride.set_const_val (d.stride);
++
++      struct type *new_range
++	= create_range_type_with_stride ((struct type *) NULL,
++					 TYPE_TARGET_TYPE (d.index),
++					 &p_low, &p_high, 0, &p_stride,
++					 true);
++      array_slice_type
++	= create_array_type (nullptr, array_slice_type, new_range);
++    }
+ 
+-      /* Fill in the subscript array.  */
+-      subscript_array[i] = value_as_long (arg2);
++  if (fortran_array_slicing_debug)
++    {
++      debug_printf ("'-> Final result:\n");
++      debug_printf ("    |-> Type: %s\n",
++		    type_to_string (array_slice_type).c_str ());
++      debug_printf ("    |-> Total offset: %ld\n", total_offset);
++      debug_printf ("    |-> Base address: %s\n",
++		    core_addr_to_string (value_address (array)));
++      debug_printf ("    '-> Contiguous = %s\n",
++		    (is_all_contiguous ? "Yes" : "No"));
+     }
+ 
+-  /* Internal type of array is arranged right to left.  */
+-  for (int i = nargs; i > 0; i--)
++  /* Should we repack this array slice?  */
++  if (!is_all_contiguous && (repack_array_slices || is_string_p))
+     {
+-      struct type *array_type = check_typedef (value_type (array));
+-      LONGEST index = subscript_array[i - 1];
++      /* Build a type for the repacked slice.  */
++      struct type *repacked_array_type = inner_element_type;
++      for (const auto &d : slice_dims)
++	{
++	  /* Create the range.  */
++	  dynamic_prop p_low, p_high, p_stride;
++
++	  p_low.set_const_val (d.low);
++	  p_high.set_const_val (d.high);
++	  p_stride.set_const_val (TYPE_LENGTH (repacked_array_type));
++
++	  struct type *new_range
++	    = create_range_type_with_stride ((struct type *) NULL,
++					     TYPE_TARGET_TYPE (d.index),
++					     &p_low, &p_high, 0, &p_stride,
++					     true);
++	  repacked_array_type
++	    = create_array_type (nullptr, repacked_array_type, new_range);
++	}
+ 
+-      array = value_subscripted_rvalue (array, index,
+-					f77_get_lowerbound (array_type));
++      /* Now copy the elements from the original ARRAY into the packed
++	 array value DEST.  */
++      struct value *dest = allocate_value (repacked_array_type);
++      if (value_lazy (array)
++	  || (total_offset + TYPE_LENGTH (array_slice_type)
++	      > TYPE_LENGTH (check_typedef (value_type (array)))))
++	{
++	  fortran_array_walker<fortran_lazy_array_repacker_impl> p
++	    (array_slice_type, value_address (array) + total_offset, dest);
++	  p.walk ();
++	}
++      else
++	{
++	  fortran_array_walker<fortran_array_repacker_impl> p
++	    (array_slice_type, value_address (array) + total_offset,
++	     total_offset, array, dest);
++	  p.walk ();
++	}
++      array = dest;
++    }
++  else
++    {
++      if (VALUE_LVAL (array) == lval_memory)
++	{
++	  /* If the value we're taking a slice from is not yet loaded, or
++	     the requested slice is outside the values content range then
++	     just create a new lazy value pointing at the memory where the
++	     contents we're looking for exist.  */
++	  if (value_lazy (array)
++	      || (total_offset + TYPE_LENGTH (array_slice_type)
++		  > TYPE_LENGTH (check_typedef (value_type (array)))))
++	    array = value_at_lazy (array_slice_type,
++				   value_address (array) + total_offset);
++	  else
++	    array = value_from_contents_and_address (array_slice_type,
++						     (value_contents (array)
++						      + total_offset),
++						     (value_address (array)
++						      + total_offset));
++	}
++      else if (!value_lazy (array))
++	{
++	  const void *valaddr = value_contents (array) + total_offset;
++	  array = allocate_value (array_slice_type);
++	  memcpy (value_contents_raw (array), valaddr, TYPE_LENGTH (array_slice_type));
++	}
++      else
++	error (_("cannot subscript arrays that are not in memory"));
+     }
+ 
+   return array;
+@@ -1031,11 +1489,50 @@ builtin_f_type (struct gdbarch *gdbarch)
+   return (const struct builtin_f_type *) gdbarch_data (gdbarch, f_type_data);
+ }
+ 
++/* Command-list for the "set/show fortran" prefix command.  */
++static struct cmd_list_element *set_fortran_list;
++static struct cmd_list_element *show_fortran_list;
++
+ void _initialize_f_language ();
+ void
+ _initialize_f_language ()
+ {
+   f_type_data = gdbarch_data_register_post_init (build_fortran_types);
++
++  add_basic_prefix_cmd ("fortran", no_class,
++			_("Prefix command for changing Fortran-specific settings."),
++			&set_fortran_list, "set fortran ", 0, &setlist);
++
++  add_show_prefix_cmd ("fortran", no_class,
++		       _("Generic command for showing Fortran-specific settings."),
++		       &show_fortran_list, "show fortran ", 0, &showlist);
++
++  add_setshow_boolean_cmd ("repack-array-slices", class_vars,
++			   &repack_array_slices, _("\
++Enable or disable repacking of non-contiguous array slices."), _("\
++Show whether non-contiguous array slices are repacked."), _("\
++When the user requests a slice of a Fortran array then we can either return\n\
++a descriptor that describes the array in place (using the original array data\n\
++in its existing location) or the original data can be repacked (copied) to a\n\
++new location.\n\
++\n\
++When the content of the array slice is contiguous within the original array\n\
++then the result will never be repacked, but when the data for the new array\n\
++is non-contiguous within the original array repacking will only be performed\n\
++when this setting is on."),
++			   NULL,
++			   show_repack_array_slices,
++			   &set_fortran_list, &show_fortran_list);
++
++  /* Debug Fortran's array slicing logic.  */
++  add_setshow_boolean_cmd ("fortran-array-slicing", class_maintenance,
++			   &fortran_array_slicing_debug, _("\
++Set debugging of Fortran array slicing."), _("\
++Show debugging of Fortran array slicing."), _("\
++When on, debugging of Fortran array slicing is enabled."),
++			    NULL,
++			    show_fortran_array_slicing_debug,
++			    &setdebuglist, &showdebuglist);
+ }
+ 
+ /* See f-lang.h.  */
+@@ -1074,3 +1571,56 @@ fortran_preserve_arg_pointer (struct value *arg, struct type *type)
+     return value_type (arg);
+   return type;
+ }
++
++/* See f-lang.h.  */
++
++CORE_ADDR
++fortran_adjust_dynamic_array_base_address_hack (struct type *type,
++						CORE_ADDR address)
++{
++  gdb_assert (type->code () == TYPE_CODE_ARRAY);
++
++  int ndimensions = calc_f77_array_dims (type);
++  LONGEST total_offset = 0;
++
++  /* Walk through each of the dimensions of this array type and figure out
++     if any of the dimensions are "backwards", that is the base address
++     for this dimension points to the element at the highest memory
++     address and the stride is negative.  */
++  struct type *tmp_type = type;
++  for (int i = 0 ; i < ndimensions; ++i)
++    {
++      /* Grab the range for this dimension and extract the lower and upper
++	 bounds.  */
++      tmp_type = check_typedef (tmp_type);
++      struct type *range_type = tmp_type->index_type ();
++      LONGEST lowerbound, upperbound, stride;
++      if (!get_discrete_bounds (range_type, &lowerbound, &upperbound))
++	error ("failed to get range bounds");
++
++      /* Figure out the stride for this dimension.  */
++      struct type *elt_type = check_typedef (TYPE_TARGET_TYPE (tmp_type));
++      stride = tmp_type->index_type ()->bounds ()->bit_stride ();
++      if (stride == 0)
++	stride = type_length_units (elt_type);
++      else
++	{
++	  struct gdbarch *arch = get_type_arch (elt_type);
++	  int unit_size = gdbarch_addressable_memory_unit_size (arch);
++	  stride /= (unit_size * 8);
++	}
++
++      /* If this dimension is "backward" then figure out the offset
++	 adjustment required to point to the element at the lowest memory
++	 address, and add this to the total offset.  */
++      LONGEST offset = 0;
++      if (stride < 0 && lowerbound < upperbound)
++	offset = (upperbound - lowerbound) * stride;
++      total_offset += offset;
++      tmp_type = TYPE_TARGET_TYPE (tmp_type);
++    }
++
++  /* Adjust the address of this object and return it.  */
++  address += total_offset;
++  return address;
++}
+diff --git a/gdb/f-lang.h b/gdb/f-lang.h
+--- a/gdb/f-lang.h
++++ b/gdb/f-lang.h
+@@ -64,7 +64,6 @@ extern void f77_get_dynamic_array_length (struct type *);
+ 
+ extern int calc_f77_array_dims (struct type *);
+ 
+-
+ /* Fortran (F77) types */
+ 
+ struct builtin_f_type
+@@ -122,4 +121,22 @@ extern struct value *fortran_argument_convert (struct value *value,
+ extern struct type *fortran_preserve_arg_pointer (struct value *arg,
+ 						  struct type *type);
+ 
++/* Fortran arrays can have a negative stride.  When this happens it is
++   often the case that the base address for an object is not the lowest
++   address occupied by that object.  For example, an array slice (10:1:-1)
++   will be encoded with lower bound 1, upper bound 10, a stride of
++   -ELEMENT_SIZE, and have a base address pointer that points at the
++   element with the highest address in memory.
++
++   This really doesn't play well with our current model of value contents,
++   but could easily require a significant update in order to be supported
++   "correctly".
++
++   For now, we manually force the base address to be the lowest addressed
++   element here.  Yes, this will break some things, but it fixes other
++   things.  The hope is that it fixes more than it breaks.  */
++
++extern CORE_ADDR fortran_adjust_dynamic_array_base_address_hack
++	(struct type *type, CORE_ADDR address);
++
+ #endif /* F_LANG_H */
+diff --git a/gdb/f-valprint.c b/gdb/f-valprint.c
+--- a/gdb/f-valprint.c
++++ b/gdb/f-valprint.c
+@@ -35,6 +35,7 @@
+ #include "dictionary.h"
+ #include "cli/cli-style.h"
+ #include "gdbarch.h"
++#include "f-array-walker.h"
+ 
+ static void f77_get_dynamic_length_of_aggregate (struct type *);
+ 
+@@ -100,100 +101,103 @@ f77_get_dynamic_length_of_aggregate (struct type *type)
+     * TYPE_LENGTH (check_typedef (TYPE_TARGET_TYPE (type)));
+ }
+ 
+-/* Actual function which prints out F77 arrays, Valaddr == address in 
+-   the superior.  Address == the address in the inferior.  */
++/* A class used by FORTRAN_PRINT_ARRAY as a specialisation of the array
++   walking template.  This specialisation prints Fortran arrays.  */
+ 
+-static void
+-f77_print_array_1 (int nss, int ndimensions, struct type *type,
+-		   const gdb_byte *valaddr,
+-		   int embedded_offset, CORE_ADDR address,
+-		   struct ui_file *stream, int recurse,
+-		   const struct value *val,
+-		   const struct value_print_options *options,
+-		   int *elts)
++class fortran_array_printer_impl : public fortran_array_walker_base_impl
+ {
+-  struct type *range_type = check_typedef (type)->index_type ();
+-  CORE_ADDR addr = address + embedded_offset;
+-  LONGEST lowerbound, upperbound;
+-  LONGEST i;
+-
+-  get_discrete_bounds (range_type, &lowerbound, &upperbound);
+-
+-  if (nss != ndimensions)
+-    {
+-      struct gdbarch *gdbarch = get_type_arch (type);
+-      size_t dim_size = type_length_units (TYPE_TARGET_TYPE (type));
+-      int unit_size = gdbarch_addressable_memory_unit_size (gdbarch);
+-      size_t byte_stride = type->bit_stride () / (unit_size * 8);
+-      if (byte_stride == 0)
+-	byte_stride = dim_size;
+-      size_t offs = 0;
+-
+-      for (i = lowerbound;
+-	   (i < upperbound + 1 && (*elts) < options->print_max);
+-	   i++)
+-	{
+-	  struct value *subarray = value_from_contents_and_address
+-	    (TYPE_TARGET_TYPE (type), value_contents_for_printing_const (val)
+-	     + offs, addr + offs);
+-
+-	  fprintf_filtered (stream, "(");
+-	  f77_print_array_1 (nss + 1, ndimensions, value_type (subarray),
+-			     value_contents_for_printing (subarray),
+-			     value_embedded_offset (subarray),
+-			     value_address (subarray),
+-			     stream, recurse, subarray, options, elts);
+-	  offs += byte_stride;
+-	  fprintf_filtered (stream, ")");
+-
+-	  if (i < upperbound)
+-	    fprintf_filtered (stream, " ");
+-	}
+-      if (*elts >= options->print_max && i < upperbound)
+-	fprintf_filtered (stream, "...");
+-    }
+-  else
+-    {
+-      for (i = lowerbound; i < upperbound + 1 && (*elts) < options->print_max;
+-	   i++, (*elts)++)
+-	{
+-	  struct value *elt = value_subscript ((struct value *)val, i);
+-
+-	  common_val_print (elt, stream, recurse, options, current_language);
+-
+-	  if (i != upperbound)
+-	    fprintf_filtered (stream, ", ");
+-
+-	  if ((*elts == options->print_max - 1)
+-	      && (i != upperbound))
+-	    fprintf_filtered (stream, "...");
+-	}
+-    }
+-}
++public:
++  /* Constructor.  TYPE is the array type being printed, ADDRESS is the
++     address in target memory for the object of TYPE being printed.  VAL is
++     the GDB value (of TYPE) being printed.  STREAM is where to print to,
++     RECOURSE is passed through (and prevents infinite recursion), and
++     OPTIONS are the printing control options.  */
++  explicit fortran_array_printer_impl (struct type *type,
++				       CORE_ADDR address,
++				       struct value *val,
++				       struct ui_file *stream,
++				       int recurse,
++				       const struct value_print_options *options)
++    : m_elts (0),
++      m_val (val),
++      m_stream (stream),
++      m_recurse (recurse),
++      m_options (options)
++  { /* Nothing.  */ }
++
++  /* Called while iterating over the array bounds.  When SHOULD_CONTINUE is
++     false then we must return false, as we have reached the end of the
++     array bounds for this dimension.  However, we also return false if we
++     have printed too many elements (after printing '...').  In all other
++     cases, return true.  */
++  bool continue_walking (bool should_continue)
++  {
++    bool cont = should_continue && (m_elts < m_options->print_max);
++    if (!cont && should_continue)
++      fputs_filtered ("...", m_stream);
++    return cont;
++  }
++
++  /* Called when we start iterating over a dimension.  If it's not the
++     inner most dimension then print an opening '(' character.  */
++  void start_dimension (bool inner_p)
++  {
++    fputs_filtered ("(", m_stream);
++  }
++
++  /* Called when we finish processing a batch of items within a dimension
++     of the array.  Depending on whether this is the inner most dimension
++     or not we print different things, but this is all about adding
++     separators between elements, and dimensions of the array.  */
++  void finish_dimension (bool inner_p, bool last_p)
++  {
++    fputs_filtered (")", m_stream);
++    if (!last_p)
++      fputs_filtered (" ", m_stream);
++  }
++
++  /* Called to process an element of ELT_TYPE at offset ELT_OFF from the
++     start of the parent object.  */
++  void process_element (struct type *elt_type, LONGEST elt_off, bool last_p)
++  {
++    /* Extract the element value from the parent value.  */
++    struct value *e_val
++      = value_from_component (m_val, elt_type, elt_off);
++    common_val_print (e_val, m_stream, m_recurse, m_options, current_language);
++    if (!last_p)
++      fputs_filtered (", ", m_stream);
++    ++m_elts;
++  }
++
++private:
++  /* The number of elements printed so far.  */
++  int m_elts;
++
++  /* The value from which we are printing elements.  */
++  struct value *m_val;
++
++  /* The stream we should print too.  */
++  struct ui_file *m_stream;
++
++  /* The recursion counter, passed through when we print each element.  */
++  int m_recurse;
++
++  /* The print control options.  Gives us the maximum number of elements to
++     print, and is passed through to each element that we print.  */
++  const struct value_print_options *m_options = nullptr;
++};
+ 
+-/* This function gets called to print an F77 array, we set up some 
+-   stuff and then immediately call f77_print_array_1().  */
++/* This function gets called to print a Fortran array.  */
+ 
+ static void
+-f77_print_array (struct type *type, const gdb_byte *valaddr,
+-		 int embedded_offset,
+-		 CORE_ADDR address, struct ui_file *stream,
+-		 int recurse,
+-		 const struct value *val,
+-		 const struct value_print_options *options)
++fortran_print_array (struct type *type, CORE_ADDR address,
++		     struct ui_file *stream, int recurse,
++		     const struct value *val,
++		     const struct value_print_options *options)
+ {
+-  int ndimensions;
+-  int elts = 0;
+-
+-  ndimensions = calc_f77_array_dims (type);
+-
+-  if (ndimensions > MAX_FORTRAN_DIMS || ndimensions < 0)
+-    error (_("\
+-Type node corrupt! F77 arrays cannot have %d subscripts (%d Max)"),
+-	   ndimensions, MAX_FORTRAN_DIMS);
+-
+-  f77_print_array_1 (1, ndimensions, type, valaddr, embedded_offset,
+-		     address, stream, recurse, val, options, &elts);
++  fortran_array_walker<fortran_array_printer_impl> p
++    (type, address, (struct value *) val, stream, recurse, options);
++  p.walk ();
+ }
+ 
+ 
+@@ -236,12 +240,7 @@ f_value_print_inner (struct value *val, struct ui_file *stream, int recurse,
+ 
+     case TYPE_CODE_ARRAY:
+       if (TYPE_TARGET_TYPE (type)->code () != TYPE_CODE_CHAR)
+-	{
+-	  fprintf_filtered (stream, "(");
+-	  f77_print_array (type, valaddr, 0,
+-			   address, stream, recurse, val, options);
+-	  fprintf_filtered (stream, ")");
+-	}
++	fortran_print_array (type, address, stream, recurse, val, options);
+       else
+ 	{
+ 	  struct type *ch_type = TYPE_TARGET_TYPE (type);
+diff --git a/gdb/gdbtypes.c b/gdb/gdbtypes.c
+--- a/gdb/gdbtypes.c
++++ b/gdb/gdbtypes.c
+@@ -39,6 +39,7 @@
+ #include "dwarf2/loc.h"
+ #include "gdbcore.h"
+ #include "floatformat.h"
++#include "f-lang.h"
+ #include <algorithm>
+ 
+ /* Initialize BADNESS constants.  */
+@@ -2695,7 +2696,16 @@ resolve_dynamic_type_internal (struct type *type,
+   prop = TYPE_DATA_LOCATION (resolved_type);
+   if (prop != NULL
+       && dwarf2_evaluate_property (prop, NULL, addr_stack, &value))
+-    prop->set_const_val (value);
++    {
++      /* Start of Fortran hack.  See comment in f-lang.h for what is going
++	 on here.*/
++      if (current_language->la_language == language_fortran
++	  && resolved_type->code () == TYPE_CODE_ARRAY)
++	value = fortran_adjust_dynamic_array_base_address_hack (resolved_type,
++								value);
++      /* End of Fortran hack.  */
++      prop->set_const_val (value);
++    }
+ 
+   return resolved_type;
+ }
+@@ -3600,9 +3610,11 @@ is_scalar_type_recursive (struct type *t)
+       LONGEST low_bound, high_bound;
+       struct type *elt_type = check_typedef (TYPE_TARGET_TYPE (t));
+ 
+-      get_discrete_bounds (t->index_type (), &low_bound, &high_bound);
+-
+-      return high_bound == low_bound && is_scalar_type_recursive (elt_type);
++      if (get_discrete_bounds (t->index_type (), &low_bound, &high_bound))
++	return (high_bound == low_bound
++	        && is_scalar_type_recursive (elt_type));
++      else
++	return 0;
+     }
+   /* Are we dealing with a struct with one element?  */
+   else if (t->code () == TYPE_CODE_STRUCT && t->num_fields () == 1)
+diff --git a/gdb/testsuite/gdb.fortran/array-slices-bad.exp b/gdb/testsuite/gdb.fortran/array-slices-bad.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.fortran/array-slices-bad.exp
+@@ -0,0 +1,69 @@
++# Copyright 2020 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/> .
++
++# Test invalid element and slice array accesses.
++
++if {[skip_fortran_tests]} { return -1 }
++
++standard_testfile ".f90"
++load_lib fortran.exp
++
++if {[prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} \
++	 {debug f90}]} {
++    return -1
++}
++
++if ![fortran_runto_main] {
++    untested "could not run to main"
++    return -1
++}
++
++# gdb_breakpoint [gdb_get_line_number "Display Message Breakpoint"]
++gdb_breakpoint [gdb_get_line_number "First Breakpoint"]
++gdb_breakpoint [gdb_get_line_number "Second Breakpoint"]
++gdb_breakpoint [gdb_get_line_number "Final Breakpoint"]
++
++gdb_continue_to_breakpoint "First Breakpoint"
++
++# Access not yet allocated array.
++gdb_test "print other" " = <not allocated>"
++gdb_test "print other(0:4,2:3)" "array not allocated"
++gdb_test "print other(1,1)" "no such vector element \\(vector not allocated\\)"
++
++# Access not yet associated pointer.
++gdb_test "print pointer2d" " = <not associated>"
++gdb_test "print pointer2d(1:2,1:2)" "array not associated"
++gdb_test "print pointer2d(1,1)" "no such vector element \\(vector not associated\\)"
++
++gdb_continue_to_breakpoint "Second Breakpoint"
++
++# Accessing just outside the arrays.
++foreach name {array pointer2d other} {
++    gdb_test "print $name (0:,:)" "array subscript out of bounds"
++    gdb_test "print $name (:11,:)" "array subscript out of bounds"
++    gdb_test "print $name (:,0:)" "array subscript out of bounds"
++    gdb_test "print $name (:,:11)" "array subscript out of bounds"
++
++    gdb_test "print $name (0,:)" "no such vector element"
++    gdb_test "print $name (11,:)" "no such vector element"
++    gdb_test "print $name (:,0)" "no such vector element"
++    gdb_test "print $name (:,11)" "no such vector element"
++}
++
++# Stride in the wrong direction.
++gdb_test "print array (1:10:-1,:)" "incorrect stride and boundary combination"
++gdb_test "print array (:,1:10:-1)" "incorrect stride and boundary combination"
++gdb_test "print array (10:1:1,:)" "incorrect stride and boundary combination"
++gdb_test "print array (:,10:1:1)" "incorrect stride and boundary combination"
+diff --git a/gdb/testsuite/gdb.fortran/array-slices-bad.f90 b/gdb/testsuite/gdb.fortran/array-slices-bad.f90
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.fortran/array-slices-bad.f90
+@@ -0,0 +1,42 @@
++! Copyright 2020 Free Software Foundation, Inc.
++!
++! This program is free software; you can redistribute it and/or modify
++! it under the terms of the GNU General Public License as published by
++! the Free Software Foundation; either version 3 of the License, or
++! (at your option) any later version.
++!
++! This program is distributed in the hope that it will be useful,
++! but WITHOUT ANY WARRANTY; without even the implied warranty of
++! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++! GNU General Public License for more details.
++!
++! You should have received a copy of the GNU General Public License
++! along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++!
++! Start of test program.
++!
++program test
++
++  ! Declare variables used in this test.
++  integer, dimension (1:10,1:10) :: array
++  integer, allocatable :: other (:, :)
++  integer, dimension(:,:), pointer :: pointer2d => null()
++  integer, dimension(1:10,1:10), target :: tarray
++
++  print *, "" ! First Breakpoint.
++
++  ! Allocate or associate any variables as needed.
++  allocate (other (1:10, 1:10))
++  pointer2d => tarray
++  array = 0
++
++  print *, "" ! Second Breakpoint.
++
++  ! All done.  Deallocate.
++  deallocate (other)
++
++  ! GDB catches this final breakpoint to indicate the end of the test.
++  print *, "" ! Final Breakpoint.
++
++end program test
+diff --git a/gdb/testsuite/gdb.fortran/array-slices-sub-slices.exp b/gdb/testsuite/gdb.fortran/array-slices-sub-slices.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.fortran/array-slices-sub-slices.exp
+@@ -0,0 +1,111 @@
++# Copyright 2020 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/> .
++
++# Create a slice of an array, then take a slice of that slice.
++
++if {[skip_fortran_tests]} { return -1 }
++
++standard_testfile ".f90"
++load_lib fortran.exp
++
++if {[prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} \
++	 {debug f90}]} {
++    return -1
++}
++
++if ![fortran_runto_main] {
++    untested "could not run to main"
++    return -1
++}
++
++# gdb_breakpoint [gdb_get_line_number "Display Message Breakpoint"]
++gdb_breakpoint [gdb_get_line_number "Stop Here"]
++gdb_breakpoint [gdb_get_line_number "Final Breakpoint"]
++
++# We're going to print some reasonably large arrays.
++gdb_test_no_output "set print elements unlimited"
++
++gdb_continue_to_breakpoint "Stop Here"
++
++# Print a slice, capture the convenience variable name created.
++set cmd "print array (1:10:2, 1:10:2)"
++gdb_test_multiple $cmd $cmd {
++    -re "\r\n\\\$(\\d+) = .*\r\n$gdb_prompt $" {
++	set varname "\$$expect_out(1,string)"
++    }
++}
++
++# Now check that we can correctly extract all the elements from this
++# slice.
++for { set j 1 } { $j < 6 } { incr j } {
++    for { set i 1 } { $i < 6 } { incr i } {
++	set val [expr ((($i - 1) * 2) + (($j - 1) * 20)) + 1]
++	gdb_test "print ${varname} ($i,$j)" " = $val"
++    }
++}
++
++# Now take a slice of the slice.
++gdb_test "print ${varname} (3:5, 3:5)" \
++    " = \\(\\(45, 47, 49\\) \\(65, 67, 69\\) \\(85, 87, 89\\)\\)"
++
++# Now take a different slice of a slice.
++set cmd "print ${varname} (1:5:2, 1:5:2)"
++gdb_test_multiple $cmd $cmd {
++    -re "\r\n\\\$(\\d+) = \\(\\(1, 5, 9\\) \\(41, 45, 49\\) \\(81, 85, 89\\)\\)\r\n$gdb_prompt $" {
++	set varname "\$$expect_out(1,string)"
++	pass $gdb_test_name
++    }
++}
++
++# Now take a slice from the slice, of a slice!
++set cmd "print ${varname} (1:3:2, 1:3:2)"
++gdb_test_multiple $cmd $cmd {
++    -re "\r\n\\\$(\\d+) = \\(\\(1, 9\\) \\(81, 89\\)\\)\r\n$gdb_prompt $" {
++	set varname "\$$expect_out(1,string)"
++	pass $gdb_test_name
++    }
++}
++
++# And again!
++set cmd "print ${varname} (1:2:2, 1:2:2)"
++gdb_test_multiple $cmd $cmd {
++    -re "\r\n\\\$(\\d+) = \\(\\(1\\)\\)\r\n$gdb_prompt $" {
++	set varname "\$$expect_out(1,string)"
++	pass $gdb_test_name
++    }
++}
++
++# Test taking a slice with stride of a string.  This isn't actually
++# supported within gfortran (at least), but naturally drops out of how
++# GDB models arrays and strings in a similar way, so we may as well
++# test that this is still working.
++gdb_test "print str (1:26:2)" " = 'acegikmoqsuwy'"
++gdb_test "print str (26:1:-1)" " = 'zyxwvutsrqponmlkjihgfedcba'"
++gdb_test "print str (26:1:-2)" " = 'zxvtrpnljhfdb'"
++
++# Now test the memory requirements of taking a slice from an array.
++# The idea is that we shouldn't require more memory to extract a slice
++# than the size of the slice.
++#
++# This will only work if array repacking is turned on, otherwise GDB
++# will create the slice by generating a new type that sits over the
++# existing value in memory.
++gdb_test_no_output "set fortran repack-array-slices on"
++set element_size [get_integer_valueof "sizeof (array (1,1))" "unknown"]
++set slice_size [expr $element_size * 4]
++gdb_test_no_output "set max-value-size $slice_size"
++gdb_test "print array (1:2, 1:2)" "= \\(\\(1, 2\\) \\(11, 12\\)\\)"
++gdb_test "print array (2:3, 2:3)" "= \\(\\(12, 13\\) \\(22, 23\\)\\)"
++gdb_test "print array (2:5:2, 2:5:2)" "= \\(\\(12, 14\\) \\(32, 34\\)\\)"
+diff --git a/gdb/testsuite/gdb.fortran/array-slices-sub-slices.f90 b/gdb/testsuite/gdb.fortran/array-slices-sub-slices.f90
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.fortran/array-slices-sub-slices.f90
+@@ -0,0 +1,96 @@
++! Copyright 2020 Free Software Foundation, Inc.
++!
++! This program is free software; you can redistribute it and/or modify
++! it under the terms of the GNU General Public License as published by
++! the Free Software Foundation; either version 3 of the License, or
++! (at your option) any later version.
++!
++! This program is distributed in the hope that it will be useful,
++! but WITHOUT ANY WARRANTY; without even the implied warranty of
++! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++! GNU General Public License for more details.
++!
++! You should have received a copy of the GNU General Public License
++! along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++!
++! Start of test program.
++!
++program test
++  integer, dimension (1:10,1:11) :: array
++  character (len=26) :: str = "abcdefghijklmnopqrstuvwxyz"
++
++  call fill_array_2d (array)
++
++  ! GDB catches this final breakpoint to indicate the end of the test.
++  print *, "" ! Stop Here
++
++  print *, array
++  print *, str
++
++  ! GDB catches this final breakpoint to indicate the end of the test.
++  print *, "" ! Final Breakpoint.
++
++contains
++
++  ! Fill a 1D array with a unique positive integer in each element.
++  subroutine fill_array_1d (array)
++    integer, dimension (:) :: array
++    integer :: counter
++
++    counter = 1
++    do j=LBOUND (array, 1), UBOUND (array, 1), 1
++       array (j) = counter
++       counter = counter + 1
++    end do
++  end subroutine fill_array_1d
++
++  ! Fill a 2D array with a unique positive integer in each element.
++  subroutine fill_array_2d (array)
++    integer, dimension (:,:) :: array
++    integer :: counter
++
++    counter = 1
++    do i=LBOUND (array, 2), UBOUND (array, 2), 1
++       do j=LBOUND (array, 1), UBOUND (array, 1), 1
++          array (j,i) = counter
++          counter = counter + 1
++       end do
++    end do
++  end subroutine fill_array_2d
++
++  ! Fill a 3D array with a unique positive integer in each element.
++  subroutine fill_array_3d (array)
++    integer, dimension (:,:,:) :: array
++    integer :: counter
++
++    counter = 1
++    do i=LBOUND (array, 3), UBOUND (array, 3), 1
++       do j=LBOUND (array, 2), UBOUND (array, 2), 1
++          do k=LBOUND (array, 1), UBOUND (array, 1), 1
++             array (k, j,i) = counter
++             counter = counter + 1
++          end do
++       end do
++    end do
++  end subroutine fill_array_3d
++
++  ! Fill a 4D array with a unique positive integer in each element.
++  subroutine fill_array_4d (array)
++    integer, dimension (:,:,:,:) :: array
++    integer :: counter
++
++    counter = 1
++    do i=LBOUND (array, 4), UBOUND (array, 4), 1
++       do j=LBOUND (array, 3), UBOUND (array, 3), 1
++          do k=LBOUND (array, 2), UBOUND (array, 2), 1
++             do l=LBOUND (array, 1), UBOUND (array, 1), 1
++                array (l, k, j,i) = counter
++                counter = counter + 1
++             end do
++          end do
++       end do
++    end do
++    print *, ""
++  end subroutine fill_array_4d
++end program test
+diff --git a/gdb/testsuite/gdb.fortran/array-slices.exp b/gdb/testsuite/gdb.fortran/array-slices.exp
+--- a/gdb/testsuite/gdb.fortran/array-slices.exp
++++ b/gdb/testsuite/gdb.fortran/array-slices.exp
+@@ -18,6 +18,21 @@
+ # the subroutine.  This should exercise GDB's ability to handle
+ # different strides for the different dimensions.
+ 
++# Testing GDB's ability to print array (and string) slices, including
++# slices that make use of array strides.
++#
++# In the Fortran code various arrays of different ranks are filled
++# with data, and slices are passed to a series of show functions.
++#
++# In this test script we break in each of the show functions, print
++# the array slice that was passed in, and then move up the stack to
++# the parent frame and check GDB can manually extract the same slice.
++#
++# This test also checks that the size of the array slice passed to the
++# function (so as extracted and described by the compiler and the
++# debug information) matches the size of the slice manually extracted
++# by GDB.
++
+ if {[skip_fortran_tests]} { return -1 }
+ 
+ standard_testfile ".f90"
+@@ -28,57 +43,224 @@ if {[prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} \
+     return -1
+ }
+ 
+-if ![fortran_runto_main] {
+-    untested "could not run to main"
+-    return -1
++# Takes the name of an array slice as used in the test source, and extracts
++# the base array name.  For example: 'array (1,2)' becomes 'array'.
++proc array_slice_to_var { slice_str } {
++    regexp "^(?:\\s*\\()*(\[^( \t\]+)" $slice_str matchvar varname
++    return $varname
+ }
+ 
+-gdb_breakpoint "show"
+-gdb_breakpoint [gdb_get_line_number "Final Breakpoint"]
+-
+-set array_contents \
+-    [list \
+-	 " = \\(\\(1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\) \\(11, 12, 13, 14, 15, 16, 17, 18, 19, 20\\) \\(21, 22, 23, 24, 25, 26, 27, 28, 29, 30\\) \\(31, 32, 33, 34, 35, 36, 37, 38, 39, 40\\) \\(41, 42, 43, 44, 45, 46, 47, 48, 49, 50\\) \\(51, 52, 53, 54, 55, 56, 57, 58, 59, 60\\) \\(61, 62, 63, 64, 65, 66, 67, 68, 69, 70\\) \\(71, 72, 73, 74, 75, 76, 77, 78, 79, 80\\) \\(81, 82, 83, 84, 85, 86, 87, 88, 89, 90\\) \\(91, 92, 93, 94, 95, 96, 97, 98, 99, 100\\)\\)" \
+-	 " = \\(\\(1, 2, 3, 4, 5\\) \\(11, 12, 13, 14, 15\\) \\(21, 22, 23, 24, 25\\) \\(31, 32, 33, 34, 35\\) \\(41, 42, 43, 44, 45\\)\\)" \
+-	 " = \\(\\(1, 3, 5, 7, 9\\) \\(21, 23, 25, 27, 29\\) \\(41, 43, 45, 47, 49\\) \\(61, 63, 65, 67, 69\\) \\(81, 83, 85, 87, 89\\)\\)" \
+-	 " = \\(\\(1, 4, 7, 10\\) \\(21, 24, 27, 30\\) \\(41, 44, 47, 50\\) \\(61, 64, 67, 70\\) \\(81, 84, 87, 90\\)\\)" \
+-	 " = \\(\\(1, 5, 9\\) \\(31, 35, 39\\) \\(61, 65, 69\\) \\(91, 95, 99\\)\\)" \
+-	 " = \\(\\(-26, -25, -24, -23, -22, -21, -20, -19, -18, -17\\) \\(-19, -18, -17, -16, -15, -14, -13, -12, -11, -10\\) \\(-12, -11, -10, -9, -8, -7, -6, -5, -4, -3\\) \\(-5, -4, -3, -2, -1, 0, 1, 2, 3, 4\\) \\(2, 3, 4, 5, 6, 7, 8, 9, 10, 11\\) \\(9, 10, 11, 12, 13, 14, 15, 16, 17, 18\\) \\(16, 17, 18, 19, 20, 21, 22, 23, 24, 25\\) \\(23, 24, 25, 26, 27, 28, 29, 30, 31, 32\\) \\(30, 31, 32, 33, 34, 35, 36, 37, 38, 39\\) \\(37, 38, 39, 40, 41, 42, 43, 44, 45, 46\\)\\)" \
+-	 " = \\(\\(-26, -25, -24, -23, -22, -21\\) \\(-19, -18, -17, -16, -15, -14\\) \\(-12, -11, -10, -9, -8, -7\\)\\)" \
+-	 " = \\(\\(-26, -24, -22, -20, -18\\) \\(-5, -3, -1, 1, 3\\) \\(16, 18, 20, 22, 24\\) \\(37, 39, 41, 43, 45\\)\\)" ]
+-
+-set message_strings \
+-    [list \
+-	 " = 'array'" \
+-	 " = 'array \\(1:5,1:5\\)'" \
+-	 " = 'array \\(1:10:2,1:10:2\\)'" \
+-	 " = 'array \\(1:10:3,1:10:2\\)'" \
+-	 " = 'array \\(1:10:5,1:10:3\\)'" ]
+-
+-set i 0
+-foreach result $array_contents msg $message_strings {
+-    incr i
+-    with_test_prefix "test $i" {
+-	gdb_continue_to_breakpoint "show"
+-	gdb_test "p array" $result
+-	gdb_test "p message" "$msg"
++proc run_test { repack } {
++    global binfile gdb_prompt
++
++    clean_restart ${binfile}
++
++    if ![fortran_runto_main] {
++	untested "could not run to main"
++	return -1
+     }
+-}
+ 
+-gdb_continue_to_breakpoint "continue to Final Breakpoint"
++    gdb_test_no_output "set fortran repack-array-slices $repack"
++
++    # gdb_breakpoint [gdb_get_line_number "Display Message Breakpoint"]
++    gdb_breakpoint [gdb_get_line_number "Display Element"]
++    gdb_breakpoint [gdb_get_line_number "Display String"]
++    gdb_breakpoint [gdb_get_line_number "Display Array Slice 1D"]
++    gdb_breakpoint [gdb_get_line_number "Display Array Slice 2D"]
++    gdb_breakpoint [gdb_get_line_number "Display Array Slice 3D"]
++    gdb_breakpoint [gdb_get_line_number "Display Array Slice 4D"]
++    gdb_breakpoint [gdb_get_line_number "Final Breakpoint"]
++
++    # We're going to print some reasonably large arrays.
++    gdb_test_no_output "set print elements unlimited"
++
++    set found_final_breakpoint false
++
++    # We place a limit on the number of tests that can be run, just in
++    # case something goes wrong, and GDB gets stuck in an loop here.
++    set test_count 0
++    while { $test_count < 500 } {
++	with_test_prefix "test $test_count" {
++	    incr test_count
++
++	    set found_final_breakpoint false
++	    set expected_result ""
++	    set func_name ""
++	    gdb_test_multiple "continue" "continue" {
++		-re ".*GDB = (\[^\r\n\]+)\r\n" {
++		    set expected_result $expect_out(1,string)
++		    exp_continue
++		}
++		-re "! Display Element" {
++		    set func_name "show_elem"
++		    exp_continue
++		}
++		-re "! Display String" {
++		    set func_name "show_str"
++		    exp_continue
++		}
++		-re "! Display Array Slice (.)D" {
++		    set func_name "show_$expect_out(1,string)d"
++		    exp_continue
++		}
++		-re "! Final Breakpoint" {
++		    set found_final_breakpoint true
++		    exp_continue
++		}
++		-re "$gdb_prompt $" {
++		    # We're done.
++		}
++	    }
+ 
+-# Next test that asking for an array with stride at the CLI gives an
+-# error.
+-clean_restart ${testfile}
++	    if ($found_final_breakpoint) {
++		break
++	    }
+ 
+-if ![fortran_runto_main] then {
+-    perror "couldn't run to main"
+-    continue
++	    # We want to take a look at the line in the previous frame that
++	    # called the current function.  I couldn't find a better way of
++	    # doing this than 'up', which will print the line, then 'down'
++	    # again.
++	    #
++	    # I don't want to fill the log with passes for these up/down
++	    # commands, so we don't report any.  If something goes wrong then we
++	    # should get a fail from gdb_test_multiple.
++	    set array_slice_name ""
++	    set unique_id ""
++	    array unset replacement_vars
++	    array set replacement_vars {}
++	    gdb_test_multiple "up" "up" {
++		-re "\r\n\[0-9\]+\[ \t\]+call ${func_name} \\((\[^\r\n\]+)\\)\r\n$gdb_prompt $" {
++		    set array_slice_name $expect_out(1,string)
++		}
++		-re "\r\n\[0-9\]+\[ \t\]+call ${func_name} \\((\[^\r\n\]+)\\)\[ \t\]+! VARS=(\[^ \t\r\n\]+)\r\n$gdb_prompt $" {
++		    set array_slice_name $expect_out(1,string)
++		    set unique_id $expect_out(2,string)
++		}
++	    }
++	    if {$unique_id != ""} {
++		set str ""
++		foreach v [split $unique_id ,] {
++		    set val [get_integer_valueof "${v}" "??"\
++				 "get variable '$v' for '$array_slice_name'"]
++		    set replacement_vars($v) $val
++		    if {$str != ""} {
++			set str "Str,"
++		    }
++		    set str "$str$v=$val"
++		}
++		set unique_id " $str"
++	    }
++	    gdb_test_multiple "down" "down" {
++		-re "\r\n$gdb_prompt $" {
++		    # Don't issue a pass here.
++		}
++	    }
++
++	    # Check we have all the information we need to successfully run one
++	    # of these tests.
++	    if { $expected_result == "" } {
++		perror "failed to extract expected results"
++		return 0
++	    }
++	    if { $array_slice_name == "" } {
++		perror "failed to extract array slice name"
++		return 0
++	    }
++
++	    # Check GDB can correctly print the array slice that was passed into
++	    # the current frame.
++	    set pattern [string_to_regexp " = $expected_result"]
++	    gdb_test "p array" "$pattern" \
++		"check value of '$array_slice_name'$unique_id"
++
++	    # Get the size of the slice.
++	    set size_in_show \
++		[get_integer_valueof "sizeof (array)" "show_unknown" \
++		     "get sizeof '$array_slice_name'$unique_id in show"]
++	    set addr_in_show \
++		[get_hexadecimal_valueof "&array" "show_unknown" \
++		     "get address '$array_slice_name'$unique_id in show"]
++
++	    # Now move into the previous frame, and see if GDB can extract the
++	    # array slice from the original parent object.  Again, use of
++	    # gdb_test_multiple to avoid filling the logs with unnecessary
++	    # passes.
++	    gdb_test_multiple "up" "up" {
++		-re "\r\n$gdb_prompt $" {
++		    # Do nothing.
++		}
++	    }
++
++	    # Print the array slice, this will force GDB to manually extract the
++	    # slice from the parent array.
++	    gdb_test "p $array_slice_name" "$pattern" \
++		"check array slice '$array_slice_name'$unique_id can be extracted"
++
++	    # Get the size of the slice in the calling frame.
++	    set size_in_parent \
++		[get_integer_valueof "sizeof ($array_slice_name)" \
++		     "parent_unknown" \
++		     "get sizeof '$array_slice_name'$unique_id in parent"]
++
++	    # Figure out the start and end addresses of the full array in the
++	    # parent frame.
++	    set full_var_name [array_slice_to_var $array_slice_name]
++	    set start_addr [get_hexadecimal_valueof "&${full_var_name}" \
++				"start unknown"]
++	    set end_addr [get_hexadecimal_valueof \
++			      "(&${full_var_name}) + sizeof (${full_var_name})" \
++			      "end unknown"]
++
++	    # The Fortran compiler can choose to either send a descriptor that
++	    # describes the array slice to the subroutine, or it can repack the
++	    # slice into an array section and send that.
++	    #
++	    # We find the address range of the original array in the parent,
++	    # and the address of the slice in the show function, if the
++	    # address of the slice (from show) is in the range of the original
++	    # array then repacking has not occurred, otherwise, the slice is
++	    # outside of the parent, and repacking must have occurred.
++	    #
++	    # The goal here is to compare the sizes of the slice in show with
++	    # the size of the slice extracted by GDB.  So we can only compare
++	    # sizes when GDB's repacking setting matches the repacking
++	    # behaviour we got from the compiler.
++	    if { ($addr_in_show < $start_addr || $addr_in_show >= $end_addr) \
++		 == ($repack == "on") } {
++		gdb_assert {$size_in_show == $size_in_parent} \
++		    "check sizes match"
++	    } elseif { $repack == "off" } {
++		# GDB's repacking is off (so slices are left unpacked), but
++		# the compiler did pack this one.  As a result we can't
++		# compare the sizes between the compiler's slice and GDB's
++		# slice.
++		verbose -log "slice '$array_slice_name' was repacked, sizes can't be compared"
++	    } else {
++		# Like the above, but the reverse, GDB's repacking is on, but
++		# the compiler didn't repack this slice.
++		verbose -log "slice '$array_slice_name' was not repacked, sizes can't be compared"
++	    }
++
++	    # If the array name we just tested included variable names, then
++	    # test again with all the variables expanded.
++	    if {$unique_id != ""} {
++		foreach v [array names replacement_vars] {
++		    set val $replacement_vars($v)
++		    set array_slice_name \
++			[regsub "\\y${v}\\y" $array_slice_name $val]
++		}
++		gdb_test "p $array_slice_name" "$pattern" \
++		    "check array slice '$array_slice_name'$unique_id can be extracted, with variables expanded"
++	    }
++	}
++    }
++
++    # Ensure we reached the final breakpoint.  If more tests have been added
++    # to the test script, and this starts failing, then the safety 'while'
++    # loop above might need to be increased.
++    gdb_assert {$found_final_breakpoint} "ran all tests"
+ }
+ 
+-gdb_breakpoint "show"
+-gdb_continue_to_breakpoint "show"
+-gdb_test "up" ".*"
+-gdb_test "p array (1:10:2, 1:10:2)" \
+-    "Fortran array strides are not currently supported" \
+-    "using array stride gives an error"
++foreach_with_prefix repack { on off } {
++    run_test $repack
++}
+diff --git a/gdb/testsuite/gdb.fortran/array-slices.f90 b/gdb/testsuite/gdb.fortran/array-slices.f90
+--- a/gdb/testsuite/gdb.fortran/array-slices.f90
++++ b/gdb/testsuite/gdb.fortran/array-slices.f90
+@@ -13,58 +13,368 @@
+ ! You should have received a copy of the GNU General Public License
+ ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ 
+-subroutine show (message, array)
+-  character (len=*) :: message
++subroutine show_elem (array)
++  integer :: array
++
++  print *, ""
++  print *, "Expected GDB Output:"
++  print *, ""
++
++  write(*, fmt="(A)", advance="no") "GDB = "
++  write(*, fmt="(I0)", advance="no") array
++  write(*, fmt="(A)", advance="yes") ""
++
++  print *, ""	! Display Element
++end subroutine show_elem
++
++subroutine show_str (array)
++  character (len=*) :: array
++
++  print *, ""
++  print *, "Expected GDB Output:"
++  print *, ""
++  write (*, fmt="(A)", advance="no") "GDB = '"
++  write (*, fmt="(A)", advance="no") array
++  write (*, fmt="(A)", advance="yes") "'"
++
++  print *, ""	! Display String
++end subroutine show_str
++
++subroutine show_1d (array)
++  integer, dimension (:) :: array
++
++  print *, "Array Contents:"
++  print *, ""
++
++  do i=LBOUND (array, 1), UBOUND (array, 1), 1
++     write(*, fmt="(i4)", advance="no") array (i)
++  end do
++
++  print *, ""
++  print *, "Expected GDB Output:"
++  print *, ""
++
++  write(*, fmt="(A)", advance="no") "GDB = ("
++  do i=LBOUND (array, 1), UBOUND (array, 1), 1
++     if (i > LBOUND (array, 1)) then
++        write(*, fmt="(A)", advance="no") ", "
++     end if
++     write(*, fmt="(I0)", advance="no") array (i)
++  end do
++  write(*, fmt="(A)", advance="no") ")"
++
++  print *, ""	! Display Array Slice 1D
++end subroutine show_1d
++
++subroutine show_2d (array)
+   integer, dimension (:,:) :: array
+ 
+-  print *, message
++  print *, "Array Contents:"
++  print *, ""
++
+   do i=LBOUND (array, 2), UBOUND (array, 2), 1
+      do j=LBOUND (array, 1), UBOUND (array, 1), 1
+         write(*, fmt="(i4)", advance="no") array (j, i)
+      end do
+      print *, ""
+- end do
+- print *, array
+- print *, ""
++  end do
+ 
+-end subroutine show
++  print *, ""
++  print *, "Expected GDB Output:"
++  print *, ""
+ 
+-program test
++  write(*, fmt="(A)", advance="no") "GDB = ("
++  do i=LBOUND (array, 2), UBOUND (array, 2), 1
++     if (i > LBOUND (array, 2)) then
++        write(*, fmt="(A)", advance="no") " "
++     end if
++     write(*, fmt="(A)", advance="no") "("
++     do j=LBOUND (array, 1), UBOUND (array, 1), 1
++        if (j > LBOUND (array, 1)) then
++           write(*, fmt="(A)", advance="no") ", "
++        end if
++        write(*, fmt="(I0)", advance="no") array (j, i)
++     end do
++     write(*, fmt="(A)", advance="no") ")"
++  end do
++  write(*, fmt="(A)", advance="yes") ")"
++
++  print *, ""	! Display Array Slice 2D
++end subroutine show_2d
++
++subroutine show_3d (array)
++  integer, dimension (:,:,:) :: array
++
++  print *, ""
++  print *, "Expected GDB Output:"
++  print *, ""
++
++  write(*, fmt="(A)", advance="no") "GDB = ("
++  do i=LBOUND (array, 3), UBOUND (array, 3), 1
++     if (i > LBOUND (array, 3)) then
++        write(*, fmt="(A)", advance="no") " "
++     end if
++     write(*, fmt="(A)", advance="no") "("
++     do j=LBOUND (array, 2), UBOUND (array, 2), 1
++        if (j > LBOUND (array, 2)) then
++           write(*, fmt="(A)", advance="no") " "
++        end if
++        write(*, fmt="(A)", advance="no") "("
++        do k=LBOUND (array, 1), UBOUND (array, 1), 1
++           if (k > LBOUND (array, 1)) then
++              write(*, fmt="(A)", advance="no") ", "
++           end if
++           write(*, fmt="(I0)", advance="no") array (k, j, i)
++        end do
++        write(*, fmt="(A)", advance="no") ")"
++     end do
++     write(*, fmt="(A)", advance="no") ")"
++  end do
++  write(*, fmt="(A)", advance="yes") ")"
++
++  print *, ""	! Display Array Slice 3D
++end subroutine show_3d
++
++subroutine show_4d (array)
++  integer, dimension (:,:,:,:) :: array
++
++  print *, ""
++  print *, "Expected GDB Output:"
++  print *, ""
++
++  write(*, fmt="(A)", advance="no") "GDB = ("
++  do i=LBOUND (array, 4), UBOUND (array, 4), 1
++     if (i > LBOUND (array, 4)) then
++        write(*, fmt="(A)", advance="no") " "
++     end if
++     write(*, fmt="(A)", advance="no") "("
++     do j=LBOUND (array, 3), UBOUND (array, 3), 1
++        if (j > LBOUND (array, 3)) then
++           write(*, fmt="(A)", advance="no") " "
++        end if
++        write(*, fmt="(A)", advance="no") "("
++
++        do k=LBOUND (array, 2), UBOUND (array, 2), 1
++           if (k > LBOUND (array, 2)) then
++              write(*, fmt="(A)", advance="no") " "
++           end if
++           write(*, fmt="(A)", advance="no") "("
++           do l=LBOUND (array, 1), UBOUND (array, 1), 1
++              if (l > LBOUND (array, 1)) then
++                 write(*, fmt="(A)", advance="no") ", "
++              end if
++              write(*, fmt="(I0)", advance="no") array (l, k, j, i)
++           end do
++           write(*, fmt="(A)", advance="no") ")"
++        end do
++        write(*, fmt="(A)", advance="no") ")"
++     end do
++     write(*, fmt="(A)", advance="no") ")"
++  end do
++  write(*, fmt="(A)", advance="yes") ")"
++
++  print *, ""	! Display Array Slice 4D
++end subroutine show_4d
+ 
++!
++! Start of test program.
++!
++program test
+   interface
+-     subroutine show (message, array)
+-       character (len=*) :: message
++     subroutine show_str (array)
++       character (len=*) :: array
++     end subroutine show_str
++
++     subroutine show_1d (array)
++       integer, dimension (:) :: array
++     end subroutine show_1d
++
++     subroutine show_2d (array)
+        integer, dimension(:,:) :: array
+-     end subroutine show
++     end subroutine show_2d
++
++     subroutine show_3d (array)
++       integer, dimension(:,:,:) :: array
++     end subroutine show_3d
++
++     subroutine show_4d (array)
++       integer, dimension(:,:,:,:) :: array
++     end subroutine show_4d
+   end interface
+ 
++  ! Declare variables used in this test.
++  integer, dimension (-10:-1,-10:-2) :: neg_array
+   integer, dimension (1:10,1:10) :: array
+   integer, allocatable :: other (:, :)
++  character (len=26) :: str_1 = "abcdefghijklmnopqrstuvwxyz"
++  integer, dimension (-2:2,-2:2,-2:2) :: array3d
++  integer, dimension (-3:3,7:10,-3:3,-10:-7) :: array4d
++  integer, dimension (10:20) :: array1d
++  integer, dimension(:,:), pointer :: pointer2d => null()
++  integer, dimension(-1:9,-1:9), target :: tarray
+ 
++  ! Allocate or associate any variables as needed.
+   allocate (other (-5:4, -2:7))
++  pointer2d => tarray
+ 
+-  do i=LBOUND (array, 2), UBOUND (array, 2), 1
+-     do j=LBOUND (array, 1), UBOUND (array, 1), 1
+-        array (j,i) = ((i - 1) * UBOUND (array, 2)) + j
+-     end do
+-  end do
++  ! Fill arrays with contents ready for testing.
++  call fill_array_1d (array1d)
++
++  call fill_array_2d (neg_array)
++  call fill_array_2d (array)
++  call fill_array_2d (other)
++  call fill_array_2d (tarray)
++
++  call fill_array_3d (array3d)
++  call fill_array_4d (array4d)
++
++  ! The tests.  Each call to a show_* function must have a unique set
++  ! of arguments as GDB uses the arguments are part of the test name
++  ! string, so duplicate arguments will result in duplicate test
++  ! names.
++  !
++  ! If a show_* line ends with VARS=... where '...' is a comma
++  ! separated list of variable names, these variables are assumed to
++  ! be part of the call line, and will be expanded by the test script,
++  ! for example:
++  !
++  !     do x=1,9,1
++  !       do y=x,10,1
++  !         call show_1d (some_array (x,y))	! VARS=x,y
++  !       end do
++  !     end do
++  !
++  ! In this example the test script will automatically expand 'x' and
++  ! 'y' in order to better test different aspects of GDB.  Do take
++  ! care, the expansion is not very "smart", so try to avoid clashing
++  ! with other text on the line, in the example above, avoid variables
++  ! named 'some' or 'array', as these will likely clash with
++  ! 'some_array'.
++  call show_str (str_1)
++  call show_str (str_1 (1:20))
++  call show_str (str_1 (10:20))
+ 
+-  do i=LBOUND (other, 2), UBOUND (other, 2), 1
+-     do j=LBOUND (other, 1), UBOUND (other, 1), 1
+-        other (j,i) = ((i - 1) * UBOUND (other, 2)) + j
++  call show_elem (array1d (11))
++  call show_elem (pointer2d (2,3))
++
++  call show_1d (array1d)
++  call show_1d (array1d (13:17))
++  call show_1d (array1d (17:13:-1))
++  call show_1d (array (1:5,1))
++  call show_1d (array4d (1,7,3,:))
++  call show_1d (pointer2d (-1:3, 2))
++  call show_1d (pointer2d (-1, 2:4))
++
++  ! Enclosing the array slice argument in (...) causess gfortran to
++  ! repack the array.
++  call show_1d ((array (1:5,1)))
++
++  call show_2d (pointer2d)
++  call show_2d (array)
++  call show_2d (array (1:5,1:5))
++  do i=1,10,2
++     do j=1,10,3
++        call show_2d (array (1:10:i,1:10:j))	! VARS=i,j
++        call show_2d (array (10:1:-i,1:10:j))	! VARS=i,j
++        call show_2d (array (10:1:-i,10:1:-j))	! VARS=i,j
++        call show_2d (array (1:10:i,10:1:-j))	! VARS=i,j
+      end do
+   end do
++  call show_2d (array (6:2:-1,3:9))
++  call show_2d (array (1:10:2, 1:10:2))
++  call show_2d (other)
++  call show_2d (other (-5:0, -2:0))
++  call show_2d (other (-5:4:2, -2:7:3))
++  call show_2d (neg_array)
++  call show_2d (neg_array (-10:-3,-8:-4:2))
++
++  ! Enclosing the array slice argument in (...) causess gfortran to
++  ! repack the array.
++  call show_2d ((array (1:10:3, 1:10:2)))
++  call show_2d ((neg_array (-10:-3,-8:-4:2)))
+ 
+-  call show ("array", array)
+-  call show ("array (1:5,1:5)", array (1:5,1:5))
+-  call show ("array (1:10:2,1:10:2)", array (1:10:2,1:10:2))
+-  call show ("array (1:10:3,1:10:2)", array (1:10:3,1:10:2))
+-  call show ("array (1:10:5,1:10:3)", array (1:10:4,1:10:3))
++  call show_3d (array3d)
++  call show_3d (array3d(-1:1,-1:1,-1:1))
++  call show_3d (array3d(1:-1:-1,1:-1:-1,1:-1:-1))
+ 
+-  call show ("other", other)
+-  call show ("other (-5:0, -2:0)", other (-5:0, -2:0))
+-  call show ("other (-5:4:2, -2:7:3)", other (-5:4:2, -2:7:3))
++  ! Enclosing the array slice argument in (...) causess gfortran to
++  ! repack the array.
++  call show_3d ((array3d(1:-1:-1,1:-1:-1,1:-1:-1)))
+ 
++  call show_4d (array4d)
++  call show_4d (array4d (-3:0,10:7:-1,0:3,-7:-10:-1))
++  call show_4d (array4d (3:0:-1, 10:7:-1, :, -7:-10:-1))
++
++  ! Enclosing the array slice argument in (...) causess gfortran to
++  ! repack the array.
++  call show_4d ((array4d (3:-2:-2, 10:7:-2, :, -7:-10:-1)))
++
++  ! All done.  Deallocate.
+   deallocate (other)
++
++  ! GDB catches this final breakpoint to indicate the end of the test.
+   print *, "" ! Final Breakpoint.
++
++contains
++
++  ! Fill a 1D array with a unique positive integer in each element.
++  subroutine fill_array_1d (array)
++    integer, dimension (:) :: array
++    integer :: counter
++
++    counter = 1
++    do j=LBOUND (array, 1), UBOUND (array, 1), 1
++       array (j) = counter
++       counter = counter + 1
++    end do
++  end subroutine fill_array_1d
++
++  ! Fill a 2D array with a unique positive integer in each element.
++  subroutine fill_array_2d (array)
++    integer, dimension (:,:) :: array
++    integer :: counter
++
++    counter = 1
++    do i=LBOUND (array, 2), UBOUND (array, 2), 1
++       do j=LBOUND (array, 1), UBOUND (array, 1), 1
++          array (j,i) = counter
++          counter = counter + 1
++       end do
++    end do
++  end subroutine fill_array_2d
++
++  ! Fill a 3D array with a unique positive integer in each element.
++  subroutine fill_array_3d (array)
++    integer, dimension (:,:,:) :: array
++    integer :: counter
++
++    counter = 1
++    do i=LBOUND (array, 3), UBOUND (array, 3), 1
++       do j=LBOUND (array, 2), UBOUND (array, 2), 1
++          do k=LBOUND (array, 1), UBOUND (array, 1), 1
++             array (k, j,i) = counter
++             counter = counter + 1
++          end do
++       end do
++    end do
++  end subroutine fill_array_3d
++
++  ! Fill a 4D array with a unique positive integer in each element.
++  subroutine fill_array_4d (array)
++    integer, dimension (:,:,:,:) :: array
++    integer :: counter
++
++    counter = 1
++    do i=LBOUND (array, 4), UBOUND (array, 4), 1
++       do j=LBOUND (array, 3), UBOUND (array, 3), 1
++          do k=LBOUND (array, 2), UBOUND (array, 2), 1
++             do l=LBOUND (array, 1), UBOUND (array, 1), 1
++                array (l, k, j,i) = counter
++                counter = counter + 1
++             end do
++          end do
++       end do
++    end do
++    print *, ""
++  end subroutine fill_array_4d
+ end program test
+diff --git a/gdb/testsuite/gdb.fortran/vla-sizeof.exp b/gdb/testsuite/gdb.fortran/vla-sizeof.exp
+--- a/gdb/testsuite/gdb.fortran/vla-sizeof.exp
++++ b/gdb/testsuite/gdb.fortran/vla-sizeof.exp
+@@ -44,7 +44,7 @@ gdb_continue_to_breakpoint "vla1-allocated"
+ gdb_test "print sizeof(vla1)" " = 4000" "print sizeof allocated vla1"
+ gdb_test "print sizeof(vla1(3,2,1))" "4" \
+     "print sizeof element from allocated vla1"
+-gdb_test "print sizeof(vla1(3:4,2,1))" "800" \
++gdb_test "print sizeof(vla1(3:4,2,1))" "8" \
+     "print sizeof sliced vla1"
+ 
+ # Try to access values in undefined pointer to VLA (dangling)
+@@ -61,7 +61,7 @@ gdb_continue_to_breakpoint "pvla-associated"
+ gdb_test "print sizeof(pvla)" " = 4000" "print sizeof associated pvla"
+ gdb_test "print sizeof(pvla(3,2,1))" "4" \
+     "print sizeof element from associated pvla"
+-gdb_test "print sizeof(pvla(3:4,2,1))" "800" "print sizeof sliced pvla"
++gdb_test "print sizeof(pvla(3:4,2,1))" "8" "print sizeof sliced pvla"
+ 
+ gdb_breakpoint [gdb_get_line_number "vla1-neg-bounds-v1"]
+ gdb_continue_to_breakpoint "vla1-neg-bounds-v1"

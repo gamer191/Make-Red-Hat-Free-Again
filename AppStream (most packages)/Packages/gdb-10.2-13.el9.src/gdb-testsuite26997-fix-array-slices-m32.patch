@@ -1,0 +1,68 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Thu, 10 Jun 2021 11:08:25 -0700
+Subject: gdb-testsuite26997-fix-array-slices-m32.patch
+
+;; Backport "Fix gdb.fortran/array-slices.exp with -m32"
+;; (Tom de Vres)
+
+   commit 10f92414d6d4a5f8eb8cbb2bf39ca86c1f9c1da5
+   Author: Tom de Vries <tdevries@suse.de>
+   Date:   Fri Jan 15 12:14:45 2021 +0100
+
+    [gdb/testsuite] Fix gdb.fortran/array-slices.exp with -m32
+
+    When running test-case gdb.fortran/array-slices.exp with target board
+    unix/-m32, we run into:
+    ...
+    (gdb) print /x &array4d^M
+    $69 = 0xffffb620^M
+    (gdb) print /x (&array4d) + sizeof (array4d)^M
+    $70 = 0x95c620^M
+    (gdb) FAIL: gdb.fortran/array-slices.exp: repack=on: test 9: check sizes match
+    ...
+    The expressions calculate the start and end of an array, but the calculation
+    of the end expression has an unexpected result (given that it lies before the
+    start of the array).  By printing "sizeof (array4d)" as a separate
+    expression:
+    ...
+    (gdb) print /x sizeof (array4d)
+    $1 = 0xc40
+    ...
+    it becomes clear we expected to get 0xffffb620 + 0xc40 == 0xffffc260 instead.
+
+    The problem is that using the '&' returns a pointer type:
+    ...
+    (gdb) p &array4d
+    $5 = (PTR TO -> ( integer(kind=4) (-3:3,7:10,-3:3,-10:-7) )) 0xffffbe00
+    ...
+    which has the consequence that the addition is done as pointer arithmetic.
+
+    Fix this by using the result of "print /x &array4d" instead of &array4d in the
+    addition.
+
+    Tested on x86_64-linux.
+
+    gdb/testsuite/ChangeLog:
+
+    2021-01-15  Tom de Vries  <tdevries@suse.de>
+
+            PR testsuite/26997
+            * gdb.fortran/array-slices.exp (run_test): Avoid pointer arithmetic
+            when adding sizeof.
+
+diff --git a/gdb/testsuite/gdb.fortran/array-slices.exp b/gdb/testsuite/gdb.fortran/array-slices.exp
+--- a/gdb/testsuite/gdb.fortran/array-slices.exp
++++ b/gdb/testsuite/gdb.fortran/array-slices.exp
+@@ -208,8 +208,9 @@ proc run_test { repack } {
+ 	    set start_addr [get_hexadecimal_valueof "&${full_var_name}" \
+ 				"start unknown"]
+ 	    set end_addr [get_hexadecimal_valueof \
+-			      "(&${full_var_name}) + sizeof (${full_var_name})" \
+-			      "end unknown"]
++			      "$start_addr + sizeof (${full_var_name})" \
++			      "end unknown" \
++			      "get end address of ${full_var_name}"]
+ 
+ 	    # The Fortran compiler can choose to either send a descriptor that
+ 	    # describes the array slice to the subroutine, or it can repack the

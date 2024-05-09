@@ -1,0 +1,64 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Wed, 17 Feb 2021 17:58:54 -0700
+Subject: gdb-rhbz1912985-libstdc++-assert.patch
+
+;; Backport fix for libstdc++ assert when performing tab completion
+;; (RH BZ 1912985).
+
+Fix completion related libstdc++ assert when using -D_GLIBCXX_DEBUG
+
+This commit fixes a libstdc++ assertion failure encountered when
+running gdb.base/completion.exp.  In order to see this problem,
+GDB must be built with the follow CFLAGS and CXXFLAGS as part
+of the configure line:
+
+  CFLAGS='-D_GLIBCXX_DEBUG' CXXFLAGS='-D_GLIBCXX_DEBUG'
+
+(Also, this problem was encountered using Fedora rawhide.  It might
+not be reproducible in Fedora versions prior to Fedora 34.)
+
+Using the gdb.base/completion.exp test program, the problem can be
+observed as follows:
+
+[kev@rawhide-1 gdb]$ ./gdb -q testsuite/outputs/gdb.base/completion/completion
+Reading symbols from testsuite/outputs/gdb.base/completion/completion...
+(gdb) start
+Temporary breakpoint 1 at 0x401179: file ../../worktree-master/gdb/testsuite/gdb.base/break.c, line 43.
+Starting program: testsuite/outputs/gdb.base/completion/completion
+
+Temporary breakpoint 1, main (argc=1, argv=0x7fffffffd718, envp=0x7fffffffd728) at ../../worktree-master/gdb/testsuite/gdb.base/break.c:43
+43	    if (argc == 12345) {  /* an unlikely value < 2^16, in case uninited */ /* set breakpoint 6 here */
+(gdb) p <TAB>/usr/include/c++/11/string_view:211: constexpr const value_type& std::basic_string_view<_CharT, _Traits>::operator[](std::basic_string_view<_CharT, _Traits>::size_type) const [with _CharT = char; _Traits = std::char_traits<char>; std::basic_string_view<_CharT, _Traits>::const_reference = const char&; std::basic_string_view<_CharT, _Traits>::size_type = long unsigned int]: Assertion '__pos < this->_M_len' failed.
+Aborted (core dumped)
+
+(Note that I added "<TAB>" to make it clear where the tab key was
+pressed.)
+
+gdb/ChangeLog:
+
+	* ada-lang.c (ada_fold_name): Check for non-empty string prior
+	to accessing it.
+	(ada_lookup_name_info): Likewise.
+
+diff --git a/gdb/ada-lang.c b/gdb/ada-lang.c
+--- a/gdb/ada-lang.c
++++ b/gdb/ada-lang.c
+@@ -997,7 +997,7 @@ ada_fold_name (gdb::string_view name)
+   int len = name.size ();
+   GROW_VECT (fold_buffer, fold_buffer_size, len + 1);
+ 
+-  if (name[0] == '\'')
++  if (!name.empty () && name[0] == '\'')
+     {
+       strncpy (fold_buffer, name.data () + 1, len - 2);
+       fold_buffer[len - 2] = '\000';
+@@ -13597,7 +13597,7 @@ ada_lookup_name_info::ada_lookup_name_info (const lookup_name_info &lookup_name)
+ {
+   gdb::string_view user_name = lookup_name.name ();
+ 
+-  if (user_name[0] == '<')
++  if (!user_name.empty () && user_name[0] == '<')
+     {
+       if (user_name.back () == '>')
+ 	m_encoded_name

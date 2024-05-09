@@ -1,0 +1,356 @@
+From d3e073fa1cd314b344db1ec22f0add2702a6c299 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Tue, 15 Feb 2022 14:33:22 -0500
+Subject: [PATCH 2/4] common: Add API to reload settings from disk
+
+Ideally we would reread /run/gdm/custom.conf after we've decided
+graphics setup is complete.  This is because the file may not
+get written out by udev until after GDM is already started and waiting.
+
+As a first step to get there, this commit adds an API for rereading
+the file, and changes the SIGHUP handler to use it (instead of
+the complete teardown and reinitialization it was doing before).
+---
+ common/gdm-settings-direct.c |  9 +++++++++
+ common/gdm-settings-direct.h |  2 ++
+ common/gdm-settings.c        | 14 ++++++++++++--
+ common/gdm-settings.h        |  1 +
+ daemon/main.c                | 12 ++----------
+ 5 files changed, 26 insertions(+), 12 deletions(-)
+
+diff --git a/common/gdm-settings-direct.c b/common/gdm-settings-direct.c
+index ddb31908..5fbe0326 100644
+--- a/common/gdm-settings-direct.c
++++ b/common/gdm-settings-direct.c
+@@ -224,35 +224,44 @@ hashify_list (GdmSettingsEntry *entry,
+ 
+ gboolean
+ gdm_settings_direct_init (GdmSettings *settings,
+                           const char  *file,
+                           const char  *root)
+ {
+         GSList  *list;
+ 
+         g_return_val_if_fail (file != NULL, FALSE);
+         g_return_val_if_fail (root != NULL, FALSE);
+ 
+         g_debug ("Settings Direct Init");
+         if (schemas != NULL) {
+                 g_hash_table_unref (schemas);
+                 schemas = NULL;
+         }
+ 
+         if (! gdm_settings_parse_schemas (file, root, &list)) {
+                 g_warning ("Unable to parse schemas");
+                 return FALSE;
+         }
+ 
+         schemas = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, (GDestroyNotify)gdm_settings_entry_free);
+         g_slist_foreach (list, (GFunc)hashify_list, NULL);
+ 
+         settings_object = settings;
+ 
+         return TRUE;
+ }
+ 
++void
++gdm_settings_direct_reload (void)
++{
++    if (!settings_object)
++            return;
++
++    gdm_settings_reload (settings_object);
++}
++
+ void
+ gdm_settings_direct_shutdown (void)
+ {
+ 
+ }
+diff --git a/common/gdm-settings-direct.h b/common/gdm-settings-direct.h
+index 156489cd..6754955f 100644
+--- a/common/gdm-settings-direct.h
++++ b/common/gdm-settings-direct.h
+@@ -3,48 +3,50 @@
+  * Copyright (C) 2007 William Jon McCann <mccann@jhu.edu>
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License as published by
+  * the Free Software Foundation; either version 2 of the License, or
+  * (at your option) any later version.
+  *
+  * This program is distributed in the hope that it will be useful,
+  * but WITHOUT ANY WARRANTY; without even the implied warranty of
+  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  * GNU General Public License for more details.
+  *
+  * You should have received a copy of the GNU General Public License
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+  *
+  */
+ 
+ 
+ #ifndef __GDM_SETTINGS_DIRECT_H
+ #define __GDM_SETTINGS_DIRECT_H
+ 
+ #include <glib-object.h>
+ #include "gdm-settings.h"
+ 
+ G_BEGIN_DECLS
+ 
+ gboolean              gdm_settings_direct_init                       (GdmSettings       *settings,
+                                                                       const char        *schemas_file,
+                                                                       const char        *root);
++
++void                  gdm_settings_direct_reload                     (void);
+ void                  gdm_settings_direct_shutdown                   (void);
+ 
+ gboolean              gdm_settings_direct_get                        (const char        *key,
+                                                                       GValue            *value);
+ gboolean              gdm_settings_direct_set                        (const char        *key,
+                                                                       GValue            *value);
+ gboolean              gdm_settings_direct_get_int                    (const char        *key,
+                                                                       int               *value);
+ gboolean              gdm_settings_direct_get_uint                   (const char        *key,
+                                                                       uint              *value);
+ gboolean              gdm_settings_direct_get_boolean                (const char        *key,
+                                                                       gboolean          *value);
+ gboolean              gdm_settings_direct_get_string                 (const char        *key,
+                                                                       char             **value);
+ 
+ G_END_DECLS
+ 
+ #endif /* __GDM_SETTINGS_DIRECT_H */
+diff --git a/common/gdm-settings.c b/common/gdm-settings.c
+index e6f46ec3..96c2f8d3 100644
+--- a/common/gdm-settings.c
++++ b/common/gdm-settings.c
+@@ -157,84 +157,94 @@ gdm_settings_class_init (GdmSettingsClass *klass)
+         object_class->finalize = gdm_settings_finalize;
+ 
+         signals [VALUE_CHANGED] =
+                 g_signal_new ("value-changed",
+                               G_TYPE_FROM_CLASS (object_class),
+                               G_SIGNAL_RUN_LAST,
+                               0,
+                               NULL,
+                               NULL,
+                               g_cclosure_marshal_generic,
+                               G_TYPE_NONE,
+                               3,
+                               G_TYPE_STRING,
+                               G_TYPE_STRING,
+                               G_TYPE_STRING);
+ }
+ 
+ static void
+ backend_value_changed (GdmSettingsBackend *backend,
+                        const char         *key,
+                        const char         *old_value,
+                        const char         *new_value,
+                        GdmSettings        *settings)
+ {
+         g_debug ("Emitting value-changed %s %s %s", key, old_value, new_value);
+ 
+         /* proxy it to internal listeners */
+         g_signal_emit (settings, signals [VALUE_CHANGED], 0, key, old_value, new_value);
+ }
+ 
+-static void
+-gdm_settings_init (GdmSettings *settings)
++void
++gdm_settings_reload (GdmSettings *settings)
+ {
+         GList *l;
+         GdmSettingsBackend *backend;
+ 
++        g_list_foreach (settings->backends, (GFunc) g_object_unref, NULL);
++        g_list_free (settings->backends);
++        settings->backends = NULL;
++
+         backend = gdm_settings_desktop_backend_new (GDM_CUSTOM_CONF);
+         if (backend)
+                 settings->backends = g_list_prepend (NULL, backend);
+ 
+         backend = gdm_settings_desktop_backend_new (GDM_RUNTIME_CONF);
+         if (backend)
+                 settings->backends = g_list_prepend (settings->backends, backend);
+ 
+         for (l = settings->backends; l; l = g_list_next (l)) {
+                 backend = l->data;
+ 
+                 g_signal_connect (backend,
+                                   "value-changed",
+                                   G_CALLBACK (backend_value_changed),
+                                   settings);
+         }
+ }
+ 
++static void
++gdm_settings_init (GdmSettings *settings)
++{
++        gdm_settings_reload (settings);
++}
++
+ static void
+ gdm_settings_finalize (GObject *object)
+ {
+         GdmSettings *settings;
+ 
+         g_return_if_fail (object != NULL);
+         g_return_if_fail (GDM_IS_SETTINGS (object));
+ 
+         settings = GDM_SETTINGS (object);
+ 
+         g_return_if_fail (settings != NULL);
+ 
+         g_list_foreach (settings->backends, (GFunc) g_object_unref, NULL);
+         g_list_free (settings->backends);
+         settings->backends = NULL;
+ 
+         settings_object = NULL;
+ 
+         G_OBJECT_CLASS (gdm_settings_parent_class)->finalize (object);
+ }
+ 
+ GdmSettings *
+ gdm_settings_new (void)
+ {
+         if (settings_object != NULL) {
+                 g_object_ref (settings_object);
+         } else {
+                 settings_object = g_object_new (GDM_TYPE_SETTINGS, NULL);
+         }
+ 
+diff --git a/common/gdm-settings.h b/common/gdm-settings.h
+index 786868a9..07b64785 100644
+--- a/common/gdm-settings.h
++++ b/common/gdm-settings.h
+@@ -13,45 +13,46 @@
+  * GNU General Public License for more details.
+  *
+  * You should have received a copy of the GNU General Public License
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+  *
+  */
+ 
+ 
+ #ifndef __GDM_SETTINGS_H
+ #define __GDM_SETTINGS_H
+ 
+ #include <glib-object.h>
+ 
+ G_BEGIN_DECLS
+ 
+ #define GDM_TYPE_SETTINGS (gdm_settings_get_type ())
+ G_DECLARE_FINAL_TYPE (GdmSettings, gdm_settings, GDM, SETTINGS, GObject)
+ 
+ typedef enum
+ {
+         GDM_SETTINGS_ERROR_GENERAL,
+         GDM_SETTINGS_ERROR_KEY_NOT_FOUND
+ } GdmSettingsError;
+ 
+ #define GDM_SETTINGS_ERROR gdm_settings_error_quark ()
+ 
+ GQuark              gdm_settings_error_quark                    (void);
+ 
+ GdmSettings *       gdm_settings_new                            (void);
++void                gdm_settings_reload                         (GdmSettings *settings);
+ 
+ /* exported */
+ 
+ gboolean            gdm_settings_get_value                      (GdmSettings *settings,
+                                                                  const char  *key,
+                                                                  char       **value,
+                                                                  GError     **error);
+ gboolean            gdm_settings_set_value                      (GdmSettings *settings,
+                                                                  const char  *key,
+                                                                  const char  *value,
+                                                                  GError     **error);
+ 
+ G_END_DECLS
+ 
+ #endif /* __GDM_SETTINGS_H */
+diff --git a/daemon/main.c b/daemon/main.c
+index 1b893fe0..344d1b74 100644
+--- a/daemon/main.c
++++ b/daemon/main.c
+@@ -240,70 +240,62 @@ gdm_daemon_lookup_user (uid_t *uidp,
+         if G_UNLIKELY (gid == 0) {
+                 gdm_fail (_("The GDM group should not be root. Aborting!"));
+         }
+ 
+         if (uidp != NULL) {
+                 *uidp = uid;
+         }
+ 
+         if (gidp != NULL) {
+                 *gidp = gid;
+         }
+ 
+         g_free (username);
+         g_free (groupname);
+ }
+ 
+ static gboolean
+ on_shutdown_signal_cb (gpointer user_data)
+ {
+         GMainLoop *mainloop = user_data;
+ 
+         g_main_loop_quit (mainloop);
+ 
+         return FALSE;
+ }
+ 
+ static gboolean
+ on_sighup_cb (gpointer user_data)
+ {
+         g_debug ("Got HUP signal");
+-        /* Reread config stuff like system config files, VPN service
+-         * files, etc
+-         */
+-        g_object_unref (settings);
+-        settings = gdm_settings_new ();
+-        if (settings != NULL) {
+-                if (! gdm_settings_direct_init (settings, DATADIR "/gdm/gdm.schemas", "/")) {
+-                        g_warning ("Unable to initialize settings");
+-                }
+-        }
++
++        gdm_settings_reload (settings);
+ 
+         return TRUE;
+ }
+ 
+ static gboolean
+ is_debug_set (void)
+ {
+         gboolean debug;
+         gdm_settings_direct_get_boolean (GDM_KEY_DEBUG, &debug);
+         return debug;
+ }
+ 
+ /* SIGUSR1 is used by the X server to tell us that we're ready, so
+  * block it. We'll unblock it in the worker thread in gdm-server.c
+  */
+ static void
+ block_sigusr1 (void)
+ {
+         sigset_t mask;
+ 
+         sigemptyset (&mask);
+         sigaddset (&mask, SIGUSR1);
+         sigprocmask (SIG_BLOCK, &mask, NULL);
+ }
+ 
+ int
+ main (int    argc,
+       char **argv)
+ {
+         GMainLoop          *main_loop;
+-- 
+2.34.1
+

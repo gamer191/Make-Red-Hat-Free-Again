@@ -1,0 +1,375 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Mon, 24 May 2021 17:10:28 -0700
+Subject: gdb-rhbz1964167-convert-enum-range_type.patch
+
+;; [fortran] Backport Andrew Burgess's commit which changes enum
+;; range_type into a bit field enum.
+
+gdb: Convert enum range_type to a bit field enum
+
+The expression range_type enum represents the following ideas:
+
+  - Lower bound is set to default,
+  - Upper bound is set to default,
+  - Upper bound is exclusive.
+
+There are currently 6 entries in the enum to represent the combination
+of all those ideas.
+
+In a future commit I'd like to add stride information to the range,
+this could in theory appear with any of the existing enum entries, so
+this would take us to 12 enum entries.
+
+This feels like its getting a little out of hand, so in this commit I
+switch the range_type enum over to being a flags style enum.  There's
+one entry to represent no flags being set, then 3 flags to represent
+the 3 ideas above.  Adding stride information will require adding only
+one more enum flag.
+
+I've then gone through and updated the code to handle this change.
+
+There should be no user visible changes after this commit.
+
+gdb/ChangeLog:
+
+	* expprint.c (print_subexp_standard): Update to reflect changes to
+	enum range_type.
+	(dump_subexp_body_standard): Likewise.
+	* expression.h (enum range_type): Convert to a bit field enum, and
+	make the enum unsigned.
+	* f-exp.y (subrange): Update to reflect changes to enum
+	range_type.
+	* f-lang.c (value_f90_subarray): Likewise.
+	* parse.c (operator_length_standard): Likewise.
+	* rust-exp.y (rust_parser::convert_ast_to_expression): Likewise.
+	* rust-lang.c (rust_range): Likewise.
+	(rust_compute_range): Likewise.
+	(rust_subscript): Likewise.
+
+diff --git a/gdb/expprint.c b/gdb/expprint.c
+--- a/gdb/expprint.c
++++ b/gdb/expprint.c
+@@ -584,17 +584,13 @@ print_subexp_standard (struct expression *exp, int *pos,
+ 	  longest_to_int (exp->elts[pc + 1].longconst);
+ 	*pos += 2;
+ 
+-	if (range_type == NONE_BOUND_DEFAULT_EXCLUSIVE
+-	    || range_type == LOW_BOUND_DEFAULT_EXCLUSIVE)
++	if (range_type & RANGE_HIGH_BOUND_EXCLUSIVE)
+ 	  fputs_filtered ("EXCLUSIVE_", stream);
+ 	fputs_filtered ("RANGE(", stream);
+-	if (range_type == HIGH_BOUND_DEFAULT
+-	    || range_type == NONE_BOUND_DEFAULT
+-	    || range_type == NONE_BOUND_DEFAULT_EXCLUSIVE)
++	if (!(range_type & RANGE_LOW_BOUND_DEFAULT))
+ 	  print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
+ 	fputs_filtered ("..", stream);
+-	if (range_type == LOW_BOUND_DEFAULT
+-	    || range_type == NONE_BOUND_DEFAULT)
++	if (!(range_type & RANGE_HIGH_BOUND_DEFAULT))
+ 	  print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
+ 	fputs_filtered (")", stream);
+ 	return;
+@@ -1114,36 +1110,19 @@ dump_subexp_body_standard (struct expression *exp,
+ 	  longest_to_int (exp->elts[elt].longconst);
+ 	elt += 2;
+ 
+-	switch (range_type)
+-	  {
+-	  case BOTH_BOUND_DEFAULT:
+-	    fputs_filtered ("Range '..'", stream);
+-	    break;
+-	  case LOW_BOUND_DEFAULT:
+-	    fputs_filtered ("Range '..EXP'", stream);
+-	    break;
+-	  case LOW_BOUND_DEFAULT_EXCLUSIVE:
+-	    fputs_filtered ("ExclusiveRange '..EXP'", stream);
+-	    break;
+-	  case HIGH_BOUND_DEFAULT:
+-	    fputs_filtered ("Range 'EXP..'", stream);
+-	    break;
+-	  case NONE_BOUND_DEFAULT:
+-	    fputs_filtered ("Range 'EXP..EXP'", stream);
+-	    break;
+-	  case NONE_BOUND_DEFAULT_EXCLUSIVE:
+-	    fputs_filtered ("ExclusiveRange 'EXP..EXP'", stream);
+-	    break;
+-	  default:
+-	    fputs_filtered ("Invalid Range!", stream);
+-	    break;
+-	  }
++	if (range_type & RANGE_HIGH_BOUND_EXCLUSIVE)
++	  fputs_filtered ("Exclusive", stream);
++	fputs_filtered ("Range '", stream);
++	if (!(range_type & RANGE_LOW_BOUND_DEFAULT))
++	  fputs_filtered ("EXP", stream);
++	fputs_filtered ("..", stream);
++	if (!(range_type & RANGE_HIGH_BOUND_DEFAULT))
++	  fputs_filtered ("EXP", stream);
++	fputs_filtered ("'", stream);
+ 
+-	if (range_type == HIGH_BOUND_DEFAULT
+-	    || range_type == NONE_BOUND_DEFAULT)
++	if (!(range_type & RANGE_LOW_BOUND_DEFAULT))
+ 	  elt = dump_subexp (exp, stream, elt);
+-	if (range_type == LOW_BOUND_DEFAULT
+-	    || range_type == NONE_BOUND_DEFAULT)
++	if (!(range_type & RANGE_HIGH_BOUND_DEFAULT))
+ 	  elt = dump_subexp (exp, stream, elt);
+       }
+       break;
+diff --git a/gdb/expression.h b/gdb/expression.h
+--- a/gdb/expression.h
++++ b/gdb/expression.h
+@@ -185,22 +185,22 @@ extern void dump_prefix_expression (struct expression *, struct ui_file *);
+    or inclusive.  So we have six sorts of subrange.  This enumeration
+    type is to identify this.  */
+ 
+-enum range_type
++enum range_type : unsigned
+ {
+-  /* Neither the low nor the high bound was given -- so this refers to
+-     the entire available range.  */
+-  BOTH_BOUND_DEFAULT,
+-  /* The low bound was not given and the high bound is inclusive.  */
+-  LOW_BOUND_DEFAULT,
+-  /* The high bound was not given and the low bound in inclusive.  */
+-  HIGH_BOUND_DEFAULT,
+-  /* Both bounds were given and both are inclusive.  */
+-  NONE_BOUND_DEFAULT,
+-  /* The low bound was not given and the high bound is exclusive.  */
+-  NONE_BOUND_DEFAULT_EXCLUSIVE,
+-  /* Both bounds were given.  The low bound is inclusive and the high
+-     bound is exclusive.  */
+-  LOW_BOUND_DEFAULT_EXCLUSIVE,
++  /* This is a standard range.  Both the lower and upper bounds are
++     defined, and the bounds are inclusive.  */
++  RANGE_STANDARD = 0,
++
++  /* The low bound was not given.  */
++  RANGE_LOW_BOUND_DEFAULT = 1 << 0,
++
++  /* The high bound was not given.  */
++  RANGE_HIGH_BOUND_DEFAULT = 1 << 1,
++
++  /* The high bound of this range is exclusive.  */
++  RANGE_HIGH_BOUND_EXCLUSIVE = 1 << 2,
+ };
+ 
++DEF_ENUM_FLAGS_TYPE (enum range_type, range_types);
++
+ #endif /* !defined (EXPRESSION_H) */
+diff --git a/gdb/f-exp.y b/gdb/f-exp.y
+--- a/gdb/f-exp.y
++++ b/gdb/f-exp.y
+@@ -287,26 +287,30 @@ arglist	:	arglist ',' exp   %prec ABOVE_COMMA
+ /* There are four sorts of subrange types in F90.  */
+ 
+ subrange:	exp ':' exp	%prec ABOVE_COMMA
+-			{ write_exp_elt_opcode (pstate, OP_RANGE); 
+-			  write_exp_elt_longcst (pstate, NONE_BOUND_DEFAULT);
++			{ write_exp_elt_opcode (pstate, OP_RANGE);
++			  write_exp_elt_longcst (pstate, RANGE_STANDARD);
+ 			  write_exp_elt_opcode (pstate, OP_RANGE); }
+ 	;
+ 
+ subrange:	exp ':'	%prec ABOVE_COMMA
+ 			{ write_exp_elt_opcode (pstate, OP_RANGE);
+-			  write_exp_elt_longcst (pstate, HIGH_BOUND_DEFAULT);
++			  write_exp_elt_longcst (pstate,
++						 RANGE_HIGH_BOUND_DEFAULT);
+ 			  write_exp_elt_opcode (pstate, OP_RANGE); }
+ 	;
+ 
+ subrange:	':' exp	%prec ABOVE_COMMA
+ 			{ write_exp_elt_opcode (pstate, OP_RANGE);
+-			  write_exp_elt_longcst (pstate, LOW_BOUND_DEFAULT);
++			  write_exp_elt_longcst (pstate,
++						 RANGE_LOW_BOUND_DEFAULT);
+ 			  write_exp_elt_opcode (pstate, OP_RANGE); }
+ 	;
+ 
+ subrange:	':'	%prec ABOVE_COMMA
+ 			{ write_exp_elt_opcode (pstate, OP_RANGE);
+-			  write_exp_elt_longcst (pstate, BOTH_BOUND_DEFAULT);
++			  write_exp_elt_longcst (pstate,
++						 (RANGE_LOW_BOUND_DEFAULT
++						  | RANGE_HIGH_BOUND_DEFAULT));
+ 			  write_exp_elt_opcode (pstate, OP_RANGE); }
+ 	;
+ 
+diff --git a/gdb/f-lang.c b/gdb/f-lang.c
+--- a/gdb/f-lang.c
++++ b/gdb/f-lang.c
+@@ -131,12 +131,12 @@ value_f90_subarray (struct value *array,
+ 
+   *pos += 3;
+ 
+-  if (range_type == LOW_BOUND_DEFAULT || range_type == BOTH_BOUND_DEFAULT)
++  if (range_type & RANGE_LOW_BOUND_DEFAULT)
+     low_bound = range->bounds ()->low.const_val ();
+   else
+     low_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+ 
+-  if (range_type == HIGH_BOUND_DEFAULT || range_type == BOTH_BOUND_DEFAULT)
++  if (range_type & RANGE_HIGH_BOUND_DEFAULT)
+     high_bound = range->bounds ()->high.const_val ();
+   else
+     high_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+diff --git a/gdb/parse.c b/gdb/parse.c
+--- a/gdb/parse.c
++++ b/gdb/parse.c
+@@ -921,21 +921,13 @@ operator_length_standard (const struct expression *expr, int endpos,
+       range_type = (enum range_type)
+ 	longest_to_int (expr->elts[endpos - 2].longconst);
+ 
+-      switch (range_type)
+-	{
+-	case LOW_BOUND_DEFAULT:
+-	case LOW_BOUND_DEFAULT_EXCLUSIVE:
+-	case HIGH_BOUND_DEFAULT:
+-	  args = 1;
+-	  break;
+-	case BOTH_BOUND_DEFAULT:
+-	  args = 0;
+-	  break;
+-	case NONE_BOUND_DEFAULT:
+-	case NONE_BOUND_DEFAULT_EXCLUSIVE:
+-	  args = 2;
+-	  break;
+-	}
++      /* Assume the range has 2 arguments (low bound and high bound), then
++	 reduce the argument count if any bounds are set to default.  */
++      args = 2;
++      if (range_type & RANGE_LOW_BOUND_DEFAULT)
++	--args;
++      if (range_type & RANGE_HIGH_BOUND_DEFAULT)
++	--args;
+ 
+       break;
+ 
+diff --git a/gdb/rust-exp.y b/gdb/rust-exp.y
+--- a/gdb/rust-exp.y
++++ b/gdb/rust-exp.y
+@@ -2492,24 +2492,29 @@ rust_parser::convert_ast_to_expression (const struct rust_op *operation,
+ 
+     case OP_RANGE:
+       {
+-	enum range_type kind = BOTH_BOUND_DEFAULT;
++	enum range_type kind = (RANGE_HIGH_BOUND_DEFAULT
++				| RANGE_LOW_BOUND_DEFAULT);
+ 
+ 	if (operation->left.op != NULL)
+ 	  {
+ 	    convert_ast_to_expression (operation->left.op, top);
+-	    kind = HIGH_BOUND_DEFAULT;
++	    kind &= ~RANGE_LOW_BOUND_DEFAULT;
+ 	  }
+ 	if (operation->right.op != NULL)
+ 	  {
+ 	    convert_ast_to_expression (operation->right.op, top);
+-	    if (kind == BOTH_BOUND_DEFAULT)
+-	      kind = (operation->inclusive
+-		      ? LOW_BOUND_DEFAULT : LOW_BOUND_DEFAULT_EXCLUSIVE);
++	    if (kind == (RANGE_HIGH_BOUND_DEFAULT | RANGE_LOW_BOUND_DEFAULT))
++	      {
++		kind = RANGE_LOW_BOUND_DEFAULT;
++		if (!operation->inclusive)
++		  kind |= RANGE_HIGH_BOUND_EXCLUSIVE;
++	      }
+ 	    else
+ 	      {
+-		gdb_assert (kind == HIGH_BOUND_DEFAULT);
+-		kind = (operation->inclusive
+-			? NONE_BOUND_DEFAULT : NONE_BOUND_DEFAULT_EXCLUSIVE);
++		gdb_assert (kind == RANGE_HIGH_BOUND_DEFAULT);
++		kind = RANGE_STANDARD;
++		if (!operation->inclusive)
++		  kind |= RANGE_HIGH_BOUND_EXCLUSIVE;
+ 	      }
+ 	  }
+ 	else
+diff --git a/gdb/rust-lang.c b/gdb/rust-lang.c
+--- a/gdb/rust-lang.c
++++ b/gdb/rust-lang.c
+@@ -1082,13 +1082,11 @@ rust_range (struct expression *exp, int *pos, enum noside noside)
+   kind = (enum range_type) longest_to_int (exp->elts[*pos + 1].longconst);
+   *pos += 3;
+ 
+-  if (kind == HIGH_BOUND_DEFAULT || kind == NONE_BOUND_DEFAULT
+-      || kind == NONE_BOUND_DEFAULT_EXCLUSIVE)
++  if (!(kind & RANGE_LOW_BOUND_DEFAULT))
+     low = evaluate_subexp (nullptr, exp, pos, noside);
+-  if (kind == LOW_BOUND_DEFAULT || kind == LOW_BOUND_DEFAULT_EXCLUSIVE
+-      || kind == NONE_BOUND_DEFAULT || kind == NONE_BOUND_DEFAULT_EXCLUSIVE)
++  if (!(kind & RANGE_HIGH_BOUND_DEFAULT))
+     high = evaluate_subexp (nullptr, exp, pos, noside);
+-  bool inclusive = (kind == NONE_BOUND_DEFAULT || kind == LOW_BOUND_DEFAULT);
++  bool inclusive = !(kind & RANGE_HIGH_BOUND_EXCLUSIVE);
+ 
+   if (noside == EVAL_SKIP)
+     return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+@@ -1171,13 +1169,13 @@ rust_range (struct expression *exp, int *pos, enum noside noside)
+ static void
+ rust_compute_range (struct type *type, struct value *range,
+ 		    LONGEST *low, LONGEST *high,
+-		    enum range_type *kind)
++		    range_types *kind)
+ {
+   int i;
+ 
+   *low = 0;
+   *high = 0;
+-  *kind = BOTH_BOUND_DEFAULT;
++  *kind = RANGE_LOW_BOUND_DEFAULT | RANGE_HIGH_BOUND_DEFAULT;
+ 
+   if (type->num_fields () == 0)
+     return;
+@@ -1185,15 +1183,15 @@ rust_compute_range (struct type *type, struct value *range,
+   i = 0;
+   if (strcmp (TYPE_FIELD_NAME (type, 0), "start") == 0)
+     {
+-      *kind = HIGH_BOUND_DEFAULT;
++      *kind = RANGE_HIGH_BOUND_DEFAULT;
+       *low = value_as_long (value_field (range, 0));
+       ++i;
+     }
+   if (type->num_fields () > i
+       && strcmp (TYPE_FIELD_NAME (type, i), "end") == 0)
+     {
+-      *kind = (*kind == BOTH_BOUND_DEFAULT
+-	       ? LOW_BOUND_DEFAULT : NONE_BOUND_DEFAULT);
++      *kind = (*kind == (RANGE_LOW_BOUND_DEFAULT | RANGE_HIGH_BOUND_DEFAULT)
++	       ? RANGE_LOW_BOUND_DEFAULT : RANGE_STANDARD);
+       *high = value_as_long (value_field (range, i));
+ 
+       if (rust_inclusive_range_type_p (type))
+@@ -1211,7 +1209,7 @@ rust_subscript (struct expression *exp, int *pos, enum noside noside,
+   struct type *rhstype;
+   LONGEST low, high_bound;
+   /* Initialized to appease the compiler.  */
+-  enum range_type kind = BOTH_BOUND_DEFAULT;
++  range_types kind = RANGE_LOW_BOUND_DEFAULT | RANGE_HIGH_BOUND_DEFAULT;
+   LONGEST high = 0;
+   int want_slice = 0;
+ 
+@@ -1308,8 +1306,7 @@ rust_subscript (struct expression *exp, int *pos, enum noside noside,
+       else
+ 	error (_("Cannot subscript non-array type"));
+ 
+-      if (want_slice
+-	  && (kind == BOTH_BOUND_DEFAULT || kind == LOW_BOUND_DEFAULT))
++      if (want_slice && (kind & RANGE_LOW_BOUND_DEFAULT))
+ 	low = low_bound;
+       if (low < 0)
+ 	error (_("Index less than zero"));
+@@ -1327,7 +1324,7 @@ rust_subscript (struct expression *exp, int *pos, enum noside noside,
+ 	  CORE_ADDR addr;
+ 	  struct value *addrval, *tem;
+ 
+-	  if (kind == BOTH_BOUND_DEFAULT || kind == HIGH_BOUND_DEFAULT)
++	  if (kind & RANGE_HIGH_BOUND_DEFAULT)
+ 	    high = high_bound;
+ 	  if (high < 0)
+ 	    error (_("High index less than zero"));

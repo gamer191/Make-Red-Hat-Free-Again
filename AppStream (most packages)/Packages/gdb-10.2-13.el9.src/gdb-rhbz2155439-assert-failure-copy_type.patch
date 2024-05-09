@@ -1,0 +1,73 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Bruno Larsen <blarsen@redhat.com>
+Date: Wed, 22 Mar 2023 15:48:00 +0100
+Subject: gdb-rhbz2155439-assert-failure-copy_type.patch
+
+;; Backport "Fix assertion failure in copy_type"
+;; (Tom Tromey, RHBZ2155439)
+
+PR exp/20630 points out a simple way to cause an assertion failure in
+copy_type -- but this was found in the wild a few times as well.
+
+copy_type only works for objfile-owned types, but there isn't a deep
+reason for this.  This patch fixes the bug by updating copy_type to
+work for any sort of type.
+
+Better would perhaps be to finally implement type GC, but I still
+haven't attempted this.
+
+Bug: https://sourceware.org/bugzilla/show_bug.cgi?id=20630
+
+diff --git a/gdb/gdbtypes.c b/gdb/gdbtypes.c
+--- a/gdb/gdbtypes.c
++++ b/gdb/gdbtypes.c
+@@ -5504,27 +5504,24 @@ copy_type_recursive (struct objfile *objfile,
+ }
+ 
+ /* Make a copy of the given TYPE, except that the pointer & reference
+-   types are not preserved.
+-   
+-   This function assumes that the given type has an associated objfile.
+-   This objfile is used to allocate the new type.  */
++   types are not preserved.  */
+ 
+ struct type *
+ copy_type (const struct type *type)
+ {
+-  struct type *new_type;
+-
+-  gdb_assert (TYPE_OBJFILE_OWNED (type));
+-
+-  new_type = alloc_type_copy (type);
++  struct type *new_type = alloc_type_copy (type);
+   TYPE_INSTANCE_FLAGS (new_type) = TYPE_INSTANCE_FLAGS (type);
+   TYPE_LENGTH (new_type) = TYPE_LENGTH (type);
+   memcpy (TYPE_MAIN_TYPE (new_type), TYPE_MAIN_TYPE (type),
+ 	  sizeof (struct main_type));
+   if (type->main_type->dyn_prop_list != NULL)
+-    new_type->main_type->dyn_prop_list
+-      = copy_dynamic_prop_list (&TYPE_OBJFILE (type) -> objfile_obstack,
+-				type->main_type->dyn_prop_list);
++    {
++      struct obstack *storage = (TYPE_OBJFILE_OWNED (type)
++				 ? &TYPE_OBJFILE (type)->objfile_obstack
++				 : gdbarch_obstack (TYPE_OWNER (type).gdbarch));
++      new_type->main_type->dyn_prop_list
++	= copy_dynamic_prop_list (storage, type->main_type->dyn_prop_list);
++    }
+ 
+   return new_type;
+ }
+diff --git a/gdb/testsuite/gdb.base/printcmds.exp b/gdb/testsuite/gdb.base/printcmds.exp
+--- a/gdb/testsuite/gdb.base/printcmds.exp
++++ b/gdb/testsuite/gdb.base/printcmds.exp
+@@ -733,6 +733,9 @@ proc test_print_array_constants {} {
+     gdb_test_escape_braces "print {{0,1,2},{3,4,5}}"  " = {{0, 1, 2}, {3, 4, 5}}"
+     gdb_test "print {4,5,6}\[2\]"	" = 6"
+     gdb_test "print *&{4,5,6}\[1\]"	"Attempt to take address of value not located in memory."
++
++    # This used to cause a crash.
++    gdb_test "print {unsigned char[]}{65}" " = 65 'A'"
+ }
+ 
+ proc test_print_enums {} {

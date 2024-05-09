@@ -1,0 +1,224 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Mon, 24 May 2021 17:15:27 -0700
+Subject: gdb-rhbz1964167-fortran-range_type-to-range_flag.patch
+
+;; [fortran] Backport Andrew Burgess's commit which renames enum
+;; range_type to enum range_flag.
+
+gdb: rename 'enum range_type' to 'enum range_flag'
+
+To avoid confusion with other parts of GDB relating to types and
+ranges, rename this enum to make it clearer that it is a set of
+individual flags rather than an enumeration of different types of
+range.
+
+There should be no user visible changes after this commit.
+
+gdb/ChangeLog:
+
+	* expprint.c (print_subexp_standard): Change enum range_type to
+	range_flag and rename variables to match.
+	(dump_subexp_body_standard): Likewise.
+	* expression.h (enum range_type): Rename to...
+	(enum range_flag): ...this.
+	(range_types): Rename to...
+	(range_flags): ...this.
+	* f-lang.c (value_f90_subarray): Change enum range_type to
+	range_flag and rename variables to match.
+	* parse.c (operator_length_standard): Likewise.
+	* rust-exp.y (rust_parser::convert_ast_to_expression): Change enum
+	range_type to range_flag.
+	* rust-lang.c (rust_evaluate_funcall): Likewise.
+	(rust_range): Likewise.
+	(rust_compute_range): Likewise.
+	(rust_subscript): Likewise.
+
+diff --git a/gdb/expprint.c b/gdb/expprint.c
+--- a/gdb/expprint.c
++++ b/gdb/expprint.c
+@@ -578,19 +578,19 @@ print_subexp_standard (struct expression *exp, int *pos,
+ 
+     case OP_RANGE:
+       {
+-	enum range_type range_type;
++	enum range_flag range_flag;
+ 
+-	range_type = (enum range_type)
++	range_flag = (enum range_flag)
+ 	  longest_to_int (exp->elts[pc + 1].longconst);
+ 	*pos += 2;
+ 
+-	if (range_type & RANGE_HIGH_BOUND_EXCLUSIVE)
++	if (range_flag & RANGE_HIGH_BOUND_EXCLUSIVE)
+ 	  fputs_filtered ("EXCLUSIVE_", stream);
+ 	fputs_filtered ("RANGE(", stream);
+-	if (!(range_type & RANGE_LOW_BOUND_DEFAULT))
++	if (!(range_flag & RANGE_LOW_BOUND_DEFAULT))
+ 	  print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
+ 	fputs_filtered ("..", stream);
+-	if (!(range_type & RANGE_HIGH_BOUND_DEFAULT))
++	if (!(range_flag & RANGE_HIGH_BOUND_DEFAULT))
+ 	  print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
+ 	fputs_filtered (")", stream);
+ 	return;
+@@ -1104,25 +1104,25 @@ dump_subexp_body_standard (struct expression *exp,
+       break;
+     case OP_RANGE:
+       {
+-	enum range_type range_type;
++	enum range_flag range_flag;
+ 
+-	range_type = (enum range_type)
++	range_flag = (enum range_flag)
+ 	  longest_to_int (exp->elts[elt].longconst);
+ 	elt += 2;
+ 
+-	if (range_type & RANGE_HIGH_BOUND_EXCLUSIVE)
++	if (range_flag & RANGE_HIGH_BOUND_EXCLUSIVE)
+ 	  fputs_filtered ("Exclusive", stream);
+ 	fputs_filtered ("Range '", stream);
+-	if (!(range_type & RANGE_LOW_BOUND_DEFAULT))
++	if (!(range_flag & RANGE_LOW_BOUND_DEFAULT))
+ 	  fputs_filtered ("EXP", stream);
+ 	fputs_filtered ("..", stream);
+-	if (!(range_type & RANGE_HIGH_BOUND_DEFAULT))
++	if (!(range_flag & RANGE_HIGH_BOUND_DEFAULT))
+ 	  fputs_filtered ("EXP", stream);
+ 	fputs_filtered ("'", stream);
+ 
+-	if (!(range_type & RANGE_LOW_BOUND_DEFAULT))
++	if (!(range_flag & RANGE_LOW_BOUND_DEFAULT))
+ 	  elt = dump_subexp (exp, stream, elt);
+-	if (!(range_type & RANGE_HIGH_BOUND_DEFAULT))
++	if (!(range_flag & RANGE_HIGH_BOUND_DEFAULT))
+ 	  elt = dump_subexp (exp, stream, elt);
+       }
+       break;
+diff --git a/gdb/expression.h b/gdb/expression.h
+--- a/gdb/expression.h
++++ b/gdb/expression.h
+@@ -185,7 +185,7 @@ extern void dump_prefix_expression (struct expression *, struct ui_file *);
+    or inclusive.  So we have six sorts of subrange.  This enumeration
+    type is to identify this.  */
+ 
+-enum range_type : unsigned
++enum range_flag : unsigned
+ {
+   /* This is a standard range.  Both the lower and upper bounds are
+      defined, and the bounds are inclusive.  */
+@@ -201,6 +201,6 @@ enum range_type : unsigned
+   RANGE_HIGH_BOUND_EXCLUSIVE = 1 << 2,
+ };
+ 
+-DEF_ENUM_FLAGS_TYPE (enum range_type, range_types);
++DEF_ENUM_FLAGS_TYPE (enum range_flag, range_flags);
+ 
+ #endif /* !defined (EXPRESSION_H) */
+diff --git a/gdb/f-lang.c b/gdb/f-lang.c
+--- a/gdb/f-lang.c
++++ b/gdb/f-lang.c
+@@ -126,17 +126,17 @@ value_f90_subarray (struct value *array,
+   int pc = (*pos) + 1;
+   LONGEST low_bound, high_bound;
+   struct type *range = check_typedef (value_type (array)->index_type ());
+-  enum range_type range_type
+-    = (enum range_type) longest_to_int (exp->elts[pc].longconst);
++  enum range_flag range_flag
++    = (enum range_flag) longest_to_int (exp->elts[pc].longconst);
+ 
+   *pos += 3;
+ 
+-  if (range_type & RANGE_LOW_BOUND_DEFAULT)
++  if (range_flag & RANGE_LOW_BOUND_DEFAULT)
+     low_bound = range->bounds ()->low.const_val ();
+   else
+     low_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+ 
+-  if (range_type & RANGE_HIGH_BOUND_DEFAULT)
++  if (range_flag & RANGE_HIGH_BOUND_DEFAULT)
+     high_bound = range->bounds ()->high.const_val ();
+   else
+     high_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+diff --git a/gdb/parse.c b/gdb/parse.c
+--- a/gdb/parse.c
++++ b/gdb/parse.c
+@@ -774,7 +774,7 @@ operator_length_standard (const struct expression *expr, int endpos,
+ {
+   int oplen = 1;
+   int args = 0;
+-  enum range_type range_type;
++  enum range_flag range_flag;
+   int i;
+ 
+   if (endpos < 1)
+@@ -918,15 +918,15 @@ operator_length_standard (const struct expression *expr, int endpos,
+ 
+     case OP_RANGE:
+       oplen = 3;
+-      range_type = (enum range_type)
++      range_flag = (enum range_flag)
+ 	longest_to_int (expr->elts[endpos - 2].longconst);
+ 
+       /* Assume the range has 2 arguments (low bound and high bound), then
+ 	 reduce the argument count if any bounds are set to default.  */
+       args = 2;
+-      if (range_type & RANGE_LOW_BOUND_DEFAULT)
++      if (range_flag & RANGE_LOW_BOUND_DEFAULT)
+ 	--args;
+-      if (range_type & RANGE_HIGH_BOUND_DEFAULT)
++      if (range_flag & RANGE_HIGH_BOUND_DEFAULT)
+ 	--args;
+ 
+       break;
+diff --git a/gdb/rust-exp.y b/gdb/rust-exp.y
+--- a/gdb/rust-exp.y
++++ b/gdb/rust-exp.y
+@@ -2492,7 +2492,7 @@ rust_parser::convert_ast_to_expression (const struct rust_op *operation,
+ 
+     case OP_RANGE:
+       {
+-	enum range_type kind = (RANGE_HIGH_BOUND_DEFAULT
++	unsigned int kind = (RANGE_HIGH_BOUND_DEFAULT
+ 				| RANGE_LOW_BOUND_DEFAULT);
+ 
+ 	if (operation->left.op != NULL)
+diff --git a/gdb/rust-lang.c b/gdb/rust-lang.c
+--- a/gdb/rust-lang.c
++++ b/gdb/rust-lang.c
+@@ -1070,7 +1070,6 @@ rust_evaluate_funcall (struct expression *exp, int *pos, enum noside noside)
+ static struct value *
+ rust_range (struct expression *exp, int *pos, enum noside noside)
+ {
+-  enum range_type kind;
+   struct value *low = NULL, *high = NULL;
+   struct value *addrval, *result;
+   CORE_ADDR addr;
+@@ -1079,7 +1078,8 @@ rust_range (struct expression *exp, int *pos, enum noside noside)
+   struct type *temp_type;
+   const char *name;
+ 
+-  kind = (enum range_type) longest_to_int (exp->elts[*pos + 1].longconst);
++  auto kind
++    = (enum range_flag) longest_to_int (exp->elts[*pos + 1].longconst);
+   *pos += 3;
+ 
+   if (!(kind & RANGE_LOW_BOUND_DEFAULT))
+@@ -1169,7 +1169,7 @@ rust_range (struct expression *exp, int *pos, enum noside noside)
+ static void
+ rust_compute_range (struct type *type, struct value *range,
+ 		    LONGEST *low, LONGEST *high,
+-		    range_types *kind)
++		    range_flags *kind)
+ {
+   int i;
+ 
+@@ -1209,7 +1209,7 @@ rust_subscript (struct expression *exp, int *pos, enum noside noside,
+   struct type *rhstype;
+   LONGEST low, high_bound;
+   /* Initialized to appease the compiler.  */
+-  range_types kind = RANGE_LOW_BOUND_DEFAULT | RANGE_HIGH_BOUND_DEFAULT;
++  range_flags kind = RANGE_LOW_BOUND_DEFAULT | RANGE_HIGH_BOUND_DEFAULT;
+   LONGEST high = 0;
+   int want_slice = 0;
+ 

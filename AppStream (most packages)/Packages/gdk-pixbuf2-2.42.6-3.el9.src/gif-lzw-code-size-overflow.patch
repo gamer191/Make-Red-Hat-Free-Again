@@ -1,0 +1,224 @@
+From 76eda67dbc3f48c9dd6815a5aaf6014ea4a16771 Mon Sep 17 00:00:00 2001
+From: Robert Ancell <robert.ancell@canonical.com>
+Date: Wed, 2 Feb 2022 12:36:08 +1300
+Subject: [PATCH 1/4] Fix test GIF that was broken in the LZW code size, not
+ the values of the pixels
+
+---
+ .../test-images/gif-test-suite/invalid-colors.gif | Bin 37 -> 35 bytes
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+
+diff --git a/tests/test-images/gif-test-suite/invalid-colors.gif b/tests/test-images/gif-test-suite/invalid-colors.gif
+index c3111525ac2d977a0dbedf917f2beae610b614f8..6c3a7240e6ba58c344051351eb3581887fa314c7 100644
+GIT binary patch
+delta 11
+ScmY#Yo*>J{%%s7|U=08YGy!b@
+
+delta 13
+UcmY#ZogmA>!}4E&fr-Hy01|-$Y5)KL
+
+-- 
+GitLab
+
+
+From 0cf97225c9c227d11fc4ddf9cba8e8480672ee1b Mon Sep 17 00:00:00 2001
+From: Robert Ancell <robert.ancell@canonical.com>
+Date: Wed, 2 Feb 2022 12:38:45 +1300
+Subject: [PATCH 2/4] Add an assertion that checks for maximum LZW code size
+
+---
+ gdk-pixbuf/lzw.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/gdk-pixbuf/lzw.c b/gdk-pixbuf/lzw.c
+index 105daf2b1..15293560b 100644
+--- a/gdk-pixbuf/lzw.c
++++ b/gdk-pixbuf/lzw.c
+@@ -121,6 +121,8 @@ lzw_decoder_new (guint8 code_size)
+         LZWDecoder *self;
+         int i;
+ 
++        g_return_val_if_fail (code_size <= LZW_CODE_MAX, NULL);
++
+         self = g_object_new (lzw_decoder_get_type (), NULL);
+ 
+         self->min_code_size = code_size;
+-- 
+GitLab
+
+
+From 19ebba03117aefc9d0312f675f3a210ffdcc4907 Mon Sep 17 00:00:00 2001
+From: Robert Ancell <robert.ancell@canonical.com>
+Date: Wed, 2 Feb 2022 14:03:13 +1300
+Subject: [PATCH 3/4] Fix the check for maximum value of LZW initial code size.
+
+This value is the number of bits for each symbol (i.e. colour index) decoded via LZW.
+The maximum LZW code is specified as 12 bits, so the value here can only be 11 as two additional code words are required (clear and end of information) that immediately uses an additional bit.
+This implementation has always been wrong, and the Firefox implementation has the same issue so it seems a common misinterpretation of the spec.
+This has been changed here to avoid an assertion later in the LZW decoder.
+Note that there is never any reason for a GIF to be encoded with more than 8 bits of colour information, as the colour tables only support up to 8 bits.
+---
+ gdk-pixbuf/io-gif.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/gdk-pixbuf/io-gif.c b/gdk-pixbuf/io-gif.c
+index 1befba155..310bdff6a 100644
+--- a/gdk-pixbuf/io-gif.c
++++ b/gdk-pixbuf/io-gif.c
+@@ -499,8 +499,8 @@ gif_prepare_lzw (GifContext *context)
+ 		/*g_message (_("GIF: EOF / read error on image data\n"));*/
+ 		return -1;
+ 	}
+-        
+-        if (context->lzw_set_code_size > 12) {
++
++        if (context->lzw_set_code_size >= 12) {
+                 g_set_error_literal (context->error,
+                                      GDK_PIXBUF_ERROR,
+                                      GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
+-- 
+GitLab
+
+
+From 449441210921c8ed417b0c4d5edbccd2d57e23f8 Mon Sep 17 00:00:00 2001
+From: Robert Ancell <robert.ancell@canonical.com>
+Date: Wed, 2 Feb 2022 14:19:06 +1300
+Subject: [PATCH 4/4] Add tests for GIF files with invalid LZW code sizes
+
+---
+ tests/test-images/fail/overflow-codes-max.gif      | Bin 0 -> 65 bytes
+ tests/test-images/fail/overflow-codes.gif          | Bin 0 -> 35 bytes
+ tests/test-images/gif-test-suite/TESTS             |   2 ++
+ tests/test-images/gif-test-suite/invalid-code.conf |  11 +++++++++++
+ tests/test-images/gif-test-suite/invalid-code.gif  | Bin 0 -> 35 bytes
+ .../gif-test-suite/overflow-codes-max.conf         |  11 +++++++++++
+ .../gif-test-suite/overflow-codes-max.gif          | Bin 0 -> 65 bytes
+ .../test-images/gif-test-suite/overflow-codes.conf |  11 +++++++++++
+ .../test-images/gif-test-suite/overflow-codes.gif  | Bin 0 -> 35 bytes
+ 9 files changed, 35 insertions(+)
+ create mode 100644 tests/test-images/fail/overflow-codes-max.gif
+ create mode 100644 tests/test-images/fail/overflow-codes.gif
+ create mode 100644 tests/test-images/gif-test-suite/invalid-code.conf
+ create mode 100644 tests/test-images/gif-test-suite/invalid-code.gif
+ create mode 100644 tests/test-images/gif-test-suite/overflow-codes-max.conf
+ create mode 100644 tests/test-images/gif-test-suite/overflow-codes-max.gif
+ create mode 100644 tests/test-images/gif-test-suite/overflow-codes.conf
+ create mode 100644 tests/test-images/gif-test-suite/overflow-codes.gif
+
+diff --git a/tests/test-images/fail/overflow-codes-max.gif b/tests/test-images/fail/overflow-codes-max.gif
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d507ca7daa790c9370e69a2ab277f55d749a013
+GIT binary patch
+literal 65
+ncmZ?wbhEHbWMW`q_`m=H|NsBj0ns24hW`ozAU1Bm$Y2csUc3i2
+
+literal 0
+HcmV?d00001
+
+diff --git a/tests/test-images/fail/overflow-codes.gif b/tests/test-images/fail/overflow-codes.gif
+new file mode 100644
+index 0000000000000000000000000000000000000000..c38053872ae2e3378ff6fb8f3eaff839fa5d35ed
+GIT binary patch
+literal 35
+jcmZ?wbhEHbWMW`q_`m=H|NsBj0ns241|B8>Mh0sDhc^Z!
+
+literal 0
+HcmV?d00001
+
+diff --git a/tests/test-images/gif-test-suite/TESTS b/tests/test-images/gif-test-suite/TESTS
+index 1d4a3f13f..bc573acf4 100644
+--- a/tests/test-images/gif-test-suite/TESTS
++++ b/tests/test-images/gif-test-suite/TESTS
+@@ -44,6 +44,8 @@ max-height
+ 255-codes
+ large-codes
+ max-codes
++#overflow-codes
++#overflow-codes-max
+ transparent
+ invalid-transparent
+ disabled-transparent
+diff --git a/tests/test-images/gif-test-suite/invalid-code.conf b/tests/test-images/gif-test-suite/invalid-code.conf
+new file mode 100644
+index 000000000..3bf287b4e
+--- /dev/null
++++ b/tests/test-images/gif-test-suite/invalid-code.conf
+@@ -0,0 +1,11 @@
++# Automatically generated, do not edit!
++[config]
++input = invalid-code.gif
++version = GIF89a
++width = 2
++height = 2
++background = #000000
++loop-count = 0
++force-animation = no
++frames = 
++
+diff --git a/tests/test-images/gif-test-suite/invalid-code.gif b/tests/test-images/gif-test-suite/invalid-code.gif
+new file mode 100644
+index 0000000000000000000000000000000000000000..7d929c9431c0c5b7cd53f636f7711d47385f88b2
+GIT binary patch
+literal 35
+jcmZ?wbhEHbWMW`q_`m=H|NsBj0ns241}3Ke{~4?Sjj;#^
+
+literal 0
+HcmV?d00001
+
+diff --git a/tests/test-images/gif-test-suite/overflow-codes-max.conf b/tests/test-images/gif-test-suite/overflow-codes-max.conf
+new file mode 100644
+index 000000000..f6d3f38d8
+--- /dev/null
++++ b/tests/test-images/gif-test-suite/overflow-codes-max.conf
+@@ -0,0 +1,11 @@
++# Automatically generated, do not edit!
++[config]
++input = overflow-codes-max.gif
++version = GIF89a
++width = 2
++height = 2
++background = #000000
++loop-count = 0
++force-animation = no
++frames = 
++
+diff --git a/tests/test-images/gif-test-suite/overflow-codes-max.gif b/tests/test-images/gif-test-suite/overflow-codes-max.gif
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d507ca7daa790c9370e69a2ab277f55d749a013
+GIT binary patch
+literal 65
+ncmZ?wbhEHbWMW`q_`m=H|NsBj0ns24hW`ozAU1Bm$Y2csUc3i2
+
+literal 0
+HcmV?d00001
+
+diff --git a/tests/test-images/gif-test-suite/overflow-codes.conf b/tests/test-images/gif-test-suite/overflow-codes.conf
+new file mode 100644
+index 000000000..19f57fa74
+--- /dev/null
++++ b/tests/test-images/gif-test-suite/overflow-codes.conf
+@@ -0,0 +1,11 @@
++# Automatically generated, do not edit!
++[config]
++input = overflow-codes.gif
++version = GIF89a
++width = 2
++height = 2
++background = #000000
++loop-count = 0
++force-animation = no
++frames = 
++
+diff --git a/tests/test-images/gif-test-suite/overflow-codes.gif b/tests/test-images/gif-test-suite/overflow-codes.gif
+new file mode 100644
+index 0000000000000000000000000000000000000000..c38053872ae2e3378ff6fb8f3eaff839fa5d35ed
+GIT binary patch
+literal 35
+jcmZ?wbhEHbWMW`q_`m=H|NsBj0ns241|B8>Mh0sDhc^Z!
+
+literal 0
+HcmV?d00001
+
+-- 
+GitLab
+

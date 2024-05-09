@@ -1,0 +1,39 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Thu, 6 May 2021 15:39:45 -0400
+Subject: gdb-rhbz1870031-p10-prefixed-insn-3of3.patch
+
+;; Backport "Fix build failure for 32-bit targets with..."
+;; (Luis Machado, RHBZ 1870031)
+
+   commit d9d2ef05f11736bf2e889047cc7588d0c0dd907e
+   Author: Luis Machado <luis.machado@linaro.org>
+   Date:   Tue Apr 13 09:19:52 2021 -0300
+
+    Fix build failure for 32-bit targets with --enable-targets=all
+
+    Replace use of %lx with %s.
+
+    gdb/ChangeLog:
+
+    2021-04-13  Luis Machado  <luis.machado@linaro.org>
+
+            * rs6000-tdep.c (ppc_displaced_step_fixup): Use %s to print
+            hex values.
+
+diff --git a/gdb/rs6000-tdep.c b/gdb/rs6000-tdep.c
+--- a/gdb/rs6000-tdep.c
++++ b/gdb/rs6000-tdep.c
+@@ -982,9 +982,9 @@ ppc_displaced_step_fixup (struct gdbarch *gdbarch,
+       if (debug_displaced)
+ 	fprintf_unfiltered (gdb_stdlog,
+ 			    "displaced: {ppc} addpcis target regnum %d was "
+-			    "0x%lx now 0x%lx",
+-			    regnum, current_val,
+-			    current_val + displaced_offset);
++			    "%s now %s",
++			    regnum, paddress (gdbarch, current_val),
++			    paddress (gdbarch, current_val + displaced_offset));
+       regcache_cooked_write_unsigned (regs, regnum,
+ 					current_val + displaced_offset);
+       /* point the PC back at the non-displaced instruction.  */

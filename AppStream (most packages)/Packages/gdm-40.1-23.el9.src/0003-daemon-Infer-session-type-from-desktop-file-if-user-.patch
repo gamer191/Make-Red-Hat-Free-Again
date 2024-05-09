@@ -1,0 +1,87 @@
+From 7084aea50bdc16ccecb4474ca79403429e79ec0e Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Wed, 29 Sep 2021 11:03:41 -0400
+Subject: [PATCH 3/5] daemon: Infer session type from desktop file if user has
+ no saved session type
+
+The accountsservice user cache file can specify a session type
+associated with the saved session.  This is optional though. If one
+isn't specified GDM needs to figure out the session type based on the
+list of preferred session types for the system and the session file
+itself.
+
+It was failing to do the latter, though.  This commit fixes that.
+---
+ daemon/gdm-session.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/daemon/gdm-session.c b/daemon/gdm-session.c
+index b54687d5..a65fa0f9 100644
+--- a/daemon/gdm-session.c
++++ b/daemon/gdm-session.c
+@@ -1009,60 +1009,62 @@ worker_on_saved_language_name_read (GdmDBusWorker          *worker,
+                 }
+         }
+ }
+ 
+ static void
+ worker_on_saved_session_name_read (GdmDBusWorker          *worker,
+                                    const char             *session_name,
+                                    GdmSessionConversation *conversation)
+ {
+         GdmSession *self = conversation->session;
+ 
+         if (! get_session_command_for_name (self, session_name, self->saved_session_type, NULL)) {
+                 /* ignore sessions that don't exist */
+                 g_debug ("GdmSession: not using invalid .dmrc session: %s", session_name);
+                 g_free (self->saved_session);
+                 self->saved_session = NULL;
+                 update_session_type (self);
+         } else {
+                 if (strcmp (session_name,
+                             get_default_session_name (self)) != 0) {
+                         g_free (self->saved_session);
+                         self->saved_session = g_strdup (session_name);
+ 
+                         if (self->greeter_interface != NULL) {
+                                 gdm_dbus_greeter_emit_default_session_name_changed (self->greeter_interface,
+                                                                                     session_name);
+                         }
+                 }
+                 if (self->saved_session_type != NULL)
+                         set_session_type (self, self->saved_session_type);
++                else
++                        update_session_type (self);
+         }
+ 
+ }
+ 
+ static void
+ worker_on_saved_session_type_read (GdmDBusWorker          *worker,
+                                    const char             *session_type,
+                                    GdmSessionConversation *conversation)
+ {
+         GdmSession *self = conversation->session;
+ 
+         g_free (self->saved_session_type);
+         self->saved_session_type = g_strdup (session_type);
+ }
+ 
+ static GdmSessionConversation *
+ find_conversation_by_pid (GdmSession *self,
+                           GPid        pid)
+ {
+         GHashTableIter iter;
+         gpointer key, value;
+ 
+         g_hash_table_iter_init (&iter, self->conversations);
+         while (g_hash_table_iter_next (&iter, &key, &value)) {
+                 GdmSessionConversation *conversation;
+ 
+                 conversation = (GdmSessionConversation *) value;
+ 
+                 if (conversation->worker_pid == pid) {
+                         return conversation;
+-- 
+2.34.1
+

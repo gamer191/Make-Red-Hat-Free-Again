@@ -1,0 +1,193 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Mon, 24 May 2021 22:30:32 -0700
+Subject: gdb-rhbz1964167-fortran-array-strides-in-expressions.patch
+
+;; [fortran] Backport Andrew Burgess's commit which adds support
+;; for array strides in expressions.
+
+gdb/fortran: add support for parsing array strides in expressions
+
+With this commit GDB now understands the syntax of Fortran array
+strides, a user can type an expression including an array stride, but
+they will only get an error informing them that array strides are not
+supported.
+
+This alone is an improvement on what we had before in GDB, better to
+give the user a helpful message that a particular feature is not
+supported than to just claim a syntax error.
+
+Before:
+
+  (gdb) p array (1:10:2, 2:10:2)
+  A syntax error in expression, near `:2, 2:10:2)'.
+
+Now:
+
+  (gdb) p array (1:10:2, 2:10:2)
+  Fortran array strides are not currently supported
+
+Later commits will allow GDB to handle array strides correctly.
+
+gdb/ChangeLog:
+
+	* expprint.c (dump_subexp_body_standard): Print RANGE_HAS_STRIDE.
+	* expression.h (enum range_type): Add RANGE_HAS_STRIDE.
+	* f-exp.y (arglist): Allow for a series of subranges.
+	(subrange): Add cases for subranges with strides.
+	* f-lang.c (value_f90_subarray): Catch use of array strides and
+	throw an error.
+	* parse.c (operator_length_standard): Handle RANGE_HAS_STRIDE.
+
+gdb/testsuite/ChangeLog:
+
+	* gdb.fortran/array-slices.exp: Add a new test.
+
+diff --git a/gdb/expprint.c b/gdb/expprint.c
+--- a/gdb/expprint.c
++++ b/gdb/expprint.c
+@@ -1118,12 +1118,16 @@ dump_subexp_body_standard (struct expression *exp,
+ 	fputs_filtered ("..", stream);
+ 	if (!(range_flag & RANGE_HIGH_BOUND_DEFAULT))
+ 	  fputs_filtered ("EXP", stream);
++	if (range_flag & RANGE_HAS_STRIDE)
++	  fputs_filtered (":EXP", stream);
+ 	fputs_filtered ("'", stream);
+ 
+ 	if (!(range_flag & RANGE_LOW_BOUND_DEFAULT))
+ 	  elt = dump_subexp (exp, stream, elt);
+ 	if (!(range_flag & RANGE_HIGH_BOUND_DEFAULT))
+ 	  elt = dump_subexp (exp, stream, elt);
++	if (range_flag & RANGE_HAS_STRIDE)
++	  elt = dump_subexp (exp, stream, elt);
+       }
+       break;
+ 
+diff --git a/gdb/expression.h b/gdb/expression.h
+--- a/gdb/expression.h
++++ b/gdb/expression.h
+@@ -199,6 +199,9 @@ enum range_flag : unsigned
+ 
+   /* The high bound of this range is exclusive.  */
+   RANGE_HIGH_BOUND_EXCLUSIVE = 1 << 2,
++
++  /* The range has a stride.  */
++  RANGE_HAS_STRIDE = 1 << 3,
+ };
+ 
+ DEF_ENUM_FLAGS_TYPE (enum range_flag, range_flags);
+diff --git a/gdb/f-exp.y b/gdb/f-exp.y
+--- a/gdb/f-exp.y
++++ b/gdb/f-exp.y
+@@ -284,6 +284,10 @@ arglist	:	arglist ',' exp   %prec ABOVE_COMMA
+ 			{ pstate->arglist_len++; }
+ 	;
+ 
++arglist	:	arglist ',' subrange   %prec ABOVE_COMMA
++			{ pstate->arglist_len++; }
++	;
++
+ /* There are four sorts of subrange types in F90.  */
+ 
+ subrange:	exp ':' exp	%prec ABOVE_COMMA
+@@ -314,6 +318,38 @@ subrange:	':'	%prec ABOVE_COMMA
+ 			  write_exp_elt_opcode (pstate, OP_RANGE); }
+ 	;
+ 
++/* And each of the four subrange types can also have a stride.  */
++subrange:	exp ':' exp ':' exp	%prec ABOVE_COMMA
++			{ write_exp_elt_opcode (pstate, OP_RANGE);
++			  write_exp_elt_longcst (pstate, RANGE_HAS_STRIDE);
++			  write_exp_elt_opcode (pstate, OP_RANGE); }
++	;
++
++subrange:	exp ':' ':' exp	%prec ABOVE_COMMA
++			{ write_exp_elt_opcode (pstate, OP_RANGE);
++			  write_exp_elt_longcst (pstate,
++						 (RANGE_HIGH_BOUND_DEFAULT
++						  | RANGE_HAS_STRIDE));
++			  write_exp_elt_opcode (pstate, OP_RANGE); }
++	;
++
++subrange:	':' exp ':' exp	%prec ABOVE_COMMA
++			{ write_exp_elt_opcode (pstate, OP_RANGE);
++			  write_exp_elt_longcst (pstate,
++						 (RANGE_LOW_BOUND_DEFAULT
++						  | RANGE_HAS_STRIDE));
++			  write_exp_elt_opcode (pstate, OP_RANGE); }
++	;
++
++subrange:	':' ':' exp	%prec ABOVE_COMMA
++			{ write_exp_elt_opcode (pstate, OP_RANGE);
++			  write_exp_elt_longcst (pstate,
++						 (RANGE_LOW_BOUND_DEFAULT
++						  | RANGE_HIGH_BOUND_DEFAULT
++						  | RANGE_HAS_STRIDE));
++			  write_exp_elt_opcode (pstate, OP_RANGE); }
++	;
++
+ complexnum:     exp ',' exp 
+                 	{ }                          
+         ;
+diff --git a/gdb/f-lang.c b/gdb/f-lang.c
+--- a/gdb/f-lang.c
++++ b/gdb/f-lang.c
+@@ -124,7 +124,7 @@ value_f90_subarray (struct value *array,
+ 		    struct expression *exp, int *pos, enum noside noside)
+ {
+   int pc = (*pos) + 1;
+-  LONGEST low_bound, high_bound;
++  LONGEST low_bound, high_bound, stride;
+   struct type *range = check_typedef (value_type (array)->index_type ());
+   enum range_flag range_flag
+     = (enum range_flag) longest_to_int (exp->elts[pc].longconst);
+@@ -141,6 +141,14 @@ value_f90_subarray (struct value *array,
+   else
+     high_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
+ 
++  if (range_flag & RANGE_HAS_STRIDE)
++    stride = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
++  else
++    stride = 1;
++
++  if (stride != 1)
++    error (_("Fortran array strides are not currently supported"));
++
+   return value_slice (array, low_bound, high_bound - low_bound + 1);
+ }
+ 
+diff --git a/gdb/parse.c b/gdb/parse.c
+--- a/gdb/parse.c
++++ b/gdb/parse.c
+@@ -924,6 +924,8 @@ operator_length_standard (const struct expression *expr, int endpos,
+       /* Assume the range has 2 arguments (low bound and high bound), then
+ 	 reduce the argument count if any bounds are set to default.  */
+       args = 2;
++      if (range_flag & RANGE_HAS_STRIDE)
++	++args;
+       if (range_flag & RANGE_LOW_BOUND_DEFAULT)
+ 	--args;
+       if (range_flag & RANGE_HIGH_BOUND_DEFAULT)
+diff --git a/gdb/testsuite/gdb.fortran/array-slices.exp b/gdb/testsuite/gdb.fortran/array-slices.exp
+--- a/gdb/testsuite/gdb.fortran/array-slices.exp
++++ b/gdb/testsuite/gdb.fortran/array-slices.exp
+@@ -66,3 +66,19 @@ foreach result $array_contents msg $message_strings {
+ }
+ 
+ gdb_continue_to_breakpoint "continue to Final Breakpoint"
++
++# Next test that asking for an array with stride at the CLI gives an
++# error.
++clean_restart ${testfile}
++
++if ![fortran_runto_main] then {
++    perror "couldn't run to main"
++    continue
++}
++
++gdb_breakpoint "show"
++gdb_continue_to_breakpoint "show"
++gdb_test "up" ".*"
++gdb_test "p array (1:10:2, 1:10:2)" \
++    "Fortran array strides are not currently supported" \
++    "using array stride gives an error"

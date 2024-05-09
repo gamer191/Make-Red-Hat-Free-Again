@@ -1,0 +1,54 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Tue, 24 May 2022 07:39:17 -0700
+Subject: gdb-rhbz2086761-unknown-cfa-rule.patch
+
+;; Backport "fix logic of find_comp_unit and set_comp_unit"
+;; (Simon Marchi, RHBZ 2086761)
+
+The logic in find_comp_unit and set_comp_unit is reversed.  When the BFD
+requires relocation, we want to put the comp_unit structure in the
+map where the comp_unit objects are not shared, that is the one indexed
+by objfile.  If the BFD does not require relocation, then, we can share
+a single comp_unit structure for all users of that BFD, so we want to
+put it in the BFD-indexed map.  The comments on top of
+dwarf2_frame_bfd_data and dwarf2_frame_objfile_data make that clear.
+
+Fix it by swapping the two in find_comp_unit and set_comp_unit.
+
+I don't have a test for this, because I don't see how to write one in a
+reasonable amount of time.
+
+gdb/ChangeLog:
+
+        PR gdb/26876
+        * dwarf2/frame.c (find_comp_unit, set_comp_unit): Reverse use of
+        dwarf2_frame_bfd_data and dwarf2_frame_objfile_data.
+
+diff --git a/gdb/dwarf2/frame.c b/gdb/dwarf2/frame.c
+--- a/gdb/dwarf2/frame.c
++++ b/gdb/dwarf2/frame.c
+@@ -1640,8 +1640,9 @@ find_comp_unit (struct objfile *objfile)
+ {
+   bfd *abfd = objfile->obfd;
+   if (gdb_bfd_requires_relocations (abfd))
+-    return dwarf2_frame_bfd_data.get (abfd);
+-  return dwarf2_frame_objfile_data.get (objfile);
++    return dwarf2_frame_objfile_data.get (objfile);
++
++  return dwarf2_frame_bfd_data.get (abfd);
+ }
+ 
+ /* Store the comp_unit on OBJFILE, or the corresponding BFD, as
+@@ -1652,8 +1653,9 @@ set_comp_unit (struct objfile *objfile, struct comp_unit *unit)
+ {
+   bfd *abfd = objfile->obfd;
+   if (gdb_bfd_requires_relocations (abfd))
+-    return dwarf2_frame_bfd_data.set (abfd, unit);
+-  return dwarf2_frame_objfile_data.set (objfile, unit);
++    return dwarf2_frame_objfile_data.set (objfile, unit);
++
++  return dwarf2_frame_bfd_data.set (abfd, unit);
+ }
+ 
+ /* Find the FDE for *PC.  Return a pointer to the FDE, and store the

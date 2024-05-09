@@ -1,0 +1,67 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Mon, 16 Nov 2020 12:42:09 -0500
+Subject: gdb-rhbz1898252-loadable-section-outside-ELF-segments.patch
+
+;; Backport of "Exclude debuginfo files from 'outside of ELF segments'
+;; warning"  (Keith Seitz)
+
+    Exclude debuginfo files from "outside of ELF segments" warning
+
+    When GDB loads an ELF file, it will warn when a section is not located
+    in an ELF segment:
+
+    $ ./gdb -q -iex "set build-id-verbose 0" --ex "b systemctl_main" -ex "r" -batch --args systemctl kexec
+    Breakpoint 1 at 0xc24d: file ../src/systemctl/systemctl.c, line 8752.
+    warning: Loadable section ".note.gnu.property" outside of ELF segments
+      in .gnu_debugdata for /lib64/libgcc_s.so.1
+    [Thread debugging using libthread_db enabled]
+    Using host libthread_db library "/lib64/libthread_db.so.1".
+    warning: Loadable section ".note.gnu.property" outside of ELF segments
+      in .gnu_debugdata for /lib64/libcap.so.2
+    warning: Loadable section ".note.gnu.property" outside of ELF segments
+      in .gnu_debugdata for /lib64/libacl.so.1
+    warning: Loadable section ".note.gnu.property" outside of ELF segments
+      in .gnu_debugdata for /lib64/libcryptsetup.so.12
+    warning: Loadable section ".note.gnu.property" outside of ELF segments
+      in .gnu_debugdata for /lib64/libgcrypt.so.20
+    warning: Loadable section ".note.gnu.property" outside of ELF segments
+      in .gnu_debugdata for /lib64/libip4tc.so.2
+    [snip]
+    This has feature has also been reported by various users, most notably
+    the Fedora-EOL'd bug 1553086.
+
+    Mark Wielaard explains the issue quite nicely in
+
+       https://sourceware.org/bugzilla/show_bug.cgi?id=24717#c2
+
+    The short of it is, the ELF program headers for debuginfo files are
+    not suited to this particular use case. Consequently, the warning
+    generated above really is useless and should be ignored.
+
+    This patch follows the same heuristic that BFD itself uses.
+
+    gdb/ChangeLog
+    2020-11-13  Keith Seitz  <keiths@redhat.com>
+
+            https://bugzilla.redhat.com/show_bug.cgi?id=1553086
+            * elfread.c (elf_symfile_segments): Omit "Loadable section ...
+            outside of ELF segments" warning for debugin
+
+diff --git a/gdb/elfread.c b/gdb/elfread.c
+--- a/gdb/elfread.c
++++ b/gdb/elfread.c
+@@ -147,7 +147,12 @@ elf_symfile_segments (bfd *abfd)
+ 	 RealView) use SHT_NOBITS for uninitialized data.  Since it is
+ 	 uninitialized, it doesn't need a program header.  Such
+ 	 binaries are not relocatable.  */
+-      if (bfd_section_size (sect) > 0 && j == num_segments
++
++      /* Exclude debuginfo files from this warning, too, since those
++	 are often not strictly compliant with the standard. See, e.g.,
++	 ld/24717 for more discussion.  */
++      if (!is_debuginfo_file (abfd)
++	  && bfd_section_size (sect) > 0 && j == num_segments
+ 	  && (bfd_section_flags (sect) & SEC_LOAD) != 0)
+ 	warning (_("Loadable section \"%s\" outside of ELF segments"),
+ 		 bfd_section_name (sect));

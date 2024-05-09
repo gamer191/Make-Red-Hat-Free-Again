@@ -1,0 +1,84 @@
+From 26705ee64f4d3628eaaf45db980c435fa26e112a Mon Sep 17 00:00:00 2001
+From: Chingkai Chu <3013329+chuchingkai@users.noreply.github.com>
+Date: Thu, 12 Aug 2021 10:34:01 +0800
+Subject: [PATCH] session-worker: Set session_vt=0 out of pam uninitialization
+
+MR GNOME/gdm!123 moved jump_to_vt and session_vt reseting to a
+separate function, so we don't need to reset session_vt in pam
+uninitialization.
+
+https://gitlab.gnome.org/GNOME/gdm/-/issues/719
+---
+ daemon/gdm-session-worker.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/daemon/gdm-session-worker.c b/daemon/gdm-session-worker.c
+index 7d7d2496..3ad94e2a 100644
+--- a/daemon/gdm-session-worker.c
++++ b/daemon/gdm-session-worker.c
+@@ -1076,62 +1076,60 @@ gdm_session_worker_set_state (GdmSessionWorker      *worker,
+ 
+ static void
+ gdm_session_worker_uninitialize_pam (GdmSessionWorker *worker,
+                                      int               status)
+ {
+         g_debug ("GdmSessionWorker: uninitializing PAM");
+ 
+         if (worker->priv->pam_handle == NULL)
+                 return;
+ 
+         gdm_session_worker_get_username (worker, NULL);
+ 
+         if (worker->priv->state >= GDM_SESSION_WORKER_STATE_SESSION_OPENED) {
+                 pam_close_session (worker->priv->pam_handle, 0);
+                 gdm_session_auditor_report_logout (worker->priv->auditor);
+         } else {
+                 gdm_session_auditor_report_login_failure (worker->priv->auditor,
+                                                           status,
+                                                           pam_strerror (worker->priv->pam_handle, status));
+         }
+ 
+         if (worker->priv->state >= GDM_SESSION_WORKER_STATE_ACCREDITED) {
+                 pam_setcred (worker->priv->pam_handle, PAM_DELETE_CRED);
+         }
+ 
+         pam_end (worker->priv->pam_handle, status);
+         worker->priv->pam_handle = NULL;
+ 
+         gdm_session_worker_stop_auditor (worker);
+ 
+-        worker->priv->session_vt = 0;
+-
+         g_debug ("GdmSessionWorker: state NONE");
+         gdm_session_worker_set_state (worker, GDM_SESSION_WORKER_STATE_NONE);
+ }
+ 
+ static char *
+ _get_tty_for_pam (const char *x11_display_name,
+                   const char *display_device)
+ {
+ #ifdef __sun
+         return g_strdup (display_device);
+ #else
+         return g_strdup (x11_display_name);
+ #endif
+ }
+ 
+ #ifdef PAM_XAUTHDATA
+ static struct pam_xauth_data *
+ _get_xauth_for_pam (const char *x11_authority_file)
+ {
+         FILE                  *fh;
+         Xauth                 *auth = NULL;
+         struct pam_xauth_data *retval = NULL;
+         gsize                  len = sizeof (*retval) + 1;
+ 
+         fh = fopen (x11_authority_file, "r");
+         if (fh) {
+                 auth = XauReadAuth (fh);
+                 fclose (fh);
+         }
+         if (auth) {
+-- 
+2.32.0
+
