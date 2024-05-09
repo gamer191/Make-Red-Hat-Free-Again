@@ -1,0 +1,12 @@
+diff -ru gst-plugins-base-1.18.4/gst-libs/gst/gl/wayland/gstglwindow_wayland_egl.h gst-plugins-base-1.18.4.new/gst-libs/gst/gl/wayland/gstglwindow_wayland_egl.h
+--- gst-plugins-base-1.18.4/gst-libs/gst/gl/wayland/gstglwindow_wayland_egl.h	2021-03-15 18:48:01.251275800 +0100
++++ gst-plugins-base-1.18.4.new/gst-libs/gst/gl/wayland/gstglwindow_wayland_egl.h	2022-01-14 16:53:07.235319602 +0100
+@@ -22,7 +22,7 @@
+ #define __GST_GL_WINDOW_WAYLAND_EGL_H__
+ 
+ #include <wayland-client.h>
+-#include "xdg-shell-client-protocol.h"
++#include "../xdg-shell-client-protocol.h"
+ #include <wayland-egl.h>
+ #include <wayland-cursor.h>
+ 

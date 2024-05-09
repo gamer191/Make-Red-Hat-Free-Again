@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="font">
+  <id>gubbi</id>
+  <metadata_license>CC-BY-3.0</metadata_license>
+  <name>Gubbi</name>
+  <summary>Free Kannada opentype serif font</summary>
+  <description>
+    <p>
+      This package provides a free Kannada serif opentype font.
+    </p>
+  </description>
+  <updatecontact>psatpute_at_redhat_dot_com</updatecontact>
+  <url type="homepage">https://github.com/aravindavk/Gubbi</url>
+</component>
