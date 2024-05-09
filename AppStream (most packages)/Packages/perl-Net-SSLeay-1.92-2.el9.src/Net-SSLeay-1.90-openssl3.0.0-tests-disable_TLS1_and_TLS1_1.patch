@@ -1,0 +1,37 @@
+diff -ru Net-SSLeay-1.90.orig/t/local/44_sess.t Net-SSLeay-1.90/t/local/44_sess.t
+--- Net-SSLeay-1.90.orig/t/local/44_sess.t	2020-12-12 14:55:23.000000000 +0100
++++ Net-SSLeay-1.90/t/local/44_sess.t	2021-06-04 18:50:09.733150048 +0200
+@@ -13,13 +13,13 @@
+ if (not can_fork()) {
+     plan skip_all => "fork() not supported on this system";
+ } else {
+-    plan tests => 58;
++    plan tests => 34;
+ }
+ 
+ initialise_libssl();
+ 
+ my @rounds = qw(
+-    TLSv1 TLSv1.1 TLSv1.2 TLSv1.3 TLSv1.3-num-tickets-ssl
++    TLSv1.2 TLSv1.3 TLSv1.3-num-tickets-ssl
+     TLSv1.3-num-tickets-ctx-6 TLSv1.3-num-tickets-ctx-0
+ );
+ 
+diff -ru Net-SSLeay-1.90.orig/t/local/45_exporter.t Net-SSLeay-1.90/t/local/45_exporter.t
+--- Net-SSLeay-1.90.orig/t/local/45_exporter.t	2020-12-12 14:55:23.000000000 +0100
++++ Net-SSLeay-1.90/t/local/45_exporter.t	2021-06-04 18:50:13.931192784 +0200
+@@ -15,12 +15,12 @@
+ } elsif (!defined &Net::SSLeay::export_keying_material) {
+     plan skip_all => "No export_keying_material()";
+ } else {
+-    plan tests => 36;
++    plan tests => 18;
+ }
+ 
+ initialise_libssl();
+ 
+-my @rounds = qw( TLSv1 TLSv1.1 TLSv1.2 TLSv1.3 );
++my @rounds = qw( TLSv1.2 TLSv1.3 );
+ 
+ my %usable =
+     map {

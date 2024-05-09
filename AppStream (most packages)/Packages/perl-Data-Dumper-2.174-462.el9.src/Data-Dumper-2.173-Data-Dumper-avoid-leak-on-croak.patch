@@ -1,0 +1,167 @@
+From d9c4b4ae5a1a17347ff5e3ecbf8e1d9da481f476 Mon Sep 17 00:00:00 2001
+From: David Mitchell <davem@iabyn.com>
+Date: Wed, 3 Apr 2019 13:23:24 +0100
+Subject: [PATCH] Data::Dumper - avoid leak on croak
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+v5.21.3-742-g19be3be696 added a facility to Dumper.xs to croak if the
+recursion level became too deep (1000 by default).
+
+The trouble with this is that various parts of DD_dump() allocate
+temporary SVs and buffers, which will leak if DD_dump() unceremoniously
+just croaks().
+
+This currently manifests as dist/Data-Dumper/t/recurse.t failing under
+Address Sanitiser.
+
+This commit makes the depth checking code just set a sticky 'too deep'
+boolean flag, and
+a) on entry, DD_dump() just returns immediately if the flag is set;
+b) the flag is checked by the top-level called of DD_dump() and croaks
+if set.
+
+So the net effect is to defer croaking until the dump is complete,
+and avoid any further recursion once the flag is set.
+
+This is a bit of a quick fix. More long-term solutions would be to
+convert DD_dump() to be iterative rather than recursive, and/or make
+sure all temporary SVs and buffers are suitably anchored somewhere so
+that they get cleaned up on croak.
+
+Petr Písař: Ported from 6d65cb5d847ac93680949c4fa02111808207fbdc in
+perl git tree.
+
+Signed-off-by: Petr Písař <ppisar@redhat.com>
+---
+ Dumper.pm |  6 +++---
+ Dumper.xs | 27 ++++++++++++++++++++-------
+ 2 files changed, 23 insertions(+), 10 deletions(-)
+
+diff --git a/Dumper.pm b/Dumper.pm
+index 40aeb7d..06af4c4 100644
+--- a/Dumper.pm
++++ b/Dumper.pm
+@@ -10,7 +10,7 @@
+ package Data::Dumper;
+ 
+ BEGIN {
+-    $VERSION = '2.173'; # Don't forget to set version and release
++    $VERSION = '2.174'; # Don't forget to set version and release
+ }               # date in POD below!
+ 
+ #$| = 1;
+@@ -1461,13 +1461,13 @@ be to use the C<Sortkeys> filter of Data::Dumper.
+ 
+ Gurusamy Sarathy        gsar@activestate.com
+ 
+-Copyright (c) 1996-2017 Gurusamy Sarathy. All rights reserved.
++Copyright (c) 1996-2019 Gurusamy Sarathy. All rights reserved.
+ This program is free software; you can redistribute it and/or
+ modify it under the same terms as Perl itself.
+ 
+ =head1 VERSION
+ 
+-Version 2.173
++Version 2.174
+ 
+ =head1 SEE ALSO
+ 
+diff --git a/Dumper.xs b/Dumper.xs
+index 7f0b027..a324cb6 100644
+--- a/Dumper.xs
++++ b/Dumper.xs
+@@ -61,9 +61,10 @@
+ #endif
+ 
+ /* This struct contains almost all the user's desired configuration, and it
+- * is treated as constant by the recursive function. This arrangement has
+- * the advantage of needing less memory than passing all of them on the
+- * stack all the time (as was the case in an earlier implementation). */
++ * is treated as mostly constant (except for maxrecursed) by the recursive
++ * function.  This arrangement has the advantage of needing less memory
++ * than passing all of them on the stack all the time (as was the case in
++ * an earlier implementation). */
+ typedef struct {
+     SV *pad;
+     SV *xpad;
+@@ -74,6 +75,7 @@ typedef struct {
+     SV *toaster;
+     SV *bless;
+     IV maxrecurse;
++    bool maxrecursed; /* at some point we exceeded the maximum recursion level */
+     I32 indent;
+     I32 purity;
+     I32 deepcopy;
+@@ -97,7 +99,7 @@ static bool safe_decimal_number(const char *p, STRLEN len);
+ static SV *sv_x (pTHX_ SV *sv, const char *str, STRLEN len, I32 n);
+ static I32 DD_dump (pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval,
+                     HV *seenhv, AV *postav, const I32 level, SV *apad,
+-                    const Style *style);
++                    Style *style);
+ 
+ #ifndef HvNAME_get
+ #define HvNAME_get HvNAME
+@@ -615,7 +617,7 @@ deparsed_output(pTHX_ SV *val)
+  */
+ static I32
+ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
+-	AV *postav, const I32 level, SV *apad, const Style *style)
++	AV *postav, const I32 level, SV *apad, Style *style)
+ {
+     char tmpbuf[128];
+     Size_t i;
+@@ -642,6 +644,9 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
+     if (!val)
+ 	return 0;
+ 
++    if (style->maxrecursed)
++        return 0;
++
+     /* If the output buffer has less than some arbitrary amount of space
+        remaining, then enlarge it. For the test case (25M of output),
+        *1.1 was slower, *2.0 was the same, so the first guess of 1.5 is
+@@ -793,7 +798,7 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
+ 	}
+ 
+         if (style->maxrecurse > 0 && level >= style->maxrecurse) {
+-            croak("Recursion limit of %" IVdf " exceeded", style->maxrecurse);
++            style->maxrecursed = TRUE;
+ 	}
+ 
+ 	if (realpack && !no_bless) {				/* we have a blessed ref */
+@@ -1528,6 +1533,7 @@ Data_Dumper_Dumpxs(href, ...)
+             style.indent = 2;
+             style.quotekeys = 1;
+             style.maxrecurse = 1000;
++            style.maxrecursed = FALSE;
+             style.purity = style.deepcopy = style.useqq = style.maxdepth
+                 = style.use_sparse_seen_hash = style.trailingcomma = 0;
+             style.pad = style.xpad = style.sep = style.pair = style.sortkeys
+@@ -1675,7 +1681,7 @@ Data_Dumper_Dumpxs(href, ...)
+ 		    DD_dump(aTHX_ val, SvPVX_const(name), SvCUR(name), valstr, seenhv,
+                             postav, 0, newapad, &style);
+ 		    SPAGAIN;
+-		
++
+                     if (style.indent >= 2 && !terse)
+ 			SvREFCNT_dec(newapad);
+ 
+@@ -1715,6 +1721,13 @@ Data_Dumper_Dumpxs(href, ...)
+ 		}
+ 		SvREFCNT_dec(postav);
+ 		SvREFCNT_dec(valstr);
++
++                /* we defer croaking until here so that temporary SVs and
++                 * buffers won't be leaked */
++                if (style.maxrecursed)
++                    croak("Recursion limit of %" IVdf " exceeded",
++                            style.maxrecurse);
++		
+ 	    }
+ 	    else
+ 		croak("Call to new() method failed to return HASH ref");
+-- 
+2.20.1
+

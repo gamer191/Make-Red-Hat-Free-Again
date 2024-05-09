@@ -1,0 +1,143 @@
+From ab3c25e921e15aa2923d509a9317610a1e9f1d4e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20P=C3=ADsa=C5=99?= <ppisar@redhat.com>
+Date: Wed, 18 Nov 2020 08:42:00 +0100
+Subject: [PATCH 2/2] Disable all network tests with NO_NETWORK_TESTING=1
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If a host cannot resolve the host names, the tests fail like:
+
+getaddrinfo(www.google.com.,,AF_INET) failed - Temporary failure in name resolution at /builddir/build/BUILD/Net-Ping-2.74/blib/lib/Net/Ping.pm line 1925.
+
+The tests recommend setting PERL_CORE=1, but PERL_CORE has a different
+meaning.
+
+This patch recognizes a NO_NETWORK_TESTING environment variable to
+skip non-localhost tests. This is alike to Test::RequiresInternet. The
+patch also coerces the remaining tests to use loopback addresses
+instead.
+
+Signed-off-by: Petr Písař <ppisar@redhat.com>
+---
+ t/400_ping_syn.t      | 11 +++++------
+ t/410_syn_host.t      | 11 +++++------
+ t/420_ping_syn_port.t | 11 +++++------
+ t/500_ping_icmp.t     |  1 +
+ t/501_ping_icmpv6.t   |  1 +
+ 5 files changed, 17 insertions(+), 18 deletions(-)
+
+diff --git a/t/400_ping_syn.t b/t/400_ping_syn.t
+index 8409aae..4e22e7c 100644
+--- a/t/400_ping_syn.t
++++ b/t/400_ping_syn.t
+@@ -1,11 +1,10 @@
+ use strict;
+ 
+ BEGIN {
+-  if ($ENV{PERL_CORE}) {
+-    unless ($ENV{PERL_TEST_Net_Ping}) {
+-      print "1..0 # Skip: network dependent test\n";
+-      exit;
+-    }
++  if ($ENV{NO_NETWORK_TESTING} ||
++      ($ENV{PERL_CORE} && !$ENV{PERL_TEST_Net_Ping})) {
++    print "1..0 # Skip: network dependent test\n";
++    exit;
+   }
+   unless (eval "require Socket") {
+     print "1..0 \# Skip: no Socket\n";
+@@ -30,7 +29,7 @@ BEGIN {
+ #   connection to remote networks, but you still want the tests
+ #   to pass, use the following:
+ #
+-# $ PERL_CORE=1 make test
++# $ NO_NETWORK_TESTING=1 make test
+ 
+ # Hopefully this is never a routeable host
+ my $fail_ip = $ENV{NET_PING_FAIL_IP} || "192.0.2.0";
+diff --git a/t/410_syn_host.t b/t/410_syn_host.t
+index 15948e2..5d58bda 100644
+--- a/t/410_syn_host.t
++++ b/t/410_syn_host.t
+@@ -2,11 +2,10 @@
+ use strict;
+ 
+ BEGIN {
+-  if ($ENV{PERL_CORE}) {
+-    unless ($ENV{PERL_TEST_Net_Ping}) {
+-      print "1..0 # Skip: network dependent test\n";
+-        exit;
+-    }
++  if ($ENV{NO_NETWORK_TESTING} ||
++      ($ENV{PERL_CORE} && !$ENV{PERL_TEST_Net_Ping})) {
++    print "1..0 # Skip: network dependent test\n";
++    exit;
+   }
+   unless (eval "require Socket") {
+     print "1..0 \# Skip: no Socket\n";
+@@ -31,7 +30,7 @@ BEGIN {
+ #   connection to remote networks, but you still want the tests
+ #   to pass, use the following:
+ #
+-# $ PERL_CORE=1 make test
++# $ NO_NETWORK_TESTING=1 make test
+ 
+ # Try a few remote servers
+ my %webs;
+diff --git a/t/420_ping_syn_port.t b/t/420_ping_syn_port.t
+index 53c153f..6b8d19a 100644
+--- a/t/420_ping_syn_port.t
++++ b/t/420_ping_syn_port.t
+@@ -2,11 +2,10 @@
+ use strict;
+ 
+ BEGIN {
+-  if ($ENV{PERL_CORE}) {
+-    unless ($ENV{PERL_TEST_Net_Ping}) {
+-      print "1..0 # Skip: network dependent test\n";
+-        exit;
+-    }
++  if ($ENV{NO_NETWORK_TESTING} ||
++      ($ENV{PERL_CORE} && !$ENV{PERL_TEST_Net_Ping})) {
++    print "1..0 # Skip: network dependent test\n";
++    exit;
+   }
+   unless (eval "require Socket") {
+     print "1..0 \# Skip: no Socket\n";
+@@ -31,7 +30,7 @@ BEGIN {
+ #   connection to remote networks, but you still want the tests
+ #   to pass, use the following:
+ #
+-# $ PERL_CORE=1 make test
++# $ NO_NETWORK_TESTING=1 make test
+ 
+ # Hopefully this is never a routeable host
+ my $fail_ip = $ENV{NET_PING_FAIL_IP} || "192.0.2.0";
+diff --git a/t/500_ping_icmp.t b/t/500_ping_icmp.t
+index dea6588..7e45cc4 100644
+--- a/t/500_ping_icmp.t
++++ b/t/500_ping_icmp.t
+@@ -19,6 +19,7 @@ BEGIN {
+ }
+ 
+ my $is_devel = $ENV{PERL_CORE} || -d ".git" ? 1 : 0;
++$ENV{TEST_PING_HOST} = "127.0.0.1" if $ENV{NO_NETWORK_TESTING};
+ # Note this rawsocket test code is considered anti-social in p5p and was removed in
+ # their variant.
+ # See http://nntp.perl.org/group/perl.perl5.porters/240707
+diff --git a/t/501_ping_icmpv6.t b/t/501_ping_icmpv6.t
+index 165824f..9b5b8b8 100644
+--- a/t/501_ping_icmpv6.t
++++ b/t/501_ping_icmpv6.t
+@@ -19,6 +19,7 @@ BEGIN {
+ }
+ 
+ my $is_devel = $ENV{PERL_CORE} || -d ".git" ? 1 : 0;
++$ENV{TEST_PING6_HOST} = "::1" if $ENV{NO_NETWORK_TESTING};
+ if (!Net::Ping::_isroot()) {
+     my $file = __FILE__;
+     my $lib = $ENV{PERL_CORE} ? '-I../../lib' : '-Mblib';
+-- 
+2.25.4
+

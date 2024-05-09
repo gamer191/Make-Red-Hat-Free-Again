@@ -1,0 +1,29 @@
+From 7d4d5e32bcd9b75f7bf70a395938a48ca4a06d25 Mon Sep 17 00:00:00 2001
+From: Andreas Koenig <andk@cpan.org>
+Date: Mon, 10 Jan 2022 21:47:30 +0100
+Subject: [PATCH 1/2] s/gpg/$gpg/ in system, add quotes where needed
+
+- thanks to Tomas Hoger for spotting the missing sigil
+---
+ lib/CPAN/Distribution.pm | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/lib/CPAN/Distribution.pm b/lib/CPAN/Distribution.pm
+index b262b6f6..d837b8ad 100644
+--- a/lib/CPAN/Distribution.pm
++++ b/lib/CPAN/Distribution.pm
+@@ -1551,9 +1551,10 @@ sub CHECKSUM_check_file {
+         }
+         my $tempfile = File::Spec->catfile($tempdir, "CHECKSUMS.$$");
+         unlink $tempfile; # ignore missing file
++        my $devnull = File::Spec->devnull;
+         my $gpg = $CPAN::Config->{gpg} or
+             $CPAN::Frontend->mydie("Your configuration suggests that you do not have 'gpg' installed. This is needed to verify checksums with the config variable 'check_sigs' on. Please configure it with 'o conf init gpg'");
+-        my $system = "gpg --verify --batch --no-tty --output $tempfile $chk_file 2> /dev/null";
++        my $system = qq{"$gpg" --verify --batch --no-tty --output "$tempfile" "$chk_file" 2> "/dev/null"};
+         0 == system $system or $CPAN::Frontend->mydie("gpg run was failing, cannot continue: $system");
+         open $fh, $tempfile or $CPAN::Frontend->mydie("Could not open $tempfile: $!");
+         local $/;
+-- 
+2.34.1
+

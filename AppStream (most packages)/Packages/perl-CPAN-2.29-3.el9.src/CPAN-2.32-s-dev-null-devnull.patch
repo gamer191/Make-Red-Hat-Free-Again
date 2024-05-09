@@ -1,0 +1,26 @@
+From 89b13baf1d46e4fb10023af30ef305efec4fd603 Mon Sep 17 00:00:00 2001
+From: Andreas Koenig <andk@cpan.org>
+Date: Wed, 12 Jan 2022 21:53:35 +0100
+Subject: [PATCH 2/2] s,/dev/null,$devnull,
+
+- another thanks to Tomas Hoger for spotting that
+---
+ lib/CPAN/Distribution.pm | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/CPAN/Distribution.pm b/lib/CPAN/Distribution.pm
+index d837b8ad..6ca1b434 100644
+--- a/lib/CPAN/Distribution.pm
++++ b/lib/CPAN/Distribution.pm
+@@ -1554,7 +1554,7 @@ sub CHECKSUM_check_file {
+         my $devnull = File::Spec->devnull;
+         my $gpg = $CPAN::Config->{gpg} or
+             $CPAN::Frontend->mydie("Your configuration suggests that you do not have 'gpg' installed. This is needed to verify checksums with the config variable 'check_sigs' on. Please configure it with 'o conf init gpg'");
+-        my $system = qq{"$gpg" --verify --batch --no-tty --output "$tempfile" "$chk_file" 2> "/dev/null"};
++        my $system = qq{"$gpg" --verify --batch --no-tty --output "$tempfile" "$chk_file" 2> "$devnull"};
+         0 == system $system or $CPAN::Frontend->mydie("gpg run was failing, cannot continue: $system");
+         open $fh, $tempfile or $CPAN::Frontend->mydie("Could not open $tempfile: $!");
+         local $/;
+-- 
+2.34.1
+

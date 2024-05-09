@@ -1,0 +1,53 @@
+From 21e67795792e5e1d25bcbd3b167ed18d0d6dc7b4 Mon Sep 17 00:00:00 2001
+From: Tony Cook <tony@develop-help.com>
+Date: Tue, 11 Aug 2020 10:46:38 +1000
+Subject: [PATCH 2/3] make postav and valstr mortal so they're freed soonish
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+these can leak if the value being dumped (or any part of it)
+had get magic and that magic throws an exception.
+
+Several other SVs can also leak in that case, but cleaning those up
+is more complex.
+
+Petr Písař: Ported to Data-Dumper-2.173 from
+b98a3a6d08f681353d0b357fd1cce437c93656e7 perl commit.
+
+Signed-off-by: Petr Písař <ppisar@redhat.com>
+---
+ Dumper.xs | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/Dumper.xs b/Dumper.xs
+index f91145a..d4b34ad 100644
+--- a/Dumper.xs
++++ b/Dumper.xs
+@@ -1613,12 +1613,13 @@ Data_Dumper_Dumpxs(href, ...)
+                         style.sortkeys = &PL_sv_yes;
+ 		}
+ 		postav = newAV();
++                sv_2mortal((SV*)postav);
+ 
+ 		if (todumpav)
+ 		    imax = av_len(todumpav);
+ 		else
+ 		    imax = -1;
+-		valstr = newSVpvs("");
++		valstr = newSVpvs_flags("", SVs_TEMP);
+ 		for (i = 0; i <= imax; ++i) {
+ 		    SV *newapad;
+ 		
+@@ -1719,8 +1720,6 @@ Data_Dumper_Dumpxs(href, ...)
+ 			    retval = newSVpvs_flags("", SVs_TEMP);
+ 		    }
+ 		}
+-		SvREFCNT_dec(postav);
+-		SvREFCNT_dec(valstr);
+ 
+                 /* we defer croaking until here so that temporary SVs and
+                  * buffers won't be leaked */
+-- 
+2.25.4
+

@@ -1,0 +1,14 @@
+diff -up Net-Ping-2.74/t/200_ping_tcp.t.orig Net-Ping-2.74/t/200_ping_tcp.t
+--- Net-Ping-2.74/t/200_ping_tcp.t.orig	2020-12-03 12:50:50.645715613 +0100
++++ Net-Ping-2.74/t/200_ping_tcp.t	2020-12-03 12:53:14.305039861 +0100
+@@ -1,8 +1,8 @@
+ use strict;
+ 
+ BEGIN {
+-  if ($ENV{PERL_CORE}) {
+-    unless ($ENV{PERL_TEST_Net_Ping}) {
++  if ($ENV{NO_NETWORK_TESTING} ||
++      ($ENV{PERL_CORE} && !$ENV{PERL_TEST_Net_Ping})) {
+       print "1..0 # Skip: network dependent test\n";
+         exit;
+     }

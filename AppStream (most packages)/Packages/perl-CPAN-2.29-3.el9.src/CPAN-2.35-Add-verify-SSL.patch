@@ -1,0 +1,13 @@
+Add verify_SSL=>1 to HTTP::Tiny to verify https server identity (Stig Palmquist)
+
+diff -u -r CPAN-2.29.orig/lib/CPAN/HTTP/Client.pm CPAN-2.29/lib/CPAN/HTTP/Client.pm
+--- CPAN-2.29.orig/lib/CPAN/HTTP/Client.pm	2023-08-01 16:19:19.216625710 +0200
++++ CPAN-2.29/lib/CPAN/HTTP/Client.pm	2023-08-01 16:28:29.323221118 +0200
+@@ -32,6 +32,7 @@
+ 
+     my $want_proxy = $self->_want_proxy($uri);
+     my $http = HTTP::Tiny->new(
++        verify_SSL => 1,
+         $want_proxy ? (proxy => $self->{proxy}) : ()
+     );
+ 

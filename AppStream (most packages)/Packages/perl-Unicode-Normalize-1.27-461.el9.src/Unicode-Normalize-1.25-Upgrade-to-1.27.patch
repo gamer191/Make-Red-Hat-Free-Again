@@ -1,0 +1,59 @@
+From 95cca0326ee38020d55382493e6d42b16ae889c9 Mon Sep 17 00:00:00 2001
+From: Jitka Plesnikova <jplesnik@redhat.com>
+Date: Tue, 21 Apr 2020 13:05:51 +0200
+Subject: [PATCH] Upgrade to 1.27
+
+---
+ Normalize.pm | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/Normalize.pm b/Normalize.pm
+index adf3db5..d06fb8b 100644
+--- a/Normalize.pm
++++ b/Normalize.pm
+@@ -16,7 +16,7 @@ use Carp;
+ 
+ no warnings 'utf8';
+ 
+-our $VERSION = '1.26';
++our $VERSION = '1.27';
+ our $PACKAGE = __PACKAGE__;
+ 
+ our @EXPORT = qw( NFC NFD NFKC NFKD );
+@@ -606,27 +606,27 @@ and/or modify it under the same terms as Perl itself.
+ 
+ =over 4
+ 
+-=item http://www.unicode.org/reports/tr15/
++=item L<http://www.unicode.org/reports/tr15/>
+ 
+ Unicode Normalization Forms - UAX #15
+ 
+-=item http://www.unicode.org/Public/UNIDATA/CompositionExclusions.txt
++=item L<http://www.unicode.org/Public/UNIDATA/CompositionExclusions.txt>
+ 
+ Composition Exclusion Table
+ 
+-=item http://www.unicode.org/Public/UNIDATA/DerivedNormalizationProps.txt
++=item L<http://www.unicode.org/Public/UNIDATA/DerivedNormalizationProps.txt>
+ 
+ Derived Normalization Properties
+ 
+-=item http://www.unicode.org/Public/UNIDATA/NormalizationCorrections.txt
++=item L<http://www.unicode.org/Public/UNIDATA/NormalizationCorrections.txt>
+ 
+ Normalization Corrections
+ 
+-=item http://www.unicode.org/review/pr-29.html
++=item L<http://www.unicode.org/review/pr-29.html>
+ 
+ Public Review Issue #29: Normalization Issue
+ 
+-=item http://www.unicode.org/notes/tn5/
++=item L<http://www.unicode.org/notes/tn5/>
+ 
+ Canonical Equivalence in Applications - UTN #5
+ 
+-- 
+2.21.1
+

@@ -1,0 +1,82 @@
+From a0eaa97e59b5b2ad8e2a83f8509da3787ff4b4bf Mon Sep 17 00:00:00 2001
+From: Jitka Plesnikova <jplesnik@redhat.com>
+Date: Thu, 24 May 2018 11:32:01 +0200
+Subject: [PATCH] Upgrade to 2.22
+
+---
+ lib/threads.pm | 29 ++++++++++++++++++++++++++++-
+ threads.xs     |  4 ++++
+ 2 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/lib/threads.pm b/lib/threads.pm
+index 2eb926a..1b99567 100644
+--- a/lib/threads.pm
++++ b/lib/threads.pm
+@@ -5,7 +5,7 @@ use 5.008;
+ use strict;
+ use warnings;
+ 
+-our $VERSION = '2.21';      # remember to update version in POD!
++our $VERSION = '2.22';      # remember to update version in POD!
+ my $XS_VERSION = $VERSION;
+ $VERSION = eval $VERSION;
+ 
+@@ -937,6 +937,33 @@ C<chdir()>) will affect all the threads in the application.
+ On MSWin32, each thread maintains its own the current working directory
+ setting.
+ 
++=item Locales
++
++Prior to Perl 5.28, locales could not be used with threads, due to various
++race conditions.  Starting in that release, on systems that implement
++thread-safe locale functions, threads can be used, with some caveats.
++This includes Windows starting with Visual Studio 2005, and systems compatible
++with POSIX 2008.  See L<perllocale/Multi-threaded operation>.
++
++Each thread (except the main thread) is started using the C locale.  The main
++thread is started like all other Perl programs; see L<perllocale/ENVIRONMENT>.
++You can switch locales in any thread as often as you like.
++
++If you want to inherit the parent thread's locale, you can, in the parent, set
++a variable like so:
++
++    $foo = POSIX::setlocale(LC_ALL, NULL);
++
++and then pass to threads->create() a sub that closes over C<$foo>.  Then, in
++the child, you say
++
++    POSIX::setlocale(LC_ALL, $foo);
++
++Or you can use the facilities in L<threads::shared> to pass C<$foo>;
++or if the environment hasn't changed, in the child, do
++
++    POSIX::setlocale(LC_ALL, "");
++
+ =item Environment variables
+ 
+ Currently, on all platforms except MSWin32, all I<system> calls (e.g., using
+diff --git a/threads.xs b/threads.xs
+index 4e9e31f..3da9165 100644
+--- a/threads.xs
++++ b/threads.xs
+@@ -580,6 +580,8 @@ S_ithread_run(void * arg)
+     S_set_sigmask(&thread->initial_sigmask);
+ #endif
+ 
++    thread_locale_init();
++
+     PL_perl_destruct_level = 2;
+ 
+     {
+@@ -665,6 +667,8 @@ S_ithread_run(void * arg)
+     MUTEX_UNLOCK(&thread->mutex);
+     MUTEX_UNLOCK(&MY_POOL.create_destruct_mutex);
+ 
++    thread_locale_term();
++
+     /* Exit application if required */
+     if (exit_app) {
+         (void)S_jmpenv_run(aTHX_ 2, thread, NULL, &exit_app, &exit_code);
+-- 
+2.14.3
+

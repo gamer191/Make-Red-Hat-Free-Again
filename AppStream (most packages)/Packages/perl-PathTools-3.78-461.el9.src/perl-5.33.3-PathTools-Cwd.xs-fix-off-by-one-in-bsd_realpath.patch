@@ -1,0 +1,76 @@
+From c8c367581c3333c38d07481e2ea8d81171403c81 Mon Sep 17 00:00:00 2001
+From: David Mitchell <davem@iabyn.com>
+Date: Mon, 26 Oct 2020 15:11:14 +0000
+Subject: [PATCH] PathTools/Cwd.xs: fix off-by-one in bsd_realpath()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+At the heart of this function is a loop which repeatedly finds the next
+component in the path, processes it, then chops that component off the
+front of the path by shifting the string to the start of the buffer;
+i.e. something like:
+
+    while (remaining_len) {
+        s = strchr(remaining, '/')
+        ...
+        remaining_len -= s - remaining;
+        memmove(remaining, s, remaining_len + 1);
+    }
+
+The problem is that the per-iteration decrement to remaining_len doesn't
+take account of the '/' character, so each iteration, remaining_len gets
+one more byte too big.
+
+It turns out that this is harmless - it just means that more and more
+garbage characters after the trailing null byte get copied each time,
+but after each copy the path string is still well formed, with a
+trailing null in the right place. So just the random garbage after the
+null byte is different.
+
+This commit fixes that.
+
+Although really, it would be better to just increment the
+start-of-string pointer each time rather than shift the whole string
+each time.
+
+Signed-off-by: Petr Písař <ppisar@redhat.com>
+---
+ dist/PathTools/Cwd.xs | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/dist/PathTools/Cwd.xs b/dist/PathTools/Cwd.xs
+index 8662400e47..e7ecb3c6c1 100644
+--- a/dist/PathTools/Cwd.xs
++++ b/dist/PathTools/Cwd.xs
+@@ -119,15 +119,24 @@ bsd_realpath(const char *path, char resolved[MAXPATHLEN])
+ 
+             p = strchr(remaining, '/');
+             s = p ? p : remaining + remaining_len;
++
+             if ((STRLEN)(s - remaining) >= (STRLEN)sizeof(next_token)) {
+                 errno = ENAMETOOLONG;
+                 return (NULL);
+             }
+             memcpy(next_token, remaining, s - remaining);
+             next_token[s - remaining] = '\0';
+-            remaining_len -= s - remaining;
+-            if (p != NULL)
+-                memmove(remaining, s + 1, remaining_len + 1);
++
++            /* shift first component off front of path, including '/' */
++            if (p) {
++                s++; /* skip '/' */
++                remaining_len -= s - remaining;
++                /* the +1 includes the trailing '\0' */
++                memmove(remaining, s, remaining_len + 1);
++            }
++            else
++                remaining_len = 0;
++
+             if (resolved[resolved_len - 1] != '/') {
+                 if (resolved_len + 1 >= MAXPATHLEN) {
+                     errno = ENAMETOOLONG;
+-- 
+2.25.4
+

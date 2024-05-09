@@ -1,0 +1,102 @@
+From a42c6588e33a1d6d847b60ef3386bfd122ce030b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20P=C3=ADsa=C5=99?= <ppisar@redhat.com>
+Date: Wed, 18 Nov 2020 09:49:48 +0100
+Subject: [PATCH 1/2] Use non-routable addreses for negative tests
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This patch uses the addresses reserved for a documentation purpose
+which should be unroutable instead of just a random address.
+
+Signed-off-by: Petr Písař <ppisar@redhat.com>
+---
+ t/190_alarm.t         | 2 +-
+ t/200_ping_tcp.t      | 2 +-
+ t/400_ping_syn.t      | 2 +-
+ t/410_syn_host.t      | 2 +-
+ t/420_ping_syn_port.t | 2 +-
+ t/501_ping_icmpv6.t   | 2 +-
+ 6 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/t/190_alarm.t b/t/190_alarm.t
+index 65276a2..f86305c 100644
+--- a/t/190_alarm.t
++++ b/t/190_alarm.t
+@@ -29,7 +29,7 @@ use Test::More tests => 6;
+ BEGIN {use_ok 'Net::Ping'};
+ 
+ # Hopefully this is never a routeable host
+-my $fail_ip = $ENV{NET_PING_FAIL_IP} || "172.29.249.249";
++my $fail_ip = $ENV{NET_PING_FAIL_IP} || "192.0.2.0";
+ 
+ eval {
+   my $timeout = 11;
+diff --git a/t/200_ping_tcp.t b/t/200_ping_tcp.t
+index e2bfe18..8e8f56d 100644
+--- a/t/200_ping_tcp.t
++++ b/t/200_ping_tcp.t
+@@ -18,7 +18,7 @@ BEGIN {
+ }
+ 
+ # Hopefully this is never a routeable host
+-my $fail_ip = $ENV{NET_PING_FAIL_IP} || "172.29.249.249";
++my $fail_ip = $ENV{NET_PING_FAIL_IP} || "192.0.2.0";
+ 
+ # Remote network test using tcp protocol.
+ #
+diff --git a/t/400_ping_syn.t b/t/400_ping_syn.t
+index 1ccec9f..8409aae 100644
+--- a/t/400_ping_syn.t
++++ b/t/400_ping_syn.t
+@@ -33,7 +33,7 @@ BEGIN {
+ # $ PERL_CORE=1 make test
+ 
+ # Hopefully this is never a routeable host
+-my $fail_ip = $ENV{NET_PING_FAIL_IP} || "172.29.249.249";
++my $fail_ip = $ENV{NET_PING_FAIL_IP} || "192.0.2.0";
+ 
+ # Try a few remote servers
+ my %webs = (
+diff --git a/t/410_syn_host.t b/t/410_syn_host.t
+index d84a7eb..15948e2 100644
+--- a/t/410_syn_host.t
++++ b/t/410_syn_host.t
+@@ -37,7 +37,7 @@ BEGIN {
+ my %webs;
+ BEGIN {
+   # Hopefully this is never a routeable host
+-  my $fail_ip = $ENV{NET_PING_FAIL_IP} || "172.29.249.249";
++  my $fail_ip = $ENV{NET_PING_FAIL_IP} || "192.0.2.0";
+ 
+   %webs = (
+   $fail_ip => 0,
+diff --git a/t/420_ping_syn_port.t b/t/420_ping_syn_port.t
+index 55ee88a..53c153f 100644
+--- a/t/420_ping_syn_port.t
++++ b/t/420_ping_syn_port.t
+@@ -34,7 +34,7 @@ BEGIN {
+ # $ PERL_CORE=1 make test
+ 
+ # Hopefully this is never a routeable host
+-my $fail_ip = $ENV{NET_PING_FAIL_IP} || "172.29.249.249";
++my $fail_ip = $ENV{NET_PING_FAIL_IP} || "192.0.2.0";
+ 
+ # Try a few remote servers
+ my %webs;
+diff --git a/t/501_ping_icmpv6.t b/t/501_ping_icmpv6.t
+index 3d2b789..165824f 100644
+--- a/t/501_ping_icmpv6.t
++++ b/t/501_ping_icmpv6.t
+@@ -59,7 +59,7 @@ SKIP: {
+   my $rightip = "2001:4860:4860::8888"; # pingable ip of google's dnsserver
+   # for a firewalled ipv6 network try an optional local ipv6 host
+   $rightip = $ENV{TEST_PING6_HOST} if $ENV{TEST_PING6_HOST};
+-  my $wrongip = "2001:4860:4860::1234"; # non existing ip
++  my $wrongip = "2001:db8::"; # non existing ip
+   # diag "Pinging existing IPv6 ";
+   my $result = $p->ping($rightip);
+   if ($result == 1) {
+-- 
+2.25.4
+
