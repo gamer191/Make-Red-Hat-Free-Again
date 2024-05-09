@@ -1,0 +1,427 @@
+From 18de86345d5e455b815fe0395d2992b9a2f1195f Mon Sep 17 00:00:00 2001
+From: Oleksiy Chernyavskyy <ochern@ics.com>
+Date: Tue, 28 Mar 2017 01:11:59 +0300
+Subject: [PATCH] removed bugfix 1565. See details on
+ http://bugs.motifzone.net/show_bug.cgi?id=1565
+
+---
+ lib/Xm/ComboBox.c   |   8 ---
+ lib/Xm/DropDown.c   |   7 ---
+ lib/Xm/GrabShell.c  |  15 +----
+ lib/Xm/GrabShellP.h |   3 -
+ lib/Xm/RCMenu.c     |  40 ------------
+ lib/Xm/Xm.c         | 173 ----------------------------------------------------
+ lib/Xm/XmI.h        |   4 --
+ 7 files changed, 2 insertions(+), 248 deletions(-)
+
+diff --git a/lib/Xm/ComboBox.c b/lib/Xm/ComboBox.c
+index cf507da4..1472e458 100644
+--- a/lib/Xm/ComboBox.c
++++ b/lib/Xm/ComboBox.c
+@@ -3164,9 +3164,6 @@ CreatePulldown(Widget    parent,
+   Arg      args[4];
+   ArgList  merged_args;
+   Cardinal n;
+-#ifdef FIX_1565
+-  XmGrabShellWidget grabsh;
+-#endif
+ 
+   n = 0;
+   XtSetArg(args[n], XmNlayoutDirection, LayoutM(parent)), n++;
+@@ -3178,11 +3175,6 @@ CreatePulldown(Widget    parent,
+ 			     merged_args, n + *num_args);
+   XtFree((char*)merged_args);
+ 
+-#ifdef FIX_1565
+-  grabsh = (XmGrabShellWidget) shell;
+-  grabsh->grab_shell.set_input_focus = False;
+-#endif
+-
+   return shell;
+ }
+ 
+diff --git a/lib/Xm/DropDown.c b/lib/Xm/DropDown.c
+index 5cd15cae..37fec03f 100644
+--- a/lib/Xm/DropDown.c
++++ b/lib/Xm/DropDown.c
+@@ -2027,9 +2027,6 @@ CreatePopup(Widget w, ArgList args, Cardinal num_args)
+     Arg *new_list, largs[10];
+     Cardinal num_largs;
+     Widget sb;
+-#ifdef FIX_1565
+-    XmGrabShellWidget grabsh;
+-#endif
+ 
+     num_largs = 0;
+     XtSetArg(largs[num_largs], XmNoverrideRedirect, True); num_largs++;
+@@ -2043,10 +2040,6 @@ CreatePopup(Widget w, ArgList args, Cardinal num_args)
+ 						xmGrabShellWidgetClass, w,
+ 						new_list,
+ 						num_largs + num_args);
+-#ifdef FIX_1565
+-    grabsh = (XmGrabShellWidget) XmDropDown_popup_shell(cbw);
+-    grabsh->grab_shell.set_input_focus = False;
+-#endif
+     XtFree((char *) new_list);
+ 
+ #ifdef FIX_1446
+diff --git a/lib/Xm/GrabShell.c b/lib/Xm/GrabShell.c
+index af13e0b7..a73f7cb9 100644
+--- a/lib/Xm/GrabShell.c
++++ b/lib/Xm/GrabShell.c
+@@ -284,9 +284,6 @@ Initialize(Widget req,		/* unused */
+   /* CR 9920:  Popdown may be requested before MapNotify. */
+   grabsh->grab_shell.mapped = False;
+ 
+-#ifdef FIX_1565
+-  grabsh->grab_shell.set_input_focus = True;
+-#endif
+ }
+ 
+ /*
+@@ -399,16 +396,8 @@ MapNotifyHandler(Widget shell, XtPointer client_data,
+   XGetInputFocus(XtDisplay(shell), &grabshell->grab_shell.old_focus,
+ 		 &grabshell->grab_shell.old_revert_to);
+   old_handler = XSetErrorHandler(IgnoreXErrors);
+-#ifdef FIX_1565
+-  if (! grabshell->grab_shell.set_input_focus) {
+-    XmForceGrabKeyboard(shell, time);
+-  } else {
+-#endif
+-    XSetInputFocus(XtDisplay(shell), XtWindow(shell), RevertToParent, time);
+-    XSync(XtDisplay(shell), False);
+-#ifdef FIX_1565
+-  }
+-#endif
++  XSetInputFocus(XtDisplay(shell), XtWindow(shell), RevertToParent, time);
++  XSync(XtDisplay(shell), False);
+   XSetErrorHandler(old_handler);
+ }
+ 
+diff --git a/lib/Xm/GrabShellP.h b/lib/Xm/GrabShellP.h
+index 025f0015..e2585540 100644
+--- a/lib/Xm/GrabShellP.h
++++ b/lib/Xm/GrabShellP.h
+@@ -56,9 +56,6 @@ typedef struct
+   Boolean	mapped;
+   Window	old_focus;
+   int		old_revert_to;
+-#ifdef FIX_1565
+-  Boolean	set_input_focus;
+-#endif
+ } XmGrabShellPart;
+ 
+ 
+diff --git a/lib/Xm/RCMenu.c b/lib/Xm/RCMenu.c
+index 8b156da5..2c698d4f 100644
+--- a/lib/Xm/RCMenu.c
++++ b/lib/Xm/RCMenu.c
+@@ -85,9 +85,6 @@ static char *rcsid = "$TOG: RCMenu.c /main/25 1999/05/24 18:06:57 samborn $";
+ #include "TraversalI.h"
+ #include "UniqueEvnI.h"
+ #include "VendorSI.h"
+-#ifdef FIX_1565
+-#include <Xm/GrabShell.h>
+-#endif
+ 
+ #define FIX_1535
+ 
+@@ -946,13 +943,6 @@ _XmMenuFocus(
+    XmMenuState mst = _XmGetMenuState((Widget)w);
+    Window tmpWindow;
+    int tmpRevert;
+-#ifdef FIX_1565
+-   Widget shell;
+-
+-   shell = w;
+-   while (! XtIsSubclass(shell, shellWidgetClass))
+-     shell = XtParent(shell);
+-#endif
+  
+    if (_time == CurrentTime) 
+      _time = XtLastTimestampProcessed(XtDisplay(w));
+@@ -993,11 +983,6 @@ _XmMenuFocus(
+ 			  shell.popped_up))
+ **/
+ 		     {
+-#ifdef FIX_1565
+-               if (XtIsSubclass(shell, xmGrabShellWidgetClass) || XtIsSubclass(shell, xmMenuShellWidgetClass))
+-                 XmForceGrabKeyboard(w, _time);
+-               else
+-#endif
+ 		       SetInputFocus(XtDisplay(w), mst->RC_menuFocus.oldFocus,
+ 				     mst->RC_menuFocus.oldRevert,
+ 				     mst->RC_menuFocus.oldTime);
+@@ -1011,11 +996,6 @@ _XmMenuFocus(
+  	      */
+  	     else
+  	       {
+-#ifdef FIX_1565
+-               if (XtIsSubclass(shell, xmGrabShellWidgetClass) || XtIsSubclass(shell, xmMenuShellWidgetClass))
+-                 XmForceGrabKeyboard(w, _time);
+-               else
+-#endif
+  		  SetInputFocus(XtDisplay(w), mst->RC_menuFocus.oldFocus,
+ 				mst->RC_menuFocus.oldRevert,
+ 				mst->RC_menuFocus.oldTime);
+@@ -1034,11 +1014,6 @@ _XmMenuFocus(
+ 	     RC_menuFocus.oldFocus);
+ 	  mst->RC_menuFocus.oldTime = _time - 1;
+ 
+-#ifdef FIX_1565
+-      if (XtIsSubclass(shell, xmGrabShellWidgetClass) || XtIsSubclass(shell, xmMenuShellWidgetClass))
+-        XmForceGrabKeyboard(w, _time);
+-      else
+-#endif
+ 	  SetInputFocus(XtDisplay(w), XtWindow(w), mst->RC_menuFocus.oldRevert,
+ 			mst->RC_menuFocus.oldTime);
+ 
+@@ -1052,11 +1027,6 @@ _XmMenuFocus(
+ 	  XGetInputFocus(XtDisplay(w), &tmpWindow, &tmpRevert);
+ 	  if (tmpWindow != XtWindow(w))
+ 	  {
+-#ifdef FIX_1565
+-        if (XtIsSubclass(shell, xmGrabShellWidgetClass) || XtIsSubclass(shell, xmMenuShellWidgetClass))
+-          XmForceGrabKeyboard(w, _time);
+-        else
+-#endif
+ 	    SetInputFocus(XtDisplay(w), XtWindow(w), tmpRevert, _time);
+ 
+ 	    mst->RC_menuFocus.oldRevert = tmpRevert;
+@@ -1078,11 +1048,6 @@ _XmMenuFocus(
+ 
+ 	  break;
+ 	case XmMENU_MIDDLE:
+-#ifdef FIX_1565
+-      if (XtIsSubclass(shell, xmGrabShellWidgetClass) || XtIsSubclass(shell, xmMenuShellWidgetClass))
+-        XmForceGrabKeyboard(w, _time);
+-      else
+-#endif
+ 	  SetInputFocus(XtDisplay(w), XtWindow(w),
+ 			mst->RC_menuFocus.oldRevert,
+ 			mst->RC_menuFocus.oldTime);
+@@ -1097,11 +1062,6 @@ _XmMenuFocus(
+ 	  if ((tmpWindow != XtWindow(w)) &&
+ 	      (_time > mst->RC_menuFocus.oldTime))
+ 	  {
+-#ifdef FIX_1565
+-        if (XtIsSubclass(shell, xmGrabShellWidgetClass) || XtIsSubclass(shell, xmMenuShellWidgetClass))
+-          XmForceGrabKeyboard(w, _time);
+-        else
+-#endif
+ 	    SetInputFocus(XtDisplay(w), XtWindow(w), tmpRevert, _time);
+ 
+ 	    mst->RC_menuFocus.oldRevert = tmpRevert;
+diff --git a/lib/Xm/Xm.c b/lib/Xm/Xm.c
+index 45d48b61..657f9041 100644
+--- a/lib/Xm/Xm.c
++++ b/lib/Xm/Xm.c
+@@ -40,10 +40,6 @@
+ #ifdef FIX_345
+ #include <X11/keysym.h>
+ #endif
+-#ifdef FIX_1565
+-#include <Xm/GrabShell.h>
+-#include <Xm/MenuShell.h>
+-#endif
+ 
+ 
+ /**************************************************************************
+@@ -535,172 +531,3 @@ _XmAssignInsensitiveColor(Widget w)
+ }
+ #endif
+ 
+-#ifdef FIX_1565
+-
+-typedef struct _GrabData GrabData;
+-struct _GrabData {
+-  Widget w;
+-  GrabData *next;
+-};
+-
+-static void _XmSendFocusEvent(Widget child, int type);
+-static void _XmStartDispatcher(Display *display);
+-static Boolean _XmEventDispatcher(XEvent *event);
+-static void UnmapHandler(Widget w, XtPointer client_data, XEvent *event, Boolean *cont);
+-static Boolean _UngrabKeyboard(Widget w);
+-
+-static GrabData *grabw_top = NULL;
+-static int xm_dispatcher_on = 0;
+-static XtEventDispatchProc saved_dispatcher_proc = NULL;
+-static XtEventDispatchProc xt_dispatcher_proc = NULL;
+-
+-/*
+-   XmForceGrabKeyboard function is defined to be a substitutor of XSetInputFocus calls
+-   for popup and pulldown menus that should grab keyboard focus yet main window at the
+-   same time should visually stay in focus for window manager. This resolves focus flip
+-   issue when popup or pulldown menu is raised. ~ochern
+- */
+-void XmForceGrabKeyboard(Widget w, Time time)
+-{
+-  GrabData *grabw;
+-
+-  if (!w)
+-    return;
+-
+-  while (! XtIsSubclass(w, shellWidgetClass))
+-    w = XtParent(w);
+-
+-  if (! (XtIsSubclass(w, xmGrabShellWidgetClass) || XtIsSubclass(w, xmMenuShellWidgetClass)))
+-    return;
+-
+-  _XmStartDispatcher(XtDisplay(w));
+-
+-  _UngrabKeyboard(w);
+-
+-  grabw = (GrabData *) XtMalloc(sizeof(GrabData));
+-  grabw->w = w;
+-  _XmProcessLock();
+-  grabw->next = grabw_top;
+-  grabw_top = grabw;
+-  _XmProcessUnlock();
+-
+-  XtInsertEventHandler(w, StructureNotifyMask, False, UnmapHandler, NULL, XtListHead);
+-
+-  _XmSendFocusEvent(w, FocusIn);
+-
+-  /* Following the XSetInputFocus behaviour we force sending FocusOut (see XGrabKeyboard(3))
+-     event to a previous keyboard holder */
+-  XtGrabKeyboard(w, True, GrabModeAsync, GrabModeAsync, time);
+-}
+-
+-static void _XmStartDispatcher(Display *display)
+-{
+-  if (!display)
+-    return;
+-
+-  _XmProcessLock();
+-
+-  if (xm_dispatcher_on) {
+-    _XmProcessUnlock();
+-    return;
+-  }
+-
+-  saved_dispatcher_proc = XtSetEventDispatcher(display, KeyPress, _XmEventDispatcher);
+-  if (! xt_dispatcher_proc)
+-    xt_dispatcher_proc = saved_dispatcher_proc;
+-  XtSetEventDispatcher(display, KeyRelease, _XmEventDispatcher);
+-  xm_dispatcher_on = 1;
+-
+-  _XmProcessUnlock();
+-}
+-
+-static Boolean _XmEventDispatcher(XEvent *event)
+-{
+-  _XmProcessLock();
+-  if (grabw_top) {
+-    if (event->type == KeyPress || event->type == KeyRelease)
+-      event->xany.window = XtWindow(grabw_top->w);
+-  }
+-  _XmProcessUnlock();
+-
+-  if (saved_dispatcher_proc) {
+-    return (*saved_dispatcher_proc)(event);
+-  } else if (xt_dispatcher_proc) {
+-    return (*xt_dispatcher_proc)(event);
+-  } else {
+-    if (grabw_top)
+-      XtSetEventDispatcher(XtDisplay(grabw_top->w), event->type, NULL);
+-    return XtDispatchEvent(event);
+-  }
+-}
+-
+-static void UnmapHandler(Widget w, XtPointer client_data, XEvent *event, Boolean *cont)
+-{
+-  if (event->type == UnmapNotify)
+-    _UngrabKeyboard(w);
+-  if (! grabw_top) {
+-    XtSetEventDispatcher(XtDisplay(w), KeyPress, saved_dispatcher_proc);
+-    XtSetEventDispatcher(XtDisplay(w), KeyRelease, saved_dispatcher_proc);
+-    xm_dispatcher_on = 0;
+-  }
+-
+-  /* we do not call XtUngrabKeyboard since X server automatically performs an
+-     UngrabKeyboard request if the event window for an active keyboard grab becomes
+-     not viewable. ~ochern */
+-}
+-
+-static Boolean _UngrabKeyboard(Widget w)
+-{
+-  GrabData *grabw, *grabw_prev;
+-
+-  _XmProcessLock();
+-  if (! grabw_top) {
+-    _XmProcessUnlock();
+-    return False;
+-  }
+-
+-  grabw = grabw_top;
+-  grabw_prev = NULL;
+-  while(grabw && grabw->w != w) {
+-    grabw_prev = grabw;
+-    grabw = grabw->next;
+-  }
+-  if (grabw) {
+-    if (grabw_prev)
+-      grabw_prev->next = grabw->next;
+-    else
+-      grabw_top = grabw->next;
+-    XtFree((char*) grabw);
+-
+-    _XmProcessUnlock();
+-    return True;
+-  }
+-
+-  _XmProcessUnlock();
+-  return False;
+-}
+-
+-static void _XmSendFocusEvent(Widget child, int type)
+-{
+-  child = XtIsWidget(child) ? child : _XtWindowedAncestor(child);
+-  if (XtIsSensitive(child) && !child->core.being_destroyed
+-      && XtIsRealized(child) && (XtBuildEventMask(child) & FocusChangeMask))
+-  {
+-    XFocusChangeEvent event;
+-    Display* dpy = XtDisplay (child);
+-
+-    event.type = type;
+-    event.serial = LastKnownRequestProcessed(dpy);
+-    event.send_event = True;
+-    event.display = dpy;
+-    event.window = XtWindow(child);
+-    event.mode = NotifyNormal;
+-    event.detail = NotifyAncestor;
+-    if (XFilterEvent((XEvent*)&event, XtWindow(child)))
+-      return;
+-    XtDispatchEventToWidget(child, (XEvent*)&event);
+-  }
+-}
+-
+-#endif
+-
+diff --git a/lib/Xm/XmI.h b/lib/Xm/XmI.h
+index ef6165c5..769e5f0a 100644
+--- a/lib/Xm/XmI.h
++++ b/lib/Xm/XmI.h
+@@ -237,9 +237,6 @@ extern Boolean _XmIsISO10646(Display *dpy,
+ extern XChar2b* _XmUtf8ToUcs2(char *draw_text,
+                               size_t seg_len,
+ 			      size_t *ret_str_len);
+-#ifdef FIX_1565
+-extern void XmForceGrabKeyboard(Widget w, Time time);
+-#endif
+ 
+ /********    End Private Function Declarations    ********/
+ 
+@@ -294,7 +291,6 @@ extern Pixel _XmAssignInsensitiveColor(Widget w);
+ #define FIX_1501
+ #define FIX_1521
+ #define FIX_1505
+-#define FIX_1565
+ 
+ #endif /* _XmI_h */
+ /* DON'T ADD ANYTHING AFTER THIS #endif */
+-- 
+2.13.5
+

@@ -1,0 +1,27 @@
+From e5c51cda449ea3544fddcdb84c6809757477035b Mon Sep 17 00:00:00 2001
+From: Oleksiy Chernyavskyy <ochern@ics.com>
+Date: Tue, 22 Aug 2017 03:27:36 +0300
+Subject: [PATCH] Fixed bug 1660
+
+---
+ lib/Xm/TextF.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/Xm/TextF.c b/lib/Xm/TextF.c
+index 3323d2bd..f66076da 100644
+--- a/lib/Xm/TextF.c
++++ b/lib/Xm/TextF.c
+@@ -1768,8 +1768,8 @@ PaintCursor(XmTextFieldWidget tf)
+         }
+            if (cursor_width > 0 && cursor_height > 0)
+   	  	XCopyArea(XtDisplay(tf), tf->text.ibeam_off, XtWindow(tf), 
+-		      tf->text.save_gc, 0, 0, cursor_width, 
+-		      cursor_height, x, y);
++          tf->text.save_gc, src_x, 0, cursor_width, 
++          cursor_height, x, y);
+   	}
+   }
+ }
+-- 
+2.13.5
+

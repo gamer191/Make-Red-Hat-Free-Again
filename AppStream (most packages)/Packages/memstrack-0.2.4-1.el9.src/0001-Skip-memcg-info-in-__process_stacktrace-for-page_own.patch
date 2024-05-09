@@ -1,0 +1,88 @@
+From 2d27b3694bf0996767b6e5282b9d39784d1524c1 Mon Sep 17 00:00:00 2001
+From: Tao Liu <ltao@redhat.com>
+Date: Mon, 11 Jul 2022 15:28:25 +0800
+Subject: [PATCH 1/2] Skip memcg info in __process_stacktrace for page_owner
+ backend
+
+Kernel patch set [1] extended page_owner to show memcg information:
+
+Page allocated via order 0, mask 0x0(), pid 1, tgid 1 (swapper/0), ts 158908732 ns, free_ts 0 ns
+PFN 4540 type Unmovable Block 8 type Unmovable Flags 0xfffffc0010200(slab|head|node=0|zone=1|lastcpupid=0x1fffff)
+ register_early_stack+0x28/0x57
+ init_page_owner+0x1d/0x2f
+ kernel_init_freeable+0x138/0x1a2
+ kernel_init+0x16/0x120
+Slab cache page
+
+Page allocated via order 0, mask 0x400dc0(GFP_KERNEL_ACCOUNT|__GFP_ZERO), pid 737, tgid 737 (NetworkManager), ts 3964670439 ns, free_ts 3961489285 ns
+PFN 11172 type Unmovable Block 21 type Unmovable Flags 0xfffffc0000000(node=0|zone=1|lastcpupid=0x1fffff)
+ get_page_from_freelist+0x3f0/0x500
+ __alloc_pages+0xe6/0x230
+ pte_alloc_one+0x15/0x50
+ ...
+ asm_exc_page_fault+0x1e/0x30
+Charged (via objcg) to memcg NetworkManager.service
+
+"^Slab|^Charged" lines are unexpected for __process_stacktrace.
+As a result, error messages as "Page owner stacktrace malformed"
+will be output and fail.
+
+This patch fix the issue by skip the memcg info lines when iterating
+stacktrace.
+
+[1]: https://lore.kernel.org/all/20220202203036.744010-3-longman@redhat.com/T/#mcd67a65c84092f71efb766d0d509f0e8255d4dc2
+
+Signed-off-by: Tao Liu <ltao@redhat.com>
+---
+ src/backend/page_owner.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/src/backend/page_owner.c b/src/backend/page_owner.c
+index f66d77d..156f688 100644
+--- a/src/backend/page_owner.c
++++ b/src/backend/page_owner.c
+@@ -37,6 +37,23 @@
+ 
+ static char *page_owner_file;
+ 
++static char *memcg_info[] = {
++	"Slab cache page",
++	"Charged ",
++};
++
++static int is_memcg_info(char *str)
++{
++	for (int i = 0;
++	     i < sizeof(memcg_info) / sizeof(__typeof__(memcg_info[0]));
++	     i++) {
++		if (!strncmp(str, memcg_info[i], strlen(memcg_info[i]))) {
++			return true;
++		}
++	}
++	return false;
++}
++
+ static struct Tracenode* __process_stacktrace(
+ 		struct Tracenode *tn, struct PageEvent *pe, char *line, FILE *file)
+ {
+@@ -45,6 +62,7 @@ static struct Tracenode* __process_stacktrace(
+ 	int callsite_len;
+ 	unsigned long len;
+ 
++retry:
+ 	if (!fgets(line, MAX_LINE, file)) {
+ 		log_error("Page owner file ended unexpectly before stacktrace.\n");
+ 		return NULL;
+@@ -56,6 +74,9 @@ static struct Tracenode* __process_stacktrace(
+ 		return NULL;
+ 	}
+ 
++	if (is_memcg_info(line))
++		goto retry;
++
+ 	/* Empty line, end of a stacktrace */
+ 	if (line[0] == '\n' || line[0] == '\r')
+ 		return tn;
+-- 
+2.33.1
+

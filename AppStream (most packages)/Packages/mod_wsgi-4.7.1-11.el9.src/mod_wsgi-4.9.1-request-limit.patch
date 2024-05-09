@@ -1,0 +1,46 @@
+diff --git a/src/server/mod_wsgi.c b/src/server/mod_wsgi.c
+index 59aad90..ef5f5af 100644
+--- a/src/server/mod_wsgi.c
++++ b/src/server/mod_wsgi.c
+@@ -12586,6 +12586,9 @@ static apr_status_t wsgi_header_filter(ap_filter_t *f, apr_bucket_brigade *b)
+ 
+     /* Output status line. */
+ 
++    if (!r->status_line)
++        r->status_line = ap_get_status_line(r->status);
++
+     vec1[0].iov_base = (void *)"Status:";
+     vec1[0].iov_len  = strlen("Status:");
+     vec1[1].iov_base = (void *)" ";
+@@ -12699,6 +12702,7 @@ static int wsgi_hook_daemon_handler(conn_rec *c)
+     apr_bucket_brigade *bb;
+ 
+     core_request_config *req_cfg;
++    core_dir_config *d;
+ 
+     ap_filter_t *current = NULL;
+     ap_filter_t *next = NULL;
+@@ -12890,6 +12894,23 @@ static int wsgi_hook_daemon_handler(conn_rec *c)
+ 
+     r->per_dir_config  = r->server->lookup_defaults;
+ 
++    /*
++     * Try and ensure that request body limit in daemon mode process
++     * is unlimited as Apache 2.4.54 changed rules for limit and if
++     * unset is now overridden by HTTP filters to be 1GiB rather than
++     * unlimited. This is required since we populate configuration
++     * from the base server config only so setting unlimited in a more
++     * specific context such as a virtual host wouldn't be visible.
++     * Note that setting this to unlimited in the daemon mode process
++     * is okay as the request limit body is checked in the Apache
++     * child process before request is proxied specifically to avoid
++     * unecessarily passing the content across to the daemon process.
++     */
++
++    d = (core_dir_config *)ap_get_core_module_config(r->per_dir_config);
++
++    d->limit_req_body = 0;
++
+     r->sent_bodyct = 0;
+ 
+     r->read_length = 0;

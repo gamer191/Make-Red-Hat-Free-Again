@@ -1,0 +1,16 @@
+Currently, the CMAKE script is able to aither use the system library, or download a bundle.
+We don't have FMT as a system library in RHEL, and we can't *download* a bundle during build time.
+So we download the bundle ourselves, add it as additional package sources, and redirect the CMAKE
+so it would search for it on the correct - local - location.
+
+--- mariadb-10.11.6/cmake/libfmt.cmake	2023-11-08 16:51:39.000000000 +0100
++++ mariadb-10.11.6/cmake/libfmt.cmake_patched	2024-01-10 17:29:18.004421343 +0100
+@@ -15,7 +15,7 @@ MACRO(BUNDLE_LIBFMT)
+   ExternalProject_Add(
+     libfmt
+     PREFIX   "${dir}"
+-    URL      "https://github.com/fmtlib/fmt/archive/refs/tags/8.0.1.zip"
++    URL      "${CMAKE_BINARY_DIR}/bundles/8.0.1.zip"
+     URL_MD5  e77873199e897ca9f780479ad68e25b1
+     INSTALL_COMMAND ""
+     CONFIGURE_COMMAND ""

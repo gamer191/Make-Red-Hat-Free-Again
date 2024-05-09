@@ -1,0 +1,54 @@
+From 591ae206f83a359a590090524c286cb03e5c2494 Mon Sep 17 00:00:00 2001
+From: Olivier Fourdan <ofourdan@redhat.com>
+Date: Tue, 6 Sep 2022 17:39:19 +0200
+Subject: [PATCH] EditresCom: Fix build with modern systems.
+
+The code in _XtGetStringValues() depends on the LONG_BIT define.
+
+However, modern system require -D_XOPEN_SOURCE to set LONG_BIT, so with
+the current code as it is, LONG_BIT is not defined (from limits.h) and
+the build wrongly assumes this is a 32bit build.
+
+Unfortunately, defining _XOPEN_SOURCE to have LONG_BIT set would disable
+the definition of caddr_t, a deprecated definition inherited from BSD,
+so we also need to replace that with a simple cast to (long *).
+
+Signed-off-by: Olivier Fourdan <ofourdan@redhat.com>
+---
+ lib/Xm/EditresCom.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/lib/Xm/EditresCom.c b/lib/Xm/EditresCom.c
+index 4114ff8b..c93d6844 100644
+--- a/lib/Xm/EditresCom.c
++++ b/lib/Xm/EditresCom.c
+@@ -43,6 +43,9 @@ in this Software without prior written authorization from the X Consortium.
+ #include <config.h>
+ #endif
+ 
++#ifndef _XOPEN_SOURCE
++#define _XOPEN_SOURCE 700
++#endif
+ 
+ #include <X11/IntrinsicP.h>	/* To get into the composite and core widget
+ 				   structures. */
+@@ -59,6 +62,7 @@ in this Software without prior written authorization from the X Consortium.
+ #include <X11/Xmd.h>
+ 
+ #include <stdio.h>
++#include <limits.h>
+ 
+ #define _XEditResPutBool _XEditResPut8	
+ #define _XEditResPutResourceType _XEditResPut8
+@@ -1608,7 +1612,7 @@ _XtGetStringValues(Widget w, Arg *warg, int numargs)
+ 	old_handler = XtAppSetWarningMsgHandler(XtWidgetToApplicationContext(w),
+ 					     EditResCvtWarningHandler);
+ 	from.size = res->resource_size;
+-	from.addr = (caddr_t)&value;
++	from.addr = (void *)&value;
+ 	to.addr = NULL;
+ 	to.size = 0;
+ 	to_color.addr = NULL;
+-- 
+2.37.3
+

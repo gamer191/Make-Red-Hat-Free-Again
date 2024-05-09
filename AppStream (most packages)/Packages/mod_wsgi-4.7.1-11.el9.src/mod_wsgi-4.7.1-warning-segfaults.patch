@@ -1,0 +1,46 @@
+From 2c9d1b3e725ad2a072e9fef4cb1cb0bb9ae2d540 Mon Sep 17 00:00:00 2001
+From: Graham Dumpleton <Graham.Dumpleton@gmail.com>
+Date: Sat, 13 Feb 2021 11:05:39 +1100
+Subject: [PATCH] Fix deprecation warning in PyArg_ParseTuple().
+
+---
+ docs/release-notes/version-4.8.0.rst | 5 +++++
+ src/server/wsgi_logger.c             | 4 ++--
+ src/server/wsgi_python.h             | 2 ++
+ 3 files changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/src/server/wsgi_logger.c b/src/server/wsgi_logger.c
+index 71c7d69e..df35887e 100644
+--- a/src/server/wsgi_logger.c
++++ b/src/server/wsgi_logger.c
+@@ -223,7 +223,7 @@ static PyObject *Log_isatty(LogObject *self, PyObject *args)
+     return Py_False;
+ }
+ 
+-static void Log_queue(LogObject *self, const char *msg, int len)
++static void Log_queue(LogObject *self, const char *msg, Py_ssize_t len)
+ {
+     const char *p = NULL;
+     const char *q = NULL;
+@@ -330,7 +330,7 @@ static void Log_queue(LogObject *self, const char *msg, int len)
+ static PyObject *Log_write(LogObject *self, PyObject *args)
+ {
+     const char *msg = NULL;
+-    int len = -1;
++    Py_ssize_t len = -1;
+ 
+     WSGIThreadInfo *thread_info = NULL;
+ 
+diff --git a/src/server/wsgi_python.h b/src/server/wsgi_python.h
+index 0464fe6d..5c10cae5 100644
+--- a/src/server/wsgi_python.h
++++ b/src/server/wsgi_python.h
+@@ -21,6 +21,8 @@
+ 
+ /* ------------------------------------------------------------------------- */
+ 
++#define PY_SSIZE_T_CLEAN 1
++
+ #include <Python.h>
+ 
+ #if !defined(PY_VERSION_HEX)

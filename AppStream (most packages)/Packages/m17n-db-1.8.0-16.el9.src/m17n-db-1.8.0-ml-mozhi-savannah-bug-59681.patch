@@ -1,0 +1,28 @@
+commit 3e26647b3ec04c95f97e435b79f1f148ba8a6950
+Author: Rajeesh K V <rajeeshknambiar@gmail.com>
+Date:   Mon Dec 14 15:58:11 2020 +0530
+
+    Malayalam mozhi input method: fix spurious ZWNJ being added
+
+diff --git a/MIM/ml-mozhi.mim b/MIM/ml-mozhi.mim
+index e502c7a..ce0b84f 100644
+--- MIM/ml-mozhi.mim
++++ MIM/ml-mozhi.mim
+@@ -113,7 +113,7 @@ For the details, see the page:
+   ("N__" "ണ്‍")
+   ("n__" "ന്‍")
+   ("l__" "ല്‍")
+-  ("L__" "‌‌ള്‍")
++  ("L__" "ള്‍")
+   ("r__" "ര്‍")
+   ("R__" "ര്‍")
+   ("x" "ക്ഷ്"))
+@@ -147,7 +147,7 @@ For the details, see the page:
+   (".n" "ം")
+   ("M" "ം")
+   ("~" "്")
+-  ("_" "‌‌")     
++  ("_" "‌")     
+   ("m_" "ം")
+   ("m " "ം ")
+   ("m," "ം,")

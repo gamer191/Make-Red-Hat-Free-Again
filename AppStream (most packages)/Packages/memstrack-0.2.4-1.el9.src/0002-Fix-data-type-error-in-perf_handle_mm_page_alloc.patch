@@ -1,0 +1,53 @@
+From 8c42fcfa92998da170ee84cd24c2377db2e90f33 Mon Sep 17 00:00:00 2001
+From: Tao Liu <ltao@redhat.com>
+Date: Tue, 12 Jul 2022 19:41:25 +0800
+Subject: [PATCH 2/2] Fix data type error in perf_handle_mm_page_alloc
+
+For systems as s390, unsigned long and unsigned int are different in
+size. After expanding the macro, the code will be:
+
+unsigned int order = *((unsigned long*)
+		       (((const unsigned char*)(&raw->data)) +
+		        ((struct __perf_event_field_table_mm_page_alloc*)(perf_event_mm_page_alloc.fields))->order_info.offset));
+
+or simply:
+
+unsigned int order = *((unsigned long*)
+                       (((const unsigned char*)(&raw->data)) + 16));
+
+If we have the following data array:
+
+Raw data[16]: 0x0
+Raw data[17]: 0x0
+Raw data[18]: 0x0
+Raw data[19]: 0x2
+Raw data[20]: 0x0
+Raw data[21]: 0x0
+Raw data[22]: 0xc
+Raw data[23]: 0xc0
+
+The order will be: 0x0cc0, instead of 0x2.
+
+This patch will fix the error data type.
+
+Signed-off-by: Tao Liu <ltao@redhat.com>
+---
+ src/backend/perf-events.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/backend/perf-events.c b/src/backend/perf-events.c
+index 0252991..67f1dad 100644
+--- a/src/backend/perf-events.c
++++ b/src/backend/perf-events.c
+@@ -156,7 +156,7 @@ static int perf_handle_mm_page_alloc(const unsigned char* header) {
+ 			sizeof(callchain->ips) * callchain->nr);
+ 
+ 	unsigned long pfn = read_data_from_perf_raw(mm_page_alloc, pfn, unsigned long, raw);
+-	unsigned int order = read_data_from_perf_raw(mm_page_alloc, order, unsigned long, raw);
++	unsigned int order = read_data_from_perf_raw(mm_page_alloc, order, unsigned int, raw);
+ 	int pid = read_data_from_perf_raw(mm_page_alloc, common_pid, int, raw);
+ 
+ 	// TODO: pfn == -1?
+-- 
+2.33.1
+
