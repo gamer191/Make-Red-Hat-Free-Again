@@ -1,0 +1,17 @@
+Index: ibus-hangul-1.5.4/src/engine.c
+===================================================================
+--- ibus-hangul-1.5.4.orig/src/engine.c
++++ ibus-hangul-1.5.4/src/engine.c
+@@ -1577,7 +1577,11 @@ ibus_hangul_engine_process_key_event (IB
+      *
+      * See: https://github.com/choehwanjin/ibus-hangul/issues/40
+      */
+-    if (use_event_forwarding) {
++    if (use_event_forwarding
++#if IBUS_CHECK_VERSION(1, 5, 25)
++        && (hangul->caps & IBUS_CAP_SYNC_PROCESS_KEY_V2)
++#endif
++        ) {
+         if (!retval) {
+             ibus_engine_forward_key_event (engine, orig_keyval, keycode, modifiers);
+         }

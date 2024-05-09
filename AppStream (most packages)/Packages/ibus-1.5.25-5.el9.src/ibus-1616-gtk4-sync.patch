@@ -1,0 +1,3286 @@
+From 5cfe838715097d61b50da55f80bcff2c698ca885 Mon Sep 17 00:00:00 2001
+From: Changwoo Ryu <cwryu@debian.org>
+Date: Fri, 18 Feb 2022 09:07:02 +0900
+Subject: [PATCH] client/gtk2/ibusimcontext: Fix forward key keycode for GTK4
+
+When a keycode is provided (!= 0) for a forwarded key event, convert it to a
+GTK keycode before passing it to gtk_im_context_filter_key().
+
+Also free GdkKeymapKey after gdk_display_map_keyval() is called.
+
+BUG=https://github.com/ibus/ibus/issues/2380
+BUG=https://github.com/ibus/ibus/issues/2382
+---
+ client/gtk2/ibusimcontext.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index c2df3a87..a5e5e792 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -1945,7 +1945,9 @@ _ibus_context_forward_key_event_cb (IBusInputContext  *ibuscontext,
+ #if GTK_CHECK_VERSION (3, 98, 4)
+     int group = 0;
+     g_return_if_fail (GTK_IS_IM_CONTEXT (ibusimcontext));
+-    if (keycode == 0 && ibusimcontext->client_window) {
++    if (keycode != 0) {
++        keycode += 8; // to GTK keycode
++    } else if (ibusimcontext->client_window) {
+         GdkDisplay *display =
+                 gtk_widget_get_display (ibusimcontext->client_window);
+         GdkKeymapKey *keys = NULL;
+@@ -1953,6 +1955,7 @@ _ibus_context_forward_key_event_cb (IBusInputContext  *ibuscontext,
+         if (gdk_display_map_keyval (display, keyval, &keys, &n_keys)) {
+             keycode = keys->keycode;
+             group = keys->group;
++            g_free (keys);
+         } else {
+             g_warning ("Failed to parse keycode from keyval %x", keyval);
+         }
+-- 
+2.37.3
+
+From 8711dc83225a7fade3ba67ab796ecb03b38406ff Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Fri, 20 May 2022 20:54:58 +0900
+Subject: [PATCH] client/gtk2/ibusimcontext: keycode - 8 for gtk3 keycode
+ generation
+
+Since IBus keycode subtracts 8 from Linux keycode, keycodes from
+gdk_keymap_get_entries_for_keyval() also have to be subtracted 8.
+The keycodes will add 8 when they bring back the GDK event loop.
+---
+ client/gtk2/ibusimcontext.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index a5e5e792..07835a24 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -2,8 +2,8 @@
+ /* vim:set et sts=4: */
+ /* ibus - The Input Bus
+  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
+- * Copyright (C) 2015-2021 Takao Fujiwara <takao.fujiwara1@gmail.com>
+- * Copyright (C) 2008-2021 Red Hat, Inc.
++ * Copyright (C) 2015-2022 Takao Fujiwara <takao.fujiwara1@gmail.com>
++ * Copyright (C) 2008-2022 Red Hat, Inc.
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -1980,6 +1980,9 @@ _ibus_context_forward_key_event_cb (IBusInputContext  *ibuscontext,
+             keycode = keys->keycode;
+         else
+             g_warning ("Failed to parse keycode from keyval %x", keyval);
++        /* _create_gdk_event() will add 8 to keycode. */
++        if (keycode != 0)
++            keycode -= 8;
+     }
+     GdkEventKey *event = _create_gdk_event (ibusimcontext, keyval, keycode, state);
+     gdk_event_put ((GdkEvent *)event);
+-- 
+2.37.3
+
+From 3e5fab4991f4e2e22b56cf57d4dfb779a1d1977c Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Fri, 20 May 2022 20:54:59 +0900
+Subject: [PATCH] client/gtk2: Revert CCedilla change for pt-BR
+
+gtk_im_context_simple_add_table() is deprecated in GTK4.
+I decide to delete gtk_im_context_simple_add_table() here because
+the change 03c9e591430c62354bbf26ef7bd4a2e6acfb7c8f is no longer needed
+because IBusEngineSimple has implemented to load pt_br compose key
+by locale.
+
+Fixes: 03c9e591430c62354bbf26ef7bd4a2e6acfb7c8f
+
+BUG=chromium-os:11421
+BUG=http://codereview.appspot.com/3989060
+---
+ client/gtk2/ibusimcontext.c | 31 -------------------------------
+ 1 file changed, 31 deletions(-)
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index 07835a24..c7f23293 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -874,33 +874,6 @@ ibus_im_context_class_fini (IBusIMContextClass *class)
+     g_bus_unwatch_name (_daemon_name_watch_id);
+ }
+ 
+-/* Copied from gtk+2.0-2.20.1/modules/input/imcedilla.c to fix crosbug.com/11421.
+- * Overwrite the original Gtk+'s compose table in gtk+-2.x.y/gtk/gtkimcontextsimple.c. */
+-
+-/* The difference between this and the default input method is the handling
+- * of C+acute - this method produces C WITH CEDILLA rather than C WITH ACUTE.
+- * For languages that use CCedilla and not acute, this is the preferred mapping,
+- * and is particularly important for pt_BR, where the us-intl keyboard is
+- * used extensively.
+- */
+-static guint16 cedilla_compose_seqs[] = {
+-#ifdef DEPRECATED_GDK_KEYSYMS
+-  GDK_dead_acute,	GDK_C,	0,	0,	0,	0x00C7,	/* LATIN_CAPITAL_LETTER_C_WITH_CEDILLA */
+-  GDK_dead_acute,	GDK_c,	0,	0,	0,	0x00E7,	/* LATIN_SMALL_LETTER_C_WITH_CEDILLA */
+-  GDK_Multi_key,	GDK_apostrophe,	GDK_C,  0,      0,      0x00C7, /* LATIN_CAPITAL_LETTER_C_WITH_CEDILLA */
+-  GDK_Multi_key,	GDK_apostrophe,	GDK_c,  0,      0,      0x00E7, /* LATIN_SMALL_LETTER_C_WITH_CEDILLA */
+-  GDK_Multi_key,	GDK_C,  GDK_apostrophe,	0,      0,      0x00C7, /* LATIN_CAPITAL_LETTER_C_WITH_CEDILLA */
+-  GDK_Multi_key,	GDK_c,  GDK_apostrophe,	0,      0,      0x00E7, /* LATIN_SMALL_LETTER_C_WITH_CEDILLA */
+-#else
+-  GDK_KEY_dead_acute,	GDK_KEY_C,	0,	0,	0,	0x00C7,	/* LATIN_CAPITAL_LETTER_C_WITH_CEDILLA */
+-  GDK_KEY_dead_acute,	GDK_KEY_c,	0,	0,	0,	0x00E7,	/* LATIN_SMALL_LETTER_C_WITH_CEDILLA */
+-  GDK_KEY_Multi_key,	GDK_KEY_apostrophe,	GDK_KEY_C,  0,      0,      0x00C7, /* LATIN_CAPITAL_LETTER_C_WITH_CEDILLA */
+-  GDK_KEY_Multi_key,	GDK_KEY_apostrophe,	GDK_KEY_c,  0,      0,      0x00E7, /* LATIN_SMALL_LETTER_C_WITH_CEDILLA */
+-  GDK_KEY_Multi_key,	GDK_KEY_C,  GDK_KEY_apostrophe,	0,      0,      0x00C7, /* LATIN_CAPITAL_LETTER_C_WITH_CEDILLA */
+-  GDK_KEY_Multi_key,	GDK_KEY_c,  GDK_KEY_apostrophe,	0,      0,      0x00E7, /* LATIN_SMALL_LETTER_C_WITH_CEDILLA */
+-#endif
+-};
+-
+ static void
+ ibus_im_context_init (GObject *obj)
+ {
+@@ -936,10 +909,6 @@ ibus_im_context_init (GObject *obj)
+ 
+     // Create slave im context
+     ibusimcontext->slave = gtk_im_context_simple_new ();
+-    gtk_im_context_simple_add_table (GTK_IM_CONTEXT_SIMPLE (ibusimcontext->slave),
+-                                     cedilla_compose_seqs,
+-                                     4,
+-                                     G_N_ELEMENTS (cedilla_compose_seqs) / (4 + 2));
+ 
+     g_signal_connect (ibusimcontext->slave,
+                       "commit",
+-- 
+2.37.3
+
+From b94f0c1cea5d0e423fef3bcc13b23f212f04c930 Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Thu, 7 Jul 2022 08:13:57 +0900
+Subject: [PATCH] src: Add IBUS_CAP_OSK to IBusCapabilite
+
+Some IMEs' behavior is different between the on-screen keyboard and
+the direct physical keyboard and this flag is useful for the IMEs.
+
+Also fix src/ibusaccelgroup.c for gtkdoc-mkhtml.
+If the API comment of IBusCapabilite is updated, XML & HTML files
+are rebuilt and gtk-doc-1.33.2 no longer accepts HTML tags in
+the comments.
+
+diff --git a/src/ibusaccelgroup.c b/src/ibusaccelgroup.c
+index ef2d3976..aec1c7e4 100644
+--- a/src/ibusaccelgroup.c
++++ b/src/ibusaccelgroup.c
+@@ -267,14 +267,14 @@ is_keycode (const gchar *string)
+  *     modifier mask, %NULL
+  *
+  * Parses a string representing an accelerator. The format looks like
+- * “<Control>a” or “<Shift><Alt>F1” or “<Release>z” (the last one is
+- * for key release).
++ * “&lt;Control&gt;a” or “&lt;Shift&gt;&lt;Alt&gt;F1” or “&lt;Release%gt;z”
++ * (the last one is for key release).
+  *
+  * The parser is fairly liberal and allows lower or upper case, and also
+- * abbreviations such as “<Ctl>” and “<Ctrl>”. Key names are parsed using
+- * gdk_keyval_from_name(). For character keys the name is not the symbol,
+- * but the lowercase name, e.g. one would use “<Ctrl>minus” instead of
+- * “<Ctrl>-”.
++ * abbreviations such as “&lt;Ctl&gt;” and “&lt;Ctrl&gt;”. Key names are
++ * parsed using gdk_keyval_from_name(). For character keys the name is not the
++ * symbol, but the lowercase name, e.g. one would use “&lt;Ctrl&gt;minus”
++ * instead of “&lt;Ctrl&gt;-”.
+  *
+  * If the parse fails, @accelerator_key and @accelerator_mods will
+  * be set to 0 (zero).
+@@ -403,7 +403,7 @@ out:
+  *
+  * Converts an accelerator keyval and modifier mask into a string
+  * parseable by gtk_accelerator_parse(). For example, if you pass in
+- * #IBUS_KEY_q and #IBUS_CONTROL_MASK, this function returns “<Control>q”.
++ * #IBUS_KEY_q and #IBUS_CONTROL_MASK, this function returns “&lt;Control&gt;q”.
+  *
+  * If you need to display accelerators in the user interface,
+  * see gtk_accelerator_get_label().
+diff --git a/src/ibustypes.h b/src/ibustypes.h
+index 990659ac..60bcb92b 100644
+--- a/src/ibustypes.h
++++ b/src/ibustypes.h
+@@ -108,6 +108,7 @@ typedef enum
+  * @IBUS_CAP_PROPERTY: UI is capable to have property.
+  * @IBUS_CAP_SURROUNDING_TEXT: Client can provide surround text,
+  *  or IME can handle surround text.
++ * @IBUS_CAP_OSK: UI is owned by on-screen keyboard.
+  *
+  * Capability flags of UI.
+  */
+@@ -118,6 +119,7 @@ typedef enum {
+     IBUS_CAP_FOCUS              = 1 << 3,
+     IBUS_CAP_PROPERTY           = 1 << 4,
+     IBUS_CAP_SURROUNDING_TEXT   = 1 << 5,
++    IBUS_CAP_OSK                = 1 << 6,
+ } IBusCapabilite;
+ 
+ /**
+-- 
+2.37.3
+
+From c957c5f6ba07074a8fb56c978c27873c1cfe0783 Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Tue, 19 Jul 2022 22:58:24 +0900
+Subject: [PATCH] client/gtk2: Implement new process_key_event for GTK4
+
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index c7f23293..bc14df00 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -111,13 +111,13 @@ static guint    _signal_delete_surrounding_id = 0;
+ static guint    _signal_retrieve_surrounding_id = 0;
+ 
+ #if GTK_CHECK_VERSION (3, 98, 4)
+-static gboolean _use_sync_mode = TRUE;
++static char _use_sync_mode = 2;
+ #else
+ static const gchar *_no_snooper_apps = NO_SNOOPER_APPS;
+ static gboolean _use_key_snooper = ENABLE_SNOOPER;
+ static guint    _key_snooper_id = 0;
+ 
+-static gboolean _use_sync_mode = FALSE;
++static char _use_sync_mode = 0;
+ #endif
+ 
+ static const gchar *_discard_password_apps  = "";
+@@ -375,12 +375,15 @@ ibus_im_context_commit_event (IBusIMContext *ibusimcontext,
+    return FALSE;
+ }
+ 
+-struct _ProcessKeyEventData {
++typedef struct {
+     GdkEvent *event;
+     IBusIMContext *ibusimcontext;
+-};
++} ProcessKeyEventData;
+ 
+-typedef struct _ProcessKeyEventData ProcessKeyEventData;
++typedef struct {
++    GMainLoop *loop;
++    gboolean    retval;
++} ProcessKeyEventReplyData;
+ 
+ static void
+ _process_key_event_done (GObject      *object,
+@@ -395,12 +398,12 @@ _process_key_event_done (GObject      *object,
+     IBusIMContext *ibusimcontext = data->ibusimcontext;
+ #endif
+     GError *error = NULL;
++    gboolean retval;
+ 
+     g_slice_free (ProcessKeyEventData, data);
+-    gboolean retval = ibus_input_context_process_key_event_async_finish (
+-            context,
+-            res,
+-            &error);
++    retval = ibus_input_context_process_key_event_async_finish (context,
++                                                                res,
++                                                                &error);
+ 
+     if (error != NULL) {
+         g_warning ("Process Key Event failed: %s.", error->message);
+@@ -431,6 +434,27 @@ _process_key_event_done (GObject      *object,
+ #endif
+ }
+ 
++static void
++_process_key_event_reply_done (GObject      *object,
++                               GAsyncResult *res,
++                               gpointer      user_data)
++{
++    IBusInputContext *context = (IBusInputContext *)object;
++    ProcessKeyEventReplyData *data = (ProcessKeyEventReplyData *)user_data;
++    GError *error = NULL;
++    gboolean retval = ibus_input_context_process_key_event_async_finish (
++            context,
++            res,
++            &error);
++    if (error != NULL) {
++        g_warning ("Process Key Event failed: %s.", error->message);
++        g_error_free (error);
++    }
++    g_return_if_fail (data);
++    data->retval = retval;
++    g_main_loop_quit (data->loop);
++}
++
+ static gboolean
+ _process_key_event (IBusInputContext *context,
+ #if GTK_CHECK_VERSION (3, 98, 4)
+@@ -462,13 +486,45 @@ _process_key_event (IBusInputContext *context,
+ #endif
+     keycode = hardware_keycode;
+ 
+-    if (_use_sync_mode) {
++    switch (_use_sync_mode) {
++    case 1: {
+         retval = ibus_input_context_process_key_event (context,
++                                                       keyval,
++                                                       keycode - 8,
++                                                       state);
++        break;
++    }
++    case 2: {
++        GMainLoop *loop = g_main_loop_new (NULL, TRUE);
++        ProcessKeyEventReplyData *data = NULL;
++
++        if (loop)
++            data = g_slice_new0 (ProcessKeyEventReplyData);
++        if (!data) {
++            g_warning ("Cannot wait for the reply of the process key event.");
++            retval = ibus_input_context_process_key_event (context,
++                                                           keyval,
++                                                           keycode - 8,
++                                                           state);
++            if (loop)
++                g_main_loop_quit (loop);
++            break;
++        }
++        data->loop = loop;
++        ibus_input_context_process_key_event_async (context,
+             keyval,
+             keycode - 8,
+-            state);
++            state,
++            -1,
++            NULL,
++            _process_key_event_reply_done,
++            data);
++        g_main_loop_run (loop);
++        retval = data->retval;
++        g_slice_free (ProcessKeyEventReplyData, data);
++        break;
+     }
+-    else {
++    default: {
+         ProcessKeyEventData *data = g_slice_new0 (ProcessKeyEventData);
+ #if GTK_CHECK_VERSION (3, 98, 4)
+         data->event = gdk_event_ref (event);
+@@ -487,6 +543,7 @@ _process_key_event (IBusInputContext *context,
+ 
+         retval = TRUE;
+     }
++    }
+ 
+     /* GTK4 does not provide gtk_key_snooper_install() and also
+      * GtkIMContextClass->filter_keypress() cannot send the updated
+@@ -676,24 +733,47 @@ _key_snooper_cb (GtkWidget   *widget,
+ #endif
+ 
+ static gboolean
+-_get_boolean_env(const gchar *name,
+-                 gboolean     defval)
++_get_boolean_env (const gchar *name,
++                  gboolean     defval)
+ {
+     const gchar *value = g_getenv (name);
+ 
+     if (value == NULL)
+-      return defval;
++        return defval;
+ 
+     if (g_strcmp0 (value, "") == 0 ||
+         g_strcmp0 (value, "0") == 0 ||
+         g_strcmp0 (value, "false") == 0 ||
+         g_strcmp0 (value, "False") == 0 ||
+-        g_strcmp0 (value, "FALSE") == 0)
+-      return FALSE;
++        g_strcmp0 (value, "FALSE") == 0) {
++        return FALSE;
++    }
+ 
+     return TRUE;
+ }
+ 
++static char
++_get_char_env (const gchar *name,
++               char         defval)
++{
++    const gchar *value = g_getenv (name);
++
++    if (value == NULL)
++        return defval;
++
++    if (g_strcmp0 (value, "") == 0 ||
++        g_strcmp0 (value, "0") == 0 ||
++        g_strcmp0 (value, "false") == 0 ||
++        g_strcmp0 (value, "False") == 0 ||
++        g_strcmp0 (value, "FALSE") == 0) {
++        return 0;
++    } else if (!g_strcmp0 (value, "2")) {
++        return 2;
++    }
++
++    return 1;
++}
++
+ static void
+ daemon_name_appeared (GDBusConnection *connection,
+                       const gchar     *name,
+@@ -777,11 +857,11 @@ ibus_im_context_class_init (IBusIMContextClass *class)
+     g_assert (_signal_retrieve_surrounding_id != 0);
+ 
+ #if GTK_CHECK_VERSION (3, 98, 4)
+-    _use_sync_mode = _get_boolean_env ("IBUS_ENABLE_SYNC_MODE", TRUE);
++    _use_sync_mode = _get_char_env ("IBUS_ENABLE_SYNC_MODE", 2);
+ #else
+     _use_key_snooper = !_get_boolean_env ("IBUS_DISABLE_SNOOPER",
+                                           !(ENABLE_SNOOPER));
+-    _use_sync_mode = _get_boolean_env ("IBUS_ENABLE_SYNC_MODE", FALSE);
++    _use_sync_mode = (char)_get_char_env ("IBUS_ENABLE_SYNC_MODE", 0);
+ #endif
+     _use_discard_password = _get_boolean_env ("IBUS_DISCARD_PASSWORD", FALSE);
+ 
+@@ -904,6 +984,8 @@ ibus_im_context_init (GObject *obj)
+ #else
+     ibusimcontext->caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS;
+ #endif
++    if (_use_sync_mode != 1)
++        ibusimcontext->caps |= IBUS_CAP_SYNC_PROCESS_KEY;
+ 
+     ibusimcontext->events_queue = g_queue_new ();
+ 
+@@ -1246,7 +1328,7 @@ ibus_im_context_reset (GtkIMContext *context)
+          * IBus uses button-press-event instead until GTK is fixed.
+          * https://gitlab.gnome.org/GNOME/gtk/issues/1534
+          */
+-        if (_use_sync_mode)
++        if (_use_sync_mode == 1)
+             ibus_im_context_clear_preedit_text (ibusimcontext);
+         ibus_input_context_reset (ibusimcontext->ibuscontext);
+     }
+@@ -1361,7 +1443,7 @@ ibus_im_context_set_client_window (GtkIMContext *context,
+ 
+     if (ibusimcontext->client_window) {
+ #if !GTK_CHECK_VERSION (3, 98, 4)
+-        if (ibusimcontext->use_button_press_event && !_use_sync_mode)
++        if (ibusimcontext->use_button_press_event && _use_sync_mode != 1)
+             _connect_button_press_event (ibusimcontext, FALSE);
+ #endif
+         g_object_unref (ibusimcontext->client_window);
+@@ -1371,7 +1453,7 @@ ibus_im_context_set_client_window (GtkIMContext *context,
+     if (client != NULL) {
+         ibusimcontext->client_window = g_object_ref (client);
+ #if !GTK_CHECK_VERSION (3, 98, 4)
+-        if (!ibusimcontext->use_button_press_event && !_use_sync_mode)
++        if (!ibusimcontext->use_button_press_event && _use_sync_mode != 1)
+             _connect_button_press_event (ibusimcontext, TRUE);
+ #endif
+     }
+@@ -1993,7 +2075,7 @@ _ibus_context_update_preedit_text_cb (IBusInputContext  *ibuscontext,
+ #if !GTK_CHECK_VERSION (3, 98, 4)
+     if (!ibusimcontext->use_button_press_event &&
+         mode == IBUS_ENGINE_PREEDIT_COMMIT &&
+-        !_use_sync_mode) {
++        _use_sync_mode != 1) {
+         if (ibusimcontext->client_window) {
+             _connect_button_press_event (ibusimcontext, TRUE);
+         }
+@@ -2200,6 +2282,8 @@ _create_input_context_done (IBusBus       *bus,
+ static void
+ _create_input_context (IBusIMContext *ibusimcontext)
+ {
++    gchar *prgname = g_strdup (g_get_prgname());
++    gchar *client_name;
+     IDEBUG ("%s", __FUNCTION__);
+ 
+     g_assert (ibusimcontext->ibuscontext == NULL);
+@@ -2208,11 +2292,24 @@ _create_input_context (IBusIMContext *ibusimcontext)
+ 
+     ibusimcontext->cancellable = g_cancellable_new ();
+ 
++    if (!prgname)
++        prgname = g_strdup_printf ("(%d)", getpid ());
++    client_name = g_strdup_printf ("%s:%s",
++#if GTK_CHECK_VERSION (3, 98, 4)
++                                   "gtk4-im",
++#elif GTK_CHECK_VERSION (2, 91, 0)
++                                   "gtk3-im",
++#else
++                                   "gtk-im",
++#endif
++                                   prgname);
++    g_free (prgname);
+     ibus_bus_create_input_context_async (_bus,
+-            "gtk-im", -1,
++            client_name, -1,
+             ibusimcontext->cancellable,
+             (GAsyncReadyCallback)_create_input_context_done,
+             g_object_ref (ibusimcontext));
++    g_free (client_name);
+ }
+ 
+ /* Callback functions for slave context */
+@@ -2329,6 +2426,8 @@ _create_fake_input_context_done (IBusBus       *bus,
+                       NULL);
+ 
+     guint32 caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS | IBUS_CAP_SURROUNDING_TEXT;
++    if (_use_sync_mode != 1)
++        caps |= IBUS_CAP_SYNC_PROCESS_KEY;
+     ibus_input_context_set_capabilities (_fake_context, caps);
+ 
+     /* focus in/out the fake context */
+diff --git a/src/ibustypes.h b/src/ibustypes.h
+index 60bcb92b..a8eee319 100644
+--- a/src/ibustypes.h
++++ b/src/ibustypes.h
+@@ -109,6 +109,9 @@ typedef enum
+  * @IBUS_CAP_SURROUNDING_TEXT: Client can provide surround text,
+  *  or IME can handle surround text.
+  * @IBUS_CAP_OSK: UI is owned by on-screen keyboard.
++ * @IBUS_CAP_SYNC_PROCESS_KEY: Asynchronous process key events are not
++ *  supported and the ibus_engine_forward_key_event() should not be
++ *  used for the return value of #IBusEngine::process_key_event().
+  *
+  * Capability flags of UI.
+  */
+@@ -120,6 +123,7 @@ typedef enum {
+     IBUS_CAP_PROPERTY           = 1 << 4,
+     IBUS_CAP_SURROUNDING_TEXT   = 1 << 5,
+     IBUS_CAP_OSK                = 1 << 6,
++    IBUS_CAP_SYNC_PROCESS_KEY   = 1 << 7,
+ } IBusCapabilite;
+ 
+ /**
+-- 
+2.41.0
+
+From 506ac9993d5166196b7c4e9bfa9fb0f9d3792ffa Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Thu, 10 Nov 2022 18:38:05 +0900
+Subject: [PATCH] client/x11: Implement new process_key_event for ibus-x11
+
+The new process_key_event is ported from GTK4 to X11 because
+hangul maintainers wish to delete forward_key_event as much as possible
+and currently we could apply forward_key_event to the sync mode only
+and the new process_key_event is a new async key event process in X11
+and hangul might disable forward_key_event by default.
+
+Now the definition of IBUS_CAP_SYNC_PROCESS_KEY_V2 capability is changed
+to set only if the sync mode.
+
+Also switch a heavy GMainLoop to the light GSource.
+
+Fixes: https://github.com/ibus/ibus/commit/c957c5f
+---
+ client/gtk2/ibusimcontext.c |  61 ++++++++++----
+ client/x11/main.c           | 157 +++++++++++++++++++++++++++++++-----
+ src/ibustypes.h             |   1 +
+ 3 files changed, 184 insertions(+), 35 deletions(-)
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index 6e338157..1f3723e6 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -382,8 +382,9 @@ typedef struct {
+ } ProcessKeyEventData;
+ 
+ typedef struct {
+-    GMainLoop *loop;
+-    gboolean    retval;
++    int       count;
++    guint     count_cb_id;
++    gboolean  retval;
+ } ProcessKeyEventReplyData;
+ 
+ static void
+@@ -453,7 +454,23 @@ _process_key_event_reply_done (GObject      *object,
+     }
+     g_return_if_fail (data);
+     data->retval = retval;
+-    g_main_loop_quit (data->loop);
++    data->count = 0;
++    g_source_remove (data->count_cb_id);
++}
++
++static gboolean
++_process_key_event_count_cb (gpointer user_data)
++{
++    ProcessKeyEventReplyData *data = (ProcessKeyEventReplyData *)user_data;
++    g_return_val_if_fail (data, G_SOURCE_REMOVE);
++    if (!data->count)
++        return G_SOURCE_REMOVE;
++    /* Wait for about 10 secs. */
++    if (data->count++ == 10000) {
++        data->count = 0;
++        return G_SOURCE_REMOVE;
++    }
++    return G_SOURCE_CONTINUE;
+ }
+ 
+ static gboolean
+@@ -496,10 +513,10 @@ _process_key_event (IBusInputContext *context,
+         break;
+     }
+     case 2: {
+-        GMainLoop *loop = g_main_loop_new (NULL, TRUE);
++        GSource *source = g_timeout_source_new (1);
+         ProcessKeyEventReplyData *data = NULL;
+ 
+-        if (loop)
++        if (source)
+             data = g_slice_new0 (ProcessKeyEventReplyData);
+         if (!data) {
+             g_warning ("Cannot wait for the reply of the process key event.");
+@@ -507,11 +524,14 @@ _process_key_event (IBusInputContext *context,
+                                                            keyval,
+                                                            keycode - 8,
+                                                            state);
+-            if (loop)
+-                g_main_loop_quit (loop);
++            if (source)
++                g_source_destroy (source);
+             break;
+         }
+-        data->loop = loop;
++        data->count = 1;
++        g_source_attach (source, NULL);
++        g_source_unref (source);
++        data->count_cb_id = g_source_get_id (source);
+         ibus_input_context_process_key_event_async (context,
+             keyval,
+             keycode - 8,
+@@ -520,7 +540,14 @@ _process_key_event (IBusInputContext *context,
+             NULL,
+             _process_key_event_reply_done,
+             data);
+-        g_main_loop_run (loop);
++        g_source_set_callback (source, _process_key_event_count_cb, data, NULL);
++        while (data->count)
++            g_main_context_iteration (NULL, TRUE);
++        if (source->ref_count > 0) {
++            /* g_source_get_id() could causes a SEGV */
++            g_info ("Broken GSource.ref_count and maybe a timing issue in %p.",
++                    source);
++        }
+         retval = data->retval;
+         g_slice_free (ProcessKeyEventReplyData, data);
+         break;
+@@ -994,8 +1021,8 @@ ibus_im_context_init (GObject *obj)
+ #else
+     ibusimcontext->caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS;
+ #endif
+-    if (_use_sync_mode != 1)
+-        ibusimcontext->caps |= IBUS_CAP_SYNC_PROCESS_KEY;
++    if (_use_sync_mode == 1)
++        ibusimcontext->caps |= IBUS_CAP_SYNC_PROCESS_KEY_V2;
+ 
+     ibusimcontext->events_queue = g_queue_new ();
+ 
+@@ -1338,7 +1365,7 @@ ibus_im_context_reset (GtkIMContext *context)
+          * IBus uses button-press-event instead until GTK is fixed.
+          * https://gitlab.gnome.org/GNOME/gtk/issues/1534
+          */
+-        if (_use_sync_mode == 1)
++        if (_use_sync_mode != 0)
+             ibus_im_context_clear_preedit_text (ibusimcontext);
+         ibus_input_context_reset (ibusimcontext->ibuscontext);
+     }
+@@ -1453,7 +1480,7 @@ ibus_im_context_set_client_window (GtkIMContext *context,
+ 
+     if (ibusimcontext->client_window) {
+ #if !GTK_CHECK_VERSION (3, 98, 4)
+-        if (ibusimcontext->use_button_press_event && _use_sync_mode != 1)
++        if (ibusimcontext->use_button_press_event && _use_sync_mode == 0)
+             _connect_button_press_event (ibusimcontext, FALSE);
+ #endif
+         g_object_unref (ibusimcontext->client_window);
+@@ -1463,7 +1490,7 @@ ibus_im_context_set_client_window (GtkIMContext *context,
+     if (client != NULL) {
+         ibusimcontext->client_window = g_object_ref (client);
+ #if !GTK_CHECK_VERSION (3, 98, 4)
+-        if (!ibusimcontext->use_button_press_event && _use_sync_mode != 1)
++        if (!ibusimcontext->use_button_press_event && _use_sync_mode == 0)
+             _connect_button_press_event (ibusimcontext, TRUE);
+ #endif
+     }
+@@ -2085,7 +2112,7 @@ _ibus_context_update_preedit_text_cb (IBusInputContext  *ibuscontext,
+ #if !GTK_CHECK_VERSION (3, 98, 4)
+     if (!ibusimcontext->use_button_press_event &&
+         mode == IBUS_ENGINE_PREEDIT_COMMIT &&
+-        _use_sync_mode != 1) {
++        _use_sync_mode == 0) {
+         if (ibusimcontext->client_window) {
+             _connect_button_press_event (ibusimcontext, TRUE);
+         }
+@@ -2459,8 +2486,8 @@ _create_fake_input_context_done (IBusBus       *bus,
+                       NULL);
+ 
+     guint32 caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS | IBUS_CAP_SURROUNDING_TEXT;
+-    if (_use_sync_mode != 1)
+-        caps |= IBUS_CAP_SYNC_PROCESS_KEY;
++    if (_use_sync_mode == 1)
++        caps |= IBUS_CAP_SYNC_PROCESS_KEY_V2;
+     ibus_input_context_set_capabilities (_fake_context, caps);
+ 
+     /* focus in/out the fake context */
+diff --git a/client/x11/main.c b/client/x11/main.c
+index 6057cc03..905fd251 100644
+--- a/client/x11/main.c
++++ b/client/x11/main.c
+@@ -124,7 +124,7 @@ static gint     g_debug_level = 0;
+ 
+ static IBusBus *_bus = NULL;
+ 
+-static gboolean _use_sync_mode = TRUE;
++static char _use_sync_mode = 2;
+ 
+ static void
+ _xim_preedit_start (XIMS xims, const X11IC *x11ic)
+@@ -331,6 +331,7 @@ xim_create_ic (XIMS xims, IMChangeICStruct *call_data)
+ {
+     static int base_icid = 1;
+     X11IC *x11ic;
++    guint32 capabilities = IBUS_CAP_FOCUS;
+ 
+     call_data->icid = base_icid ++;
+ 
+@@ -375,12 +376,11 @@ xim_create_ic (XIMS xims, IMChangeICStruct *call_data)
+                         G_CALLBACK (_context_disabled_cb), x11ic);
+ 
+ 
+-    if (x11ic->input_style & XIMPreeditCallbacks) {
+-        ibus_input_context_set_capabilities (x11ic->context, IBUS_CAP_FOCUS | IBUS_CAP_PREEDIT_TEXT);
+-    }
+-    else {
+-        ibus_input_context_set_capabilities (x11ic->context, IBUS_CAP_FOCUS);
+-    }
++    if (x11ic->input_style & XIMPreeditCallbacks)
++        capabilities |= IBUS_CAP_PREEDIT_TEXT;
++    if (_use_sync_mode == 1)
++        capabilities |= IBUS_CAP_SYNC_PROCESS_KEY_V2;
++    ibus_input_context_set_capabilities (x11ic->context, capabilities);
+ 
+     g_hash_table_insert (_x11_ic_table,
+                          GINT_TO_POINTER (x11ic->icid), (gpointer)x11ic);
+@@ -461,6 +461,13 @@ xim_unset_ic_focus (XIMS xims, IMChangeFocusStruct *call_data)
+ 
+ }
+ 
++typedef struct {
++    IMForwardEventStruct *pfe;
++    int                   count;
++    guint                 count_cb_id;
++    gboolean              retval;
++} ProcessKeyEventReplyData;
++
+ static void
+ _process_key_event_done (GObject      *object,
+                          GAsyncResult *res,
+@@ -493,6 +500,43 @@ _process_key_event_done (GObject      *object,
+     g_slice_free (IMForwardEventStruct, pfe);
+ }
+ 
++static void
++_process_key_event_reply_done (GObject      *object,
++                               GAsyncResult *res,
++                               gpointer      user_data)
++{
++    IBusInputContext *context = (IBusInputContext *)object;
++    ProcessKeyEventReplyData *data = (ProcessKeyEventReplyData *)user_data;
++    GError *error = NULL;
++    gboolean retval = ibus_input_context_process_key_event_async_finish (
++            context,
++            res,
++            &error);
++    if (error != NULL) {
++        g_warning ("Process Key Event failed: %s.", error->message);
++        g_error_free (error);
++    }
++    g_return_if_fail (data);
++    data->retval = retval;
++    data->count = 0;
++    g_source_remove (data->count_cb_id);
++}
++
++static gboolean
++_process_key_event_count_cb (gpointer user_data)
++{
++    ProcessKeyEventReplyData *data = (ProcessKeyEventReplyData *)user_data;
++    g_return_val_if_fail (data, G_SOURCE_REMOVE);
++    if (!data->count)
++        return G_SOURCE_REMOVE;
++    /* Wait for about 10 secs. */
++    if (data->count++ == 10000) {
++        data->count = 0;
++        return G_SOURCE_REMOVE;
++    }
++    return G_SOURCE_CONTINUE;
++}
++
+ static int
+ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
+ {
+@@ -520,14 +564,15 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
+         event.state |= IBUS_RELEASE_MASK;
+     }
+ 
+-    if (_use_sync_mode) {
++    switch (_use_sync_mode) {
++    case 1: {
+         retval = ibus_input_context_process_key_event (
+                                       x11ic->context,
+                                       event.keyval,
+                                       event.hardware_keycode - 8,
+                                       event.state);
+         if (retval) {
+-            if (! x11ic->has_preedit_area) {
++            if (!x11ic->has_preedit_area) {
+                 _xim_set_cursor_location (x11ic);
+             }
+             return 1;
+@@ -546,8 +591,80 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
+         IMForwardEvent (_xims, (XPointer) &fe);
+ 
+         retval = 1;
++        break;
+     }
+-    else {
++    case 2: {
++        GSource *source = g_timeout_source_new (1);
++        ProcessKeyEventReplyData *data = NULL;
++        IMForwardEventStruct fe;
++
++        if (source)
++            data = g_slice_new0 (ProcessKeyEventReplyData);
++        if (!data) {
++            g_warning ("Cannot wait for the reply of the process key event.");
++            retval = ibus_input_context_process_key_event (
++                    x11ic->context,
++                    event.keyval,
++                    event.hardware_keycode - 8,
++                    event.state);
++            if (source)
++                g_source_destroy (source);
++        } else {
++            CARD16 connect_id = x11ic->connect_id;
++            data->count = 1;
++            g_source_attach (source, NULL);
++            g_source_unref (source);
++            data->count_cb_id = g_source_get_id (source);
++            ibus_input_context_process_key_event_async (
++                    x11ic->context,
++                    event.keyval,
++                    event.hardware_keycode - 8,
++                    event.state,
++                    -1,
++                    NULL,
++                    _process_key_event_reply_done,
++                    data);
++            g_source_set_callback (source, _process_key_event_count_cb,
++                                   data, NULL);
++            while (data->count)
++                g_main_context_iteration (NULL, TRUE);
++            if (source->ref_count > 0) {
++                /* g_source_get_id() could causes a SEGV */
++                g_info ("Broken GSource.ref_count and maybe a timing "
++                        "issue in %p.", source);
++            }
++            retval = data->retval;
++            g_slice_free (ProcessKeyEventReplyData, data);
++
++            if (g_hash_table_lookup (_connections,
++                                     GINT_TO_POINTER ((gint)connect_id))
++                == NULL) {
++                return 1;
++            }
++        }
++
++        if (retval) {
++            if (! x11ic->has_preedit_area) {
++                _xim_set_cursor_location (x11ic);
++            }
++            return 1;
++        }
++
++        memset (&fe, 0, sizeof (fe));
++
++        fe.major_code = XIM_FORWARD_EVENT;
++        fe.icid = x11ic->icid;
++        fe.connect_id = x11ic->connect_id;
++        fe.sync_bit = 0;
++        fe.serial_number = 0L;
++        fe.event = call_data->event;
++
++        IMForwardEvent (_xims, (XPointer) &fe);
++
++        retval = 1;
++        break;
++    }
++    default: {
+         IMForwardEventStruct *pfe;
+ 
+         pfe = g_slice_new0 (IMForwardEventStruct);
+@@ -569,6 +686,7 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
+                                       pfe);
+         retval = 1;
+     }
++    }
+     return retval;
+ }
+ 
+@@ -1026,23 +1144,26 @@ _context_disabled_cb (IBusInputContext *context,
+     _xim_preedit_end (_xims, x11ic);
+ }
+ 
+-static gboolean
+-_get_boolean_env(const gchar *name,
+-                 gboolean     defval)
++static char
++_get_char_env (const gchar *name,
++               char         defval)
+ {
+     const gchar *value = g_getenv (name);
+ 
+     if (value == NULL)
+-      return defval;
++        return defval;
+ 
+     if (g_strcmp0 (value, "") == 0 ||
+         g_strcmp0 (value, "0") == 0 ||
+         g_strcmp0 (value, "false") == 0 ||
+         g_strcmp0 (value, "False") == 0 ||
+-        g_strcmp0 (value, "FALSE") == 0)
+-      return FALSE;
++        g_strcmp0 (value, "FALSE") == 0) {
++        return 0;
++    } else if (!g_strcmp0 (value, "2")) {
++        return 2;
++    }
+ 
+-    return TRUE;
++    return 1;
+ }
+ 
+ static void
+@@ -1059,7 +1180,7 @@ _init_ibus (void)
+                         G_CALLBACK (_bus_disconnected_cb), NULL);
+ 
+     /* https://github.com/ibus/ibus/issues/1713 */
+-    _use_sync_mode = _get_boolean_env ("IBUS_ENABLE_SYNC_MODE", TRUE);
++    _use_sync_mode = _get_char_env ("IBUS_ENABLE_SYNC_MODE", 2);
+ }
+ 
+ static void
+diff --git a/src/ibustypes.h b/src/ibustypes.h
+index a8eee319..ba2a0010 100644
+--- a/src/ibustypes.h
++++ b/src/ibustypes.h
+@@ -124,6 +124,7 @@ typedef enum {
+     IBUS_CAP_SURROUNDING_TEXT   = 1 << 5,
+     IBUS_CAP_OSK                = 1 << 6,
+     IBUS_CAP_SYNC_PROCESS_KEY   = 1 << 7,
++    IBUS_CAP_SYNC_PROCESS_KEY_V2 = IBUS_CAP_SYNC_PROCESS_KEY,
+ } IBusCapabilite;
+ 
+ /**
+-- 
+2.41.0
+
+From 497f0c74230a65309e22ce5569060ce48310406b Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Thu, 23 Mar 2023 13:07:30 +0900
+Subject: [PATCH] client/x11: Fix Key typing order
+
+ibus-x11 now also uses the hybrid process key events with
+IBUS_ENABLE_SYNC_MODE=2 and it waits for the async API
+with GSource and g_main_context_iteration() in xim_forward_event().
+
+But g_main_context_iteration() calls gdk_event_source_dispatch()
+and it can call another xim_forward_event() and the callbacks
+of ibus_input_context_process_key_event_async() can be nested.
+So if the forwarding API is called out of the callbacks of
+ibus_input_context_process_key_event_async(), the key events
+order is swapped due to the delayed return of
+g_main_context_iteration().
+
+To resolve this issue, the forwarding API should be called in
+the callbacks of ibus_input_context_process_key_event_async().
+
+Fixes: https://github.com/ibus/ibus/commit/506ac99
+
+BUG=https://github.com/ibus/ibus/issues/2480
+---
+ client/x11/main.c | 160 ++++++++++++++++++++++++----------------------
+ 1 file changed, 83 insertions(+), 77 deletions(-)
+
+diff --git a/client/x11/main.c b/client/x11/main.c
+index 905fd251..83d95cb7 100644
+--- a/client/x11/main.c
++++ b/client/x11/main.c
+@@ -2,7 +2,7 @@
+ /* vim:set et sts=4: */
+ /* ibus
+  * Copyright (C) 2007-2015 Peng Huang <shawn.p.huang@gmail.com>
+- * Copyright (C) 2015-2021 Takao Fujiwara <takao.fujiwara1@gmail.com>
++ * Copyright (C) 2015-2023 Takao Fujiwara <takao.fujiwara1@gmail.com>
+  * Copyright (C) 2007-2015 Red Hat, Inc.
+  *
+  * main.c:
+@@ -48,6 +48,9 @@
+ 
+ #include <getopt.h>
+ 
++/* Wait for about 120 secs to return a key from async process-key-event. */
++#define MAX_WAIT_KEY_TIME       120000
++
+ #define LOG(level, fmt_args...) \
+     if (g_debug_level >= (level)) { \
+         g_debug (fmt_args); \
+@@ -461,11 +463,39 @@ xim_unset_ic_focus (XIMS xims, IMChangeFocusStruct *call_data)
+ 
+ }
+ 
++static void
++_xim_forward_key_event_done (X11IC   *x11ic,
++                             XEvent  *event,
++                             gboolean processed)
++{
++    IMForwardEventStruct fe;
++    if (processed) {
++        if (!x11ic->has_preedit_area) {
++            _xim_set_cursor_location (x11ic);
++        }
++        return;
++    }
++    g_assert (x11ic);
++    g_assert (event);
++
++    memset (&fe, 0, sizeof (fe));
++    fe.major_code = XIM_FORWARD_EVENT;
++    fe.icid = x11ic->icid;
++    fe.connect_id = x11ic->connect_id;
++    fe.sync_bit = 0;
++    fe.serial_number = 0L;
++    fe.event = *event;
++    IMForwardEvent (_xims, (XPointer) &fe);
++}
++
++
+ typedef struct {
+-    IMForwardEventStruct *pfe;
+     int                   count;
+     guint                 count_cb_id;
+     gboolean              retval;
++    X11IC                *x11ic;
++    CARD16                connect_id;
++    XEvent                event;
+ } ProcessKeyEventReplyData;
+ 
+ static void
+@@ -474,7 +504,7 @@ _process_key_event_done (GObject      *object,
+                          gpointer      user_data)
+ {
+     IBusInputContext *context = (IBusInputContext *)object;
+-    IMForwardEventStruct *pfe = (IMForwardEventStruct*) user_data;
++    ProcessKeyEventReplyData *data = (ProcessKeyEventReplyData *)user_data;
+ 
+     GError *error = NULL;
+     gboolean retval = ibus_input_context_process_key_event_async_finish (
+@@ -488,16 +518,15 @@ _process_key_event_done (GObject      *object,
+     }
+ 
+     if (g_hash_table_lookup (_connections,
+-                             GINT_TO_POINTER ((gint) pfe->connect_id))
++                             GINT_TO_POINTER ((gint)data->connect_id))
+         == NULL) {
+-        g_slice_free (IMForwardEventStruct, pfe);
++        g_slice_free (ProcessKeyEventReplyData, data);
+         return;
+     }
+ 
+-    if (retval == FALSE) {
+-        IMForwardEvent (_xims, (XPointer) pfe);
+-    }
+-    g_slice_free (IMForwardEventStruct, pfe);
++    if (retval == FALSE)
++        _xim_forward_key_event_done (data->x11ic, &data->event, retval);
++    g_slice_free (ProcessKeyEventReplyData, data);
+ }
+ 
+ static void
+@@ -518,6 +547,21 @@ _process_key_event_reply_done (GObject      *object,
+     }
+     g_return_if_fail (data);
+     data->retval = retval;
++    if (g_hash_table_lookup (_connections,
++                             GINT_TO_POINTER ((gint)data->connect_id))
++        == NULL) {
++        return;
++    }
++    /* _xim_forward_key_event_done() should be called in
++     * _process_key_event_reply_done() because g_main_context_iteration()
++     * can call another xim_forward_event() and xim_forward_event() can be
++     * nested and the first _process_key_event_reply_done() is returned
++     * at last with g_main_context_iteration() so
++     * if _xim_forward_key_event_done() is called out of
++     * _process_key_event_reply_done(), the key events order
++     * can be swapped.
++     */
++    _xim_forward_key_event_done (data->x11ic, &data->event, retval);
+     data->count = 0;
+     g_source_remove (data->count_cb_id);
+ }
+@@ -529,9 +573,8 @@ _process_key_event_count_cb (gpointer user_data)
+     g_return_val_if_fail (data, G_SOURCE_REMOVE);
+     if (!data->count)
+         return G_SOURCE_REMOVE;
+-    /* Wait for about 10 secs. */
+-    if (data->count++ == 10000) {
+-        data->count = 0;
++    if (data->count++ == MAX_WAIT_KEY_TIME) {
++        g_warning ("Key event is not returned for %usecs.", MAX_WAIT_KEY_TIME);
+         return G_SOURCE_REMOVE;
+     }
+     return G_SOURCE_CONTINUE;
+@@ -571,32 +614,13 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
+                                       event.keyval,
+                                       event.hardware_keycode - 8,
+                                       event.state);
+-        if (retval) {
+-            if (!x11ic->has_preedit_area) {
+-                _xim_set_cursor_location (x11ic);
+-            }
+-            return 1;
+-        }
+-
+-        IMForwardEventStruct fe;
+-        memset (&fe, 0, sizeof (fe));
+-
+-        fe.major_code = XIM_FORWARD_EVENT;
+-        fe.icid = x11ic->icid;
+-        fe.connect_id = x11ic->connect_id;
+-        fe.sync_bit = 0;
+-        fe.serial_number = 0L;
+-        fe.event = call_data->event;
+-
+-        IMForwardEvent (_xims, (XPointer) &fe);
+-
++        _xim_forward_key_event_done (x11ic, &call_data->event, retval);
+         retval = 1;
+         break;
+     }
+     case 2: {
+         GSource *source = g_timeout_source_new (1);
+         ProcessKeyEventReplyData *data = NULL;
+-        IMForwardEventStruct fe;
+ 
+         if (source)
+             data = g_slice_new0 (ProcessKeyEventReplyData);
+@@ -610,11 +634,13 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
+             if (source)
+                 g_source_destroy (source);
+         } else {
+-            CARD16 connect_id = x11ic->connect_id;
+             data->count = 1;
+             g_source_attach (source, NULL);
+             g_source_unref (source);
+             data->count_cb_id = g_source_get_id (source);
++            data->connect_id = call_data->connect_id;
++            data->x11ic = x11ic;
++            data->event = *((XEvent*)xevent);
+             ibus_input_context_process_key_event_async (
+                     x11ic->context,
+                     event.keyval,
+@@ -626,7 +652,7 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
+                     data);
+             g_source_set_callback (source, _process_key_event_count_cb,
+                                    data, NULL);
+-            while (data->count)
++            while (data->count > 0 && data->count < MAX_WAIT_KEY_TIME)
+                 g_main_context_iteration (NULL, TRUE);
+             if (source->ref_count > 0) {
+                 /* g_source_get_id() could causes a SEGV */
+@@ -634,46 +660,33 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
+                         "issue in %p.", source);
+             }
+             retval = data->retval;
+-            g_slice_free (ProcessKeyEventReplyData, data);
+-
+-            if (g_hash_table_lookup (_connections,
+-                                     GINT_TO_POINTER ((gint)connect_id))
+-                == NULL) {
++            if (data->count == 0) {
++                g_slice_free (ProcessKeyEventReplyData, data);
+                 return 1;
+             }
+         }
+ 
+-        if (retval) {
+-            if (! x11ic->has_preedit_area) {
+-                _xim_set_cursor_location (x11ic);
+-            }
+-            return 1;
++        g_slice_free (ProcessKeyEventReplyData, data);
++        if (g_hash_table_lookup (_connections,
++                                 GINT_TO_POINTER ((gint)call_data->connect_id))
++                == NULL) {
++                return 1;
+         }
+-
+-        memset (&fe, 0, sizeof (fe));
+-
+-        fe.major_code = XIM_FORWARD_EVENT;
+-        fe.icid = x11ic->icid;
+-        fe.connect_id = x11ic->connect_id;
+-        fe.sync_bit = 0;
+-        fe.serial_number = 0L;
+-        fe.event = call_data->event;
+-
+-        IMForwardEvent (_xims, (XPointer) &fe);
+-
++        _xim_forward_key_event_done (x11ic, &call_data->event, retval);
+         retval = 1;
+         break;
+     }
+     default: {
+-        IMForwardEventStruct *pfe;
++        ProcessKeyEventReplyData *data;
+ 
+-        pfe = g_slice_new0 (IMForwardEventStruct);
+-        pfe->major_code = XIM_FORWARD_EVENT;
+-        pfe->icid = x11ic->icid;
+-        pfe->connect_id = x11ic->connect_id;
+-        pfe->sync_bit = 0;
+-        pfe->serial_number = 0L;
+-        pfe->event = call_data->event;
++        if (!(data = g_slice_new0 (ProcessKeyEventReplyData))) {
++            g_warning ("Cannot allocate async data");
++            _xim_forward_key_event_done (x11ic, &call_data->event, 0);
++            return 1;
++        }
++        data->connect_id = call_data->connect_id;
++        data->x11ic = x11ic;
++        data->event = call_data->event;
+ 
+         ibus_input_context_process_key_event_async (
+                                       x11ic->context,
+@@ -683,7 +696,7 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
+                                       -1,
+                                       NULL,
+                                       _process_key_event_done,
+-                                      pfe);
++                                      data);
+         retval = 1;
+     }
+     }
+@@ -962,11 +975,10 @@ _xim_forward_key_event (X11IC   *x11ic,
+                         guint    keycode,
+                         guint    state)
+ {
+-    g_return_if_fail (x11ic != NULL);
+-
+-    IMForwardEventStruct fe = {0};
+     XEvent xkp = {0};
+ 
++    g_return_if_fail (x11ic != NULL);
++
+     xkp.xkey.type = (state & IBUS_RELEASE_MASK) ? KeyRelease : KeyPress;
+     xkp.xkey.serial = 0L;
+     xkp.xkey.send_event = False;
+@@ -975,20 +987,14 @@ _xim_forward_key_event (X11IC   *x11ic,
+     xkp.xkey.window =
+         x11ic->focus_window ? x11ic->focus_window : x11ic->client_window;
+     xkp.xkey.subwindow = None;
+-    xkp.xkey.root = DefaultRootWindow (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()));
++    xkp.xkey.root = DefaultRootWindow (
++            GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()));
+ 
+     xkp.xkey.time = 0;
+     xkp.xkey.state = state;
+     xkp.xkey.keycode = (keycode == 0) ? 0 : keycode + 8;
+ 
+-    fe.major_code = XIM_FORWARD_EVENT;
+-    fe.icid = x11ic->icid;
+-    fe.connect_id = x11ic->connect_id;
+-    fe.sync_bit = 0;
+-    fe.serial_number = 0L;
+-    fe.event = xkp;
+-
+-    IMForwardEvent (_xims, (XPointer) & fe);
++    _xim_forward_key_event_done (x11ic, &xkp, FALSE);
+ }
+ 
+ static void
+-- 
+2.41.0
+
+From 8f706d160631f1ffdbfa16543a38b9d5f91c16ad Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Thu, 23 Mar 2023 13:07:38 +0900
+Subject: [PATCH] util/IMdkit: Disable while loop before call
+ ForwardEventMessageProc()
+
+Seems ProcessQueue() had a wrong XFree() with async process-key-event.
+Fixes: https://github.com/ibus/ibus/commit/506ac99
+
+BUG=https://github.com/ibus/ibus/issues/2484
+---
+ util/IMdkit/i18nPtHdr.c | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/util/IMdkit/i18nPtHdr.c b/util/IMdkit/i18nPtHdr.c
+index 8dc52714..ec20e322 100644
+--- a/util/IMdkit/i18nPtHdr.c
++++ b/util/IMdkit/i18nPtHdr.c
+@@ -1747,11 +1747,13 @@ static void ProcessQueue (XIMS ims, CARD16 connect_id)
+         XimProtoHdr *hdr = (XimProtoHdr *) client->pending->p;
+         unsigned char *p1 = (unsigned char *) (hdr + 1);
+         IMProtocol call_data;
++        XIMPending *old = client->pending;
+ 
+         call_data.major_code = hdr->major_opcode;
+         call_data.any.minor_code = hdr->minor_opcode;
+         call_data.any.connect_id = connect_id;
+ 
++        client->pending = old->next;
+         switch (hdr->major_opcode)
+         {
+         case XIM_FORWARD_EVENT:
+@@ -1760,12 +1762,7 @@ static void ProcessQueue (XIMS ims, CARD16 connect_id)
+         }
+         /*endswitch*/
+         XFree (hdr);
+-        {
+-            XIMPending *old = client->pending;
+-
+-            client->pending = old->next;
+-            XFree (old);
+-        }
++        XFree (old);
+     }
+     /*endwhile*/
+     return;
+-- 
+2.41.0
+
+From 38f09c657fd5713e39f698aae43a09a07574f1a6 Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Wed, 12 Jul 2023 07:50:22 +0900
+Subject: [PATCH] src: Fix sync ibus_input_context_process_key_event()
+
+The synchronous "ProcessKeyEvent" D-Bus method cannot receive
+"CommitText" and "ForwardKeyEvent" D-Bus signals during calling the method.
+To resolve the issue, now
+ibus_input_context_set_post_process_key_event() and
+ibus_input_context_post_process_key_event() are added newly.
+
+ibus_input_context_post_process_key_event() retries "CommitText" and
+"ForwardKeyEvent" D-Bus signals during calling the "ProcessKeyEvent" D-Bus
+method and ibus-daemon does not handle those signals.
+
+"Since: 1.5.00" is added in header files to available APIs before 1.5.29
+is released. Will think later how to convert the version comments together
+when the new version 1.5.29 is committed.
+
+BUG=https://github.com/ibus/ibus/issues/2486
+---
+ bus/inputcontext.c          | 252 ++++++++++++++++++++++++++++++++----
+ client/gtk2/ibusimcontext.c | 225 ++++++++++++++++++++++----------
+ src/ibusinputcontext.c      | 162 +++++++++++++++++++++--
+ src/ibusinputcontext.h      |  36 +++++-
+ 4 files changed, 567 insertions(+), 108 deletions(-)
+
+diff --git a/bus/inputcontext.c b/bus/inputcontext.c
+index 8aded5d8..4d1fb041 100644
+--- a/bus/inputcontext.c
++++ b/bus/inputcontext.c
+@@ -31,6 +31,8 @@
+ #include "marshalers.h"
+ #include "types.h"
+ 
++#define MAX_SYNC_DATA 30
++
+ struct _SetEngineByDescData {
+     /* context related to the data */
+     BusInputContext *context;
+@@ -46,6 +48,11 @@ struct _SetEngineByDescData {
+ };
+ typedef struct _SetEngineByDescData SetEngineByDescData;
+ 
++typedef struct _SyncForwardingData {
++    gchar     key;
++    IBusText *text;
++} SyncForwardingData;
++
+ struct _BusInputContext {
+     IBusService parent;
+ 
+@@ -99,6 +106,9 @@ struct _BusInputContext {
+ 
+     BusPanelProxy *emoji_extension;
+     gboolean is_extension_lookup_table;
++    GQueue *queue_during_process_key_event;
++    gboolean use_post_process_key_event;
++    gboolean processing_key_event;
+ };
+ 
+ struct _BusInputContextClass {
+@@ -156,6 +166,15 @@ static void     bus_input_context_service_method_call
+                                     const gchar           *method_name,
+                                     GVariant              *parameters,
+                                     GDBusMethodInvocation *invocation);
++static GVariant *
++                bus_input_context_service_get_property
++                                   (IBusService           *service,
++                                    GDBusConnection       *connection,
++                                    const gchar           *sender,
++                                    const gchar           *object_path,
++                                    const gchar           *interface_name,
++                                    const gchar           *property_name,
++                                    GError               **error);
+ static gboolean bus_input_context_service_set_property
+                                    (IBusService           *service,
+                                     GDBusConnection       *connection,
+@@ -214,8 +233,21 @@ static const gchar introspection_xml[] =
+     "<node>"
+     "  <interface name='org.freedesktop.IBus.InputContext'>"
+     /* properties */
++    "    <property name='PostProcessKeyEvent' type='(a(yv))' access='read'>\n"
++    "      <annotation name='org.gtk.GDBus.Since'\n"
++    "          value='1.5.29' />\n"
++    "      <annotation name='org.gtk.GDBus.DocString'\n"
++    "          value='Stability: Unstable' />\n"
++    "    </property>\n"
+     "    <property name='ContentType' type='(uu)' access='write' />"
+     "    <property name='ClientCommitPreedit' type='(b)' access='write' />\n"
++    "    <property name='EffectivePostProcessKeyEvent' type='(b)' \n"
++    "                                                  access='write'>\n"
++    "      <annotation name='org.gtk.GDBus.Since'\n"
++    "          value='1.5.29' />\n"
++    "      <annotation name='org.gtk.GDBus.DocString'\n"
++    "          value='Stability: Unstable' />\n"
++    "    </property>\n"
+     /* methods */
+     "    <method name='ProcessKeyEvent'>"
+     "      <arg direction='in'  type='u' name='keyval' />"
+@@ -348,6 +380,8 @@ bus_input_context_class_init (BusInputContextClass *class)
+     /* override the parent class's implementation. */
+     IBUS_SERVICE_CLASS (class)->service_method_call =
+         bus_input_context_service_method_call;
++    IBUS_SERVICE_CLASS (class)->service_get_property =
++        bus_input_context_service_get_property;
+     IBUS_SERVICE_CLASS (class)->service_set_property =
+         bus_input_context_service_set_property;
+     /* register the xml so that bus_ibus_impl_service_method_call will be called on a method call defined in the xml (e.g. 'FocusIn'.) */
+@@ -782,6 +816,11 @@ bus_input_context_property_changed (BusInputContext *context,
+ }
+ 
+ 
++typedef struct _PanelProcessKeyEventData {
++    GDBusMethodInvocation *invocation;
++    BusInputContext *context;
++} PanelProcessKeyEventData;
++
+ /**
+  * _panel_process_key_event_cb:
+  *
+@@ -789,14 +828,21 @@ bus_input_context_property_changed (BusInputContext *context,
+  * bus_panel_proxy_process_key_event() is finished.
+  */
+ static void
+-_panel_process_key_event_cb (GObject               *source,
+-                             GAsyncResult          *res,
+-                             GDBusMethodInvocation *invocation)
++_panel_process_key_event_cb (GObject                  *source,
++                             GAsyncResult             *res,
++                             PanelProcessKeyEventData *data)
+ {
+     GError *error = NULL;
+     GVariant *value = g_dbus_proxy_call_finish ((GDBusProxy *)source,
+                                                  res,
+                                                  &error);
++    GDBusMethodInvocation *invocation;
++    BusInputContext *context;
++
++    g_assert (data);
++    invocation = data->invocation;
++    context = data->context;
++    g_slice_free (PanelProcessKeyEventData, data);
+     if (value != NULL) {
+         g_dbus_method_invocation_return_value (invocation, value);
+         g_variant_unref (value);
+@@ -805,6 +851,7 @@ _panel_process_key_event_cb (GObject               *source,
+         g_dbus_method_invocation_return_gerror (invocation, error);
+         g_error_free (error);
+     }
++    context->processing_key_event = FALSE;
+ }
+ 
+ typedef struct _ProcessKeyEventData ProcessKeyEventData;
+@@ -841,21 +888,27 @@ _ic_process_key_event_reply_cb (GObject               *source,
+         gboolean retval = FALSE;
+         g_variant_get (value, "(b)", &retval);
+         if (context->emoji_extension && !retval) {
++            PanelProcessKeyEventData *pdata =
++                    g_slice_new (PanelProcessKeyEventData);
++            pdata->invocation = invocation;
++            pdata->context = context;
+             bus_panel_proxy_process_key_event (context->emoji_extension,
+                                                keyval,
+                                                keycode,
+                                                modifiers,
+                                                (GAsyncReadyCallback)
+                                                     _panel_process_key_event_cb,
+-                                               invocation);
++                                               pdata);
+         } else {
+             g_dbus_method_invocation_return_value (invocation, value);
++            context->processing_key_event = FALSE;
+         }
+         g_variant_unref (value);
+     }
+     else {
+         g_dbus_method_invocation_return_gerror (invocation, error);
+         g_error_free (error);
++        context->processing_key_event = FALSE;
+     }
+ 
+     g_object_unref (context);
+@@ -877,6 +930,8 @@ _ic_process_key_event (BusInputContext       *context,
+     guint keycode = 0;
+     guint modifiers = 0;
+ 
++    if (context->use_post_process_key_event)
++        context->processing_key_event = TRUE;
+     g_variant_get (parameters, "(uuu)", &keyval, &keycode, &modifiers);
+     if (G_UNLIKELY (!context->has_focus)) {
+         /* workaround: set focus if context does not have focus */
+@@ -1372,17 +1427,109 @@ bus_input_context_service_method_call (IBusService            *service,
+     g_return_if_reached ();
+ }
+ 
+-static void
++/**
++ * _ic_get_post_process_key_event:
++ *
++ * Implement the "PostProcessKeyEvent" get property of the
++ * org.freedesktop.IBus.InputContext interface because currently the Gio
++ * D-Bus method calls don't support multiple nested tuples likes
++ * G_VARIANT_TYPE ("((ba(yv)))")) in "ProcessKeyEvent" D-Bus method
++ * So these post events are separated from the return value "b" of
++ * the "ProcessKeyEvent" D-Bus method call.
++ */
++static GVariant *
++_ic_get_post_process_key_event (BusInputContext *context,
++                                GDBusConnection *connection,
++                                GError         **error)
++{
++    const char *error_message = NULL;
++    GVariantBuilder array;
++    SyncForwardingData *data;
++
++    do {
++        if (!BUS_IS_INPUT_CONTEXT (context)) {
++            error_message = "BusInputContext is freed";
++            break;
++        }
++        if (context->processing_key_event) {
++            error_message = "Another ProcessKeyEvent is called.";
++            break;
++        }
++        g_variant_builder_init (&array, G_VARIANT_TYPE ("a(yv)"));
++        while ((data =
++                g_queue_pop_head (context->queue_during_process_key_event))) {
++            GVariant *variant = ibus_serializable_serialize_object (
++                    IBUS_SERIALIZABLE (data->text));
++            g_variant_builder_add (&array, "(yv)", data->key, variant);
++            g_object_unref (data->text);
++            g_slice_free (SyncForwardingData, data);
++        }
++    } while (FALSE);
++    if (error_message) {
++        g_set_error (error,
++                     G_DBUS_ERROR,
++                     G_DBUS_ERROR_FAILED,
++                     "%s", error_message);
++        return NULL;
++    }
++    return g_variant_builder_end (&array);
++}
++
++static GVariant *
++bus_input_context_service_get_property (IBusService           *service,
++                                        GDBusConnection       *connection,
++                                        const gchar           *sender,
++                                        const gchar           *object_path,
++                                        const gchar           *interface_name,
++                                        const gchar           *property_name,
++                                        GError               **error)
++{
++    int i;
++    static const struct {
++        const char *property_name;
++        GVariant * (* property_callback) (BusInputContext *,
++                                          GDBusConnection *,
++                                          GError **);
++    } properties [] =  {
++        { "PostProcessKeyEvent",   _ic_get_post_process_key_event },
++    };
++
++    if (error)
++        *error = NULL;
++    if (g_strcmp0 (interface_name, IBUS_INTERFACE_INPUT_CONTEXT) != 0) {
++        return IBUS_SERVICE_CLASS (bus_input_context_parent_class)->
++                service_get_property (
++                        service, connection, sender, object_path,
++                        interface_name, property_name,
++                        error);
++    }
++    for (i = 0; i < G_N_ELEMENTS (properties); i++) {
++        if (g_strcmp0 (properties[i].property_name, property_name) == 0) {
++            return properties[i].property_callback ((BusInputContext *)service,
++                                                    connection,
++                                                    error);
++        }
++    }
++
++    g_set_error (error,
++                 G_DBUS_ERROR,
++                 G_DBUS_ERROR_FAILED,
++                 "service_get_property received an unknown property: %s",
++                 property_name ? property_name : "(null)");
++    g_return_val_if_reached (NULL);
++}
++
++static gboolean
+ _ic_set_content_type (BusInputContext *context,
+-                      GVariant        *value)
++                      GVariant        *value,
++                      GError         **error)
+ {
+     guint purpose = 0;
+     guint hints = 0;
++    gboolean retval = TRUE;
+ 
+     g_variant_get (value, "(uu)", &purpose, &hints);
+     if (purpose != context->purpose || hints != context->hints) {
+-        GError *error;
+-        gboolean retval;
+ 
+         context->purpose = purpose;
+         context->hints = hints;
+@@ -1400,24 +1547,30 @@ _ic_set_content_type (BusInputContext *context,
+                            context->hints);
+         }
+ 
+-        error = NULL;
+         retval = bus_input_context_property_changed (context,
+                                                      "ContentType",
+                                                      value,
+-                                                     &error);
+-        if (!retval) {
+-            g_warning ("Failed to emit PropertiesChanged signal: %s",
+-                       error->message);
+-            g_error_free (error);
+-        }
++                                                     error);
+     }
++    return retval;
+ }
+ 
+-static void
++static gboolean
+ _ic_set_client_commit_preedit (BusInputContext *context,
+-                               GVariant        *value)
++                               GVariant        *value,
++                               GError         **error)
+ {
+     g_variant_get (value, "(b)", &context->client_commit_preedit);
++    return TRUE;
++}
++
++static gboolean
++_ic_set_use_post_process_key_event (BusInputContext *context,
++                                    GVariant        *value,
++                                    GError         **error)
++{
++    g_variant_get (value, "(b)", &context->use_post_process_key_event);
++    return TRUE;
+ }
+ 
+ static gboolean
+@@ -1384,6 +1548,18 @@ bus_input_context_service_set_property (
+                                         GVariant        *value,
+                                         GError         **error)
+ {
++    int i;
++    static const struct {
++        const char *property_name;
++        gboolean (* property_callback) (BusInputContext *,
++                                        GVariant *,
++                                        GError **);
++    } properties [] =  {
++        { "ContentType",                   _ic_set_content_type },
++        { "ClientCommitPreedit",           _ic_set_client_commit_preedit },
++        { "EffectivePostProcessKeyEvent",  _ic_set_use_post_process_key_event },
++    };
++
+     if (g_strcmp0 (interface_name, IBUS_INTERFACE_INPUT_CONTEXT) != 0) {
+         return IBUS_SERVICE_CLASS (bus_input_context_parent_class)->
+             service_set_property (service,
+@@ -1401,13 +1566,12 @@ bus_input_context_service_set_property (
+ 
+     g_return_val_if_fail (BUS_IS_INPUT_CONTEXT (service), FALSE);
+ 
+-    if (g_strcmp0 (property_name, "ContentType") == 0) {
+-        _ic_set_content_type (BUS_INPUT_CONTEXT (service), value);
+-        return TRUE;
+-    }
+-    if (g_strcmp0 (property_name, "ClientCommitPreedit") == 0) {
+-        _ic_set_client_commit_preedit (BUS_INPUT_CONTEXT (service), value);
+-        return TRUE;
++    for (i = 0; i < G_N_ELEMENTS (properties); i++) {
++        if (g_strcmp0 (properties[i].property_name, property_name) == 0) {
++            return properties[i].property_callback ((BusInputContext *) service,
++                                                    value,
++                                                    error);
++        }
+     }
+ 
+     g_return_val_if_reached (FALSE);
+@@ -2094,7 +2258,23 @@ _engine_forward_key_event_cb (BusEngineProxy    *engine,
+     g_assert (BUS_IS_INPUT_CONTEXT (context));
+ 
+     g_assert (context->engine == engine);
++    g_assert (context->queue_during_process_key_event);
+ 
++    if (context->processing_key_event && g_queue_get_length (
++                   context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
++        SyncForwardingData *data;
++        IBusText *text = ibus_text_new_from_printf ("%u,%u,%u",
++                                                    keyval, keycode, state);
++        if (g_queue_get_length (context->queue_during_process_key_event)
++            == MAX_SYNC_DATA) {
++            g_warning ("Exceed max number of post process_key_event data");
++        }
++        data = g_slice_new (SyncForwardingData);
++        data->key = 'f';
++        data->text = text;
++        g_queue_push_tail (context->queue_during_process_key_event, data);
++        return;
++    }
+     bus_input_context_emit_signal (context,
+                                    "ForwardKeyEvent",
+                                    g_variant_new ("(uuu)", keyval, keycode, state),
+@@ -2455,6 +2634,7 @@ bus_input_context_new (BusConnection    *connection,
+ 
+     /* it is a fake input context, just need process hotkey */
+     context->fake = (strncmp (client, "fake", 4) == 0);
++    context->queue_during_process_key_event = g_queue_new ();
+ 
+     if (connection) {
+         g_object_ref_sink (connection);
+@@ -2938,11 +3118,17 @@ bus_input_context_set_content_type (BusInputContext *context,
+                                     guint            hints)
+ {
+     GVariant *value;
++    GError *error = NULL;
+ 
+     g_assert (BUS_IS_INPUT_CONTEXT (context));
+ 
+     value = g_variant_ref_sink (g_variant_new ("(uu)", purpose, hints));
+-    _ic_set_content_type (context, value);
++    _ic_set_content_type (context, value, &error);
++    if (error) {
++        g_warning ("Failed to emit PropertiesChanged signal: %s",
++                   error->message);
++        g_error_free (error);
++    }
+     g_variant_unref (value);
+ }
+ 
+@@ -2952,12 +3138,24 @@ bus_input_context_commit_text_use_extension (BusInputContext *context,
+                                              gboolean         use_extension)
+ {
+     g_assert (BUS_IS_INPUT_CONTEXT (context));
++    g_assert (context->queue_during_process_key_event);
+ 
+     if (text == text_empty || text == NULL)
+         return;
+ 
+     if (use_extension && context->emoji_extension) {
+         bus_panel_proxy_commit_text_received (context->emoji_extension, text);
++    } else if (context->processing_key_event && g_queue_get_length (
++                   context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
++        SyncForwardingData *data;
++        if (g_queue_get_length (context->queue_during_process_key_event)
++            == MAX_SYNC_DATA) {
++            g_warning ("Exceed max number of sync process_key_event data");
++        }
++        data = g_slice_new (SyncForwardingData);
++        data->key = 'c';
++        data->text = g_object_ref (text);
++        g_queue_push_tail (context->queue_during_process_key_event, data);
+     } else {
+         GVariant *variant = ibus_serializable_serialize (
+                 (IBusSerializable *)text);
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index ea8270bb..7ccc129d 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -111,7 +111,7 @@ static guint    _signal_delete_surrounding_id = 0;
+ static guint    _signal_retrieve_surrounding_id = 0;
+ 
+ #if GTK_CHECK_VERSION (3, 98, 4)
+-static char _use_sync_mode = 2;
++static char _use_sync_mode = 1;
+ #else
+ static const gchar *_no_snooper_apps = NO_SNOOPER_APPS;
+ static gboolean _use_key_snooper = ENABLE_SNOOPER;
+@@ -386,6 +386,7 @@ typedef struct {
+     gboolean  retval;
+ } ProcessKeyEventReplyData;
+ 
++
+ static void
+ _process_key_event_done (GObject      *object,
+                          GAsyncResult *res,
+@@ -435,6 +436,7 @@ _process_key_event_done (GObject      *object,
+ #endif
+ }
+ 
++
+ static void
+ _process_key_event_reply_done (GObject      *object,
+                                GAsyncResult *res,
+@@ -457,6 +459,7 @@ _process_key_event_reply_done (GObject      *object,
+     g_source_remove (data->count_cb_id);
+ }
+ 
++
+ static gboolean
+ _process_key_event_count_cb (gpointer user_data)
+ {
+@@ -472,6 +475,101 @@ _process_key_event_count_cb (gpointer user_data)
+     return G_SOURCE_CONTINUE;
+ }
+ 
++
++static gboolean
++_process_key_event_sync (IBusInputContext *context,
++                         guint             keyval,
++                         guint             keycode,
++                         guint             state)
++{
++    gboolean retval;
++
++    g_assert (IBUS_IS_INPUT_CONTEXT (context));
++    retval = ibus_input_context_process_key_event (context,
++                                                   keyval,
++                                                   keycode - 8,
++                                                   state);
++    ibus_input_context_post_process_key_event (context);
++    return retval;
++}
++
++
++static gboolean
++_process_key_event_async (IBusInputContext *context,
++                          guint             keyval,
++                          guint             keycode,
++                          guint             state,
++                          GdkEvent         *event,
++                          IBusIMContext    *ibusimcontext)
++{
++    ProcessKeyEventData *data = g_slice_new0 (ProcessKeyEventData);
++
++    g_assert (event);
++    if (!data) {
++        g_warning ("Cannot allocate async data");
++        return _process_key_event_sync (context, keyval, keycode, state);
++    }
++#if GTK_CHECK_VERSION (3, 98, 4)
++    data->event = gdk_event_ref (event);
++#else
++    data->event = gdk_event_copy (event);
++#endif
++    data->ibusimcontext = ibusimcontext;
++    ibus_input_context_process_key_event_async (context,
++            keyval,
++            keycode - 8,
++            state,
++            -1,
++            NULL,
++            _process_key_event_done,
++            data);
++
++    return TRUE;
++}
++
++
++static gboolean
++_process_key_event_hybrid_async (IBusInputContext *context,
++                                 guint             keyval,
++                                 guint             keycode,
++                                 guint             state)
++{
++    GSource *source = g_timeout_source_new (1);
++    ProcessKeyEventReplyData *data = NULL;
++    gboolean retval = FALSE;
++
++    if (source)
++        data = g_slice_new0 (ProcessKeyEventReplyData);
++    if (!data) {
++        g_warning ("Cannot wait for the reply of the process key event.");
++        retval = _process_key_event_sync (context, keyval, keycode, state);
++        if (source)
++            g_source_destroy (source);
++        return retval;
++    }
++    data->count = 1;
++    g_source_attach (source, NULL);
++    g_source_unref (source);
++    data->count_cb_id = g_source_get_id (source);
++    ibus_input_context_process_key_event_async (context,
++            keyval,
++            keycode - 8,
++            state,
++            -1,
++            NULL,
++            _process_key_event_reply_done,
++            data);
++    g_source_set_callback (source, _process_key_event_count_cb, data, NULL);
++    while (data->count)
++        g_main_context_iteration (NULL, TRUE);
++    /* #2498 Checking source->ref_count might cause Nautilus hang up
++     */
++    retval = data->retval;
++    g_slice_free (ProcessKeyEventReplyData, data);
++    return retval;
++}
++
++
+ static gboolean
+ _process_key_event (IBusInputContext *context,
+ #if GTK_CHECK_VERSION (3, 98, 4)
+@@ -505,70 +603,20 @@ _process_key_event (IBusInputContext *context,
+ 
+     switch (_use_sync_mode) {
+     case 1: {
+-        retval = ibus_input_context_process_key_event (context,
+-                                                       keyval,
+-                                                       keycode - 8,
+-                                                       state);
++        retval = _process_key_event_sync (context, keyval, keycode, state);
+         break;
+     }
+     case 2: {
+-        GSource *source = g_timeout_source_new (1);
+-        ProcessKeyEventReplyData *data = NULL;
+-
+-        if (source)
+-            data = g_slice_new0 (ProcessKeyEventReplyData);
+-        if (!data) {
+-            g_warning ("Cannot wait for the reply of the process key event.");
+-            retval = ibus_input_context_process_key_event (context,
+-                                                           keyval,
+-                                                           keycode - 8,
+-                                                           state);
+-            if (source)
+-                g_source_destroy (source);
+-            break;
+-        }
+-        data->count = 1;
+-        g_source_attach (source, NULL);
+-        g_source_unref (source);
+-        data->count_cb_id = g_source_get_id (source);
+-        ibus_input_context_process_key_event_async (context,
+-            keyval,
+-            keycode - 8,
+-            state,
+-            -1,
+-            NULL,
+-            _process_key_event_reply_done,
+-            data);
+-        g_source_set_callback (source, _process_key_event_count_cb, data, NULL);
+-        while (data->count)
+-            g_main_context_iteration (NULL, TRUE);
+-        if (source->ref_count > 0) {
+-            /* g_source_get_id() could causes a SEGV */
+-            g_info ("Broken GSource.ref_count and maybe a timing issue in %p.",
+-                    source);
+-        }
+-        retval = data->retval;
+-        g_slice_free (ProcessKeyEventReplyData, data);
++        retval = _process_key_event_hybrid_async (context,
++                                                  keyval, keycode, state);
+         break;
+     }
+     default: {
+-        ProcessKeyEventData *data = g_slice_new0 (ProcessKeyEventData);
+-#if GTK_CHECK_VERSION (3, 98, 4)
+-        data->event = gdk_event_ref (event);
+-#else
+-        data->event = gdk_event_copy ((GdkEvent *)event);
+-#endif
+-        data->ibusimcontext = ibusimcontext;
+-        ibus_input_context_process_key_event_async (context,
+-            keyval,
+-            keycode - 8,
+-            state,
+-            -1,
+-            NULL,
+-            _process_key_event_done,
+-            data);
+-
+-        retval = TRUE;
++        retval = _process_key_event_async (context,
++                                           keyval, keycode, state,
++                                           (GdkEvent *)event,
++                                           ibusimcontext);
++        break;
+     }
+     }
+ 
+@@ -877,7 +925,55 @@ ibus_im_context_class_init (IBusIMContextClass *class)
+     g_assert (_signal_retrieve_surrounding_id != 0);
+ 
+ #if GTK_CHECK_VERSION (3, 98, 4)
+-    _use_sync_mode = _get_char_env ("IBUS_ENABLE_SYNC_MODE", 2);
++    /* IBus GtkIMModule, QtIMModlue, ibus-x11, ibus-wayland are called as
++     * IBus clients.
++     * Each GTK application, each QT application, Xorg server, Wayland
++     * comppsitor are called as IBus event owners here.
++     *
++     * The IBus client processes the key events between the IBus event owner
++     * and the IBus daemon and the procedure step is to:
++     *
++     * receive the key event from the IBus event owner and forward the
++     * event to the IBus daemon with the "ProcessKeyEvent" D-Bus method at
++     * first,
++     *
++     * receive the return value from the IBus daemon with the "ProessKeyEvent"
++     * D-Bus method and forward the value to the IBus event owner secondly and
++     * the return value includes if the key event is processed normally or not.
++     *
++     * The procedure behavior can be changed by the "IBUS_ENABLE_SYNC_MODE"
++     * environment variable with the synchronous procedure or asynchronous
++     * one and value is:
++     *
++     * 1: Synchronous process key event:
++     *    Wait for the return of the IBus "ProcessKeyEvent" D-Bus method
++     *    synchronously and forward the return value to the IBus event owner
++     *    synchronously.
++     * 0: Asynchronous process key event:
++     *    Return to the IBus event owner as the key event is processed normally
++     *    at first as soon as the IBus client receives the event from the
++     *    IBus event owner and also forward the event to the IBus daemon with
++     *    the "ProcessKeyEvent" D-Bus method and wait for the return value of
++     *    the D-Bus method *asynchronously*.
++     *    If the return value indicates the key event is disposed by IBus,
++     *    the IBus client does not perform anything. Otherwise the IBus client
++     *    forwards the key event with the gdk_event_put() in GTK3,
++     *    gtk_im_context_filter_key() in GTK4, IMForwardEvent() in XIM API.
++     * 2: Hybrid asynchronous process key event:
++     *    Wait for the return of the IBus "ProcessKeyEvent" D-Bus method
++     *    *asynchronously* with a GSource loop and forward the return value
++     *    to the IBus event owner synchronously. So IBus clients perform
++     *    virtually synchronously to cover problems of IBus synchronous APIs.
++     *
++     * The purpose of the asynchronous process is that each IBus input
++     * method can process the key events without D-Bus timeout and also
++     * the IBus synchronous process has a problem that the IBus
++     * "ProcessKeyEvent" D-Bus method cannot send the commit-text and
++     * forwar-key-event D-Bus signals until the D-Bus method is finished.
++     *
++     * Relative issues: #1713, #2486
++     */
++    _use_sync_mode = _get_char_env ("IBUS_ENABLE_SYNC_MODE", 1);
+ #else
+     _use_key_snooper = !_get_boolean_env ("IBUS_DISABLE_SNOOPER",
+                                           !(ENABLE_SNOOPER));
+@@ -1004,8 +1100,6 @@ ibus_im_context_init (GObject *obj)
+ #else
+     ibusimcontext->caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS;
+ #endif
+-    if (_use_sync_mode == 1)
+-        ibusimcontext->caps |= IBUS_CAP_SYNC_PROCESS_KEY_V2;
+ 
+     ibusimcontext->events_queue = g_queue_new ();
+ 
+@@ -2235,6 +2329,8 @@ _create_input_context_done (IBusBus       *bus,
+     }
+     else {
+         ibus_input_context_set_client_commit_preedit (context, TRUE);
++        if (_use_sync_mode == 1)
++            ibus_input_context_set_post_process_key_event (context, TRUE);
+         ibusimcontext->ibuscontext = context;
+ 
+         g_signal_connect (ibusimcontext->ibuscontext,
+@@ -2489,9 +2585,8 @@ _create_fake_input_context_done (IBusBus       *bus,
+                       G_CALLBACK (_ibus_fake_context_destroy_cb),
+                       NULL);
+ 
+-    guint32 caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS | IBUS_CAP_SURROUNDING_TEXT;
+-    if (_use_sync_mode == 1)
+-        caps |= IBUS_CAP_SYNC_PROCESS_KEY_V2;
++    guint32 caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS
++                   | IBUS_CAP_SURROUNDING_TEXT;
+     ibus_input_context_set_capabilities (_fake_context, caps);
+ 
+     /* focus in/out the fake context */
+diff --git a/src/ibusinputcontext.c b/src/ibusinputcontext.c
+index 28ae04ad..def23b25 100644
+--- a/src/ibusinputcontext.c
++++ b/src/ibusinputcontext.c
+@@ -2,7 +2,7 @@
+ /* vim:set et sts=4: */
+ /* ibus - The Input Bus
+  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
+- * Copyright (C) 2018-2019 Takao Fujiwara <takao.fujiwara1@gmail.com>
++ * Copyright (C) 2018-2023 Takao Fujiwara <takao.fujiwara1@gmail.com>
+  * Copyright (C) 2008-2019 Red Hat, Inc.
+  *
+  * This library is free software; you can redistribute it and/or
+@@ -1190,14 +1190,14 @@ ibus_input_context_set_content_type (IBusInputContext *context,
+     g_assert (IBUS_IS_INPUT_CONTEXT (context));
+ 
+     cached_content_type =
+-        g_dbus_proxy_get_cached_property ((GDBusProxy *) context,
++        g_dbus_proxy_get_cached_property ((GDBusProxy *)context,
+                                           "ContentType");
+     content_type = g_variant_new ("(uu)", purpose, hints);
+ 
+     g_variant_ref_sink (content_type);
+-    if (cached_content_type == NULL ||
++    if (!cached_content_type ||
+         !g_variant_equal (content_type, cached_content_type)) {
+-        g_dbus_proxy_call ((GDBusProxy *) context,
++        g_dbus_proxy_call ((GDBusProxy *)context,
+                            "org.freedesktop.DBus.Properties.Set",
+                            g_variant_new ("(ssv)",
+                                           IBUS_INTERFACE_INPUT_CONTEXT,
+@@ -1209,9 +1209,13 @@ ibus_input_context_set_content_type (IBusInputContext *context,
+                            NULL, /* callback */
+                            NULL  /* user_data */
+                            );
++        /* Need to update the cache by manual since there is a timing issue. */
++        g_dbus_proxy_set_cached_property ((GDBusProxy *)context,
++                                          "ContentType",
++                                          content_type);
+     }
+ 
+-    if (cached_content_type != NULL)
++    if (cached_content_type)
+         g_variant_unref (cached_content_type);
+     g_variant_unref (content_type);
+ }
+@@ -1324,19 +1328,20 @@ void
+ ibus_input_context_set_client_commit_preedit (IBusInputContext *context,
+                                               gboolean          client_commit)
+ {
+-    GVariant *cached_content_type;
++    GVariant *cached_var_client_commit;
+     GVariant *var_client_commit;
+ 
+     g_assert (IBUS_IS_INPUT_CONTEXT (context));
+ 
+-    cached_content_type =
+-        g_dbus_proxy_get_cached_property ((GDBusProxy *) context,
++    cached_var_client_commit =
++        g_dbus_proxy_get_cached_property ((GDBusProxy *)context,
+                                           "ClientCommitPreedit");
+     var_client_commit = g_variant_new ("(b)", client_commit);
+ 
+     g_variant_ref_sink (var_client_commit);
+-    if (cached_content_type == NULL) {
+-        g_dbus_proxy_call ((GDBusProxy *) context,
++    if (!cached_var_client_commit ||
++        !g_variant_equal (var_client_commit, cached_var_client_commit)) {
++        g_dbus_proxy_call ((GDBusProxy *)context,
+                            "org.freedesktop.DBus.Properties.Set",
+                            g_variant_new ("(ssv)",
+                                           IBUS_INTERFACE_INPUT_CONTEXT,
+@@ -1348,13 +1353,146 @@ ibus_input_context_set_client_commit_preedit (IBusInputContext *context,
+                            NULL, /* callback */
+                            NULL  /* user_data */
+                            );
++        /* Need to update the cache by manual since there is a timing issue. */
++        g_dbus_proxy_set_cached_property ((GDBusProxy *)context,
++                                          "ClientCommitPreedit",
++                                          var_client_commit);
+     }
+ 
+-    if (cached_content_type != NULL)
+-        g_variant_unref (cached_content_type);
++    if (cached_var_client_commit)
++        g_variant_unref (cached_var_client_commit);
+     g_variant_unref (var_client_commit);
+ }
+ 
++void
++ibus_input_context_set_post_process_key_event (IBusInputContext *context,
++                                               gboolean          enable)
++{
++    GVariant *cached_var_post;
++    GVariant *var_post;
++
++    g_assert (IBUS_IS_INPUT_CONTEXT (context));
++
++    cached_var_post =
++        g_dbus_proxy_get_cached_property ((GDBusProxy *)context,
++                                          "EffectivePostProcessKeyEvent");
++    var_post = g_variant_new ("(b)", enable);
++    g_variant_ref_sink (var_post);
++    if (!cached_var_post ||
++        !g_variant_equal (var_post, cached_var_post)) {
++        g_dbus_proxy_call ((GDBusProxy *)context,
++                           "org.freedesktop.DBus.Properties.Set",
++                           g_variant_new ("(ssv)",
++                                          IBUS_INTERFACE_INPUT_CONTEXT,
++                                          "EffectivePostProcessKeyEvent",
++                                          var_post),
++                           G_DBUS_CALL_FLAGS_NONE,
++                           -1,
++                           NULL, /* cancellable */
++                           NULL, /* callback */
++                           NULL  /* user_data */
++                           );
++        /* Need to update the cache by manual since there is a timing issue. */
++        g_dbus_proxy_set_cached_property ((GDBusProxy *)context,
++                                          "EffectivePostProcessKeyEvent",
++                                          var_post);
++    }
++
++    if (cached_var_post)
++        g_variant_unref (cached_var_post);
++    g_variant_unref (var_post);
++}
++
++void
++ibus_input_context_post_process_key_event (IBusInputContext *context)
++{
++    GVariant *cached_var_post;
++    gboolean enable = FALSE;
++    GVariant *result;
++    GError *error = NULL;
++    GVariant *variant = NULL;
++    GVariantIter iter;
++    gsize size;
++    char type = 0;
++    GVariant *vtext = NULL;
++
++    g_assert (IBUS_IS_INPUT_CONTEXT (context));
++
++    cached_var_post =
++        g_dbus_proxy_get_cached_property ((GDBusProxy *)context,
++                                          "EffectivePostProcessKeyEvent");
++    if (cached_var_post)
++        g_variant_get (cached_var_post, "(b)", &enable);
++    if (!enable) {
++        g_warning ("%s: ibus_input_context_set_post_process_key_event() "
++                   "needs to be called before.",
++                   G_STRFUNC);
++        if (cached_var_post)
++            g_variant_unref (cached_var_post);
++        return;
++    }
++    g_variant_unref (cached_var_post);
++    result = g_dbus_proxy_call_sync (
++            (GDBusProxy *)context,
++            "org.freedesktop.DBus.Properties.Get",
++            g_variant_new ("(ss)",
++                           IBUS_INTERFACE_INPUT_CONTEXT,
++                           "PostProcessKeyEvent"),
++            G_DBUS_CALL_FLAGS_NONE,
++            -1,
++            NULL,
++            &error);
++    if (error) {
++        g_warning ("%s: %s", G_STRFUNC, error->message);
++        g_error_free (error);
++        return;
++    }
++
++    g_variant_get (result, "(v)", &variant);
++    g_assert (variant);
++    g_variant_iter_init (&iter, variant);
++    size = g_variant_iter_n_children (&iter);
++    while (size >0 && g_variant_iter_loop (&iter, "(yv)", &type, &vtext)) {
++        IBusText *text =
++                (IBusText *)ibus_serializable_deserialize_object (vtext);
++        if (!IBUS_IS_TEXT (text)) {
++            g_warning ("%s: %s", G_STRFUNC, "text is not IBusText");
++            break;
++        }
++        switch (type) {
++        case 'c':
++            g_signal_emit (context, context_signals[COMMIT_TEXT], 0, text);
++            break;
++        case 'f': {
++            gchar **array = NULL;
++            guint keyval, keycode, state;
++            array = g_strsplit (text->text, ",", -1);
++            keyval = g_ascii_strtoull (array[0], NULL, 10);
++            keycode = g_ascii_strtoull (array[1], NULL, 10);
++            state = g_ascii_strtoull (array[2], NULL, 10);
++            g_strfreev (array);
++            g_signal_emit (context,
++                           context_signals[FORWARD_KEY_EVENT],
++                           0,
++                           keyval,
++                           keycode,
++                           state | IBUS_FORWARD_MASK);
++            break;
++        }
++        default:
++            g_warning ("%s: Type '%c' is not supported.", G_STRFUNC, type);
++        }
++        if (g_object_is_floating (text)) {
++            g_object_ref_sink (text);
++            g_object_unref (text);
++        }
++        g_clear_pointer (&vtext, g_variant_unref);
++    }
++
++    g_variant_unref (variant);
++    g_variant_unref (result);
++}
++
+ #define DEFINE_FUNC(name, Name)                                         \
+     void                                                                \
+     ibus_input_context_##name (IBusInputContext *context)               \
+diff --git a/src/ibusinputcontext.h b/src/ibusinputcontext.h
+index 09992148..ca604670 100644
+--- a/src/ibusinputcontext.h
++++ b/src/ibusinputcontext.h
+@@ -2,7 +2,7 @@
+ /* vim:set et sts=4: */
+ /* ibus - The Input Bus
+  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
+- * Copyright (C) 2018 Takao Fujiwara <takao.fujiwara1@gmail.com>
++ * Copyright (C) 2018-2023 Takao Fujiwara <takao.fujiwara1@gmail.com>
+  * Copyright (C) 2008-2018 Red Hat, Inc.
+  *
+  * This library is free software; you can redistribute it and/or
+@@ -298,7 +298,6 @@ gboolean     ibus_input_context_process_key_event
+                                              guint32             keycode,
+                                              guint32             state);
+ 
+-
+ /**
+  * ibus_input_context_set_cursor_location:
+  * @context: An IBusInputContext.
+@@ -519,9 +518,38 @@ void         ibus_input_context_set_content_type
+  *
+  * See also ibus_engine_update_preedit_text_with_mode().
+  */
+-void         ibus_input_context_set_client_commit_preedit (
+-                                             IBusInputContext   *context,
++void         ibus_input_context_set_client_commit_preedit
++                                            (IBusInputContext   *context,
+                                              gboolean            client_commit);
+ 
++/**
++ * ibus_input_context_set_post_process_key_event:
++ * @context: An #IBusInputContext.
++ * @enable: Can use ibus_input_context_post_process_key_event() to retrieve
++ * commit-text and forwar-key-event signals during
++ * calling ibus_input_context_process_key_event() if it's %TRUE.
++ *
++ * Since: 1.5.00
++ * Stability: Unstable
++ */
++void         ibus_input_context_set_post_process_key_event
++                                            (IBusInputContext   *context,
++                                             gboolean            enable);
++/**
++ * ibus_input_context_post_process_key_event:
++ * @context: An #IBusInputContext.
++ *
++ * Call this API after ibus_input_context_process_key_event() returns
++ * to retrieve commit-text and forwar-key-event signals during
++ * calling ibus_input_context_process_key_event().
++ *
++ * See also ibus_input_context_set_post_process_key_event().
++ *
++ * Since: 1.5.00
++ * Stability: Unstable
++ */
++void         ibus_input_context_post_process_key_event
++                                            (IBusInputContext   *context);
++
+ G_END_DECLS
+ #endif
+-- 
+2.41.0
+
+From 86d9bb9a1cbd4ffbd6bc2a4de85cb76a43bc2ced Mon Sep 17 00:00:00 2001
+From: Peng Wu <pwu@redhat.com>
+Date: Mon, 24 Jul 2023 14:04:12 +0800
+Subject: [PATCH] client/gtk2: Update set_cursor_location function to use Gdk
+ functions
+
+For ibus-gtk4, use the Gdk functions to get the inner cursor location.
+The inner cursor location is translated by XTranslateCoordinates
+for X Window.
+For ibus-gtk3, use gdk_window_get_root_coords function to translate the
+inner cursor location for X Window.
+In Wayland, the set_cursor_location_relative function is called.
+In X Window, the set_cursor_location function is called.
+
+Fixes: https://github.com/ibus/ibus/commit/d0a47c3
+Fixes: https://github.com/ibus/ibus/commit/a823161
+
+BUG=https://github.com/ibus/ibus/pull/2549
+BUG=https://gitlab.gnome.org/GNOME/gtk/-/issues/3024#note_987835
+---
+ client/gtk2/ibusimcontext.c | 141 +++++++++++++++---------------------
+ 1 file changed, 58 insertions(+), 83 deletions(-)
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index 7ccc129d..b5a44da0 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -27,6 +27,7 @@
+ 
+ #include <string.h>
+ #include <gtk/gtk.h>
++#include <gdk/gdk.h>
+ #include <gdk/gdkkeysyms.h>
+ #include <ibus.h>
+ #include "ibusimcontext.h"
+@@ -1612,8 +1613,13 @@ static gboolean
+ _set_cursor_location_internal (IBusIMContext *ibusimcontext)
+ {
+     GdkRectangle area;
++    GdkDisplay *display = NULL;
+ #if GTK_CHECK_VERSION (3, 98, 4)
+     GtkWidget *root;
++    GtkNative *native;
++    graphene_point_t p;
++    int tx = 0, ty = 0;
++    double nx = 0., ny = 0.;
+ #endif
+ 
+     if(ibusimcontext->client_window == NULL ||
+@@ -1623,103 +1629,72 @@ _set_cursor_location_internal (IBusIMContext *ibusimcontext)
+ 
+     area = ibusimcontext->cursor_area;
+ 
+-#ifdef GDK_WINDOWING_WAYLAND
+ #if GTK_CHECK_VERSION (3, 98, 4)
+     root = GTK_WIDGET (gtk_widget_get_root (ibusimcontext->client_window));
+-     /* FIXME: GTK_STYLE_CLASS_TITLEBAR is available in GTK3 but not GTK4.
+-      * gtk_css_boxes_get_content_rect() is available in GTK4 but it's an
+-      * internal API and calculate the window edge 32 in GTK3.
+-      */
+-    area.y += 32;
+-    area.width = 50; /* FIXME: Why 50 meets the cursor position? */
+-    area.height = gtk_widget_get_height (root);
+-    area.height += 32;
+-    if (GDK_IS_WAYLAND_DISPLAY (gdk_display_get_default ())) {
+-        ibus_input_context_set_cursor_location_relative (
+-            ibusimcontext->ibuscontext,
+-            area.x,
+-            area.y,
+-            area.width,
+-            area.height);
+-        return FALSE;
+-    }
+-#else
+-    if (GDK_IS_WAYLAND_DISPLAY (gdk_display_get_default ())) {
+-        gdouble px, py;
+-        GdkWindow *parent;
+-        GdkWindow *window = ibusimcontext->client_window;
+-
+-        while ((parent = gdk_window_get_effective_parent (window)) != NULL) {
+-            gdk_window_coords_to_parent (window, area.x, area.y, &px, &py);
+-            area.x = px;
+-            area.y = py;
+-            window = parent;
+-        }
+-
+-        _set_rect_scale_factor_with_window (&area,
+-                                            ibusimcontext->client_window);
+-        ibus_input_context_set_cursor_location_relative (
+-            ibusimcontext->ibuscontext,
+-            area.x,
+-            area.y,
+-            area.width,
+-            area.height);
+-        return FALSE;
++    /* Translates the given point in client_window coordinates to coordinates
++       relative to root coordinate system. */
++    if (!gtk_widget_compute_point (ibusimcontext->client_window,
++                                   root,
++                                   &GRAPHENE_POINT_INIT (area.x, area.y),
++                                   &p)) {
++        graphene_point_init (&p, area.x, area.y);
+     }
+-#endif
+-#endif
+ 
+-#if GTK_CHECK_VERSION (3, 98, 4)
+-#elif GTK_CHECK_VERSION (2, 91, 0)
+-    if (area.x == -1 && area.y == -1 && area.width == 0 && area.height == 0) {
+-        area.x = 0;
+-        area.y += gdk_window_get_height (ibusimcontext->client_window);
+-    }
+-#else
+-    if (area.x == -1 && area.y == -1 && area.width == 0 && area.height == 0) {
+-        gint w, h;
+-        gdk_drawable_get_size (ibusimcontext->client_window, &w, &h);
+-        area.y += h;
+-        area.x = 0;
+-    }
+-#endif
++    native = gtk_widget_get_native (ibusimcontext->client_window);
++    /* Translates from the surface coordinates into the widget coordinates. */
++    gtk_native_get_surface_transform (native, &nx, &ny);
+ 
+-#if GTK_CHECK_VERSION (3, 98, 4)
+-#if defined(GDK_WINDOWING_X11)
+-    GdkDisplay *display = gtk_widget_get_display (ibusimcontext->client_window);
++    display = gtk_widget_get_display (ibusimcontext->client_window);
+     if (GDK_IS_X11_DISPLAY (display)) {
+-        Display *xdisplay = gdk_x11_display_get_xdisplay (display);
+-        Window root_window = gdk_x11_display_get_xrootwindow (display);
+-        GtkNative *native = gtk_widget_get_native (
+-                ibusimcontext->client_window);
+-        GdkSurface *surface = gtk_native_get_surface (native);
+-        /* The window is the toplevel window but not the inner text widget.
+-         * Unfortunatelly GTK4 cannot get the coordinate of the text widget.
+-         */
+-        Window window = gdk_x11_surface_get_xid (surface);
++        GdkSurface *surface = gtk_native_get_surface
++            (gtk_widget_get_native (ibusimcontext->client_window));
+         Window child;
+-        int x, y;
+-        XTranslateCoordinates (xdisplay, window, root_window,
+-                               0, 0, &x, &y, &child);
+-        XWindowAttributes xwa;
+-        XGetWindowAttributes (xdisplay, window, &xwa);
+-        area.x = x - xwa.x + area.x;
+-        area.y = y - xwa.y + area.y;
+-        area.width = 50; /* FIXME: Why 50 meets the cursor position? */
+-        area.height = xwa.height;
++        int scale_factor = gtk_widget_get_scale_factor
++            (ibusimcontext->client_window);
++
++        XTranslateCoordinates (GDK_DISPLAY_XDISPLAY (display),
++                               GDK_SURFACE_XID (surface),
++                               gdk_x11_display_get_xrootwindow (display),
++                               0, 0, &tx, &ty,
++                               &child);
++
++        tx = tx / scale_factor;
++        ty = ty / scale_factor;
+     }
+-#endif
++
++    area.x = p.x + nx + tx;
++    area.y = p.y + ny + ty;
+ #else
+     gdk_window_get_root_coords (ibusimcontext->client_window,
+                                 area.x, area.y,
+                                 &area.x, &area.y);
+ #endif
++
+     _set_rect_scale_factor_with_window (&area, ibusimcontext->client_window);
+-    ibus_input_context_set_cursor_location (ibusimcontext->ibuscontext,
+-                                            area.x,
+-                                            area.y,
+-                                            area.width,
+-                                            area.height);
++
++#ifdef GDK_WINDOWING_WAYLAND
++#if !GTK_CHECK_VERSION (3, 98, 4)
++    display = gdk_window_get_display (ibusimcontext->client_window);
++#endif
++
++    if (GDK_IS_WAYLAND_DISPLAY (display)) {
++        ibus_input_context_set_cursor_location_relative (ibusimcontext->ibuscontext,
++                                                         area.x,
++                                                         area.y,
++                                                         area.width,
++                                                         area.height);
++
++    } else {
++#endif
++        ibus_input_context_set_cursor_location (ibusimcontext->ibuscontext,
++                                                area.x,
++                                                area.y,
++                                                area.width,
++                                                area.height);
++#ifdef GDK_WINDOWING_WAYLAND
++    }
++#endif
++
+     return FALSE;
+ }
+ 
+-- 
+2.41.0
+
+From f176569cf774f87b23270257da68249dcda837c9 Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Wed, 18 Oct 2023 16:57:28 +0900
+Subject: [PATCH] src: Add DeleteSurroundingText to PostProcessKeyEvent
+
+DeleteSurroundingText also can be delayed sending to IBus clients.
+Now surrounding D-Bus methods are added to PostProcessKeyEvent.
+
+Fixes: https://github.com/ibus/ibus/commit/38f09c6
+
+BUG=https://github.com/ibus/ibus/issues/2570
+---
+ bus/inputcontext.c     | 33 +++++++++++++++++++++++++++++++--
+ src/ibusinputcontext.c | 23 +++++++++++++++++++++++
+ 2 files changed, 54 insertions(+), 2 deletions(-)
+
+diff --git a/bus/inputcontext.c b/bus/inputcontext.c
+index aecc64f8..64430fe4 100644
+--- a/bus/inputcontext.c
++++ b/bus/inputcontext.c
+@@ -2382,7 +2382,7 @@ _engine_forward_key_event_cb (BusEngineProxy    *engine,
+     g_assert (context->queue_during_process_key_event);
+ 
+     if (context->processing_key_event && g_queue_get_length (
+-                   context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
++            context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
+         SyncForwardingData *data;
+         IBusText *text = ibus_text_new_from_printf ("%u,%u,%u",
+                                                     keyval, keycode, state);
+@@ -2397,6 +2397,21 @@ _engine_delete_surrounding_text_cb (BusEngineProxy    *engine,
+ 
+     g_assert (context->engine == engine);
+ 
++    if (context->processing_key_event && g_queue_get_length (
++            context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
++        SyncForwardingData *data;
++        IBusText *text = ibus_text_new_from_printf ("%d,%u",
++                                                    offset_from_cursor, nchars);
++        if (g_queue_get_length (context->queue_during_process_key_event)
++            == MAX_SYNC_DATA) {
++            g_warning ("Exceed max number of sync process_key_event data");
++        }
++        data = g_slice_new (SyncForwardingData);
++        data->key = 'd';
++        data->text = g_object_ref (text);
++        g_queue_push_tail (context->queue_during_process_key_event, data);
++        return;
++    }
+     bus_input_context_emit_signal (context,
+                                    "DeleteSurroundingText",
+                                    g_variant_new ("(iu)", offset_from_cursor, nchars),
+@@ -2442,6 +2457,20 @@ _engine_require_surrounding_text_cb (BusEngineProxy    *engine,
+ 
+     g_assert (context->engine == engine);
+ 
++    if (context->processing_key_event && g_queue_get_length (
++            context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
++        SyncForwardingData *data;
++        IBusText *text = ibus_text_new_from_static_string ("");
++        if (g_queue_get_length (context->queue_during_process_key_event)
++            == MAX_SYNC_DATA) {
++            g_warning ("Exceed max number of post process_key_event data");
++        }
++        data = g_slice_new (SyncForwardingData);
++        data->key = 'r';
++        data->text = text;
++        g_queue_push_tail (context->queue_during_process_key_event, data);
++        return;
++    }
+     bus_input_context_emit_signal (context,
+                                    "RequireSurroundingText",
+                                    NULL,
+@@ -3158,7 +3187,7 @@ bus_input_context_commit_text_use_extension (BusInputContext *context,
+     if (use_extension && context->emoji_extension) {
+         bus_panel_proxy_commit_text_received (context->emoji_extension, text);
+     } else if (context->processing_key_event && g_queue_get_length (
+-                   context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
++            context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
+         SyncForwardingData *data;
+         if (g_queue_get_length (context->queue_during_process_key_event)
+             == MAX_SYNC_DATA) {
+diff --git a/src/ibusinputcontext.c b/src/ibusinputcontext.c
+index def23b25..c6a030fe 100644
+--- a/src/ibusinputcontext.c
++++ b/src/ibusinputcontext.c
+@@ -1406,6 +1406,7 @@ ibus_input_context_set_post_process_key_event (IBusInputContext *context,
+ void
+ ibus_input_context_post_process_key_event (IBusInputContext *context)
+ {
++    IBusInputContextPrivate *priv;
+     GVariant *cached_var_post;
+     gboolean enable = FALSE;
+     GVariant *result;
+@@ -1418,6 +1419,7 @@ ibus_input_context_post_process_key_event (IBusInputContext *context)
+ 
+     g_assert (IBUS_IS_INPUT_CONTEXT (context));
+ 
++    priv = IBUS_INPUT_CONTEXT_GET_PRIVATE (IBUS_INPUT_CONTEXT (context));
+     cached_var_post =
+         g_dbus_proxy_get_cached_property ((GDBusProxy *)context,
+                                           "EffectivePostProcessKeyEvent");
+@@ -1479,6 +1481,25 @@ ibus_input_context_post_process_key_event (IBusInputContext *context)
+                            state | IBUS_FORWARD_MASK);
+             break;
+         }
++        case 'r': {
++            priv->needs_surrounding_text = TRUE;
++            break;
++        }
++        case 'd': {
++            gchar **array = NULL;
++            gint offset_from_cursor;
++            guint nchars;
++            array = g_strsplit (text->text, ",", -1);
++            offset_from_cursor = g_ascii_strtoll (array[0], NULL, 10);
++            nchars = g_ascii_strtoull (array[1], NULL, 10);
++            g_strfreev (array);
++            g_signal_emit (context,
++                           context_signals[DELETE_SURROUNDING_TEXT],
++                           0,
++                           offset_from_cursor,
++                           nchars);
++            break;
++        }
+         default:
+             g_warning ("%s: Type '%c' is not supported.", G_STRFUNC, type);
+         }
+-- 
+2.41.0
+
+From ef0d29d8bf4e533c428b2cd9d3ee9fa42e9e20e7 Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Wed, 25 Oct 2023 16:46:07 +0900
+Subject: [PATCH] src: Add preedit D-Bus signals to PostProcessKeyEvent
+
+ibus-hangul calls UpdatePreeditText signal during pressing Enter key
+to hide the current preedit text and this also causes the reorder issue
+in sync process-key-event and need to move the preedit signals
+to PostProcessKeyEvent.
+
+Also refactor PostProcessKeyEvent codes.
+
+Fixes: https://github.com/ibus/ibus/commit/38f09c6
+
+BUG=https://github.com/ibus/ibus/pull/2575
+---
+ bus/inputcontext.c     | 176 +++++++++++++++++++++++++++--------------
+ src/ibusinputcontext.c | 162 +++++++++++++++++++++++++++++--------
+ 2 files changed, 248 insertions(+), 90 deletions(-)
+
+diff --git a/bus/inputcontext.c b/bus/inputcontext.c
+index 64430fe4..c914fbd2 100644
+--- a/bus/inputcontext.c
++++ b/bus/inputcontext.c
+@@ -48,11 +48,25 @@ struct _SetEngineByDescData {
+ };
+ typedef struct _SetEngineByDescData SetEngineByDescData;
+ 
++typedef struct _DeleteSurroundingData {
++    gint        offset;
++    guint       nchars;
++} DeleteSurroundingData;
++
+ typedef struct _SyncForwardingData {
+-    gchar     key;
+-    IBusText *text;
++    char        key;
++    IBusText   *text;
+ } SyncForwardingData;
+ 
++typedef struct _SyncForwardingPreData {
++    char        key;
++    IBusText   *text;
++    union {
++        guint                 uints[3];
++        DeleteSurroundingData deleting;
++    } u;
++} SyncForwardingPreData;
++
+ struct _BusInputContext {
+     IBusService parent;
+ 
+@@ -970,6 +984,7 @@ _ic_process_key_event (BusInputContext       *context,
+     }
+     else {
+         g_dbus_method_invocation_return_value (invocation, g_variant_new ("(b)", FALSE));
++        context->processing_key_event = FALSE;
+     }
+ }
+ 
+@@ -1654,6 +1670,71 @@ bus_input_context_service_set_property (IBusService     *service,
+ }
+ 
+ 
++static gboolean
++bus_input_context_make_post_process_key_event (BusInputContext       *context,
++                                               SyncForwardingPreData *pre_data)
++{
++    SyncForwardingData *data;
++    if (context->processing_key_event && g_queue_get_length (
++            context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
++        if (g_queue_get_length (context->queue_during_process_key_event)
++            == MAX_SYNC_DATA) {
++            g_warning ("Exceed max number of post process_key_event data");
++        }
++        data = g_slice_new (SyncForwardingData);
++        data->key = pre_data->key;
++        switch (pre_data->key) {
++        case 'c':
++            data->text = g_object_ref (pre_data->text);
++            break;
++        case 'd':
++            data->text = ibus_text_new_from_printf (
++                    "%d,%u",
++                    pre_data->u.deleting.offset,
++                    pre_data->u.deleting.nchars);
++            break;
++        case 'f':
++            data->text = ibus_text_new_from_printf ("%u,%u,%u",
++                                                    pre_data->u.uints[0],
++                                                    pre_data->u.uints[1],
++                                                    pre_data->u.uints[2]);
++            break;
++        case 'h':
++        case 'r':
++        case 's':
++            data->text = ibus_text_new_from_static_string ("");
++            break;
++        case 'u':
++        case 'm':
++            data->text = g_object_ref (pre_data->text);
++            g_queue_push_tail (context->queue_during_process_key_event, data);
++            data = g_slice_new (SyncForwardingData);
++            data->key = pre_data->key;
++            if (pre_data->key == 'u') {
++                data->text = ibus_text_new_from_printf (
++                        "%u,%u",
++                        pre_data->u.uints[0],
++                        pre_data->u.uints[1]);
++            } else {
++                data->text = ibus_text_new_from_printf (
++                        "%u,%u,%u",
++                        pre_data->u.uints[0],
++                        pre_data->u.uints[1],
++                        pre_data->u.uints[2]);
++            }
++            break;
++        default:
++            g_warning ("Type %c of SyncForwardingData is not supported",
++                       pre_data->key);
++            g_slice_free (SyncForwardingData, data);
++            return FALSE;
++        }
++        g_queue_push_tail (context->queue_during_process_key_event, data);
++        return TRUE;
++    }
++    return FALSE;
++}
++
+ gboolean
+ bus_input_context_has_focus (BusInputContext *context)
+ {
+@@ -1893,6 +1974,9 @@ bus_input_context_show_preedit_text (BusInputContext *context,
+     }
+ 
+     if (PREEDIT_CONDITION) {
++        SyncForwardingPreData pre_data = { 's', };
++        if (bus_input_context_make_post_process_key_event (context, &pre_data))
++            return;
+         bus_input_context_emit_signal (context,
+                                        "ShowPreeditText",
+                                        NULL,
+@@ -1933,6 +2017,9 @@ bus_input_context_hide_preedit_text (BusInputContext *context,
+     }
+ 
+     if (PREEDIT_CONDITION) {
++        SyncForwardingPreData pre_data = { 'h', };
++        if (bus_input_context_make_post_process_key_event (context, &pre_data))
++            return;
+         bus_input_context_emit_signal (context,
+                                        "HidePreeditText",
+                                        NULL,
+@@ -2254,27 +2340,18 @@ _engine_forward_key_event_cb (BusEngineProxy    *engine,
+                               guint              state,
+                               BusInputContext   *context)
+ {
++    SyncForwardingPreData pre_data = { 'f', };
++
+     g_assert (BUS_IS_ENGINE_PROXY (engine));
+     g_assert (BUS_IS_INPUT_CONTEXT (context));
+-
+     g_assert (context->engine == engine);
+     g_assert (context->queue_during_process_key_event);
+ 
+-    if (context->processing_key_event && g_queue_get_length (
+-            context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
+-        SyncForwardingData *data;
+-        IBusText *text = ibus_text_new_from_printf ("%u,%u,%u",
+-                                                    keyval, keycode, state);
+-        if (g_queue_get_length (context->queue_during_process_key_event)
+-            == MAX_SYNC_DATA) {
+-            g_warning ("Exceed max number of post process_key_event data");
+-        }
+-        data = g_slice_new (SyncForwardingData);
+-        data->key = 'f';
+-        data->text = text;
+-        g_queue_push_tail (context->queue_during_process_key_event, data);
++    pre_data.u.uints[0] = keyval;
++    pre_data.u.uints[1] = keycode;
++    pre_data.u.uints[2] = state;
++    if (bus_input_context_make_post_process_key_event (context, &pre_data))
+         return;
+-    }
+     bus_input_context_emit_signal (context,
+                                    "ForwardKeyEvent",
+                                    g_variant_new ("(uuu)", keyval, keycode, state),
+@@ -2292,26 +2369,16 @@ _engine_delete_surrounding_text_cb (BusEngineProxy    *engine,
+                                     guint              nchars,
+                                     BusInputContext   *context)
+ {
++    SyncForwardingPreData pre_data = { 'd', };
++
+     g_assert (BUS_IS_ENGINE_PROXY (engine));
+     g_assert (BUS_IS_INPUT_CONTEXT (context));
+-
+     g_assert (context->engine == engine);
+ 
+-    if (context->processing_key_event && g_queue_get_length (
+-            context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
+-        SyncForwardingData *data;
+-        IBusText *text = ibus_text_new_from_printf ("%d,%u",
+-                                                    offset_from_cursor, nchars);
+-        if (g_queue_get_length (context->queue_during_process_key_event)
+-            == MAX_SYNC_DATA) {
+-            g_warning ("Exceed max number of sync process_key_event data");
+-        }
+-        data = g_slice_new (SyncForwardingData);
+-        data->key = 'd';
+-        data->text = g_object_ref (text);
+-        g_queue_push_tail (context->queue_during_process_key_event, data);
++    pre_data.u.deleting.offset = offset_from_cursor;
++    pre_data.u.deleting.nchars = nchars;
++    if (bus_input_context_make_post_process_key_event (context, &pre_data))
+         return;
+-    }
+     bus_input_context_emit_signal (context,
+                                    "DeleteSurroundingText",
+                                    g_variant_new ("(iu)", offset_from_cursor, nchars),
+@@ -2452,25 +2520,14 @@ static void
+ _engine_require_surrounding_text_cb (BusEngineProxy    *engine,
+                                      BusInputContext   *context)
+ {
++    SyncForwardingPreData pre_data = { 'r', };
++
+     g_assert (BUS_IS_ENGINE_PROXY (engine));
+     g_assert (BUS_IS_INPUT_CONTEXT (context));
+-
+     g_assert (context->engine == engine);
+ 
+-    if (context->processing_key_event && g_queue_get_length (
+-            context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
+-        SyncForwardingData *data;
+-        IBusText *text = ibus_text_new_from_static_string ("");
+-        if (g_queue_get_length (context->queue_during_process_key_event)
+-            == MAX_SYNC_DATA) {
+-            g_warning ("Exceed max number of post process_key_event data");
+-        }
+-        data = g_slice_new (SyncForwardingData);
+-        data->key = 'r';
+-        data->text = text;
+-        g_queue_push_tail (context->queue_during_process_key_event, data);
++    if (bus_input_context_make_post_process_key_event (context, &pre_data))
+         return;
+-    }
+     bus_input_context_emit_signal (context,
+                                    "RequireSurroundingText",
+                                    NULL,
+@@ -3178,6 +3235,8 @@ bus_input_context_commit_text_use_extension (BusInputContext *context,
+                                              IBusText        *text,
+                                              gboolean         use_extension)
+ {
++    SyncForwardingPreData pre_data = { 'c', text, };
++
+     g_assert (BUS_IS_INPUT_CONTEXT (context));
+     g_assert (context->queue_during_process_key_event);
+ 
+@@ -3186,17 +3245,9 @@ bus_input_context_commit_text_use_extension (BusInputContext *context,
+ 
+     if (use_extension && context->emoji_extension) {
+         bus_panel_proxy_commit_text_received (context->emoji_extension, text);
+-    } else if (context->processing_key_event && g_queue_get_length (
+-            context->queue_during_process_key_event) <= MAX_SYNC_DATA) {
+-        SyncForwardingData *data;
+-        if (g_queue_get_length (context->queue_during_process_key_event)
+-            == MAX_SYNC_DATA) {
+-            g_warning ("Exceed max number of sync process_key_event data");
+-        }
+-        data = g_slice_new (SyncForwardingData);
+-        data->key = 'c';
+-        data->text = g_object_ref (text);
+-        g_queue_push_tail (context->queue_during_process_key_event, data);
++    } else if (bus_input_context_make_post_process_key_event (context,
++                                                              &pre_data)) {
++        return;
+     } else {
+         GVariant *variant = ibus_serializable_serialize (
+                 (IBusSerializable *)text);
+@@ -3245,9 +3296,18 @@ bus_input_context_update_preedit_text (BusInputContext *context,
+                                              context->preedit_cursor_pos,
+                                              context->preedit_visible);
+     } else if (PREEDIT_CONDITION) {
++        SyncForwardingPreData pre_data = { 'u', context->preedit_text, };
+         GVariant *variant = ibus_serializable_serialize (
+                 (IBusSerializable *)context->preedit_text);
+-        if (context->client_commit_preedit) {
++        pre_data.u.uints[0] = context->preedit_cursor_pos;
++        pre_data.u.uints[1] = extension_visible ? 1 : 0;
++        pre_data.u.uints[2] = context->preedit_mode;
++        if (context->client_commit_preedit)
++            pre_data.key = 'm';
++        if (bus_input_context_make_post_process_key_event (context,
++                                                           &pre_data)) {
++            return;
++        } else if (context->client_commit_preedit) {
+             bus_input_context_emit_signal (
+                     context,
+                     "UpdatePreeditTextWithMode",
+diff --git a/src/ibusinputcontext.c b/src/ibusinputcontext.c
+index c6a030fe..1b62f656 100644
+--- a/src/ibusinputcontext.c
++++ b/src/ibusinputcontext.c
+@@ -1403,10 +1403,103 @@ ibus_input_context_set_post_process_key_event (IBusInputContext *context,
+     g_variant_unref (var_post);
+ }
+ 
++
++static void
++ibus_input_context_fwd_text_to_commit (IBusInputContext *context,
++                                       IBusText         *text)
++{
++    g_signal_emit (context, context_signals[COMMIT_TEXT], 0, text);
++}
++
++
++static void
++ibus_input_context_fwd_text_to_forward_key_event (IBusInputContext *context,
++                                                  IBusText         *text)
++{
++    gchar **array = NULL;
++    guint keyval, keycode, state;
++    array = g_strsplit (text->text, ",", -1);
++    keyval = g_ascii_strtoull (array[0], NULL, 10);
++    keycode = g_ascii_strtoull (array[1], NULL, 10);
++    state = g_ascii_strtoull (array[2], NULL, 10);
++    g_strfreev (array);
++    g_signal_emit (context,
++                   context_signals[FORWARD_KEY_EVENT],
++                   0,
++                   keyval,
++                   keycode,
++                   state | IBUS_FORWARD_MASK);
++}
++
++
++static void
++ibus_input_context_fwd_text_to_require_surrounding (IBusInputContext *context,
++                                                    IBusText         *text)
++{
++    IBusInputContextPrivate *priv;
++    g_assert (IBUS_IS_INPUT_CONTEXT (context));
++    priv = IBUS_INPUT_CONTEXT_GET_PRIVATE (IBUS_INPUT_CONTEXT (context));
++    priv->needs_surrounding_text = TRUE;
++}
++
++
++static void
++ibus_input_context_fwd_text_to_delete_surrounding (IBusInputContext *context,
++                                                   IBusText         *text)
++{
++    gchar **array = NULL;
++    gint offset_from_cursor;
++    guint nchars;
++    array = g_strsplit (text->text, ",", -1);
++    offset_from_cursor = g_ascii_strtoll (array[0], NULL, 10);
++    nchars = g_ascii_strtoull (array[1], NULL, 10);
++    g_strfreev (array);
++    g_signal_emit (context,
++                   context_signals[DELETE_SURROUNDING_TEXT],
++                   0,
++                   offset_from_cursor,
++                   nchars);
++}
++
++
++static void
++ibus_input_context_fwd_text_to_update_preedit (IBusInputContext *context,
++                                               IBusText         *text,
++                                               IBusText         *position,
++                                               char              type)
++{
++    gchar **array = NULL;
++    guint32 cursor_pos;
++    gboolean visible;
++    guint mode = 0;
++
++    array = g_strsplit (position->text, ",", -1);
++    cursor_pos = g_ascii_strtoull (array[0], NULL, 10);
++    visible = g_ascii_strtoull (array[1], NULL, 10) ? TRUE : FALSE;
++    if (type == 'u') {
++                g_signal_emit (context,
++                               context_signals[UPDATE_PREEDIT_TEXT],
++                               0,
++                               text,
++                               cursor_pos,
++                               visible);
++    } else {
++                mode = g_ascii_strtoull (array[2], NULL, 10);
++                g_signal_emit (context,
++                               context_signals[UPDATE_PREEDIT_TEXT_WITH_MODE],
++                               0,
++                               text,
++                               cursor_pos,
++                               visible,
++                               mode);
++    }
++    g_strfreev (array);
++}
++
++
+ void
+ ibus_input_context_post_process_key_event (IBusInputContext *context)
+ {
+-    IBusInputContextPrivate *priv;
+     GVariant *cached_var_post;
+     gboolean enable = FALSE;
+     GVariant *result;
+@@ -1419,7 +1513,6 @@ ibus_input_context_post_process_key_event (IBusInputContext *context)
+ 
+     g_assert (IBUS_IS_INPUT_CONTEXT (context));
+ 
+-    priv = IBUS_INPUT_CONTEXT_GET_PRIVATE (IBUS_INPUT_CONTEXT (context));
+     cached_var_post =
+         g_dbus_proxy_get_cached_property ((GDBusProxy *)context,
+                                           "EffectivePostProcessKeyEvent");
+@@ -1454,7 +1547,7 @@ ibus_input_context_post_process_key_event (IBusInputContext *context)
+     g_assert (variant);
+     g_variant_iter_init (&iter, variant);
+     size = g_variant_iter_n_children (&iter);
+-    while (size >0 && g_variant_iter_loop (&iter, "(yv)", &type, &vtext)) {
++    while (size > 0 && g_variant_iter_loop (&iter, "(yv)", &type, &vtext)) {
+         IBusText *text =
+                 (IBusText *)ibus_serializable_deserialize_object (vtext);
+         if (!IBUS_IS_TEXT (text)) {
+@@ -1463,41 +1556,48 @@ ibus_input_context_post_process_key_event (IBusInputContext *context)
+         }
+         switch (type) {
+         case 'c':
+-            g_signal_emit (context, context_signals[COMMIT_TEXT], 0, text);
++            ibus_input_context_fwd_text_to_commit (context, text);
+             break;
+         case 'f': {
+-            gchar **array = NULL;
+-            guint keyval, keycode, state;
+-            array = g_strsplit (text->text, ",", -1);
+-            keyval = g_ascii_strtoull (array[0], NULL, 10);
+-            keycode = g_ascii_strtoull (array[1], NULL, 10);
+-            state = g_ascii_strtoull (array[2], NULL, 10);
+-            g_strfreev (array);
+-            g_signal_emit (context,
+-                           context_signals[FORWARD_KEY_EVENT],
+-                           0,
+-                           keyval,
+-                           keycode,
+-                           state | IBUS_FORWARD_MASK);
++            ibus_input_context_fwd_text_to_forward_key_event (context, text);
+             break;
+         }
+         case 'r': {
+-            priv->needs_surrounding_text = TRUE;
++            ibus_input_context_fwd_text_to_require_surrounding (context, text);
+             break;
+         }
+         case 'd': {
+-            gchar **array = NULL;
+-            gint offset_from_cursor;
+-            guint nchars;
+-            array = g_strsplit (text->text, ",", -1);
+-            offset_from_cursor = g_ascii_strtoll (array[0], NULL, 10);
+-            nchars = g_ascii_strtoull (array[1], NULL, 10);
+-            g_strfreev (array);
+-            g_signal_emit (context,
+-                           context_signals[DELETE_SURROUNDING_TEXT],
+-                           0,
+-                           offset_from_cursor,
+-                           nchars);
++            ibus_input_context_fwd_text_to_delete_surrounding (context, text);
++            break;
++        }
++        case 'u':
++        case 'm': {
++            IBusText *position;
++            g_clear_pointer (&vtext, g_variant_unref);
++            if (!g_variant_iter_loop (&iter, "(yv)", &type, &vtext)) {
++                g_warning ("%s: %s", G_STRFUNC,
++                           "Type 'u' requires next type 'u'");
++                break;
++            }
++            if (type != 'u' && type != 'm') {
++                g_warning ("%s: %s", G_STRFUNC,
++                           "The next of type 'u' should be type 'u'");
++                break;
++            }
++            position =
++                    (IBusText *)ibus_serializable_deserialize_object (vtext);
++            if (!IBUS_IS_TEXT (position)) {
++                g_warning ("%s: %s", G_STRFUNC, "text is not IBusText");
++                break;
++            }
++            ibus_input_context_fwd_text_to_update_preedit (context,
++                                                           text,
++                                                           position,
++                                                           type);
++            if (g_object_is_floating (position)) {
++                g_object_ref_sink (position);
++                g_object_unref (position);
++            }
+             break;
+         }
+         default:
+-- 
+2.41.0
+
+From 1be3e2f79b384a374b2a69a31c88a4f36e1dd868 Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Wed, 15 Nov 2023 17:19:02 +0900
+Subject: [PATCH] client/gtk2: Call strdup() after g_return_if_fail()
+
+---
+ client/gtk2/ibusimcontext.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index b5a44da0..cfc08c20 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -2417,7 +2417,7 @@ _create_input_context_done (IBusBus       *bus,
+ static void
+ _create_input_context (IBusIMContext *ibusimcontext)
+ {
+-    gchar *prgname = g_strdup (g_get_prgname());
++    gchar *prgname;
+     gchar *client_name;
+     IDEBUG ("%s", __FUNCTION__);
+ 
+@@ -2425,6 +2425,7 @@ _create_input_context (IBusIMContext *ibusimcontext)
+ 
+     g_return_if_fail (ibusimcontext->cancellable == NULL);
+ 
++    prgname = g_strdup (g_get_prgname());
+     ibusimcontext->cancellable = g_cancellable_new ();
+ 
+     if (!prgname)
+-- 
+2.41.0
+

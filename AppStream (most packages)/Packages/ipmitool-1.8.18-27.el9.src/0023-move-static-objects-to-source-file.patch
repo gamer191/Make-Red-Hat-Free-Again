@@ -1,0 +1,232 @@
+From 3e0ecc5edcccc85654784d0888dbeb2f116204e0 Mon Sep 17 00:00:00 2001
+From: Patrick Venture <venture@google.com>
+Date: Thu, 22 Nov 2018 15:40:24 -0800
+Subject: [PATCH] move static objects to source file
+
+Move static objects declared in headers to the source files where
+they're used.
+
+Partially resolves ipmitool/ipmitool#13
+
+Signed-off-by: Patrick Venture <venture@google.com>
+---
+ include/ipmitool/ipmi_sdr.h |  43 -----------
+ lib/ipmi_sdr.c              | 146 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 146 insertions(+), 43 deletions(-)
+
+diff --git a/include/ipmitool/ipmi_sdr.h b/include/ipmitool/ipmi_sdr.h
+index 9001e59..5e6afd3 100644
+--- a/include/ipmitool/ipmi_sdr.h
++++ b/include/ipmitool/ipmi_sdr.h
+
+@@ -773,50 +773,7 @@ struct sdr_record_list {
+ #pragma pack(0)
+ #endif
+ 
+-
+-/* unit description codes (IPMI v1.5 section 37.16) */
+-#define UNIT_MAX	0x90
+-static const char *unit_desc[] __attribute__ ((unused)) = {
+-"unspecified",
+-	    "degrees C", "degrees F", "degrees K",
+-	    "Volts", "Amps", "Watts", "Joules",
+-	    "Coulombs", "VA", "Nits",
+-	    "lumen", "lux", "Candela",
+-	    "kPa", "PSI", "Newton",
+-	    "CFM", "RPM", "Hz",
+-	    "microsecond", "millisecond", "second", "minute", "hour",
+-	    "day", "week", "mil", "inches", "feet", "cu in", "cu feet",
+-	    "mm", "cm", "m", "cu cm", "cu m", "liters", "fluid ounce",
+-	    "radians", "steradians", "revolutions", "cycles",
+-	    "gravities", "ounce", "pound", "ft-lb", "oz-in", "gauss",
+-	    "gilberts", "henry", "millihenry", "farad", "microfarad",
+-	    "ohms", "siemens", "mole", "becquerel", "PPM", "reserved",
+-	    "Decibels", "DbA", "DbC", "gray", "sievert",
+-	    "color temp deg K", "bit", "kilobit", "megabit", "gigabit",
+-	    "byte", "kilobyte", "megabyte", "gigabyte", "word", "dword",
+-	    "qword", "line", "hit", "miss", "retry", "reset",
+-	    "overflow", "underrun", "collision", "packets", "messages",
+-	    "characters", "error", "correctable error", "uncorrectable error",};
+-
+-/* sensor type codes (IPMI v1.5 table 36.3) 
+-  / Updated to v2.0 Table 42-3, Sensor Type Codes */
+ #define SENSOR_TYPE_MAX 0x2C
+-static const char *sensor_type_desc[] __attribute__ ((unused)) = {
+-"reserved",
+-	    "Temperature", "Voltage", "Current", "Fan",
+-	    "Physical Security", "Platform Security", "Processor",
+-	    "Power Supply", "Power Unit", "Cooling Device", "Other",
+-	    "Memory", "Drive Slot / Bay", "POST Memory Resize",
+-	    "System Firmwares", "Event Logging Disabled", "Watchdog1",
+-	    "System Event", "Critical Interrupt", "Button",
+-	    "Module / Board", "Microcontroller", "Add-in Card",
+-	    "Chassis", "Chip Set", "Other FRU", "Cable / Interconnect",
+-	    "Terminator", "System Boot Initiated", "Boot Error",
+-	    "OS Boot", "OS Critical Stop", "Slot / Connector",
+-	    "System ACPI Power State", "Watchdog2", "Platform Alert",
+-	    "Entity Presence", "Monitor ASIC", "LAN",
+-	    "Management Subsys Health", "Battery", "Session Audit",
+-	    "Version Change", "FRU State" };
+ 
+ struct sensor_reading {
+ 	char		s_id[33];		/* name of the sensor */
+diff --git a/lib/ipmi_sdr.c b/lib/ipmi_sdr.c
+index d51c174..eb40b36 100644
+--- a/lib/ipmi_sdr.c
++++ b/lib/ipmi_sdr.c
+@@ -68,6 +68,152 @@ static struct sdr_record_list *sdr_list_head = NULL;
+ static struct sdr_record_list *sdr_list_tail = NULL;
+ static struct ipmi_sdr_iterator *sdr_list_itr = NULL;
+ 
++/* unit description codes (IPMI v1.5 section 37.16) */
++#define UNIT_MAX	0x90
++static const char *unit_desc[] = {
++	"unspecified",
++	"degrees C",
++	"degrees F",
++	"degrees K",
++	"Volts",
++	"Amps",
++	"Watts",
++	"Joules",
++	"Coulombs",
++	"VA",
++	"Nits",
++	"lumen",
++	"lux",
++	"Candela",
++	"kPa",
++	"PSI",
++	"Newton",
++	"CFM",
++	"RPM",
++	"Hz",
++	"microsecond",
++	"millisecond",
++	"second",
++	"minute",
++	"hour",
++	"day",
++	"week",
++	"mil",
++	"inches",
++	"feet",
++	"cu in",
++	"cu feet",
++	"mm",
++	"cm",
++	"m",
++	"cu cm",
++	"cu m",
++	"liters",
++	"fluid ounce",
++	"radians",
++	"steradians",
++	"revolutions",
++	"cycles",
++	"gravities",
++	"ounce",
++	"pound",
++	"ft-lb",
++	"oz-in",
++	"gauss",
++	"gilberts",
++	"henry",
++	"millihenry",
++	"farad",
++	"microfarad",
++	"ohms",
++	"siemens",
++	"mole",
++	"becquerel",
++	"PPM",
++	"reserved",
++	"Decibels",
++	"DbA",
++	"DbC",
++	"gray",
++	"sievert",
++	"color temp deg K",
++	"bit",
++	"kilobit",
++	"megabit",
++	"gigabit",
++	"byte",
++	"kilobyte",
++	"megabyte",
++	"gigabyte",
++	"word",
++	"dword",
++	"qword",
++	"line",
++	"hit",
++	"miss",
++	"retry",
++	"reset",
++	"overflow",
++	"underrun",
++	"collision",
++	"packets",
++	"messages",
++	"characters",
++	"error",
++	"correctable error",
++	"uncorrectable error"
++};
++
++/* sensor type codes (IPMI v1.5 table 36.3)
++  / Updated to v2.0 Table 42-3, Sensor Type Codes */
++static const char *sensor_type_desc[] = {
++	"reserved",
++	"Temperature",
++	"Voltage",
++	"Current",
++	"Fan",
++	"Physical Security",
++	"Platform Security",
++	"Processor",
++	"Power Supply",
++	"Power Unit",
++	"Cooling Device",
++	"Other",
++	"Memory",
++	"Drive Slot / Bay",
++	"POST Memory Resize",
++	"System Firmwares",
++	"Event Logging Disabled",
++	"Watchdog1",
++	"System Event",
++	"Critical Interrupt",
++	"Button",
++	"Module / Board",
++	"Microcontroller",
++	"Add-in Card",
++	"Chassis",
++	"Chip Set",
++	"Other FRU",
++	"Cable / Interconnect",
++	"Terminator",
++	"System Boot Initiated",
++	"Boot Error",
++	"OS Boot",
++	"OS Critical Stop",
++	"Slot / Connector",
++	"System ACPI Power State",
++	"Watchdog2",
++	"Platform Alert",
++	"Entity Presence",
++	"Monitor ASIC",
++	"LAN",
++	"Management Subsys Health",
++	"Battery",
++	"Session Audit",
++	"Version Change",
++	"FRU State"
++};
++
+ void printf_sdr_usage();
+ 
+ /* From src/plugins/ipmi_intf.c: */
+-- 
+2.40.1
+

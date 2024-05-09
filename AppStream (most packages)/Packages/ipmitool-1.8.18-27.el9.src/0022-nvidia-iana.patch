@@ -1,0 +1,36 @@
+Description: Add IANA ID for NVIDIA hardware
+ Add the NVIDIA IANA ID to the hardcoded list used in ipmitool <= 1.8.18.
+ After upstream commit "9d41136 ID:491 - Fetch vendor IDs from IANA", ipmitool
+ generates a list of vendor IDs dynamically at build time, so we can drop this
+ patch in future releases.
+Author: dann frazier <dannf@debian.org>
+Origin: backport
+Bug-Debian: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=903616
+Forwarded: not-needed
+Last-Update: 2018-07-11
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+Index: ipmitool-1.8.18/include/ipmitool/ipmi.h
+===================================================================
+--- ipmitool-1.8.18.orig/include/ipmitool/ipmi.h
++++ ipmitool-1.8.18/include/ipmitool/ipmi.h
+@@ -279,6 +279,7 @@ typedef enum IPMI_OEM {
+      /* 4769 for [IBM Corporation] */
+      IPMI_OEM_IBM_4769   = 4769,
+      IPMI_OEM_MAGNUM     = 5593,
++     IPMI_OEM_NVIDIA     = 5703,
+      IPMI_OEM_TYAN       = 6653,
+      IPMI_OEM_QUANTA     = 7244,
+      IPMI_OEM_NEWISYS    = 9237,
+Index: ipmitool-1.8.18/lib/ipmi_strings.c
+===================================================================
+--- ipmitool-1.8.18.orig/lib/ipmi_strings.c
++++ ipmitool-1.8.18/lib/ipmi_strings.c
+@@ -96,6 +96,7 @@ const struct valstr ipmi_oem_info[] = {
+    { IPMI_OEM_IBM_4769,               "IBM Corporation" },
+    { IPMI_OEM_IBM_20301,              "IBM eServer X" },
+    { IPMI_OEM_ADLINK_24339,           "ADLINK Technology Inc." },
++   { IPMI_OEM_NVIDIA,                 "NVIDIA Corporation" },
+    { 0xffff , NULL },
+ };
+ 

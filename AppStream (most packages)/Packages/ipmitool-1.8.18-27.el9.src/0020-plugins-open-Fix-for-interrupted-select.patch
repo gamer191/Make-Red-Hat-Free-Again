@@ -1,0 +1,33 @@
+From f222df3081d965051be76b85ea52b4aff222edf1 Mon Sep 17 00:00:00 2001
+From: "William A. Kennington III" <wak@google.com>
+Date: Fri, 15 Jun 2018 14:47:12 -0700
+Subject: [PATCH] plugins/open: Fix for interrupted select
+
+The select syscall can be interrupted for signals like SIGPROF. The IPMI
+command sent will still be outstanding but the send_command will return
+an error. When the next command is sent it will get the completion for
+the previous command and has the tendency to break state of end users.
+
+Signed-off-by: William A. Kennington III <wak@google.com>
+---
+ src/plugins/open/open.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/plugins/open/open.c b/src/plugins/open/open.c
+index 5beeac7..59b736d 100644
+--- a/src/plugins/open/open.c
++++ b/src/plugins/open/open.c
+@@ -335,7 +335,9 @@ ipmi_openipmi_send_cmd(struct ipmi_intf * intf, struct ipmi_rq * req)
+ 	FD_SET(intf->fd, &rset);
+ 	read_timeout.tv_sec = IPMI_OPENIPMI_READ_TIMEOUT;
+ 	read_timeout.tv_usec = 0;
+-	retval = select(intf->fd+1, &rset, NULL, NULL, &read_timeout);
++	do {
++		retval = select(intf->fd+1, &rset, NULL, NULL, &read_timeout);
++	} while (retval < 0 && errno == EINTR);
+ 	if (retval < 0) {
+ 	   lperror(LOG_ERR, "I/O Error");
+ 	   if (data != NULL) {
+-- 
+2.40.1
+

@@ -1,0 +1,97 @@
+From 3babc7a5b767fb60ca877213d9201568205e983f Mon Sep 17 00:00:00 2001
+From: Jonathan Lebon <jonathan@jlebon.com>
+Date: Thu, 8 Feb 2024 11:02:27 -0500
+Subject: [PATCH] azure: retry HTTP requests on codes 404, 410, and 429
+
+For some reason, the Azure IMDS server expects clients to retry their
+HTTP requests even on codes that usually would be considered final.
+The documented one is 410[[1]], but let's just match the set from
+cloud-init, which also includes 404 and 429[[2]].
+
+Closes: #1806
+
+[1]: https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service?tabs=linux#errors-and-debugging
+[2]: https://github.com/canonical/cloud-init/commit/c1a2047cf291
+
+travier: Edited to cleanly backport on top of 2.17.0
+---
+ internal/providers/azure/azure.go | 11 ++++++++++-
+ internal/resource/http.go         | 17 ++++++++++++++++-
+ internal/resource/url.go          |  4 ++++
+ 3 files changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/internal/providers/azure/azure.go b/internal/providers/azure/azure.go
+index d3115f2b..caddcff5 100644
+--- a/internal/providers/azure/azure.go
++++ b/internal/providers/azure/azure.go
+@@ -112,7 +112,16 @@ func fetchFromIMDS(f *resource.Fetcher) ([]byte, error) {
+ 	headers := make(http.Header)
+ 	headers.Set("Metadata", "true")
+ 
+-	data, err := f.FetchToBuffer(imdsUserdataURL, resource.FetchOptions{Headers: headers})
++	// Azure IMDS expects some codes <500 to still be retried...
++	// Here, we match the cloud-init set.
++	// https://github.com/canonical/cloud-init/commit/c1a2047cf291
++	// https://github.com/coreos/ignition/issues/1806
++	retryCodes := []int{
++		404, // not found
++		410, // gone
++		429, // rate-limited
++	}
++	data, err := f.FetchToBuffer(imdsUserdataURL, resource.FetchOptions{Headers: headers, RetryCodes: retryCodes})
+ 	if err != nil {
+ 		return nil, fmt.Errorf("fetching to buffer: %w", err)
+ 	}
+diff --git a/internal/resource/http.go b/internal/resource/http.go
+index 0d8edace..872ce253 100644
+--- a/internal/resource/http.go
++++ b/internal/resource/http.go
+@@ -263,6 +263,21 @@ func (f *Fetcher) newHttpClient() error {
+ 	return nil
+ }
+ 
++func shouldRetryHttp(statusCode int, opts FetchOptions) bool {
++	// we always retry 500+
++	if statusCode >= 500 {
++		return true
++	}
++
++	for _, retryCode := range opts.RetryCodes {
++		if statusCode == retryCode {
++			return true
++		}
++	}
++
++	return false
++}
++
+ // httpReaderWithHeader performs an HTTP request on the provided URL with the
+ // provided request header & method and returns the response body Reader, HTTP
+ // status code, a cancel function for the result's context, and error (if any).
+@@ -298,7 +313,7 @@ func (c HttpClient) httpReaderWithHeader(opts FetchOptions, url string) (io.Read
+ 
+ 		if err == nil {
+ 			c.logger.Info("%s result: %s", opts.HTTPVerb, http.StatusText(resp.StatusCode))
+-			if resp.StatusCode < 500 {
++			if !shouldRetryHttp(resp.StatusCode, opts) {
+ 				return resp.Body, resp.StatusCode, cancelFn, nil
+ 			}
+ 			resp.Body.Close()
+diff --git a/internal/resource/url.go b/internal/resource/url.go
+index 58e0b9fc..3d16cc59 100644
+--- a/internal/resource/url.go
++++ b/internal/resource/url.go
+@@ -125,6 +125,10 @@ type FetchOptions struct {
+ 	// HTTPVerb is an HTTP request method to indicate the desired action to
+ 	// be performed for a given resource.
+ 	HTTPVerb string
++
++	// List of HTTP codes to retry that usually would be considered as complete.
++	// Status codes >= 500 are always retried.
++	RetryCodes []int
+ }
+ 
+ // FetchToBuffer will fetch the given url into a temporary file, and then read
+-- 
+2.43.0
+

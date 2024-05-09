@@ -1,0 +1,42 @@
+From c1ffc2bfcedab68ce79c2fa9a7f2bfe6cec17595 Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Fri, 18 Aug 2023 18:52:58 +0900
+Subject: [PATCH] engine: Distinguish Super-space and space shortcut keys
+
+BUG=rhbz#2232532
+---
+ engine/python2/engine.py | 3 ++-
+ engine/python3/engine.py | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/engine/python2/engine.py b/engine/python2/engine.py
+index 4b3da97..80cfa86 100644
+--- a/engine/python2/engine.py
++++ b/engine/python2/engine.py
+@@ -1940,7 +1940,8 @@ class Engine(IBus.EngineSimple):
+ 
+         state = state & (IBus.ModifierType.SHIFT_MASK |
+                          IBus.ModifierType.CONTROL_MASK |
+-                         IBus.ModifierType.MOD1_MASK)
++                         IBus.ModifierType.MOD1_MASK |
++                         IBus.ModifierType.MOD4_MASK)
+ 
+         # ignore key release events
+         if not is_press:
+diff --git a/engine/python3/engine.py b/engine/python3/engine.py
+index 20786f2..7c0d283 100644
+--- a/engine/python3/engine.py
++++ b/engine/python3/engine.py
+@@ -1935,7 +1935,8 @@ class Engine(IBus.EngineSimple):
+ 
+         state = state & (IBus.ModifierType.SHIFT_MASK |
+                          IBus.ModifierType.CONTROL_MASK |
+-                         IBus.ModifierType.MOD1_MASK)
++                         IBus.ModifierType.MOD1_MASK |
++                         IBus.ModifierType.MOD4_MASK)
+ 
+         # ignore key release events
+         if not is_press:
+-- 
+2.43.0
+

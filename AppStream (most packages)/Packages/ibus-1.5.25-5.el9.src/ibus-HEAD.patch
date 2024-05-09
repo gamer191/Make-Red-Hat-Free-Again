@@ -1,0 +1,154 @@
+From 571e3b6e4f386abf12d3db70b9468e092c8d72bd Mon Sep 17 00:00:00 2001
+From: Alynx Zhou <alynx.zhou@gmail.com>
+Date: Tue, 24 Aug 2021 10:12:52 +0800
+Subject: [PATCH] client/gtk2/ibusimcontext: Fix wrong cursor location in gtk3
+ apps
+
+If you apply this patch in your tarball, please also apply this to
+client/gtk3/ibusimcontext.c besides client/gtk2/ibusimcontext.c .
+
+BUG=https://github.com/ibus/ibus/issues/2337
+---
+ client/gtk2/ibusimcontext.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index da9a402f..b1ccede9 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -1497,7 +1497,10 @@ _set_cursor_location_internal (IBusIMContext *ibusimcontext)
+ 
+ #if GTK_CHECK_VERSION (3, 98, 4)
+ #elif GTK_CHECK_VERSION (2, 91, 0)
+-    area.y += gdk_window_get_height (ibusimcontext->client_window);
++    if (area.x == -1 && area.y == -1 && area.width == 0 && area.height == 0) {
++        area.x = 0;
++        area.y += gdk_window_get_height (ibusimcontext->client_window);
++    }
+ #else
+     if (area.x == -1 && area.y == -1 && area.width == 0 && area.height == 0) {
+         gint w, h;
+-- 
+2.31.1
+
+From 5487a6baa4b22605ba8197ca1a0fa43c91d57786 Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Mon, 6 Sep 2021 20:23:59 +0900
+Subject: [PATCH] client/gtk2/ibusimcontext: Implement clear preedit for GTK4
+
+IBus IM module uses synchornized key processes for GTK4 and the timing
+of the GTK reset siginal may work with focus-in/out between windows.
+(I don't test GTK4 firefox and terminal yet and the verification is not
+completed.)
+So ibus_im_context_clear_preedit_text() is now called with the GTK4 reset
+siginal.
+ibus_im_context_clear_preedit_text() works with ibus-setup-anthy ->
+"Conversion" tab -> "Behavior on Focus Out" pull down menu.
+
+BUG=https://github.com/ibus/ibus/issues/2334
+---
+ client/gtk2/ibusimcontext.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index b1ccede9..e12be45d 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -1270,6 +1270,8 @@ ibus_im_context_reset (GtkIMContext *context)
+          * IBus uses button-press-event instead until GTK is fixed.
+          * https://gitlab.gnome.org/GNOME/gtk/issues/1534
+          */
++        if (_use_sync_mode)
++            ibus_im_context_clear_preedit_text (ibusimcontext);
+         ibus_input_context_reset (ibusimcontext->ibuscontext);
+     }
+     gtk_im_context_reset (ibusimcontext->slave);
+@@ -1383,7 +1385,7 @@ ibus_im_context_set_client_window (GtkIMContext *context,
+ 
+     if (ibusimcontext->client_window) {
+ #if !GTK_CHECK_VERSION (3, 98, 4)
+-        if (ibusimcontext->use_button_press_event)
++        if (ibusimcontext->use_button_press_event && !_use_sync_mode)
+             _connect_button_press_event (ibusimcontext, FALSE);
+ #endif
+         g_object_unref (ibusimcontext->client_window);
+@@ -1393,7 +1395,7 @@ ibus_im_context_set_client_window (GtkIMContext *context,
+     if (client != NULL) {
+         ibusimcontext->client_window = g_object_ref (client);
+ #if !GTK_CHECK_VERSION (3, 98, 4)
+-        if (!ibusimcontext->use_button_press_event)
++        if (!ibusimcontext->use_button_press_event && !_use_sync_mode)
+             _connect_button_press_event (ibusimcontext, TRUE);
+ #endif
+     }
+@@ -1994,7 +1996,8 @@ _ibus_context_update_preedit_text_cb (IBusInputContext  *ibuscontext,
+ 
+ #if !GTK_CHECK_VERSION (3, 98, 4)
+     if (!ibusimcontext->use_button_press_event &&
+-        mode == IBUS_ENGINE_PREEDIT_COMMIT) {
++        mode == IBUS_ENGINE_PREEDIT_COMMIT &&
++        !_use_sync_mode) {
+         if (ibusimcontext->client_window) {
+             _connect_button_press_event (ibusimcontext, TRUE);
+         }
+-- 
+2.28.0
+
+From 4957d1468db4fc5ed30c3ae1f2afac9e51b329d6 Mon Sep 17 00:00:00 2001
+From: fujiwarat <takao.fujiwara1@gmail.com>
+Date: Mon, 6 Sep 2021 20:25:52 +0900
+Subject: [PATCH] client/gtk2/ibusimcontext: Calculate keycode from keysym in
+ GTK3 forward-key-event
+
+IBus GTK3 mode also calculates keycode from keysym if keycode == 0
+with forward-key-event signal to follow GTK4.
+---
+ client/gtk2/ibusimcontext.c | 22 ++++++++++++++++++----
+ 1 file changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/client/gtk2/ibusimcontext.c b/client/gtk2/ibusimcontext.c
+index e12be45d..b1424e87 100644
+--- a/client/gtk2/ibusimcontext.c
++++ b/client/gtk2/ibusimcontext.c
+@@ -1939,13 +1939,16 @@ _ibus_context_forward_key_event_cb (IBusInputContext  *ibuscontext,
+     int group = 0;
+     g_return_if_fail (GTK_IS_IM_CONTEXT (ibusimcontext));
+     if (keycode == 0 && ibusimcontext->client_window) {
+-        GdkDisplay *display = gtk_widget_get_display (ibusimcontext->client_window);
++        GdkDisplay *display =
++                gtk_widget_get_display (ibusimcontext->client_window);
+         GdkKeymapKey *keys = NULL;
+         gint n_keys = 0;
+-        if (!gdk_display_map_keyval (display, keyval, &keys, &n_keys))
++        if (gdk_display_map_keyval (display, keyval, &keys, &n_keys)) {
++            keycode = keys->keycode;
++            group = keys->group;
++        } else {
+             g_warning ("Failed to parse keycode from keyval %x", keyval);
+-       keycode = keys->keycode;
+-       group = keys->group;
++        }
+     }
+     gtk_im_context_filter_key (
+         GTK_IM_CONTEXT (ibusimcontext),
+@@ -1957,6 +1960,17 @@ _ibus_context_forward_key_event_cb (IBusInputContext  *ibuscontext,
+         (GdkModifierType)state,
+         group);
+ #else
++    if (keycode == 0 && ibusimcontext->client_window) {
++        GdkDisplay *display =
++                gdk_window_get_display (ibusimcontext->client_window);
++        GdkKeymap *keymap = gdk_keymap_get_for_display (display);
++        GdkKeymapKey *keys = NULL;
++        gint n_keys = 0;
++        if (gdk_keymap_get_entries_for_keyval (keymap, keyval, &keys, &n_keys))
++            keycode = keys->keycode;
++        else
++            g_warning ("Failed to parse keycode from keyval %x", keyval);
++    }
+     GdkEventKey *event = _create_gdk_event (ibusimcontext, keyval, keycode, state);
+     gdk_event_put ((GdkEvent *)event);
+     gdk_event_free ((GdkEvent *)event);
+-- 
+2.28.0
+
