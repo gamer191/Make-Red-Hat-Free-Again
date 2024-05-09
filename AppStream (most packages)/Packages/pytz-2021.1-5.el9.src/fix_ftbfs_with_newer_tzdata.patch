@@ -1,0 +1,50 @@
+From 83155e2f3ecd3e136e1792611afd7faa48eb90f8 Mon Sep 17 00:00:00 2001
+From: Lumir Balhar <lbalhar@redhat.com>
+Date: Thu, 13 Jul 2023 12:05:29 +0200
+Subject: [PATCH] Fix ftbfs with newer tzdata
+
+Newer tzdata contains some corrections of timezones having effect
+on years before 1930.
+---
+ pytz/tests/test_tzinfo.py | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/pytz/tests/test_tzinfo.py b/pytz/tests/test_tzinfo.py
+index dda13b9..e3d5ccc 100644
+--- a/pytz/tests/test_tzinfo.py
++++ b/pytz/tests/test_tzinfo.py
+@@ -617,18 +617,18 @@ class LocalTestCase(unittest.TestCase):
+ 
+         loc_time = loc_tz.localize(datetime(1930, 5, 10, 0, 0, 0))
+         # Actually +00:19:32, but Python datetime rounds this
+-        self.assertEqual(loc_time.strftime('%Z%z'), 'AMT+0020')
++        self.assertEqual(loc_time.strftime('%Z%z'), 'WEST+0100')
+ 
+         loc_time = loc_tz.localize(datetime(1930, 5, 20, 0, 0, 0))
+         # Actually +00:19:32, but Python datetime rounds this
+-        self.assertEqual(loc_time.strftime('%Z%z'), 'NST+0120')
++        self.assertEqual(loc_time.strftime('%Z%z'), 'WEST+0100')
+ 
+         loc_time = loc_tz.localize(datetime(1940, 5, 10, 0, 0, 0))
+         # pre-2017a, abbreviation was NCT
+-        self.assertEqual(loc_time.strftime('%Z%z'), '+0020+0020')
++        self.assertEqual(loc_time.strftime('%Z%z'), 'WEST+0100')
+ 
+         loc_time = loc_tz.localize(datetime(1940, 5, 20, 0, 0, 0))
+-        self.assertEqual(loc_time.strftime('%Z%z'), 'CEST+0200')
++        self.assertEqual(loc_time.strftime('%Z%z'), 'WEST+0100')
+ 
+         loc_time = loc_tz.localize(datetime(2004, 2, 1, 0, 0, 0))
+         self.assertEqual(loc_time.strftime('%Z%z'), 'CET+0100')
+@@ -723,7 +723,7 @@ class LocalTestCase(unittest.TestCase):
+         loc_dt = utc_dt.astimezone(tz)
+         self.assertEqual(
+             loc_dt.strftime('%Y-%m-%d %H:%M:%S %Z%z'),
+-            '1914-01-01 14:00:00 AMT+0020'
++            '1914-01-01 13:40:00 WET+0000'
+         )
+ 
+         # And get back...
+-- 
+2.41.0
+

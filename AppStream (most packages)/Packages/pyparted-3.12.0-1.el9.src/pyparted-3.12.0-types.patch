@@ -1,0 +1,115 @@
+diff -up pyparted-3.12.0/src/parted/__init__.py.orig pyparted-3.12.0/src/parted/__init__.py
+--- pyparted-3.12.0/src/parted/__init__.py.orig	2022-03-07 12:38:56.000000000 -0500
++++ pyparted-3.12.0/src/parted/__init__.py	2022-07-14 12:28:09.687155151 -0400
+@@ -217,6 +217,14 @@ from _ped import DISK_GPT_PMBR_BOOT
+ from _ped import DISK_TYPE_EXTENDED
+ from _ped import DISK_TYPE_PARTITION_NAME
+ 
++if hasattr(_ped, 'DISK_TYPE_PARTITION_TYPE_ID'):
++    # pylint: disable=E0611
++    from _ped import DISK_TYPE_PARTITION_TYPE_ID
++
++if hasattr(_ped, 'DISK_TYPE_PARTITION_TYPE_UUID'):
++    # pylint: disable=E0611
++    from _ped import DISK_TYPE_PARTITION_TYPE_UUID
++
+ from _ped import EXCEPTION_TYPE_INFORMATION
+ from _ped import EXCEPTION_TYPE_WARNING
+ from _ped import EXCEPTION_TYPE_ERROR
+diff -up pyparted-3.12.0/src/_pedmodule.c.orig pyparted-3.12.0/src/_pedmodule.c
+--- pyparted-3.12.0/src/_pedmodule.c.orig	2022-03-07 12:49:11.000000000 -0500
++++ pyparted-3.12.0/src/_pedmodule.c	2022-07-14 12:59:46.270416021 -0400
+@@ -648,42 +648,20 @@ MOD_INIT(_ped) {
+     PyModule_AddIntConstant(m, "PARTITION_BIOS_GRUB", PED_PARTITION_BIOS_GRUB);
+     PyModule_AddIntConstant(m, "PARTITION_DIAG", PED_PARTITION_DIAG);
+     PyModule_AddIntConstant(m, "PARTITION_LEGACY_BOOT", PED_PARTITION_LEGACY_BOOT);
+-
+-    /* NOTE: You cannot evaluate the enum PED_PARTITION_* values using the
+-     * preprocessor. DO NOT use #if or #ifdef with them.
+-     *
+-     * Conditionally add constants, based on PED_PARTITION_LAST_FLAG, and what
+-     * we know about parted/disk.h
+-     */
+-#if PED_PARTITION_LAST_FLAG > 15
+     PyModule_AddIntConstant(m, "PARTITION_MSFT_DATA", PED_PARTITION_MSFT_DATA);
+-#endif
+-
+-#if PED_PARTITION_LAST_FLAG > 16
+     PyModule_AddIntConstant(m, "PARTITION_IRST", PED_PARTITION_IRST);
+-#endif
+-
+-#if PED_PARTITION_LAST_FLAG > 17
+     PyModule_AddIntConstant(m, "PARTITION_ESP", PED_PARTITION_ESP);
+-#endif
+-
+-#if PED_PARTITION_LAST_FLAG > 18
+     PyModule_AddIntConstant(m, "PARTITION_CHROMEOS_KERNEL", PED_PARTITION_CHROMEOS_KERNEL);
+-#endif
+-
+-#if PED_PARTITION_LAST_FLAG > 19
+     PyModule_AddIntConstant(m, "PARTITION_BLS_BOOT", PED_PARTITION_BLS_BOOT);
+-#endif
+-
+-#if PED_PARTITION_LAST_FLAG > 20
+     PyModule_AddIntConstant(m, "PARTITION_LINUX_HOME", PED_PARTITION_LINUX_HOME);
+-#endif
+ 
+     PyModule_AddIntConstant(m, "DISK_CYLINDER_ALIGNMENT", PED_DISK_CYLINDER_ALIGNMENT);
+     PyModule_AddIntConstant(m, "DISK_GPT_PMBR_BOOT", PED_DISK_GPT_PMBR_BOOT);
+ 
+     PyModule_AddIntConstant(m, "DISK_TYPE_EXTENDED", PED_DISK_TYPE_EXTENDED);
+     PyModule_AddIntConstant(m, "DISK_TYPE_PARTITION_NAME", PED_DISK_TYPE_PARTITION_NAME);
++    PyModule_AddIntConstant(m, "DISK_TYPE_PARTITION_TYPE_ID", PED_DISK_TYPE_PARTITION_TYPE_ID);
++    PyModule_AddIntConstant(m, "DISK_TYPE_PARTITION_TYPE_UUID", PED_DISK_TYPE_PARTITION_TYPE_UUID);
+ 
+     /* add PedFileSystemType as _ped.FileSystemType */
+     if (PyType_Ready(&_ped_FileSystemType_Type_obj) < 0)
+diff -up pyparted-3.12.0/tests/test__ped_disktype.py.orig pyparted-3.12.0/tests/test__ped_disktype.py
+--- pyparted-3.12.0/tests/test__ped_disktype.py.orig	2018-01-12 13:31:40.000000000 -0500
++++ pyparted-3.12.0/tests/test__ped_disktype.py	2022-07-14 12:28:09.687155151 -0400
+@@ -63,11 +63,22 @@ class DiskTypeCheckFeatureTestCase(Requi
+             self.assertTrue(self.disktype[name].check_feature(_ped.DISK_TYPE_EXTENDED))
+             self.assertFalse(self.disktype[name].check_feature(_ped.DISK_TYPE_PARTITION_NAME))
+ 
++            if hasattr(_ped, "DISK_TYPE_PARTITION_TYPE_ID"):
++                self.assertTrue(self.disktype[name].check_feature(_ped.DISK_TYPE_PARTITION_TYPE_ID))
++
++            if hasattr(_ped, "DISK_TYPE_PARTITION_TYPE_UUID"):
++                self.assertFalse(self.disktype[name].check_feature(_ped.DISK_TYPE_PARTITION_TYPE_UUID))
++
+         # The following types support DISK_TYPE_PARTITION_NAME
+         for name in ['amiga', 'gpt', 'mac', 'pc98']:
+             self.assertFalse(self.disktype[name].check_feature(_ped.DISK_TYPE_EXTENDED))
+             self.assertTrue(self.disktype[name].check_feature(_ped.DISK_TYPE_PARTITION_NAME))
+ 
++        # The following types support DISK_TYPE_PARTITION_TYPE_UUID
++        for name in ['gpt']:
++            if hasattr(_ped, "DISK_TYPE_PARTITION_TYPE_UUID"):
++                self.assertTrue(self.disktype[name].check_feature(_ped.DISK_TYPE_PARTITION_TYPE_UUID))
++
+         # The following types support all features
+         for name in ['dvh']:
+             self.assertTrue(self.disktype[name].check_feature(_ped.DISK_TYPE_EXTENDED))
+@@ -75,11 +86,20 @@ class DiskTypeCheckFeatureTestCase(Requi
+ 
+ class DiskTypeStrTestCase(RequiresDiskTypes):
+     def runTest(self):
+-        self.assertEqual(str(self.disktype['msdos']), '_ped.DiskType instance --\n  name: msdos  features: 1')
++        if hasattr(_ped, "DISK_TYPE_PARTITION_TYPE_ID"):
++            self.assertEqual(str(self.disktype['msdos']), '_ped.DiskType instance --\n  name: msdos  features: 5')
++        else:
++            self.assertEqual(str(self.disktype['msdos']), '_ped.DiskType instance --\n  name: msdos  features: 1')
++
+         self.assertEqual(str(self.disktype['aix']), '_ped.DiskType instance --\n  name: aix  features: 0')
+         self.assertEqual(str(self.disktype['sun']), '_ped.DiskType instance --\n  name: sun  features: 0')
+         self.assertEqual(str(self.disktype['amiga']), '_ped.DiskType instance --\n  name: amiga  features: 2')
+-        self.assertEqual(str(self.disktype['gpt']), '_ped.DiskType instance --\n  name: gpt  features: 2')
++
++        if hasattr(_ped, "DISK_TYPE_PARTITION_TYPE_UUID"):
++            self.assertEqual(str(self.disktype['gpt']), '_ped.DiskType instance --\n  name: gpt  features: 10')
++        else:
++            self.assertEqual(str(self.disktype['gpt']), '_ped.DiskType instance --\n  name: gpt  features: 2')
++
+         self.assertEqual(str(self.disktype['mac']), '_ped.DiskType instance --\n  name: mac  features: 2')
+         self.assertEqual(str(self.disktype['bsd']), '_ped.DiskType instance --\n  name: bsd  features: 0')
+         self.assertEqual(str(self.disktype['pc98']), '_ped.DiskType instance --\n  name: pc98  features: 2')

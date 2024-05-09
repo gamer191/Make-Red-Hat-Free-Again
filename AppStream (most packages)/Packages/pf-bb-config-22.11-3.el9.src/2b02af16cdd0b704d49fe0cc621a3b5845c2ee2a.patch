@@ -1,0 +1,48 @@
+From 2b02af16cdd0b704d49fe0cc621a3b5845c2ee2a Mon Sep 17 00:00:00 2001
+From: Nicolas Chautru <nicolas.chautru@intel.com>
+Date: Mon, 9 Jan 2023 14:24:56 -0800
+Subject: [PATCH] Typo in ACC100 config files introduced in previous commit
+
+Signed-off-by: Nicolas Chautru <nicolas.chautru@intel.com>
+---
+ acc100/acc100_config_2vf_4g5g.cfg | 32 ++++++++++++++++++++++++++++++-
+ 1 file changed, 31 insertions(+), 1 deletion(-)
+
+diff --git a/acc100/acc100_config_2vf_4g5g.cfg b/acc100/acc100_config_2vf_4g5g.cfg
+index cba6c12..ce68033 100644
+--- a/acc100/acc100_config_2vf_4g5g.cfg
++++ b/acc100/acc100_config_2vf_4g5g.cfg
+@@ -1 +1,31 @@
+-acc100_config_4vf_4g5g.cfg
+\ No newline at end of file
++; SPDX-License-Identifier: Apache-2.0
++; Copyright(c) 2020 Intel Corporation
++
++[MODE]
++pf_mode_en = 0
++
++[VFBUNDLES]
++num_vf_bundles = 2
++
++[MAXQSIZE]
++max_queue_size = 1024
++
++[QUL4G]
++num_qgroups = 2
++num_aqs_per_groups = 16
++aq_depth_log2 = 4
++
++[QDL4G]
++num_qgroups = 2
++num_aqs_per_groups = 16
++aq_depth_log2 = 4
++
++[QUL5G]
++num_qgroups = 2
++num_aqs_per_groups = 16
++aq_depth_log2 = 4
++
++[QDL5G]
++num_qgroups = 2
++num_aqs_per_groups = 16
++aq_depth_log2 = 4
