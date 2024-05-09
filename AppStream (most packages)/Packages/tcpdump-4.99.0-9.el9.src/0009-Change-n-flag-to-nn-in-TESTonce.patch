@@ -1,0 +1,13 @@
+diff --git a/tests/TESTrun b/tests/TESTrun
+index b423627..aa3c97d 100755
+--- a/tests/TESTrun
++++ b/tests/TESTrun
+@@ -102,7 +102,7 @@ sub runtest {
+     #
+     # Furthermore, on Windows, fc can't read the standard input, so we
+     # can't do it as a pipeline in any case.
+-    $r = system "$TCPDUMP -# -n -r $input $options >tests/NEW/${outputbase} 2>${rawstderrlog}";
++    $r = system "$TCPDUMP -# -nn -r $input $options >tests/NEW/${outputbase} 2>${rawstderrlog}";
+     if($r != 0) {
+         #
+         # Something other than "tcpdump opened the file, read it, and

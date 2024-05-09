@@ -1,0 +1,70 @@
+From 04a68ad191cfcb87cdff70a6b913721e423cd28b Mon Sep 17 00:00:00 2001
+From: Christos Zoulas <christos@zoulas.com>
+Date: Mon, 23 Aug 2021 08:31:59 -0400
+Subject: [PATCH] Fix bug reported by Jan Macku:     alias postcmd '/bin/echo
+ -n "COMMAND:"'"'"'\!#:-$:gx'"'"''     echo 1 2 3 4 5     ^P prints     echo 1
+ 2 3 4 Reason: domod() enters junk history entries with event number
+ HIST_PURGE aliasrun which is used to run postcmd modifies the history
+ appending those entries. Fix by explicitly cleaning up those entries in
+ aliasrun
+
+---
+ sh.decls.h |  1 +
+ sh.hist.c  | 11 +++++++++++
+ tc.func.c  |  2 ++
+ 3 files changed, 14 insertions(+)
+
+diff --git a/sh.decls.h b/sh.decls.h
+index e230becd..1ac9716e 100644
+--- a/sh.decls.h
++++ b/sh.decls.h
+@@ -217,6 +217,7 @@ extern  int	  	  t_pmatch	(const Char *, const Char *,
+  */
+ extern	void	 	  dohist	(Char **, struct command *);
+ extern  struct Hist 	 *enthist	(int, struct wordent *, int, int, int);
++extern  void		  cleanhist	(void);
+ extern	void	 	  savehist	(struct wordent *, int);
+ extern	char		 *fmthist	(int, ptr_t);
+ extern	void		  rechist	(Char *, int);
+diff --git a/sh.hist.c b/sh.hist.c
+index 14d862a3..40660bdc 100644
+--- a/sh.hist.c
++++ b/sh.hist.c
+@@ -1184,6 +1184,17 @@ dohist(Char **vp, struct command *c)
+     }
+ }
+ 
++void
++cleanhist(void)
++{
++    struct Hist *hp, *np;
++
++    for (hp = &Histlist; (np = hp->Hnext) != NULL;) {
++	if (np->Hnum != HIST_PURGE)
++	    return;
++	hremove(np), hfree(np);
++    }
++}
+ 
+ char *
+ fmthist(int fmt, ptr_t ptr)
+diff --git a/tc.func.c b/tc.func.c
+index 9f2b1a29..df4aa7a3 100644
+--- a/tc.func.c
++++ b/tc.func.c
+@@ -999,6 +999,7 @@ aliasrun(int cnt, Char *s1, Char *s2)
+ 
+     getexit(osetexit);
+     if (seterr) {
++	cleanhist();
+ 	xfree(seterr);
+ 	seterr = NULL;	/* don't repeatedly print err msg. */
+     }
+@@ -1075,6 +1076,7 @@ aliasrun(int cnt, Char *s1, Char *s2)
+     }
+     cleanup_until(&w);
+     pendjob();
++    cleanhist();
+     /* Restore status */
+     setv(STRstatus, putn((tcsh_number_t)status), VAR_READWRITE);
+ }

@@ -1,0 +1,31 @@
+From 02831aca57444862b9546d2d8a02e59d6ec4aaf1 Mon Sep 17 00:00:00 2001
+From: Maurizio Lombardi <mlombard@redhat.com>
+Date: Tue, 30 Jan 2024 13:03:08 +0100
+Subject: [PATCH] Fix mapping the new LUN to the node ACL
+
+Signed-off-by: Maurizio Lombardi <mlombard@redhat.com>
+---
+ targetcli/ui_target.py | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/targetcli/ui_target.py b/targetcli/ui_target.py
+index 2c46765f9d1a..65df61f96185 100644
+--- a/targetcli/ui_target.py
++++ b/targetcli/ui_target.py
+@@ -1151,10 +1151,9 @@ class UILUNs(UINode):
+                         possible_mlun += 1
+                     mapped_lun = possible_mlun
+ 
+-                else:
+-                    mlun = MappedLUN(acl, mapped_lun, lun_object, write_protect=False)
+-                    self.shell.log.info("Created LUN %d->%d mapping in node ACL %s"
+-                                        % (mlun.tpg_lun.lun, mlun.mapped_lun, acl.node_wwn))
++                mlun = MappedLUN(acl, mapped_lun, lun_object, write_protect=False)
++                self.shell.log.info("Created LUN %d->%d mapping in node ACL %s"
++                                    % (mlun.tpg_lun.lun, mlun.mapped_lun, acl.node_wwn))
+             self.parent.refresh()
+ 
+         return self.new_node(ui_lun)
+-- 
+2.39.3
+

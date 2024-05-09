@@ -1,0 +1,48 @@
+From 627a1b7fdceaad8745c438bb0037e59689a1f0df Mon Sep 17 00:00:00 2001
+From: Guy Harris <gharris@sonic.net>
+Date: Tue, 22 Aug 2023 12:23:20 -0700
+Subject: [PATCH] pgm: don't advance bp by the option haeder length twice.
+
+At those points, we've already advanced it by the option header length,
+and opt_len includes that length, so advance bp by opt_len minus the
+option header length.
+
+(cherry picked from commit 09b0447fad52298440e05e7368f9d24492d0b0fe)
+---
+ print-pgm.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/print-pgm.c b/print-pgm.c
+index 8a7e215b..1e67db77 100644
+--- a/print-pgm.c
++++ b/print-pgm.c
+@@ -661,7 +661,7 @@ pgm_print(netdissect_options *ndo,
+ 
+ 		case PGM_OPT_PATH_NLA:
+ 		    ND_PRINT(" PATH_NLA [%u]", opt_len);
+-		    bp += opt_len;
++		    bp += opt_len - 2;
+ 		    opts_len -= opt_len;
+ 		    break;
+ 
+@@ -703,7 +703,7 @@ pgm_print(netdissect_options *ndo,
+ 
+ 		case PGM_OPT_CR:
+ 		    ND_PRINT(" CR");
+-		    bp += opt_len;
++		    bp += opt_len - 2;
+ 		    opts_len -= opt_len;
+ 		    break;
+ 
+@@ -807,7 +807,7 @@ pgm_print(netdissect_options *ndo,
+ 
+ 		default:
+ 		    ND_PRINT(" OPT_%02X [%u] ", opt_type, opt_len);
+-		    bp += opt_len;
++		    bp += opt_len - 2;
+ 		    opts_len -= opt_len;
+ 		    break;
+ 		}
+-- 
+2.41.0
+

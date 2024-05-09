@@ -1,0 +1,3431 @@
+From 35bb13da8e53b01a62b8fe45831134df95bdaffc Mon Sep 17 00:00:00 2001
+From: Carlos Garcia Campos <cgarcia@igalia.com>
+Date: Tue, 23 Mar 2021 15:59:16 +0100
+Subject: [PATCH 01/11] Add support for building with libsoup3
+
+Add soup2 build option, enabled by default. When disabled, it builds
+against soup3 instead.
+---
+ meson.build                                   |  6 ++
+ meson_options.txt                             |  2 +
+ src/libtracker-sparql/remote/meson.build      |  8 ++-
+ .../remote/tracker-remote.vala                | 37 +++++++---
+ src/libtracker-sparql/tracker-endpoint-http.c | 68 +++++++++++++++++--
+ 5 files changed, 105 insertions(+), 16 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index ce4c62261..12f93d966 100644
+--- a/meson.build
++++ b/meson.build
+@@ -52,6 +52,12 @@ libxml2 = dependency('libxml-2.0', version: '> 2.6')
+ sqlite = dependency('sqlite3', version: '>' + sqlite_required)
+ dbus = dependency('dbus-1')
+ 
++if get_option('soup2')
++  libsoup = dependency('libsoup-2.4', version: '> 2.40', required: true)
++else
++  libsoup = dependency('libsoup-3.0', version: '>= 2.99.2', required: true)
++endif
++
+ libmath = cc.find_library('m', required: false)
+ 
+ if get_option('man')
+diff --git a/meson_options.txt b/meson_options.txt
+index 99c569502..46e9c130f 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -26,3 +26,5 @@ option('test_utils_dir', type: 'string', value: '',
+        description: 'Directory to install trackertestutils Python package (or empty to use the default)')
+ option('tests_tap_protocol', type: 'boolean', value: false,
+        description: 'Whether to enable TAP protocol on tests')
++option('soup2', type: 'boolean', value: true,
++       description: 'Whether to build with libsoup2')
+diff --git a/src/libtracker-sparql/remote/meson.build b/src/libtracker-sparql/remote/meson.build
+index f4d589d61..916b72a8a 100644
+--- a/src/libtracker-sparql/remote/meson.build
++++ b/src/libtracker-sparql/remote/meson.build
+@@ -7,13 +7,19 @@ sources = [
+     '../../libtracker-common/libtracker-common.vapi'
+ ]
+ 
++if get_option('soup2')
++  vala_defines = ['--define=SOUP2']
++else
++  vala_defines = []
++endif
++
+ libtracker_remote = static_library('tracker-remote', sources,
+     dependencies: tracker_remote_dependencies + [tracker_common_dep, tracker_sparql_intermediate_dep],
+     c_args: tracker_c_args + [
+         '-include', 'config.h',
+         '-include', 'libtracker-sparql/tracker-private.h',
+     ],
+-    vala_args: [
++    vala_args: vala_defines + [
+         '--debug',
+         '--pkg', 'posix',
+         # FIXME: Meson has code to add --target-glib automatically, but it
+diff --git a/src/libtracker-sparql/remote/tracker-remote.vala b/src/libtracker-sparql/remote/tracker-remote.vala
+index 206c237fc..50dc612f3 100644
+--- a/src/libtracker-sparql/remote/tracker-remote.vala
++++ b/src/libtracker-sparql/remote/tracker-remote.vala
+@@ -39,7 +39,11 @@ public class Tracker.Remote.Connection : Tracker.Sparql.Connection {
+ 	private Soup.Message create_request (string sparql) {
+ 		var uri = _base_uri + "?query=" + sparql;
+ 		var message = new Soup.Message ("GET", uri);
++#if SOUP2
+ 		var headers = message.request_headers;
++#else
++                var headers = message.get_request_headers();
++#endif
+ 
+ 		headers.append ("User-Agent", USER_AGENT);
+ 		headers.append ("Accept", JSON_TYPE);
+@@ -48,15 +52,20 @@ public class Tracker.Remote.Connection : Tracker.Sparql.Connection {
+ 		return message;
+ 	}
+ 
+-	private Sparql.Cursor create_cursor (Soup.Message message) throws GLib.Error, Sparql.Error {
+-		string document = (string) message.response_body.flatten ().data;
++	private Sparql.Cursor create_cursor (Soup.Message message, string document) throws GLib.Error, Sparql.Error {
++#if SOUP2
++                var status_code = message.status_code;
++                var headers = message.response_headers;
++#else
++                var status_code = message.get_status();
++                var headers = message.get_response_headers();
++#endif
+ 
+-		if (message.status_code != Soup.Status.OK) {
++		if (status_code != Soup.Status.OK) {
+ 			throw new Sparql.Error.UNSUPPORTED ("Unhandled status code %u, document is: %s",
+-			                                    message.status_code, document);
++			                                    status_code, document);
+ 		}
+ 
+-		var headers = message.response_headers;
+ 		var content_type = headers.get_content_type (null);
+ 		long length = document.length;
+ 
+@@ -72,20 +81,32 @@ public class Tracker.Remote.Connection : Tracker.Sparql.Connection {
+ 	public override Sparql.Cursor query (string sparql, Cancellable? cancellable) throws GLib.Error, Sparql.Error, IOError {
+ 		var message = create_request (sparql);
+ 
++#if SOUP2
+ 		_session.send_message (message);
++#else
++                var body = _session.send_and_read (message);
++#endif
+ 
+ 		if (cancellable != null && cancellable.is_cancelled ())
+ 			throw new IOError.CANCELLED ("Operation was cancelled");
+ 
+-		return create_cursor (message);
++#if SOUP2
++                return create_cursor (message, (string) message.response_body.flatten ().data);
++#else
++                return create_cursor (message, (string) body.get_data());
++#endif
+ 	}
+ 
+ 	public async override Sparql.Cursor query_async (string sparql, Cancellable? cancellable) throws GLib.Error, Sparql.Error, IOError {
+ 		var message = create_request (sparql);
+ 
++#if SOUP2
+ 		yield _session.send_async (message, cancellable);
+-
+-		return create_cursor (message);
++                return create_cursor (message, (string) message.response_body.flatten ().data);
++#else
++                var body = yield _session.send_and_read_async (message, GLib.Priority.DEFAULT, cancellable);
++                return create_cursor (message, (string) body.get_data());
++#endif
+ 	}
+ 
+ 	public override void close () {
+diff --git a/src/libtracker-sparql/tracker-endpoint-http.c b/src/libtracker-sparql/tracker-endpoint-http.c
+index de231ca59..5aa82b03d 100644
+--- a/src/libtracker-sparql/tracker-endpoint-http.c
++++ b/src/libtracker-sparql/tracker-endpoint-http.c
+@@ -41,7 +41,11 @@ struct _TrackerEndpointHttp {
+ 
+ typedef struct {
+ 	TrackerEndpoint *endpoint;
++#if SOUP_CHECK_VERSION (2, 99, 2)
++        SoupServerMessage *message;
++#else
+ 	SoupMessage *message;
++#endif
+ 	GInputStream *istream;
+ 	GTask *task;
+ 	TrackerSerializerFormat format;
+@@ -90,9 +94,11 @@ handle_request_in_thread (GTask        *task,
+ 	GError *error = NULL;
+ 	gssize count;
+ 
+-	g_object_get (request->message,
+-	              "response-body", &message_body,
+-	              NULL);
++#if SOUP_CHECK_VERSION (2, 99, 2)
++        message_body = soup_server_message_get_response_body (request->message);
++#else
++        message_body = request->message->response_body;
++#endif
+ 
+ 	while (!finished) {
+ 		count = g_input_stream_read (request->istream,
+@@ -127,12 +133,22 @@ request_finished_cb (GObject      *object,
+ 	endpoint_http = TRACKER_ENDPOINT_HTTP (request->endpoint);
+ 
+ 	if (!g_task_propagate_boolean (G_TASK (result), &error)) {
++#if SOUP_CHECK_VERSION (2, 99, 2)
++                soup_server_message_set_status (request->message, 500,
++                                                error ? error->message :
++                                                "No error message");
++#else
+ 		soup_message_set_status_full (request->message, 500,
+ 		                              error ? error->message :
+ 		                              "No error message");
++#endif
+ 		g_clear_error (&error);
+ 	} else {
++#if SOUP_CHECK_VERSION (2, 99, 2)
++                soup_server_message_set_status (request->message, 200, NULL);
++#else
+ 		soup_message_set_status (request->message, 200);
++#endif
+ 	}
+ 
+ 	soup_server_unpause_message (endpoint_http->server, request->message);
+@@ -153,7 +169,11 @@ query_async_cb (GObject      *object,
+ 	cursor = tracker_sparql_connection_query_finish (TRACKER_SPARQL_CONNECTION (object),
+ 	                                                 result, &error);
+ 	if (error) {
++#if SOUP_CHECK_VERSION (2, 99, 2)
++                soup_server_message_set_status (request->message, 500, error->message);
++#else
+ 		soup_message_set_status_full (request->message, 500, error->message);
++#endif
+ 		soup_server_unpause_message (endpoint_http->server, request->message);
+ 		request_free (request);
+ 		return;
+@@ -167,16 +187,25 @@ query_async_cb (GObject      *object,
+ 	g_task_run_in_thread (request->task, handle_request_in_thread);
+ }
+ 
++#if SOUP_CHECK_VERSION (2, 99, 2)
++static gboolean
++pick_format (SoupServerMessage       *message,
++             TrackerSerializerFormat *format)
++#else
+ static gboolean
+ pick_format (SoupMessage             *message,
+              TrackerSerializerFormat *format)
++#endif
+ {
+ 	SoupMessageHeaders *request_headers, *response_headers;
+ 
+-	g_object_get (message,
+-	              "request-headers", &request_headers,
+-	              "response-headers", &response_headers,
+-	              NULL);
++#if SOUP_CHECK_VERSION (2, 99, 2)
++        request_headers = soup_server_message_get_request_headers (message);
++        response_headers = soup_server_message_get_response_headers (message);
++#else
++        request_headers = message->request_headers;
++        response_headers = message->response_headers;
++#endif
+ 
+ 	if (soup_message_headers_header_contains (request_headers, "Accept", JSON_TYPE)) {
+ 		soup_message_headers_set_content_type (response_headers, JSON_TYPE, NULL);
+@@ -193,6 +222,14 @@ pick_format (SoupMessage             *message,
+ 	return FALSE;
+ }
+ 
++#if SOUP_CHECK_VERSION (2, 99, 2)
++static void
++server_callback (SoupServer        *server,
++	         SoupServerMessage *message,
++                 const char        *path,
++	         GHashTable        *query,
++                 gpointer           user_data)
++#else
+ static void
+ server_callback (SoupServer        *server,
+                  SoupMessage       *message,
+@@ -200,6 +237,7 @@ server_callback (SoupServer        *server,
+                  GHashTable        *query,
+                  SoupClientContext *client,
+                  gpointer           user_data)
++#endif
+ {
+ 	TrackerEndpoint *endpoint = user_data;
+ 	TrackerSparqlConnection *conn;
+@@ -209,25 +247,41 @@ server_callback (SoupServer        *server,
+ 	const gchar *sparql;
+ 	Request *request;
+ 
++#if SOUP_CHECK_VERSION (2, 99, 2)
++        remote_address = soup_server_message_get_remote_address (message);
++#else
+ 	remote_address = soup_client_context_get_remote_address (client);
++#endif
+ 	if (remote_address) {
+ 		g_signal_emit (endpoint, signals[BLOCK_REMOTE_ADDRESS], 0,
+ 		               remote_address, &block);
+ 	}
+ 
+ 	if (block) {
++#if SOUP_CHECK_VERSION (2, 99, 2)
++                soup_server_message_set_status (message, 500, "Remote address disallowed");
++#else
+ 		soup_message_set_status_full (message, 500, "Remote address disallowed");
++#endif
+ 		return;
+ 	}
+ 
+ 	sparql = g_hash_table_lookup (query, "query");
+ 	if (!sparql) {
++#if SOUP_CHECK_VERSION (2, 99, 2)
++                soup_server_message_set_status (message, 500, "No query given");
++#else
+ 		soup_message_set_status_full (message, 500, "No query given");
++#endif
+ 		return;
+ 	}
+ 
+ 	if (!pick_format (message, &format)) {
++#if SOUP_CHECK_VERSION (2, 99, 2)
++                soup_server_message_set_status (message, 500, "No recognized accepted formats");
++#else
+ 		soup_message_set_status_full (message, 500, "No recognized accepted formats");
++#endif
+ 		return;
+ 	}
+ 
+-- 
+2.38.1
+
+
+From da2c34a2d7b7cb717360653c627531d04607a4ee Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 28 Jul 2021 12:53:47 +0200
+Subject: [PATCH 02/11] libtracker-sparql: Allow building against multiple
+ versions of libsoup
+
+Tracker is an innocent bystander hindering libsoup3 port, since the
+libsoup2/3->tracker->gtk3 dependency chain imposes a libsoup version,
+graphical applications using libsoup cannot port at their own pace.
+
+Make our remote code (connection & endpoint) be a private module
+that is built against both versions of libsoup (if found), then we
+pick one at runtime, with a preference on libsoup3 if libsoup2 .so
+file is not seen in the already loaded libraries.
+
+This patch should be reverted ASAP, once we can consider libsoup2
+deprecated.
+
+Fixes: https://gitlab.gnome.org/GNOME/tracker/-/issues/320
+---
+ config.h.meson.in                             |   3 +
+ meson.build                                   |  24 +++-
+ meson_options.txt                             |   2 -
+ src/libtracker-sparql/meson.build             |  60 ++++++++-
+ src/libtracker-sparql/remote/meson.build      |  36 ------
+ src/libtracker-sparql/tracker-backend.vala    |   5 -
+ src/libtracker-sparql/tracker-remote-module.c | 115 ++++++++++++++++++
+ 7 files changed, 192 insertions(+), 53 deletions(-)
+ delete mode 100644 src/libtracker-sparql/remote/meson.build
+ create mode 100644 src/libtracker-sparql/tracker-remote-module.c
+
+diff --git a/config.h.meson.in b/config.h.meson.in
+index 9d1439e91..4aff15f72 100644
+--- a/config.h.meson.in
++++ b/config.h.meson.in
+@@ -57,3 +57,6 @@
+ 
+ /* Define to the Tracker minor version */
+ #mesondefine TRACKER_MINOR_VERSION
++
++/* Whether RTLD_NOLOAD is defined */
++#mesondefine HAVE_RTLD_NOLOAD
+diff --git a/meson.build b/meson.build
+index 12f93d966..3b487835b 100644
+--- a/meson.build
++++ b/meson.build
+@@ -51,14 +51,23 @@ libsoup = dependency('libsoup-2.4', version: '> 2.40', required: true)
+ libxml2 = dependency('libxml-2.0', version: '> 2.6')
+ sqlite = dependency('sqlite3', version: '>' + sqlite_required)
+ dbus = dependency('dbus-1')
++libsoup2 = dependency('libsoup-2.4', version: '> 2.40', required: false)
++libsoup3 = dependency('libsoup-3.0', version: '>= 2.99.2', required: false)
+ 
+-if get_option('soup2')
+-  libsoup = dependency('libsoup-2.4', version: '> 2.40', required: true)
+-else
+-  libsoup = dependency('libsoup-3.0', version: '>= 2.99.2', required: true)
++libmath = cc.find_library('m', required: false)
++libdl = cc.find_library('dl')
++
++soup_backends = ''
++if libsoup2.found()
++  soup_backends = soup_backends + '2.x '
++endif
++if libsoup3.found()
++  soup_backends = soup_backends + '3.x '
+ endif
+ 
+-libmath = cc.find_library('m', required: false)
++if not libsoup2.found() and not libsoup3.found()
++  error('At least one of libsoup2 or libsoup3 is required')
++endif
+ 
+ if get_option('man')
+   asciidoc = find_program('asciidoc')
+@@ -272,6 +281,10 @@ conf.set('TRACKER_MICRO_VERSION', tracker_micro_version)
+ conf.set('TRACKER_INTERFACE_AGE', 0)
+ conf.set('TRACKER_BINARY_AGE', 100 * tracker_minor_version + tracker_micro_version)
+ 
++# Check for RTLD_NOLOAD
++have_rtld_noload = cc.has_header_symbol('dlfcn.h', 'RTLD_NOLOAD')
++conf.set('HAVE_RTLD_NOLOAD', have_rtld_noload)
++
+ # Config that goes in some other generated files (.desktop, .service, etc)
+ conf.set('abs_top_builddir', meson.current_build_dir())
+ conf.set('libexecdir', join_paths(get_option('prefix'), get_option('libexecdir')))
+@@ -362,6 +375,7 @@ summary = [
+   '    Unicode support library:                ' + unicode_library_name,
+   '    Use external FTS module:                ' + (not sqlite3_has_builtin_fts5).to_string(),
+   '    Build with Stemming support:            ' + have_libstemmer.to_string(),
++  '    Libsoup backends:                       ' + soup_backends,
+ ]
+ 
+ if get_option('bash_completion')
+diff --git a/meson_options.txt b/meson_options.txt
+index 46e9c130f..99c569502 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -26,5 +26,3 @@ option('test_utils_dir', type: 'string', value: '',
+        description: 'Directory to install trackertestutils Python package (or empty to use the default)')
+ option('tests_tap_protocol', type: 'boolean', value: false,
+        description: 'Whether to enable TAP protocol on tests')
+-option('soup2', type: 'boolean', value: true,
+-       description: 'Whether to build with libsoup2')
+diff --git a/src/libtracker-sparql/meson.build b/src/libtracker-sparql/meson.build
+index 570f4b83b..87b8167cf 100644
+--- a/src/libtracker-sparql/meson.build
++++ b/src/libtracker-sparql/meson.build
+@@ -20,7 +20,6 @@ libtracker_sparql_c_sources = files(
+     'tracker-cursor.c',
+     'tracker-endpoint.c',
+     'tracker-endpoint-dbus.c',
+-    'tracker-endpoint-http.c',
+     'tracker-error.c',
+     'tracker-namespace-manager.c',
+     'tracker-notifier.c',
+@@ -54,7 +53,7 @@ libtracker_sparql_c_public_headers = files(
+ libtracker_sparql_intermediate = static_library('tracker-sparql-intermediate',
+     enum_types,
+     libtracker_sparql_c_sources,
+-    dependencies: [tracker_common_dep, json_glib, libxml2, libsoup],
++    dependencies: [tracker_common_dep, json_glib, libxml2],
+     gnu_symbol_visibility: 'hidden',
+ )
+ 
+@@ -63,7 +62,7 @@ sparqlinc = [include_directories('.'), meson.current_build_dir()]
+ tracker_sparql_intermediate_dep = declare_dependency(
+     link_with: [libtracker_sparql_intermediate],
+     include_directories: [srcinc, include_directories('.')],
+-    dependencies: [ tracker_sparql_vapi_dep ],
++    dependencies: [ tracker_sparql_vapi_dep, tracker_data_dep ],
+     sources: enum_types[1],
+ )
+ 
+@@ -88,13 +87,61 @@ install_data(
+ 
+ subdir('bus')
+ subdir('direct')
+-subdir('remote')
++
++tracker_remote_dependencies = [json_glib, libxml2]
++
++remote_sources = [
++    'tracker-endpoint-http.c',
++    'remote/tracker-json-cursor.vala',
++    'remote/tracker-xml-cursor.vala',
++    'remote/tracker-remote.vala',
++]
++
++if libsoup2.found()
++    libtracker_remote_soup2 = shared_module('tracker-remote-soup2', remote_sources,
++        dependencies: tracker_remote_dependencies + [tracker_common_dep, tracker_sparql_intermediate_dep, libsoup2],
++        c_args: tracker_c_args + [
++            '-include', 'config.h',
++            '-include', 'libtracker-sparql/tracker-private.h',
++        ],
++        vala_args: [
++            '--debug',
++            '--pkg', 'posix',
++            # FIXME: Meson has code to add --target-glib automatically, but it
++            # doesn't seem to work here.
++            '--target-glib', glib_required,
++            '--define=SOUP2',
++        ],
++        install: true,
++        install_dir: tracker_internal_libs_dir,
++    )
++endif
++
++if libsoup3.found()
++    libtracker_remote_soup3 = shared_module('tracker-remote-soup3', remote_sources,
++        dependencies: tracker_remote_dependencies + [tracker_common_dep, tracker_sparql_intermediate_dep, libsoup3],
++        c_args: tracker_c_args + [
++            '-include', 'config.h',
++            '-include', 'libtracker-sparql/tracker-private.h',
++        ],
++        vala_args: [
++            '--debug',
++            '--pkg', 'posix',
++            # FIXME: Meson has code to add --target-glib automatically, but it
++            # doesn't seem to work here.
++            '--target-glib', glib_required,
++        ],
++        install: true,
++        install_dir: tracker_internal_libs_dir,
++    )
++endif
+ 
+ libtracker_sparql = library('tracker-sparql-' + tracker_api_version,
+     '../libtracker-common/libtracker-common.vapi',
+     '../libtracker-data/libtracker-data.vapi',
+     'direct/tracker-direct.vapi',
+     'tracker-backend.vala',
++    'tracker-remote-module.c',
+     tracker_gresources,
+ 
+     gnu_symbol_visibility: 'hidden',
+@@ -107,11 +154,14 @@ libtracker_sparql = library('tracker-sparql-' + tracker_api_version,
+ 
+     c_args: [
+ 	'-include', 'libtracker-sparql/tracker-private.h',
++        '-DPRIVATE_LIBDIR="@0@"'.format(tracker_internal_libs_dir),
++        '-DBUILD_LIBDIR="@0@"'.format(meson.current_build_dir()),
++        '-DBUILDROOT="@0@"'.format(meson.project_build_root()),
+     ],
+ 
+     link_whole: [libtracker_sparql_intermediate],
+ 
+-    dependencies: [tracker_common_dep, tracker_sparql_remote_dep, tracker_sparql_bus_dep, tracker_sparql_direct_dep, tracker_sparql_vapi_dep],
++    dependencies: [tracker_common_dep, tracker_sparql_bus_dep, tracker_sparql_direct_dep, tracker_sparql_vapi_dep, gmodule, libdl],
+ )
+ 
+ tracker_sparql_dep = declare_dependency(
+diff --git a/src/libtracker-sparql/remote/meson.build b/src/libtracker-sparql/remote/meson.build
+deleted file mode 100644
+index 916b72a8a..000000000
+--- a/src/libtracker-sparql/remote/meson.build
++++ /dev/null
+@@ -1,36 +0,0 @@
+-tracker_remote_dependencies = [json_glib, libsoup, libxml2]
+-
+-sources = [
+-    'tracker-json-cursor.vala',
+-    'tracker-xml-cursor.vala',
+-    'tracker-remote.vala',
+-    '../../libtracker-common/libtracker-common.vapi'
+-]
+-
+-if get_option('soup2')
+-  vala_defines = ['--define=SOUP2']
+-else
+-  vala_defines = []
+-endif
+-
+-libtracker_remote = static_library('tracker-remote', sources,
+-    dependencies: tracker_remote_dependencies + [tracker_common_dep, tracker_sparql_intermediate_dep],
+-    c_args: tracker_c_args + [
+-        '-include', 'config.h',
+-        '-include', 'libtracker-sparql/tracker-private.h',
+-    ],
+-    vala_args: vala_defines + [
+-        '--debug',
+-        '--pkg', 'posix',
+-        # FIXME: Meson has code to add --target-glib automatically, but it
+-        # doesn't seem to work here.
+-        '--target-glib', glib_required,
+-    ],
+-    gnu_symbol_visibility: 'hidden',
+-)
+-
+-tracker_sparql_remote_dep = declare_dependency(
+-    link_with: libtracker_remote,
+-    include_directories: include_directories('.'),
+-    dependencies: tracker_remote_dependencies,
+-)
+diff --git a/src/libtracker-sparql/tracker-backend.vala b/src/libtracker-sparql/tracker-backend.vala
+index ae6313118..af1102d5a 100644
+--- a/src/libtracker-sparql/tracker-backend.vala
++++ b/src/libtracker-sparql/tracker-backend.vala
+@@ -22,11 +22,6 @@
+  * effect of printing the 'help' message if TRACKER_DEBUG=help is set.
+  */
+ 
+-public static Tracker.Sparql.Connection tracker_sparql_connection_remote_new (string url_base) {
+-	Tracker.get_debug_flags ();
+-	return new Tracker.Remote.Connection (url_base);
+-}
+-
+ public static Tracker.Sparql.Connection tracker_sparql_connection_bus_new (string service, string? object_path, DBusConnection? conn) throws Tracker.Sparql.Error, IOError, DBusError, GLib.Error {
+ 	Tracker.get_debug_flags ();
+ 
+diff --git a/src/libtracker-sparql/tracker-remote-module.c b/src/libtracker-sparql/tracker-remote-module.c
+new file mode 100644
+index 000000000..2ca0fd181
+--- /dev/null
++++ b/src/libtracker-sparql/tracker-remote-module.c
+@@ -0,0 +1,115 @@
++/* Yuck */
++
++#include "config.h"
++
++#include <gio/gio.h>
++#include <tracker-sparql.h>
++#include <dlfcn.h>
++
++#define LIBSOUP_2_SONAME "libsoup-2.4.so.1"
++
++static gboolean initialized = FALSE;
++
++GType (* remote_endpoint_get_type) (void) = NULL;
++
++TrackerEndpoint * (* remote_endpoint_new) (TrackerSparqlConnection  *sparql_connection,
++                                           guint                     port,
++                                           GTlsCertificate          *certificate,
++                                           GCancellable             *cancellable,
++                                           GError                  **error) = NULL;
++TrackerSparqlConnection * (* remote_connection_new) (const gchar *url_base) = NULL;
++
++static void
++tracker_init_remote (void)
++{
++	const char *modules[3] = { 0 };
++	gpointer handle = NULL;
++	gint i = 0;
++
++	if (initialized)
++		return;
++
++	g_assert (g_module_supported ());
++
++#ifdef HAVE_RTLD_NOLOAD
++	if ((handle = dlopen (LIBSOUP_2_SONAME, RTLD_NOW | RTLD_NOLOAD))) {
++		/* Force load of soup2 module */
++		modules[0] = "libtracker-remote-soup2.so";
++	} else
++#endif
++	{
++		modules[0] = "libtracker-remote-soup3.so";
++		modules[1] = "libtracker-remote-soup2.so";
++	}
++
++	g_clear_pointer (&handle, dlclose);
++
++	for (i = 0; modules[i]; i++) {
++		GModule *remote_module;
++		gchar *module_path;
++
++		if (g_strcmp0 (g_get_current_dir (), BUILDROOT) == 0) {
++			/* Detect in-build runtime of this code, this may happen
++			 * building introspection information or running tests.
++			 * We want the in-tree modules to be loaded then.
++			 */
++			module_path = g_strdup_printf (BUILD_LIBDIR "/%s", modules[i]);
++		} else {
++			module_path = g_strdup_printf (PRIVATE_LIBDIR "/%s", modules[i]);
++		}
++
++		remote_module = g_module_open (module_path,
++		                               G_MODULE_BIND_LAZY |
++		                               G_MODULE_BIND_LOCAL);
++		g_free (module_path);
++
++		if (!remote_module)
++			continue;
++
++		if (!g_module_symbol (remote_module, "tracker_endpoint_http_get_type", (gpointer *) &remote_endpoint_get_type) ||
++		    !g_module_symbol (remote_module, "tracker_endpoint_http_new", (gpointer *) &remote_endpoint_new) ||
++		    !g_module_symbol (remote_module, "tracker_remote_connection_new", (gpointer *) &remote_connection_new)) {
++			g_clear_pointer (&remote_module, g_module_close);
++			continue;
++		}
++
++		g_module_make_resident (remote_module);
++		g_module_close (remote_module);
++		initialized = TRUE;
++		return;
++	}
++
++	g_assert_not_reached ();
++}
++
++GType
++tracker_endpoint_http_get_type (void)
++{
++	tracker_init_remote ();
++
++	return remote_endpoint_get_type ();
++}
++
++TrackerEndpointHttp *
++tracker_endpoint_http_new (TrackerSparqlConnection  *sparql_connection,
++                           guint                     port,
++                           GTlsCertificate          *certificate,
++                           GCancellable             *cancellable,
++                           GError                  **error)
++{
++	tracker_init_remote ();
++
++	return (TrackerEndpointHttp *) remote_endpoint_new (sparql_connection,
++	                                                    port,
++	                                                    certificate,
++	                                                    cancellable,
++	                                                    error);
++}
++
++TrackerSparqlConnection *
++tracker_sparql_connection_remote_new (const gchar *url_base)
++{
++	tracker_init_remote ();
++
++	return remote_connection_new (url_base);
++}
+-- 
+2.38.1
+
+
+From 52324bd629a5446594717a2e782a85913821b447 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 10 Nov 2021 23:16:37 +0200
+Subject: [PATCH 03/11] libtracker-sparql: Escape query in remote connection
+
+This is embedded in the URI, so should get proper escaping to avoid
+misinterpretation with certain characters.
+---
+ src/libtracker-sparql/remote/tracker-remote.vala | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/libtracker-sparql/remote/tracker-remote.vala b/src/libtracker-sparql/remote/tracker-remote.vala
+index 50dc612f3..252d70a40 100644
+--- a/src/libtracker-sparql/remote/tracker-remote.vala
++++ b/src/libtracker-sparql/remote/tracker-remote.vala
+@@ -37,7 +37,7 @@ public class Tracker.Remote.Connection : Tracker.Sparql.Connection {
+ 	}
+ 
+ 	private Soup.Message create_request (string sparql) {
+-		var uri = _base_uri + "?query=" + sparql;
++		var uri = _base_uri + "?query=" + GLib.Uri.escape_string (sparql, null, false);
+ 		var message = new Soup.Message ("GET", uri);
+ #if SOUP2
+ 		var headers = message.request_headers;
+-- 
+2.38.1
+
+
+From 68592b8a44305937134d94dfc3dfdf8444485f7b Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 10 Nov 2021 23:28:11 +0200
+Subject: [PATCH 04/11] libtracker-data: Refactor some soup2/3 code handling
+
+Remove the need for one ifdef, and make a consistent handling of empty
+responses.
+---
+ src/libtracker-sparql/remote/tracker-remote.vala | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/src/libtracker-sparql/remote/tracker-remote.vala b/src/libtracker-sparql/remote/tracker-remote.vala
+index 252d70a40..f29a989ad 100644
+--- a/src/libtracker-sparql/remote/tracker-remote.vala
++++ b/src/libtracker-sparql/remote/tracker-remote.vala
+@@ -83,18 +83,19 @@ public class Tracker.Remote.Connection : Tracker.Sparql.Connection {
+ 
+ #if SOUP2
+ 		_session.send_message (message);
++		var data = (string) message.response_body.flatten ().data;
+ #else
+-                var body = _session.send_and_read (message);
++		var body = _session.send_and_read (message);
++		var data = (string) body.get_data();
+ #endif
+ 
++		if (data == null || data == "")
++			throw new Sparql.Error.UNSUPPORTED ("Empty response");
++
+ 		if (cancellable != null && cancellable.is_cancelled ())
+ 			throw new IOError.CANCELLED ("Operation was cancelled");
+ 
+-#if SOUP2
+-                return create_cursor (message, (string) message.response_body.flatten ().data);
+-#else
+-                return create_cursor (message, (string) body.get_data());
+-#endif
++                return create_cursor (message, (string) data);
+ 	}
+ 
+ 	public async override Sparql.Cursor query_async (string sparql, Cancellable? cancellable) throws GLib.Error, Sparql.Error, IOError {
+-- 
+2.38.1
+
+
+From 6f3b7bc85b715d1071cfb39ff3f10ecc96395ee8 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 10 Nov 2021 23:43:50 +0200
+Subject: [PATCH 05/11] libtracker-data: Add remote TrackerSparqlStatement
+ implementation
+
+Implement this object for remote connections to increase API consistency.
+Underneath, our very own SPARQL parser is used to do raw string replacements
+on the actual query being sent.
+
+Besides API consistence, this also has the benefit to make ~var bindings
+work with other SPARQL endpoints that are not Tracker's.
+---
+ src/libtracker-sparql/meson.build             |   8 +-
+ .../remote/tracker-remote-statement.c         | 401 ++++++++++++++++++
+ .../remote/tracker-remote-statement.h         |  32 ++
+ .../remote/tracker-remote.vala                |   4 +
+ .../remote/tracker-remote.vapi                |   6 +
+ 5 files changed, 450 insertions(+), 1 deletion(-)
+ create mode 100644 src/libtracker-sparql/remote/tracker-remote-statement.c
+ create mode 100644 src/libtracker-sparql/remote/tracker-remote-statement.h
+ create mode 100644 src/libtracker-sparql/remote/tracker-remote.vapi
+
+diff --git a/src/libtracker-sparql/meson.build b/src/libtracker-sparql/meson.build
+index 87b8167cf..21b9b5a28 100644
+--- a/src/libtracker-sparql/meson.build
++++ b/src/libtracker-sparql/meson.build
+@@ -90,8 +90,14 @@ subdir('direct')
+ 
+ tracker_remote_dependencies = [json_glib, libxml2]
+ 
+-remote_sources = [
++libtracker_sparql_remote_c_sources = files (
+     'tracker-endpoint-http.c',
++    'remote/tracker-remote-statement.c',
++)
++
++remote_sources = [
++    libtracker_sparql_remote_c_sources,
++    'remote/tracker-remote.vapi',
+     'remote/tracker-json-cursor.vala',
+     'remote/tracker-xml-cursor.vala',
+     'remote/tracker-remote.vala',
+diff --git a/src/libtracker-sparql/remote/tracker-remote-statement.c b/src/libtracker-sparql/remote/tracker-remote-statement.c
+new file mode 100644
+index 000000000..6ca9f5246
+--- /dev/null
++++ b/src/libtracker-sparql/remote/tracker-remote-statement.c
+@@ -0,0 +1,401 @@
++/*
++ * Copyright (C) 2021, Red Hat Inc.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the
++ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
++ * Boston, MA  02110-1301, USA.
++ *
++ * Author: Carlos Garnacho <carlosg@gnome.org>
++ */
++
++#include "config.h"
++
++#include "tracker-remote-statement.h"
++
++#include <libtracker-common/tracker-common.h>
++#include <libtracker-data/tracker-sparql-grammar.h>
++#include <libtracker-data/tracker-sparql-parser.h>
++#include <libtracker-sparql/tracker-private.h>
++
++struct _TrackerRemoteStatement
++{
++	TrackerSparqlStatement parent_instance;
++	TrackerNodeTree *parser_tree;
++	GHashTable *bindings;
++};
++
++G_DEFINE_TYPE (TrackerRemoteStatement,
++               tracker_remote_statement,
++               TRACKER_TYPE_SPARQL_STATEMENT)
++
++static void
++tracker_remote_statement_finalize (GObject *object)
++{
++	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (object);
++
++	if (remote_stmt->parser_tree)
++		tracker_node_tree_free (remote_stmt->parser_tree);
++	g_hash_table_unref (remote_stmt->bindings);
++
++	G_OBJECT_CLASS (tracker_remote_statement_parent_class)->finalize (object);
++}
++
++static void
++tracker_remote_statement_bind_int (TrackerSparqlStatement *stmt,
++                                   const gchar            *name,
++                                   gint64                  value)
++{
++	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
++	GValue *val;
++
++	val = g_new0 (GValue, 1);
++	g_value_init (val, G_TYPE_INT64);
++	g_value_set_int64 (val, value);
++
++	g_hash_table_insert (remote_stmt->bindings,
++	                     g_strdup (name),
++	                     val);
++}
++
++static void
++tracker_remote_statement_bind_boolean (TrackerSparqlStatement *stmt,
++                                       const gchar            *name,
++                                       gboolean                value)
++{
++	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
++	GValue *val;
++
++	val = g_new0 (GValue, 1);
++	g_value_init (val, G_TYPE_BOOLEAN);
++	g_value_set_boolean (val, value);
++
++	g_hash_table_insert (remote_stmt->bindings,
++	                     g_strdup (name),
++	                     val);
++}
++
++static void
++tracker_remote_statement_bind_string (TrackerSparqlStatement *stmt,
++                                      const gchar            *name,
++                                      const gchar            *value)
++{
++	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
++	GValue *val;
++
++	val = g_new0 (GValue, 1);
++	g_value_init (val, G_TYPE_STRING);
++	g_value_set_string (val, value);
++
++	g_hash_table_insert (remote_stmt->bindings,
++	                     g_strdup (name),
++	                     val);
++}
++
++static void
++tracker_remote_statement_bind_double (TrackerSparqlStatement *stmt,
++                                      const gchar            *name,
++                                      gdouble                 value)
++{
++	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
++	GValue *val;
++
++	val = g_new0 (GValue, 1);
++	g_value_init (val, G_TYPE_DOUBLE);
++	g_value_set_double (val, value);
++
++	g_hash_table_insert (remote_stmt->bindings,
++	                     g_strdup (name),
++	                     val);
++}
++
++static void
++append_gvalue (GString *str,
++               const GValue  *value)
++{
++	if (G_VALUE_HOLDS_BOOLEAN (value)) {
++		g_string_append_printf (str, "%s",
++		                        g_value_get_boolean (value) ?
++		                        "true" : "false");
++	} else if (G_VALUE_HOLDS_INT64 (value)) {
++		g_string_append_printf (str, "%" G_GINT64_FORMAT,
++		                        g_value_get_int64 (value));
++	} else if (G_VALUE_HOLDS_DOUBLE (value)) {
++		gchar buf[G_ASCII_DTOSTR_BUF_SIZE + 1];
++
++		g_ascii_dtostr (buf, sizeof (buf), g_value_get_double (value));
++		g_string_append (str, buf);
++	} else if (G_VALUE_TYPE (value) == G_TYPE_DATE_TIME) {
++		GDateTime *datetime;
++		gchar *datetime_str;
++
++		datetime = g_value_get_boxed (value);
++		datetime_str = tracker_date_format_iso8601 (datetime);
++		g_string_append_printf (str, "\"%s\"", datetime_str);
++		g_free (datetime_str);
++	} else if (G_VALUE_HOLDS_STRING (value)) {
++		const gchar *val = g_value_get_string (value);
++		int len = strlen (val);
++		gchar *end;
++		gboolean is_number = FALSE;
++
++		/* Try to detect numbers anyway, since we use to allow
++		 * loose typing in other connection types.
++		 */
++		g_ascii_strtoll (val, &end, 10);
++		is_number = (end == &val[len]);
++
++		if (!is_number) {
++			g_ascii_strtod (val, &end);
++			is_number = (end == &val[len]);
++		}
++
++		if (is_number)
++			g_string_append (str, val);
++		else
++			g_string_append_printf (str, "\"%s\"", val);
++	}
++}
++
++static gchar *
++apply_bindings (TrackerSparqlStatement  *stmt,
++                GHashTable              *bindings,
++                GError                 **error)
++{
++	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
++	const gchar *query = tracker_sparql_statement_get_sparql (stmt);
++	GString *str = g_string_new (NULL);
++	TrackerParserNode *node = tracker_node_tree_get_root (remote_stmt->parser_tree);
++
++	for (node = tracker_sparql_parser_tree_find_first (node, TRUE);
++	     node;
++	     node = tracker_sparql_parser_tree_find_next (node, TRUE)) {
++		const TrackerGrammarRule *rule;
++		gssize start, end;
++
++		if (!tracker_parser_node_get_extents (node, &start, &end)) {
++			/* Skip over 0-len nodes */
++			continue;
++		}
++
++		rule = tracker_parser_node_get_rule (node);
++
++		if (tracker_grammar_rule_is_a (rule, RULE_TYPE_TERMINAL,
++		                               TERMINAL_TYPE_PARAMETERIZED_VAR)) {
++			gchar *param_name;
++			const GValue *value;
++
++			param_name = g_strndup (&query[start], end - start);
++			value = g_hash_table_lookup (bindings, &param_name[1]);
++			if (!value) {
++				g_set_error (error,
++				             TRACKER_SPARQL_ERROR,
++				             TRACKER_SPARQL_ERROR_PARSE,
++				             "No binding found for variable %s",
++				             param_name);
++				g_string_free (str, TRUE);
++				g_free (param_name);
++				return NULL;
++			}
++
++			append_gvalue (str, value);
++			g_free (param_name);
++		} else {
++			g_string_append_len (str,
++			                     &query[start],
++			                     end - start);
++		}
++
++		g_string_append_c (str, ' ');
++	}
++
++	return g_string_free (str, FALSE);
++}
++
++static TrackerSparqlCursor *
++execute_statement (TrackerSparqlStatement  *stmt,
++                   GHashTable              *bindings,
++                   GCancellable            *cancellable,
++                   GError                 **error)
++{
++	TrackerSparqlCursor *cursor;
++	gchar *rewritten_query = NULL;
++
++	if (g_hash_table_size (bindings) > 0) {
++		rewritten_query = apply_bindings (stmt, bindings, error);
++		if (!rewritten_query)
++			return NULL;
++	}
++
++	cursor = tracker_sparql_connection_query (tracker_sparql_statement_get_connection (stmt),
++	                                          rewritten_query ? rewritten_query :
++	                                          tracker_sparql_statement_get_sparql (stmt),
++	                                          cancellable,
++	                                          error);
++	g_free (rewritten_query);
++
++	return cursor;
++}
++
++TrackerSparqlCursor *
++tracker_remote_statement_execute (TrackerSparqlStatement  *stmt,
++                                  GCancellable            *cancellable,
++                                  GError                 **error)
++{
++	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
++
++	return execute_statement (stmt, remote_stmt->bindings, cancellable, error);
++}
++
++static void
++execute_in_thread (GTask        *task,
++                   gpointer      object,
++                   gpointer      task_data,
++                   GCancellable *cancellable)
++{
++	TrackerSparqlCursor *cursor;
++	GHashTable *bindings = task_data;
++	GError *error = NULL;
++
++	if (g_task_return_error_if_cancelled (task))
++		return;
++
++	cursor = execute_statement (object,
++	                            bindings,
++	                            g_task_get_cancellable (task),
++	                            &error);
++	if (error)
++		g_task_return_error (task, error);
++	else
++		g_task_return_pointer (task, cursor, g_object_unref);
++
++	g_object_unref (task);
++}
++
++static void
++free_gvalue (gpointer data)
++{
++	g_value_unset (data);
++	g_free (data);
++}
++
++static GHashTable *
++create_bindings_ht (void)
++{
++	return g_hash_table_new_full (g_str_hash, g_str_equal,
++				      g_free, free_gvalue);
++}
++
++static GHashTable *
++copy_values_deep (GHashTable *values)
++{
++	GHashTable *copy;
++	GHashTableIter iter;
++	gpointer key, val;
++
++	copy = create_bindings_ht ();
++	g_hash_table_iter_init (&iter, values);
++
++	while (g_hash_table_iter_next (&iter, &key, &val)) {
++		GValue *copy_value;
++
++		copy_value = g_new0 (GValue, 1);
++		g_value_init (copy_value, G_VALUE_TYPE (val));
++		g_value_copy (val, copy_value);
++
++		g_hash_table_insert (copy, g_strdup (key), copy_value);
++	}
++
++	return copy;
++}
++
++void
++tracker_remote_statement_execute_async (TrackerSparqlStatement *stmt,
++                                        GCancellable           *cancellable,
++                                        GAsyncReadyCallback     callback,
++                                        gpointer                user_data)
++{
++	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
++	GHashTable *bindings;
++	GTask *task;
++
++	bindings = copy_values_deep (remote_stmt->bindings);
++
++	task = g_task_new (stmt, cancellable, callback, user_data);
++	g_task_set_task_data (task, bindings, (GDestroyNotify) g_hash_table_unref);
++	g_task_run_in_thread (task, execute_in_thread);
++}
++
++TrackerSparqlCursor *
++tracker_remote_statement_execute_finish (TrackerSparqlStatement  *stmt,
++                                         GAsyncResult            *res,
++                                         GError                 **error)
++{
++	return g_task_propagate_pointer (G_TASK (res), error);
++}
++
++void
++tracker_remote_statement_clear_bindings (TrackerSparqlStatement *stmt)
++{
++	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
++
++	g_hash_table_remove_all (remote_stmt->bindings);
++}
++
++static void
++tracker_remote_statement_class_init (TrackerRemoteStatementClass *klass)
++{
++	TrackerSparqlStatementClass *stmt_class = TRACKER_SPARQL_STATEMENT_CLASS (klass);
++	GObjectClass *object_class = G_OBJECT_CLASS (klass);
++
++	object_class->finalize = tracker_remote_statement_finalize;
++
++	stmt_class->bind_int = tracker_remote_statement_bind_int;
++	stmt_class->bind_boolean = tracker_remote_statement_bind_boolean;
++	stmt_class->bind_string = tracker_remote_statement_bind_string;
++	stmt_class->bind_double = tracker_remote_statement_bind_double;
++	stmt_class->execute = tracker_remote_statement_execute;
++	stmt_class->execute_async = tracker_remote_statement_execute_async;
++	stmt_class->execute_finish = tracker_remote_statement_execute_finish;
++	stmt_class->clear_bindings = tracker_remote_statement_clear_bindings;
++}
++
++static void
++tracker_remote_statement_init (TrackerRemoteStatement *stmt)
++{
++	stmt->bindings = create_bindings_ht ();
++}
++
++TrackerSparqlStatement *
++tracker_remote_statement_new (TrackerSparqlConnection  *conn,
++                              const gchar              *query,
++                              GError                  **error)
++{
++	TrackerRemoteStatement *remote_stmt;
++	TrackerSparqlStatement *stmt;
++
++	stmt = g_object_new (TRACKER_TYPE_REMOTE_STATEMENT,
++	                            "connection", conn,
++	                            "sparql", query,
++	                            NULL);
++	remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
++	remote_stmt->parser_tree =
++		tracker_sparql_parse_query (tracker_sparql_statement_get_sparql (stmt),
++		                            -1, NULL, error);
++	if (!remote_stmt->parser_tree) {
++		g_object_unref (stmt);
++		return NULL;
++	}
++
++	return stmt;
++}
+diff --git a/src/libtracker-sparql/remote/tracker-remote-statement.h b/src/libtracker-sparql/remote/tracker-remote-statement.h
+new file mode 100644
+index 000000000..1cedf3811
+--- /dev/null
++++ b/src/libtracker-sparql/remote/tracker-remote-statement.h
+@@ -0,0 +1,32 @@
++/*
++ * Copyright (C) 2021, Red Hat Ltd.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the
++ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
++ * Boston, MA  02110-1301, USA.
++ *
++ * Author: Carlos Garnacho <carlosg@gnome.org>
++ */
++
++#include <libtracker-sparql/tracker-private.h>
++
++#define TRACKER_TYPE_REMOTE_STATEMENT (tracker_remote_statement_get_type ())
++G_DECLARE_FINAL_TYPE (TrackerRemoteStatement,
++                      tracker_remote_statement,
++                      TRACKER, REMOTE_STATEMENT,
++                      TrackerSparqlStatement)
++
++TrackerSparqlStatement * tracker_remote_statement_new (TrackerSparqlConnection  *conn,
++                                                       const gchar              *query,
++                                                       GError                  **error);
+diff --git a/src/libtracker-sparql/remote/tracker-remote.vala b/src/libtracker-sparql/remote/tracker-remote.vala
+index f29a989ad..f3be3147a 100644
+--- a/src/libtracker-sparql/remote/tracker-remote.vala
++++ b/src/libtracker-sparql/remote/tracker-remote.vala
+@@ -110,6 +110,10 @@ public class Tracker.Remote.Connection : Tracker.Sparql.Connection {
+ #endif
+ 	}
+ 
++	public override Sparql.Statement? query_statement (string sparql, GLib.Cancellable? cancellable = null) throws Sparql.Error {
++		return new Remote.Statement (this, sparql);
++	}
++
+ 	public override void close () {
+ 	}
+ 
+diff --git a/src/libtracker-sparql/remote/tracker-remote.vapi b/src/libtracker-sparql/remote/tracker-remote.vapi
+new file mode 100644
+index 000000000..caf018b41
+--- /dev/null
++++ b/src/libtracker-sparql/remote/tracker-remote.vapi
+@@ -0,0 +1,6 @@
++namespace Tracker {
++	[CCode (cheader_filename = "libtracker-sparql/remote/tracker-remote-statement.h")]
++	class Remote.Statement : Sparql.Statement {
++		public Statement (Sparql.Connection conn, string query) throws Sparql.Error;
++	}
++}
+-- 
+2.38.1
+
+
+From 04f2b77b5c1958db2c2de6d54d716ef20c0b59dc Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Sat, 27 Nov 2021 14:54:51 +0100
+Subject: [PATCH 06/11] libtracker-sparql: Add missing "static" in functions
+
+Luckily, these symbols won't be leaked, still not great.
+---
+ src/libtracker-sparql/remote/tracker-remote-statement.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/libtracker-sparql/remote/tracker-remote-statement.c b/src/libtracker-sparql/remote/tracker-remote-statement.c
+index 6ca9f5246..ad80a589b 100644
+--- a/src/libtracker-sparql/remote/tracker-remote-statement.c
++++ b/src/libtracker-sparql/remote/tracker-remote-statement.c
+@@ -319,7 +319,7 @@ copy_values_deep (GHashTable *values)
+ 	return copy;
+ }
+ 
+-void
++static void
+ tracker_remote_statement_execute_async (TrackerSparqlStatement *stmt,
+                                         GCancellable           *cancellable,
+                                         GAsyncReadyCallback     callback,
+@@ -336,7 +336,7 @@ tracker_remote_statement_execute_async (TrackerSparqlStatement *stmt,
+ 	g_task_run_in_thread (task, execute_in_thread);
+ }
+ 
+-TrackerSparqlCursor *
++static TrackerSparqlCursor *
+ tracker_remote_statement_execute_finish (TrackerSparqlStatement  *stmt,
+                                          GAsyncResult            *res,
+                                          GError                 **error)
+@@ -344,7 +344,7 @@ tracker_remote_statement_execute_finish (TrackerSparqlStatement  *stmt,
+ 	return g_task_propagate_pointer (G_TASK (res), error);
+ }
+ 
+-void
++static void
+ tracker_remote_statement_clear_bindings (TrackerSparqlStatement *stmt)
+ {
+ 	TrackerRemoteStatement *remote_stmt = TRACKER_REMOTE_STATEMENT (stmt);
+-- 
+2.38.1
+
+
+From 663e1784cfaab1d00eaf1c30e6549faa52e2f96f Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Sat, 23 Apr 2022 13:22:54 +0200
+Subject: [PATCH 07/11] libtracker-sparql: Move TrackerSerializerFormat enum to
+ distinct header
+
+We want this enum to be used from places that do not necessarily pull
+TrackerSerializer directly, or other internals. Move it to a separate
+header so that the enum can be used without further dependencies.
+---
+ src/libtracker-sparql/tracker-enums-private.h | 32 +++++++++++++++++++
+ src/libtracker-sparql/tracker-private.h       |  1 +
+ src/libtracker-sparql/tracker-serializer.h    |  7 +---
+ 3 files changed, 34 insertions(+), 6 deletions(-)
+ create mode 100644 src/libtracker-sparql/tracker-enums-private.h
+
+diff --git a/src/libtracker-sparql/tracker-enums-private.h b/src/libtracker-sparql/tracker-enums-private.h
+new file mode 100644
+index 000000000..1d193b277
+--- /dev/null
++++ b/src/libtracker-sparql/tracker-enums-private.h
+@@ -0,0 +1,32 @@
++/*
++ * Copyright (C) 2022, Red Hat, Inc
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the
++ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
++ * Boston, MA  02110-1301, USA.
++ *
++ * Author: Carlos Garnacho <carlosg@gnome.org>
++ */
++
++#ifndef TRACKER_ENUMS_PRIVATE_H
++#define TRACKER_ENUMS_PRIVATE_H
++
++typedef enum
++{
++	TRACKER_SERIALIZER_FORMAT_JSON, /* application/sparql-results+json */
++	TRACKER_SERIALIZER_FORMAT_XML, /* application/sparql-results+xml */
++	TRACKER_N_SERIALIZER_FORMATS
++} TrackerSerializerFormat;
++
++#endif /* TRACKER_ENUMS_PRIVATE_H */
+diff --git a/src/libtracker-sparql/tracker-private.h b/src/libtracker-sparql/tracker-private.h
+index b8c6381ec..c95568b45 100644
+--- a/src/libtracker-sparql/tracker-private.h
++++ b/src/libtracker-sparql/tracker-private.h
+@@ -23,6 +23,7 @@
+ #include <libtracker-sparql/tracker-version-generated.h>
+ #include <libtracker-sparql/tracker-cursor.h>
+ #include <libtracker-sparql/tracker-endpoint-dbus.h>
++#include <libtracker-sparql/tracker-enums-private.h>
+ 
+ typedef struct _TrackerSparqlConnectionClass TrackerSparqlConnectionClass;
+ 
+diff --git a/src/libtracker-sparql/tracker-serializer.h b/src/libtracker-sparql/tracker-serializer.h
+index f948858bb..704fea06a 100644
+--- a/src/libtracker-sparql/tracker-serializer.h
++++ b/src/libtracker-sparql/tracker-serializer.h
+@@ -23,6 +23,7 @@
+ #define TRACKER_SERIALIZER_H
+ 
+ #include <libtracker-sparql/tracker-sparql.h>
++#include <libtracker-sparql/tracker-enums-private.h>
+ 
+ #define TRACKER_TYPE_SERIALIZER (tracker_serializer_get_type())
+ 
+@@ -31,12 +32,6 @@ G_DECLARE_DERIVABLE_TYPE (TrackerSerializer,
+                           TRACKER, SERIALIZER,
+                           GInputStream);
+ 
+-typedef enum
+-{
+-	TRACKER_SERIALIZER_FORMAT_JSON, /* application/sparql-results+json */
+-	TRACKER_SERIALIZER_FORMAT_XML, /* application/sparql-results+xml */
+-} TrackerSerializerFormat;
+-
+ GInputStream * tracker_serializer_new (TrackerSparqlCursor     *cursor,
+                                        TrackerSerializerFormat  format);
+ 
+-- 
+2.38.1
+
+
+From 477bc7f3bcabf213d3887e5d6312ef02e1025b01 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Sat, 23 Apr 2022 13:41:06 +0200
+Subject: [PATCH 08/11] libtracker-sparql: Add base http helper object
+ definitions
+
+This is a small internal API consisting of a TrackerHttpClient and
+a TrackerHttpServer abstract objects. These are meant to wrap the
+interaction with libsoup in a way that is most isolated from internal
+library workings.
+
+These objects will have final implementations living in modules, but
+also will be interacted through the base API from the library code,
+this so far adds the latter.
+---
+ src/libtracker-sparql/meson.build           |   3 +
+ src/libtracker-sparql/remote/meson.build    |   3 +
+ src/libtracker-sparql/remote/tracker-http.c | 334 ++++++++++++++++++++
+ src/libtracker-sparql/remote/tracker-http.h | 122 +++++++
+ 4 files changed, 462 insertions(+)
+ create mode 100644 src/libtracker-sparql/remote/meson.build
+ create mode 100644 src/libtracker-sparql/remote/tracker-http.c
+ create mode 100644 src/libtracker-sparql/remote/tracker-http.h
+
+diff --git a/src/libtracker-sparql/meson.build b/src/libtracker-sparql/meson.build
+index 21b9b5a28..c1ba14a83 100644
+--- a/src/libtracker-sparql/meson.build
++++ b/src/libtracker-sparql/meson.build
+@@ -1,3 +1,5 @@
++subdir('remote')
++
+ version_header = configure_file(
+     input: 'tracker-version-generated.h.meson.in',
+     output: 'tracker-version-generated.h',
+@@ -148,6 +150,7 @@ libtracker_sparql = library('tracker-sparql-' + tracker_api_version,
+     'direct/tracker-direct.vapi',
+     'tracker-backend.vala',
+     'tracker-remote-module.c',
++    remote_files,
+     tracker_gresources,
+ 
+     gnu_symbol_visibility: 'hidden',
+diff --git a/src/libtracker-sparql/remote/meson.build b/src/libtracker-sparql/remote/meson.build
+new file mode 100644
+index 000000000..5cc639795
+--- /dev/null
++++ b/src/libtracker-sparql/remote/meson.build
+@@ -0,0 +1,3 @@
++remote_files = files(
++    'tracker-http.c',
++)
+diff --git a/src/libtracker-sparql/remote/tracker-http.c b/src/libtracker-sparql/remote/tracker-http.c
+new file mode 100644
+index 000000000..345f8412d
+--- /dev/null
++++ b/src/libtracker-sparql/remote/tracker-http.c
+@@ -0,0 +1,334 @@
++/*
++ * Copyright (C) 2022, Red Hat Inc.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the
++ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
++ * Boston, MA  02110-1301, USA.
++ *
++ * Author: Carlos Garnacho <carlosg@gnome.org>
++ */
++
++#include "config.h"
++
++#include <gio/gio.h>
++#include <tracker-sparql.h>
++#include <dlfcn.h>
++
++#include "tracker-http.h"
++
++static GType client_type = G_TYPE_NONE;
++static GType server_type = G_TYPE_NONE;
++
++/* Module loading */
++#define LIBSOUP_2_SONAME "libsoup-2.4.so.1"
++
++static void
++ensure_types (void)
++{
++	const char *modules[3] = { 0 };
++	gpointer handle = NULL;
++	gint i = 0;
++
++	if (client_type != G_TYPE_NONE)
++		return;
++
++	g_assert (g_module_supported ());
++
++#ifdef HAVE_RTLD_NOLOAD
++	if ((handle = dlopen (LIBSOUP_2_SONAME, RTLD_NOW | RTLD_NOLOAD))) {
++		/* Force load of soup2 module */
++		modules[0] = "libtracker-http-soup2.so";
++	} else
++#endif
++	{
++		modules[0] = "libtracker-http-soup3.so";
++		modules[1] = "libtracker-http-soup2.so";
++	}
++
++	g_clear_pointer (&handle, dlclose);
++
++	for (i = 0; modules[i]; i++) {
++		GModule *remote_module;
++		gchar *module_path;
++		void (* init_func) (GType *client, GType *server);
++
++		if (g_strcmp0 (g_get_current_dir (), BUILDROOT) == 0) {
++			/* Detect in-build runtime of this code, this may happen
++			 * building introspection information or running tests.
++			 * We want the in-tree modules to be loaded then.
++			 */
++			module_path = g_strdup_printf (BUILD_LIBDIR "/remote/%s", modules[i]);
++		} else {
++			module_path = g_strdup_printf (PRIVATE_LIBDIR "/%s", modules[i]);
++		}
++
++		if (!g_file_test (module_path, G_FILE_TEST_EXISTS)) {
++			g_free (module_path);
++			continue;
++		}
++
++		remote_module = g_module_open (module_path,
++		                               G_MODULE_BIND_LAZY |
++		                               G_MODULE_BIND_LOCAL);
++		g_free (module_path);
++
++		if (!remote_module) {
++			g_printerr ("Could not load '%s': %s\n",
++			            modules[i], g_module_error ());
++			continue;
++		}
++
++		if (!g_module_symbol (remote_module, "initialize_types", (gpointer *) &init_func)) {
++			g_printerr ("Could find init function: %s\n",
++			            g_module_error ());
++			g_clear_pointer (&remote_module, g_module_close);
++			continue;
++		}
++
++		g_type_ensure (TRACKER_TYPE_HTTP_CLIENT);
++		g_type_ensure (TRACKER_TYPE_HTTP_SERVER);
++
++		init_func (&client_type, &server_type);
++
++		g_module_make_resident (remote_module);
++		g_module_close (remote_module);
++
++		g_assert (client_type != G_TYPE_NONE);
++		g_assert (server_type != G_TYPE_NONE);
++		return;
++	}
++
++	g_assert_not_reached ();
++}
++
++/* HTTP server */
++enum {
++	PROP_0,
++	PROP_HTTP_PORT,
++	PROP_HTTP_CERTIFICATE,
++	N_SERVER_PROPS
++};
++
++enum {
++	REQUEST,
++	N_SERVER_SIGNALS,
++};
++
++typedef struct
++{
++	guint port;
++	GTlsCertificate *certificate;
++} TrackerHttpServerPrivate;
++
++static GParamSpec *server_props[N_SERVER_PROPS] = { 0 };
++static guint server_signals[N_SERVER_SIGNALS] = { 0 };
++
++G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (TrackerHttpServer,
++                                     tracker_http_server,
++                                     G_TYPE_OBJECT)
++
++static void
++tracker_http_server_set_property (GObject      *object,
++                                  guint         prop_id,
++                                  const GValue *value,
++                                  GParamSpec   *pspec)
++{
++	TrackerHttpServer *server = TRACKER_HTTP_SERVER (object);
++	TrackerHttpServerPrivate *priv =
++		tracker_http_server_get_instance_private (server);
++
++	switch (prop_id) {
++	case PROP_HTTP_PORT:
++		priv->port = g_value_get_uint (value);
++		break;
++	case PROP_HTTP_CERTIFICATE:
++		priv->certificate = g_value_dup_object (value);
++		break;
++	default:
++		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
++	}
++}
++
++static void
++tracker_http_server_get_property (GObject    *object,
++                                  guint       prop_id,
++                                  GValue     *value,
++                                  GParamSpec *pspec)
++{
++	TrackerHttpServer *server = TRACKER_HTTP_SERVER (object);
++	TrackerHttpServerPrivate *priv =
++		tracker_http_server_get_instance_private (server);
++
++	switch (prop_id) {
++	case PROP_HTTP_PORT:
++		g_value_set_uint (value, priv->port);
++		break;
++	case PROP_HTTP_CERTIFICATE:
++		g_value_set_object (value, priv->certificate);
++		break;
++	default:
++		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
++	}
++}
++
++static void
++tracker_http_server_class_init (TrackerHttpServerClass *klass)
++{
++	GObjectClass *object_class = G_OBJECT_CLASS (klass);
++
++	object_class->set_property = tracker_http_server_set_property;
++	object_class->get_property = tracker_http_server_get_property;
++
++	server_signals[REQUEST] =
++		g_signal_new ("request",
++		              TRACKER_TYPE_HTTP_SERVER, 0, 0,
++		              NULL, NULL, NULL,
++		              G_TYPE_NONE, 5,
++		              G_TYPE_SOCKET_ADDRESS,
++		              G_TYPE_STRING,
++		              G_TYPE_HASH_TABLE,
++		              G_TYPE_UINT,
++		              G_TYPE_POINTER);
++
++	server_props[PROP_HTTP_PORT] =
++		g_param_spec_uint ("http-port",
++		                   "HTTP Port",
++		                   "HTTP Port",
++		                   0, G_MAXUINT,
++		                   8080,
++		                   G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
++	server_props[PROP_HTTP_CERTIFICATE] =
++		g_param_spec_object ("http-certificate",
++		                     "HTTP certificate",
++		                     "HTTP certificate",
++		                     G_TYPE_TLS_CERTIFICATE,
++		                     G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
++
++	g_object_class_install_properties (object_class,
++	                                   N_SERVER_PROPS,
++	                                   server_props);
++}
++
++static void
++tracker_http_server_init (TrackerHttpServer *server)
++{
++}
++
++TrackerHttpServer *
++tracker_http_server_new (guint             port,
++                         GTlsCertificate  *certificate,
++                         GCancellable     *cancellable,
++                         GError          **error)
++{
++	ensure_types ();
++
++	return g_initable_new (server_type,
++	                       cancellable, error,
++	                       "http-port", port,
++	                       "http-certificate", certificate,
++	                       NULL);
++}
++
++void
++tracker_http_server_response (TrackerHttpServer       *server,
++                              TrackerHttpRequest      *request,
++                              TrackerSerializerFormat  format,
++                              GInputStream            *content)
++{
++	TRACKER_HTTP_SERVER_GET_CLASS (server)->response (server,
++	                                                  request,
++	                                                  format,
++	                                                  content);
++}
++
++void
++tracker_http_server_error (TrackerHttpServer  *server,
++                           TrackerHttpRequest *request,
++                           gint                code,
++                           const gchar        *message)
++{
++	TRACKER_HTTP_SERVER_GET_CLASS (server)->error (server,
++	                                               request,
++	                                               code,
++	                                               message);
++}
++
++/* HTTP client */
++G_DEFINE_ABSTRACT_TYPE (TrackerHttpClient, tracker_http_client, G_TYPE_OBJECT)
++
++static void
++tracker_http_client_class_init (TrackerHttpClientClass *klass)
++{
++}
++
++static void
++tracker_http_client_init (TrackerHttpClient *server)
++{
++}
++
++TrackerHttpClient *
++tracker_http_client_new (void)
++{
++	ensure_types ();
++
++	return g_object_new (client_type, NULL);
++}
++
++void
++tracker_http_client_send_message_async (TrackerHttpClient   *client,
++                                        const gchar         *uri,
++                                        const gchar         *query,
++                                        guint                formats,
++                                        GCancellable        *cancellable,
++                                        GAsyncReadyCallback  callback,
++                                        gpointer             user_data)
++{
++	TRACKER_HTTP_CLIENT_GET_CLASS (client)->send_message_async (client,
++	                                                            uri,
++	                                                            query,
++	                                                            formats,
++	                                                            cancellable,
++	                                                            callback,
++	                                                            user_data);
++}
++
++GInputStream *
++tracker_http_client_send_message_finish (TrackerHttpClient        *client,
++                                         GAsyncResult             *res,
++                                         TrackerSerializerFormat  *format,
++                                         GError                  **error)
++{
++	return TRACKER_HTTP_CLIENT_GET_CLASS (client)->send_message_finish (client,
++	                                                                    res,
++	                                                                    format,
++	                                                                    error);
++}
++
++GInputStream *
++tracker_http_client_send_message (TrackerHttpClient        *client,
++                                  const gchar              *uri,
++                                  const gchar              *query,
++                                  guint                     formats,
++                                  GCancellable             *cancellable,
++                                  TrackerSerializerFormat  *format,
++                                  GError                  **error)
++{
++	return TRACKER_HTTP_CLIENT_GET_CLASS (client)->send_message (client,
++	                                                             uri,
++	                                                             query,
++	                                                             formats,
++	                                                             cancellable,
++	                                                             format,
++	                                                             error);
++}
+diff --git a/src/libtracker-sparql/remote/tracker-http.h b/src/libtracker-sparql/remote/tracker-http.h
+new file mode 100644
+index 000000000..15e3498c0
+--- /dev/null
++++ b/src/libtracker-sparql/remote/tracker-http.h
+@@ -0,0 +1,122 @@
++/*
++ * Copyright (C) 2022, Red Hat Inc.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the
++ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
++ * Boston, MA  02110-1301, USA.
++ *
++ * Author: Carlos Garnacho <carlosg@gnome.org>
++ */
++
++#ifndef TRACKER_HTTP_H
++#define TRACKER_HTTP_H
++
++#include <gio/gio.h>
++
++#ifndef MODULE
++#include <libtracker-sparql/tracker-enums-private.h>
++#endif
++
++typedef struct _TrackerHttpRequest TrackerHttpRequest;
++
++#define TRACKER_TYPE_HTTP_SERVER (tracker_http_server_get_type ())
++G_DECLARE_DERIVABLE_TYPE (TrackerHttpServer,
++                          tracker_http_server,
++                          TRACKER, HTTP_SERVER,
++                          GObject)
++
++struct _TrackerHttpServerClass {
++	GObjectClass parent_class;
++
++	void (* response) (TrackerHttpServer       *server,
++	                   TrackerHttpRequest      *request,
++	                   TrackerSerializerFormat  format,
++	                   GInputStream            *content);
++	void (* error) (TrackerHttpServer  *server,
++	                TrackerHttpRequest *request,
++	                gint                code,
++	                const gchar        *message);
++};
++
++TrackerHttpServer * tracker_http_server_new (guint             port,
++                                             GTlsCertificate  *certificate,
++                                             GCancellable     *cancellable,
++                                             GError          **error);
++
++void tracker_http_server_response (TrackerHttpServer       *server,
++                                   TrackerHttpRequest      *request,
++                                   TrackerSerializerFormat  format,
++                                   GInputStream            *content);
++
++void tracker_http_server_error (TrackerHttpServer       *server,
++                                TrackerHttpRequest      *request,
++                                gint                     code,
++                                const gchar             *message);
++
++#define TRACKER_TYPE_HTTP_CLIENT (tracker_http_client_get_type ())
++G_DECLARE_DERIVABLE_TYPE (TrackerHttpClient,
++                          tracker_http_client,
++                          TRACKER, HTTP_CLIENT,
++                          GObject)
++
++struct _TrackerHttpClientClass {
++	GObjectClass parent_class;
++
++	void (* send_message_async) (TrackerHttpClient   *client,
++	                             const gchar         *uri,
++	                             const gchar         *query,
++	                             guint                formats,
++	                             GCancellable        *cancellable,
++	                             GAsyncReadyCallback  callback,
++	                             gpointer             user_data);
++	GInputStream * (* send_message_finish) (TrackerHttpClient        *client,
++	                                        GAsyncResult             *res,
++	                                        TrackerSerializerFormat  *format,
++	                                        GError                  **error);
++	GInputStream * (* send_message) (TrackerHttpClient        *client,
++	                                 const gchar              *uri,
++	                                 const gchar              *query,
++	                                 guint                     formats,
++	                                 GCancellable             *cancellable,
++	                                 TrackerSerializerFormat  *format,
++	                                 GError                  **error);
++};
++
++TrackerHttpClient * tracker_http_client_new (void);
++
++GInputStream *
++tracker_http_client_send_message (TrackerHttpClient        *client,
++                                  const gchar              *uri,
++                                  const gchar              *query,
++                                  guint                     formats,
++                                  GCancellable             *cancellable,
++                                  TrackerSerializerFormat  *format,
++                                  GError                  **error);
++
++void
++tracker_http_client_send_message_async (TrackerHttpClient   *client,
++                                        const gchar         *uri,
++                                        const gchar         *query,
++                                        guint                formats,
++                                        GCancellable        *cancellable,
++                                        GAsyncReadyCallback  callback,
++                                        gpointer             user_data);
++
++GInputStream *
++tracker_http_client_send_message_finish (TrackerHttpClient        *client,
++                                         GAsyncResult             *res,
++                                         TrackerSerializerFormat  *format,
++                                         GError                  **error);
++
++#endif /* TRACKER_HTTP_H */
+-- 
+2.38.1
+
+
+From eacc6ab2ca3177f593983133e0664d6b11a16978 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Sat, 23 Apr 2022 13:49:44 +0200
+Subject: [PATCH 09/11] libtracker-sparql: Add HTTP module soup2/soup3
+ implementation
+
+These modules implement TrackerHttpClient and TrackerHttpServer using
+the 2 relevant major libsoup versions. These modules are built and
+installed, but dormant and unused.
+---
+ src/libtracker-sparql/meson.build             |   2 +
+ src/libtracker-sparql/remote/meson.build      |  34 ++
+ .../remote/tracker-http-module.c              | 564 ++++++++++++++++++
+ .../remote/tracker-http-module.h              |  39 ++
+ 4 files changed, 639 insertions(+)
+ create mode 100644 src/libtracker-sparql/remote/tracker-http-module.c
+ create mode 100644 src/libtracker-sparql/remote/tracker-http-module.h
+
+diff --git a/src/libtracker-sparql/meson.build b/src/libtracker-sparql/meson.build
+index c1ba14a83..2cc0eebab 100644
+--- a/src/libtracker-sparql/meson.build
++++ b/src/libtracker-sparql/meson.build
+@@ -1,3 +1,5 @@
++libtracker_sparql_modules = []
++
+ subdir('remote')
+ 
+ version_header = configure_file(
+diff --git a/src/libtracker-sparql/remote/meson.build b/src/libtracker-sparql/remote/meson.build
+index 5cc639795..ca137b85e 100644
+--- a/src/libtracker-sparql/remote/meson.build
++++ b/src/libtracker-sparql/remote/meson.build
+@@ -1,3 +1,37 @@
+ remote_files = files(
+     'tracker-http.c',
+ )
++
++module_sources = files('tracker-http-module.c')
++
++if libsoup2.found()
++    libtracker_http_soup2 = shared_module('tracker-http-soup2',
++        module_sources,
++        dependencies: [libsoup2],
++        c_args: tracker_c_args + [
++            '-include', 'config.h',
++            '-include', '../tracker-enums-private.h',
++            '-DMODULE',
++        ],
++        install: true,
++        install_dir: tracker_internal_libs_dir,
++        name_suffix: 'so',
++    )
++    libtracker_sparql_modules += libtracker_http_soup2
++endif
++
++if libsoup3.found()
++    libtracker_http_soup3 = shared_module('tracker-http-soup3',
++        module_sources,
++        dependencies: [libsoup3],
++        c_args: tracker_c_args + [
++            '-include', 'config.h',
++            '-include', '../tracker-enums-private.h',
++            '-DMODULE',
++        ],
++        install: true,
++        install_dir: tracker_internal_libs_dir,
++        name_suffix: 'so',
++    )
++    libtracker_sparql_modules += libtracker_http_soup3
++endif
+diff --git a/src/libtracker-sparql/remote/tracker-http-module.c b/src/libtracker-sparql/remote/tracker-http-module.c
+new file mode 100644
+index 000000000..421005001
+--- /dev/null
++++ b/src/libtracker-sparql/remote/tracker-http-module.c
+@@ -0,0 +1,564 @@
++/*
++ * Copyright (C) 2022, Red Hat Inc.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the
++ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
++ * Boston, MA  02110-1301, USA.
++ *
++ * Author: Carlos Garnacho <carlosg@gnome.org>
++ */
++
++#include <libsoup/soup.h>
++
++#include "tracker-http-module.h"
++
++GType
++tracker_http_client_get_type (void)
++{
++	return g_type_from_name ("TrackerHttpClient");
++}
++
++GType
++tracker_http_server_get_type (void)
++{
++	return g_type_from_name ("TrackerHttpServer");
++}
++
++static const gchar *mimetypes[] = {
++	"application/sparql-results+json",
++	"application/sparql-results+xml",
++	"text/turtle",
++	"application/trig",
++};
++
++G_STATIC_ASSERT (G_N_ELEMENTS (mimetypes) == TRACKER_N_SERIALIZER_FORMATS);
++
++#define USER_AGENT "Tracker " PACKAGE_VERSION " (https://gitlab.gnome.org/GNOME/tracker/issues/)"
++
++/* Server */
++struct _TrackerHttpRequest
++{
++	TrackerHttpServer *server;
++#if SOUP_CHECK_VERSION (2, 99, 2)
++        SoupServerMessage *message;
++#else
++	SoupMessage *message;
++#endif
++	GTask *task;
++	GInputStream *istream;
++};
++
++struct _TrackerHttpServerSoup
++{
++	TrackerHttpServer parent_instance;
++	SoupServer *server;
++	GCancellable *cancellable;
++};
++
++static void tracker_http_server_soup_initable_iface_init (GInitableIface *iface);
++
++G_DEFINE_TYPE_WITH_CODE (TrackerHttpServerSoup,
++                         tracker_http_server_soup,
++                         TRACKER_TYPE_HTTP_SERVER,
++                         G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE,
++                                                tracker_http_server_soup_initable_iface_init))
++
++
++static guint
++get_supported_formats (TrackerHttpRequest *request)
++{
++	SoupMessageHeaders *request_headers;
++	TrackerSerializerFormat i;
++	guint formats = 0;
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++        request_headers = soup_server_message_get_request_headers (request->message);
++#else
++        request_headers = request->message->request_headers;
++#endif
++
++        for (i = 0; i < TRACKER_N_SERIALIZER_FORMATS; i++) {
++	        if (soup_message_headers_header_contains (request_headers, "Accept",
++	                                                  mimetypes[i]))
++		        formats |= 1 << i;
++        }
++
++	return formats;
++}
++
++static void
++set_message_format (TrackerHttpRequest      *request,
++                    TrackerSerializerFormat  format)
++{
++	SoupMessageHeaders *response_headers;
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++        response_headers = soup_server_message_get_response_headers (request->message);
++#else
++        response_headers = request->message->response_headers;
++#endif
++        soup_message_headers_set_content_type (response_headers, mimetypes[format], NULL);
++}
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++static void
++server_callback (SoupServer        *server,
++	         SoupServerMessage *message,
++                 const char        *path,
++	         GHashTable        *query,
++                 gpointer           user_data)
++#else
++static void
++server_callback (SoupServer        *server,
++                 SoupMessage       *message,
++                 const char        *path,
++                 GHashTable        *query,
++                 SoupClientContext *client,
++                 gpointer           user_data)
++#endif
++{
++	TrackerHttpServer *http_server = user_data;
++	GSocketAddress *remote_address;
++	TrackerHttpRequest *request;
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++        remote_address = soup_server_message_get_remote_address (message);
++#else
++	remote_address = soup_client_context_get_remote_address (client);
++#endif
++
++	request = g_new0 (TrackerHttpRequest, 1);
++	request->server = http_server;
++	request->message = message;
++	soup_server_pause_message (server, message);
++
++	g_signal_emit_by_name (http_server, "request",
++	                       remote_address,
++	                       path,
++	                       query,
++	                       get_supported_formats (request),
++	                       request);
++}
++
++static gboolean
++tracker_http_server_initable_init (GInitable     *initable,
++                                   GCancellable  *cancellable,
++                                   GError       **error)
++{
++	TrackerHttpServerSoup *server = TRACKER_HTTP_SERVER_SOUP (initable);
++	GTlsCertificate *certificate;
++	guint port;
++
++	g_object_get (initable,
++	              "http-certificate", &certificate,
++	              "http-port", &port,
++	              NULL);
++
++	server->server =
++		soup_server_new ("tls-certificate", certificate,
++		                 "server-header", USER_AGENT,
++		                 NULL);
++	soup_server_add_handler (server->server,
++	                         "/sparql",
++	                         server_callback,
++	                         initable,
++	                         NULL);
++	g_clear_object (&certificate);
++
++	return soup_server_listen_all (server->server,
++	                               port,
++	                               0, error);
++}
++
++static void
++tracker_http_server_soup_initable_iface_init (GInitableIface *iface)
++{
++	iface->init = tracker_http_server_initable_init;
++}
++
++static void
++tracker_http_server_soup_error (TrackerHttpServer       *server,
++                                TrackerHttpRequest      *request,
++                                gint                     code,
++                                const gchar             *message)
++{
++	TrackerHttpServerSoup *server_soup =
++		TRACKER_HTTP_SERVER_SOUP (server);
++
++	g_assert (request->server == server);
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++	soup_server_message_set_status (request->message, code, message);
++#else
++	soup_message_set_status_full (request->message, code, message);
++#endif
++	soup_server_unpause_message (server_soup->server, request->message);
++	g_free (request);
++}
++
++static void
++handle_write_in_thread (GTask        *task,
++                        gpointer      source_object,
++                        gpointer      task_data,
++                        GCancellable *cancellable)
++{
++	TrackerHttpRequest *request = task_data;
++	gchar buffer[1000];
++	SoupMessageBody *message_body;
++	GError *error = NULL;
++	gssize count;
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++        message_body = soup_server_message_get_response_body (request->message);
++#else
++        message_body = request->message->response_body;
++#endif
++
++	for (;;) {
++		count = g_input_stream_read (request->istream,
++		                             buffer, sizeof (buffer),
++		                             cancellable, &error);
++		if (count < 0) {
++			g_task_return_error (task, error);
++			g_object_unref (task);
++			break;
++		}
++
++		soup_message_body_append (message_body,
++		                          SOUP_MEMORY_COPY,
++		                          buffer, count);
++
++		if ((gsize) count < sizeof (buffer)) {
++			break;
++		}
++	}
++
++	g_input_stream_close (request->istream, cancellable, NULL);
++	soup_message_body_complete (message_body);
++	g_task_return_boolean (task, TRUE);
++	g_object_unref (task);
++}
++
++static void
++write_finished_cb (GObject      *object,
++                   GAsyncResult *result,
++                   gpointer      user_data)
++{
++	TrackerHttpRequest *request = user_data;
++	TrackerHttpServerSoup *server =
++		TRACKER_HTTP_SERVER_SOUP (request->server);
++	GError *error = NULL;
++
++	if (!g_task_propagate_boolean (G_TASK (result), &error)) {
++		tracker_http_server_soup_error (request->server,
++		                                request,
++		                                500,
++		                                error->message);
++		g_clear_error (&error);
++	} else {
++#if SOUP_CHECK_VERSION (2, 99, 2)
++                soup_server_message_set_status (request->message, 200, NULL);
++#else
++		soup_message_set_status (request->message, 200);
++#endif
++		soup_server_unpause_message (server->server, request->message);
++		g_free (request);
++	}
++}
++
++static void
++tracker_http_server_soup_response (TrackerHttpServer       *server,
++                                   TrackerHttpRequest      *request,
++                                   TrackerSerializerFormat  format,
++                                   GInputStream            *content)
++{
++	TrackerHttpServerSoup *server_soup =
++		TRACKER_HTTP_SERVER_SOUP (server);
++
++	g_assert (request->server == server);
++
++	set_message_format (request, format);
++
++	request->istream = content;
++	request->task = g_task_new (server, server_soup->cancellable,
++	                            write_finished_cb, request);
++
++	g_task_set_task_data (request->task, request, NULL);
++	g_task_run_in_thread (request->task, handle_write_in_thread);
++}
++
++static void
++tracker_http_server_soup_finalize (GObject *object)
++{
++	TrackerHttpServerSoup *server =
++		TRACKER_HTTP_SERVER_SOUP (object);
++
++	g_cancellable_cancel (server->cancellable);
++	g_object_unref (server->cancellable);
++
++	g_clear_object (&server->server);
++
++	G_OBJECT_CLASS (tracker_http_server_soup_parent_class)->finalize (object);
++}
++
++static void
++tracker_http_server_soup_class_init (TrackerHttpServerSoupClass *klass)
++{
++	TrackerHttpServerClass *server_class = TRACKER_HTTP_SERVER_CLASS (klass);
++	GObjectClass *object_class = G_OBJECT_CLASS (klass);
++
++	object_class->finalize = tracker_http_server_soup_finalize;
++
++	server_class->response = tracker_http_server_soup_response;
++	server_class->error = tracker_http_server_soup_error;
++}
++
++static void
++tracker_http_server_soup_init (TrackerHttpServerSoup *server)
++{
++	server->cancellable = g_cancellable_new ();
++}
++
++/* Client */
++struct _TrackerHttpClientSoup
++{
++	TrackerHttpClient parent_instance;
++	SoupSession *session;
++};
++
++G_DEFINE_TYPE (TrackerHttpClientSoup, tracker_http_client_soup,
++               TRACKER_TYPE_HTTP_CLIENT)
++
++static gboolean
++get_content_type_format (SoupMessage              *message,
++                         TrackerSerializerFormat  *format,
++                         GError                  **error)
++{
++	SoupMessageHeaders *response_headers;
++	gint status_code;
++	const gchar *content_type;
++	TrackerSerializerFormat i;
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++	status_code = soup_message_get_status (message);
++	response_headers = soup_message_get_response_headers (message);
++#else
++	status_code = message->status_code;
++	response_headers = message->response_headers;
++#endif
++
++	if (status_code != SOUP_STATUS_OK) {
++		g_set_error (error,
++		             G_IO_ERROR,
++		             G_IO_ERROR_FAILED,
++		             "Unhandled status code %d",
++		             status_code);
++		return FALSE;
++	}
++
++	content_type = soup_message_headers_get_content_type (response_headers, NULL);
++
++	for (i = 0; i < TRACKER_N_SERIALIZER_FORMATS; i++) {
++		if (g_strcmp0 (content_type, mimetypes[i]) == 0) {
++			*format = i;
++			return TRUE;
++		}
++	}
++
++	g_set_error (error,
++	             G_IO_ERROR,
++	             G_IO_ERROR_FAILED,
++	             "Unhandled content type '%s'",
++	             soup_message_headers_get_content_type (response_headers, NULL));
++	return FALSE;
++}
++
++static void
++send_message_cb (GObject      *source,
++                 GAsyncResult *res,
++                 gpointer      user_data)
++{
++	GTask *task = user_data;
++	GInputStream *stream;
++	GError *error = NULL;
++	SoupMessage *message;
++
++	stream = soup_session_send_finish (SOUP_SESSION (source), res, &error);
++	message = g_task_get_task_data (task);
++
++	if (stream) {
++		TrackerSerializerFormat format;
++
++		if (!get_content_type_format (message, &format, &error)) {
++			g_task_return_error (task, error);
++		} else {
++			g_task_set_task_data (task, GUINT_TO_POINTER (format), NULL);
++			g_task_return_pointer (task, stream, g_object_unref);
++		}
++	} else {
++		g_task_return_error (task, error);
++	}
++
++	g_object_unref (task);
++}
++
++static void
++add_accepted_formats (SoupMessageHeaders *headers,
++                      guint               formats)
++{
++	TrackerSerializerFormat i;
++
++	for (i = 0; i < TRACKER_N_SERIALIZER_FORMATS; i++) {
++		if ((formats & (1 << i)) == 0)
++			continue;
++
++		soup_message_headers_append (headers, "Accept", mimetypes[i]);
++	}
++}
++
++static SoupMessage *
++create_message (const gchar *uri,
++                const gchar *query,
++                guint        formats)
++{
++	SoupMessage *message;
++	SoupMessageHeaders *headers;
++	gchar *full_uri, *query_escaped;
++
++	query_escaped = g_uri_escape_string (query, NULL, FALSE);
++	full_uri = g_strconcat (uri, "?query=", query_escaped, NULL);
++	g_free (query_escaped);
++
++	message = soup_message_new ("GET", full_uri);
++	g_free (full_uri);
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++	headers = soup_message_get_request_headers (message);
++#else
++	headers = message->request_headers;
++#endif
++
++	soup_message_headers_append (headers, "User-Agent", USER_AGENT);
++	add_accepted_formats (headers, formats);
++
++	return message;
++}
++
++static void
++tracker_http_client_soup_send_message_async (TrackerHttpClient   *client,
++                                             const gchar         *uri,
++                                             const gchar         *query,
++                                             guint                formats,
++                                             GCancellable        *cancellable,
++                                             GAsyncReadyCallback  callback,
++                                             gpointer             user_data)
++{
++	TrackerHttpClientSoup *client_soup = TRACKER_HTTP_CLIENT_SOUP (client);
++	SoupMessage *message;
++	GTask *task;
++
++	task = g_task_new (client, cancellable, callback, user_data);
++
++	message = create_message (uri, query, formats);
++	g_task_set_task_data (task, message, g_object_unref);
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++	soup_session_send_async (client_soup->session,
++	                         message,
++	                         G_PRIORITY_DEFAULT,
++	                         cancellable,
++	                         send_message_cb,
++	                         task);
++#else
++	soup_session_send_async (client_soup->session,
++	                         message,
++	                         cancellable,
++	                         send_message_cb,
++	                         task);
++#endif
++}
++
++static GInputStream *
++tracker_http_client_soup_send_message_finish (TrackerHttpClient        *client,
++                                              GAsyncResult             *res,
++                                              TrackerSerializerFormat  *format,
++                                              GError                  **error)
++{
++	if (format)
++		*format = GPOINTER_TO_UINT (g_task_get_task_data (G_TASK (res)));
++
++	return g_task_propagate_pointer (G_TASK (res), error);
++}
++
++static GInputStream *
++tracker_http_client_soup_send_message (TrackerHttpClient        *client,
++                                       const gchar              *uri,
++                                       const gchar              *query,
++                                       guint                     formats,
++                                       GCancellable             *cancellable,
++                                       TrackerSerializerFormat  *format,
++                                       GError                  **error)
++{
++	TrackerHttpClientSoup *client_soup = TRACKER_HTTP_CLIENT_SOUP (client);
++	SoupMessage *message;
++	GInputStream *stream;
++
++	message = create_message (uri, query, formats);
++
++#if SOUP_CHECK_VERSION (2, 99, 2)
++	stream = soup_session_send (client_soup->session,
++	                            message,
++	                            cancellable,
++	                            error);
++#else
++	stream = soup_session_send (client_soup->session,
++	                            message,
++	                            cancellable,
++	                            error);
++#endif
++	if (!stream)
++		return NULL;
++
++	if (!get_content_type_format (message, format, error)) {
++		g_clear_object (&stream);
++		return NULL;
++	}
++
++	return stream;
++}
++
++static void
++tracker_http_client_soup_class_init (TrackerHttpClientSoupClass *klass)
++{
++	TrackerHttpClientClass *client_class =
++		TRACKER_HTTP_CLIENT_CLASS (klass);
++
++	client_class->send_message_async = tracker_http_client_soup_send_message_async;
++	client_class->send_message_finish = tracker_http_client_soup_send_message_finish;
++	client_class->send_message = tracker_http_client_soup_send_message;
++}
++
++static void
++tracker_http_client_soup_init (TrackerHttpClientSoup *client)
++{
++	client->session = soup_session_new ();
++}
++
++void
++initialize_types (GType *client,
++                  GType *server)
++{
++	*client = TRACKER_TYPE_HTTP_CLIENT_SOUP;
++	*server = TRACKER_TYPE_HTTP_SERVER_SOUP;
++}
+diff --git a/src/libtracker-sparql/remote/tracker-http-module.h b/src/libtracker-sparql/remote/tracker-http-module.h
+new file mode 100644
+index 000000000..c013a6f35
+--- /dev/null
++++ b/src/libtracker-sparql/remote/tracker-http-module.h
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (C) 2022, Red Hat Inc.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the
++ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
++ * Boston, MA  02110-1301, USA.
++ *
++ * Author: Carlos Garnacho <carlosg@gnome.org>
++ */
++
++#ifndef TRACKER_HTTP_MODULE_H
++#define TRACKER_HTTP_MODULE_H
++
++#include "tracker-http.h"
++
++#define TRACKER_TYPE_HTTP_SERVER_SOUP (tracker_http_server_soup_get_type ())
++G_DECLARE_FINAL_TYPE (TrackerHttpServerSoup,
++                      tracker_http_server_soup,
++                      TRACKER, HTTP_SERVER_SOUP,
++                      TrackerHttpServer)
++
++#define TRACKER_TYPE_HTTP_CLIENT_SOUP (tracker_http_client_soup_get_type ())
++G_DECLARE_FINAL_TYPE (TrackerHttpClientSoup,
++                      tracker_http_client_soup,
++                      TRACKER, HTTP_CLIENT_SOUP,
++                      TrackerHttpClient)
++
++#endif /* TRACKER_HTTP_MODULE_H */
+-- 
+2.38.1
+
+
+From f1687b4f7ab2be4866424b05debac47bfcc8f9c7 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Sat, 23 Apr 2022 14:18:26 +0200
+Subject: [PATCH 10/11] libtracker-sparql: Port remote TrackerSparqlConnection
+ to new http helpers
+
+Remove the direct soup dependency by using TrackerHttpClient, that deals
+with soup itself. This also means the remote connection objects can move
+to the main library code, instead of being built as standalone modules.
+
+In consequence, the older remote modules are no longer built, and their
+loading infrastructure removed.
+---
+ src/libtracker-sparql/meson.build             |  58 +--------
+ src/libtracker-sparql/remote/meson.build      |   5 +
+ .../remote/tracker-http-module.c              |   2 -
+ .../remote/tracker-remote.vala                |  94 ++++----------
+ .../remote/tracker-remote.vapi                |  15 +++
+ src/libtracker-sparql/tracker-backend.vala    |   5 +
+ src/libtracker-sparql/tracker-remote-module.c | 115 ------------------
+ 7 files changed, 50 insertions(+), 244 deletions(-)
+ delete mode 100644 src/libtracker-sparql/tracker-remote-module.c
+
+diff --git a/src/libtracker-sparql/meson.build b/src/libtracker-sparql/meson.build
+index 2cc0eebab..74a88e224 100644
+--- a/src/libtracker-sparql/meson.build
++++ b/src/libtracker-sparql/meson.build
+@@ -24,6 +24,7 @@ libtracker_sparql_c_sources = files(
+     'tracker-cursor.c',
+     'tracker-endpoint.c',
+     'tracker-endpoint-dbus.c',
++    'tracker-endpoint-http.c',
+     'tracker-error.c',
+     'tracker-namespace-manager.c',
+     'tracker-notifier.c',
+@@ -92,66 +93,11 @@ install_data(
+ subdir('bus')
+ subdir('direct')
+ 
+-tracker_remote_dependencies = [json_glib, libxml2]
+-
+-libtracker_sparql_remote_c_sources = files (
+-    'tracker-endpoint-http.c',
+-    'remote/tracker-remote-statement.c',
+-)
+-
+-remote_sources = [
+-    libtracker_sparql_remote_c_sources,
+-    'remote/tracker-remote.vapi',
+-    'remote/tracker-json-cursor.vala',
+-    'remote/tracker-xml-cursor.vala',
+-    'remote/tracker-remote.vala',
+-]
+-
+-if libsoup2.found()
+-    libtracker_remote_soup2 = shared_module('tracker-remote-soup2', remote_sources,
+-        dependencies: tracker_remote_dependencies + [tracker_common_dep, tracker_sparql_intermediate_dep, libsoup2],
+-        c_args: tracker_c_args + [
+-            '-include', 'config.h',
+-            '-include', 'libtracker-sparql/tracker-private.h',
+-        ],
+-        vala_args: [
+-            '--debug',
+-            '--pkg', 'posix',
+-            # FIXME: Meson has code to add --target-glib automatically, but it
+-            # doesn't seem to work here.
+-            '--target-glib', glib_required,
+-            '--define=SOUP2',
+-        ],
+-        install: true,
+-        install_dir: tracker_internal_libs_dir,
+-    )
+-endif
+-
+-if libsoup3.found()
+-    libtracker_remote_soup3 = shared_module('tracker-remote-soup3', remote_sources,
+-        dependencies: tracker_remote_dependencies + [tracker_common_dep, tracker_sparql_intermediate_dep, libsoup3],
+-        c_args: tracker_c_args + [
+-            '-include', 'config.h',
+-            '-include', 'libtracker-sparql/tracker-private.h',
+-        ],
+-        vala_args: [
+-            '--debug',
+-            '--pkg', 'posix',
+-            # FIXME: Meson has code to add --target-glib automatically, but it
+-            # doesn't seem to work here.
+-            '--target-glib', glib_required,
+-        ],
+-        install: true,
+-        install_dir: tracker_internal_libs_dir,
+-    )
+-endif
+-
+ libtracker_sparql = library('tracker-sparql-' + tracker_api_version,
+     '../libtracker-common/libtracker-common.vapi',
+     '../libtracker-data/libtracker-data.vapi',
+     'direct/tracker-direct.vapi',
+     'tracker-backend.vala',
+-    'tracker-remote-module.c',
+     remote_files,
+     tracker_gresources,
+ 
+@@ -172,7 +118,7 @@ libtracker_sparql = library('tracker-sparql-' + tracker_api_version,
+ 
+     link_whole: [libtracker_sparql_intermediate],
+ 
+-    dependencies: [tracker_common_dep, tracker_sparql_bus_dep, tracker_sparql_direct_dep, tracker_sparql_vapi_dep, gmodule, libdl],
++    dependencies: [tracker_common_dep, tracker_sparql_bus_dep, tracker_sparql_direct_dep, tracker_sparql_vapi_dep, gmodule, libdl, json_glib, libxml2],
+ )
+ 
+ tracker_sparql_dep = declare_dependency(
+diff --git a/src/libtracker-sparql/remote/meson.build b/src/libtracker-sparql/remote/meson.build
+index ca137b85e..3d9e0c653 100644
+--- a/src/libtracker-sparql/remote/meson.build
++++ b/src/libtracker-sparql/remote/meson.build
+@@ -1,5 +1,10 @@
+ remote_files = files(
+     'tracker-http.c',
++    'tracker-remote-statement.c',
++    'tracker-remote.vapi',
++    'tracker-json-cursor.vala',
++    'tracker-xml-cursor.vala',
++    'tracker-remote.vala',
+ )
+ 
+ module_sources = files('tracker-http-module.c')
+diff --git a/src/libtracker-sparql/remote/tracker-http-module.c b/src/libtracker-sparql/remote/tracker-http-module.c
+index 421005001..4fa240654 100644
+--- a/src/libtracker-sparql/remote/tracker-http-module.c
++++ b/src/libtracker-sparql/remote/tracker-http-module.c
+@@ -38,8 +38,6 @@ tracker_http_server_get_type (void)
+ static const gchar *mimetypes[] = {
+ 	"application/sparql-results+json",
+ 	"application/sparql-results+xml",
+-	"text/turtle",
+-	"application/trig",
+ };
+ 
+ G_STATIC_ASSERT (G_N_ELEMENTS (mimetypes) == TRACKER_N_SERIALIZER_FORMATS);
+diff --git a/src/libtracker-sparql/remote/tracker-remote.vala b/src/libtracker-sparql/remote/tracker-remote.vala
+index f3be3147a..9c659c2ef 100644
+--- a/src/libtracker-sparql/remote/tracker-remote.vala
++++ b/src/libtracker-sparql/remote/tracker-remote.vala
+@@ -18,96 +18,48 @@
+  *
+  * Author: Carlos Garnacho <carlosg@gnome.org>
+  */
+-[CCode (cname = "PACKAGE_VERSION")]
+-extern const string PACKAGE_VERSION;
+-
+ public class Tracker.Remote.Connection : Tracker.Sparql.Connection {
+-
+-	internal Soup.Session _session;
++	internal HttpClient _client;
+ 	internal string _base_uri;
+ 
+-	const string XML_TYPE = "application/sparql-results+xml";
+-	const string JSON_TYPE = "application/sparql-results+json";
+-	const string USER_AGENT = "Tracker/" + PACKAGE_VERSION + " (https://gitlab.gnome.org/GNOME/tracker/issues/; tracker-list@lists.gnome.org) Tracker/" + PACKAGE_VERSION;
+-
+ 	public Connection (string base_uri) {
+ 		Object ();
+ 		_base_uri = base_uri;
+-		_session = new Soup.Session ();
+-	}
+-
+-	private Soup.Message create_request (string sparql) {
+-		var uri = _base_uri + "?query=" + GLib.Uri.escape_string (sparql, null, false);
+-		var message = new Soup.Message ("GET", uri);
+-#if SOUP2
+-		var headers = message.request_headers;
+-#else
+-                var headers = message.get_request_headers();
+-#endif
+-
+-		headers.append ("User-Agent", USER_AGENT);
+-		headers.append ("Accept", JSON_TYPE);
+-		headers.append ("Accept", XML_TYPE);
+-
+-		return message;
++		_client = new HttpClient();
+ 	}
+ 
+-	private Sparql.Cursor create_cursor (Soup.Message message, string document) throws GLib.Error, Sparql.Error {
+-#if SOUP2
+-                var status_code = message.status_code;
+-                var headers = message.response_headers;
+-#else
+-                var status_code = message.get_status();
+-                var headers = message.get_response_headers();
+-#endif
++	private Sparql.Cursor create_cursor (GLib.InputStream stream, SerializerFormat format) throws GLib.Error, Sparql.Error {
++		var buffer = new uchar[20 * 1024 * 1024];
++		size_t len;
++		stream.read_all (buffer, out len, null);
+ 
+-		if (status_code != Soup.Status.OK) {
+-			throw new Sparql.Error.UNSUPPORTED ("Unhandled status code %u, document is: %s",
+-			                                    status_code, document);
+-		}
+-
+-		var content_type = headers.get_content_type (null);
+-		long length = document.length;
+-
+-		if (content_type == JSON_TYPE) {
+-			return new Tracker.Remote.JsonCursor (document, length);
+-		} else if (content_type == XML_TYPE) {
+-			return new Tracker.Remote.XmlCursor (document, length);
++		if (format == SerializerFormat.JSON) {
++			return new Tracker.Remote.JsonCursor ((string) buffer, (long) len);
++		} else if (format == SerializerFormat.XML) {
++			return new Tracker.Remote.XmlCursor ((string) buffer, (long) len);
+ 		} else {
+-			throw new Sparql.Error.UNSUPPORTED ("Unknown content type '%s', document is: %s", content_type, document);
++			throw new Sparql.Error.UNSUPPORTED ("Unparseable content type, document is: %s", (string) buffer);
+ 		}
+ 	}
+ 
+ 	public override Sparql.Cursor query (string sparql, Cancellable? cancellable) throws GLib.Error, Sparql.Error, IOError {
+-		var message = create_request (sparql);
+-
+-#if SOUP2
+-		_session.send_message (message);
+-		var data = (string) message.response_body.flatten ().data;
+-#else
+-		var body = _session.send_and_read (message);
+-		var data = (string) body.get_data();
+-#endif
+-
+-		if (data == null || data == "")
+-			throw new Sparql.Error.UNSUPPORTED ("Empty response");
+-
+-		if (cancellable != null && cancellable.is_cancelled ())
+-			throw new IOError.CANCELLED ("Operation was cancelled");
++		uint flags =
++			(1 << SerializerFormat.JSON) |
++			(1 << SerializerFormat.XML);
++		SerializerFormat format;
++		var istream = _client.send_message (_base_uri, sparql, flags, cancellable, out format);
+ 
+-                return create_cursor (message, (string) data);
++		return create_cursor (istream, format);
+ 	}
+ 
+ 	public async override Sparql.Cursor query_async (string sparql, Cancellable? cancellable) throws GLib.Error, Sparql.Error, IOError {
+-		var message = create_request (sparql);
++		uint flags =
++			(1 << SerializerFormat.JSON) |
++			(1 << SerializerFormat.XML);
++		SerializerFormat format;
++		var istream = yield _client.send_message_async (_base_uri, sparql, flags, cancellable, out format);
+ 
+-#if SOUP2
+-		yield _session.send_async (message, cancellable);
+-                return create_cursor (message, (string) message.response_body.flatten ().data);
+-#else
+-                var body = yield _session.send_and_read_async (message, GLib.Priority.DEFAULT, cancellable);
+-                return create_cursor (message, (string) body.get_data());
+-#endif
++		return create_cursor (istream, format);
+ 	}
+ 
+ 	public override Sparql.Statement? query_statement (string sparql, GLib.Cancellable? cancellable = null) throws Sparql.Error {
+diff --git a/src/libtracker-sparql/remote/tracker-remote.vapi b/src/libtracker-sparql/remote/tracker-remote.vapi
+index caf018b41..d266470e1 100644
+--- a/src/libtracker-sparql/remote/tracker-remote.vapi
++++ b/src/libtracker-sparql/remote/tracker-remote.vapi
+@@ -3,4 +3,19 @@ namespace Tracker {
+ 	class Remote.Statement : Sparql.Statement {
+ 		public Statement (Sparql.Connection conn, string query) throws Sparql.Error;
+ 	}
++
++	[CCode (cheader_filename = "libtracker-sparql/remote/tracker-http.h")]
++	class HttpClient : GLib.Object {
++		public HttpClient ();
++		public async GLib.InputStream send_message_async (string uri, string query, uint formats, GLib.Cancellable? cancellable, out SerializerFormat format) throws GLib.Error;
++		public GLib.InputStream send_message (string uri, string query, uint formats, GLib.Cancellable? cancellable, out SerializerFormat format) throws GLib.Error;
++	}
++
++	[CCode (cheader_filename = "libtracker-sparql/tracker-enums-private.h")]
++        enum SerializerFormat {
++	        JSON,
++	        XML,
++	        TTL,
++	        TRIG,
++        }
+ }
+diff --git a/src/libtracker-sparql/tracker-backend.vala b/src/libtracker-sparql/tracker-backend.vala
+index af1102d5a..f2d497f6a 100644
+--- a/src/libtracker-sparql/tracker-backend.vala
++++ b/src/libtracker-sparql/tracker-backend.vala
+@@ -82,3 +82,8 @@ public static async Tracker.Sparql.Connection tracker_sparql_connection_new_asyn
+ 	yield conn.init_async (Priority.DEFAULT, cancellable);
+ 	return conn;
+ }
++
++public static Tracker.Sparql.Connection tracker_sparql_connection_remote_new (string uri_base) {
++	Tracker.get_debug_flags ();
++	return new Tracker.Remote.Connection (uri_base);
++}
+diff --git a/src/libtracker-sparql/tracker-remote-module.c b/src/libtracker-sparql/tracker-remote-module.c
+deleted file mode 100644
+index 2ca0fd181..000000000
+--- a/src/libtracker-sparql/tracker-remote-module.c
++++ /dev/null
+@@ -1,115 +0,0 @@
+-/* Yuck */
+-
+-#include "config.h"
+-
+-#include <gio/gio.h>
+-#include <tracker-sparql.h>
+-#include <dlfcn.h>
+-
+-#define LIBSOUP_2_SONAME "libsoup-2.4.so.1"
+-
+-static gboolean initialized = FALSE;
+-
+-GType (* remote_endpoint_get_type) (void) = NULL;
+-
+-TrackerEndpoint * (* remote_endpoint_new) (TrackerSparqlConnection  *sparql_connection,
+-                                           guint                     port,
+-                                           GTlsCertificate          *certificate,
+-                                           GCancellable             *cancellable,
+-                                           GError                  **error) = NULL;
+-TrackerSparqlConnection * (* remote_connection_new) (const gchar *url_base) = NULL;
+-
+-static void
+-tracker_init_remote (void)
+-{
+-	const char *modules[3] = { 0 };
+-	gpointer handle = NULL;
+-	gint i = 0;
+-
+-	if (initialized)
+-		return;
+-
+-	g_assert (g_module_supported ());
+-
+-#ifdef HAVE_RTLD_NOLOAD
+-	if ((handle = dlopen (LIBSOUP_2_SONAME, RTLD_NOW | RTLD_NOLOAD))) {
+-		/* Force load of soup2 module */
+-		modules[0] = "libtracker-remote-soup2.so";
+-	} else
+-#endif
+-	{
+-		modules[0] = "libtracker-remote-soup3.so";
+-		modules[1] = "libtracker-remote-soup2.so";
+-	}
+-
+-	g_clear_pointer (&handle, dlclose);
+-
+-	for (i = 0; modules[i]; i++) {
+-		GModule *remote_module;
+-		gchar *module_path;
+-
+-		if (g_strcmp0 (g_get_current_dir (), BUILDROOT) == 0) {
+-			/* Detect in-build runtime of this code, this may happen
+-			 * building introspection information or running tests.
+-			 * We want the in-tree modules to be loaded then.
+-			 */
+-			module_path = g_strdup_printf (BUILD_LIBDIR "/%s", modules[i]);
+-		} else {
+-			module_path = g_strdup_printf (PRIVATE_LIBDIR "/%s", modules[i]);
+-		}
+-
+-		remote_module = g_module_open (module_path,
+-		                               G_MODULE_BIND_LAZY |
+-		                               G_MODULE_BIND_LOCAL);
+-		g_free (module_path);
+-
+-		if (!remote_module)
+-			continue;
+-
+-		if (!g_module_symbol (remote_module, "tracker_endpoint_http_get_type", (gpointer *) &remote_endpoint_get_type) ||
+-		    !g_module_symbol (remote_module, "tracker_endpoint_http_new", (gpointer *) &remote_endpoint_new) ||
+-		    !g_module_symbol (remote_module, "tracker_remote_connection_new", (gpointer *) &remote_connection_new)) {
+-			g_clear_pointer (&remote_module, g_module_close);
+-			continue;
+-		}
+-
+-		g_module_make_resident (remote_module);
+-		g_module_close (remote_module);
+-		initialized = TRUE;
+-		return;
+-	}
+-
+-	g_assert_not_reached ();
+-}
+-
+-GType
+-tracker_endpoint_http_get_type (void)
+-{
+-	tracker_init_remote ();
+-
+-	return remote_endpoint_get_type ();
+-}
+-
+-TrackerEndpointHttp *
+-tracker_endpoint_http_new (TrackerSparqlConnection  *sparql_connection,
+-                           guint                     port,
+-                           GTlsCertificate          *certificate,
+-                           GCancellable             *cancellable,
+-                           GError                  **error)
+-{
+-	tracker_init_remote ();
+-
+-	return (TrackerEndpointHttp *) remote_endpoint_new (sparql_connection,
+-	                                                    port,
+-	                                                    certificate,
+-	                                                    cancellable,
+-	                                                    error);
+-}
+-
+-TrackerSparqlConnection *
+-tracker_sparql_connection_remote_new (const gchar *url_base)
+-{
+-	tracker_init_remote ();
+-
+-	return remote_connection_new (url_base);
+-}
+-- 
+2.38.1
+
+
+From 4d6d43495ce831d9f3b52f2f0142a475edad35fe Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Sat, 23 Apr 2022 14:01:12 +0200
+Subject: [PATCH 11/11] libtracker-sparql: Port TrackerEndpointHttp to new HTTP
+ module
+
+Use TrackerHttpServer to implement HTTP endpoints, and remove all
+soup specific code. This also means the TrackerEndpointHttp object
+and type can move out of the elder soup modules, and into the main
+library code. All soup 2/3 handling will stay underneath.
+---
+ src/libtracker-sparql/tracker-endpoint-http.c | 238 ++++--------------
+ 1 file changed, 55 insertions(+), 183 deletions(-)
+
+diff --git a/src/libtracker-sparql/tracker-endpoint-http.c b/src/libtracker-sparql/tracker-endpoint-http.c
+index 5aa82b03d..2a45f1114 100644
+--- a/src/libtracker-sparql/tracker-endpoint-http.c
++++ b/src/libtracker-sparql/tracker-endpoint-http.c
+@@ -25,15 +25,13 @@
+ #include "tracker-serializer.h"
+ #include "tracker-private.h"
+ 
+-#include <libsoup/soup.h>
+-
+-#define SERVER_HEADER "Tracker " PACKAGE_VERSION " (https://gitlab.gnome.org/GNOME/tracker/issues/)"
++#include "remote/tracker-http.h"
+ 
+ typedef struct _TrackerEndpointHttp TrackerEndpointHttp;
+ 
+ struct _TrackerEndpointHttp {
+ 	TrackerEndpoint parent_instance;
+-	SoupServer *server;
++	TrackerHttpServer *server;
+ 	GTlsCertificate *certificate;
+ 	guint port;
+ 	GCancellable *cancellable;
+@@ -41,11 +39,7 @@ struct _TrackerEndpointHttp {
+ 
+ typedef struct {
+ 	TrackerEndpoint *endpoint;
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-        SoupServerMessage *message;
+-#else
+-	SoupMessage *message;
+-#endif
++	TrackerHttpRequest *request;
+ 	GInputStream *istream;
+ 	GTask *task;
+ 	TrackerSerializerFormat format;
+@@ -63,9 +57,6 @@ enum {
+ 	N_PROPS
+ };
+ 
+-#define XML_TYPE "application/sparql-results+xml"
+-#define JSON_TYPE "application/sparql-results+json"
+-
+ static GParamSpec *props[N_PROPS];
+ static guint signals[N_SIGNALS];
+ 
+@@ -81,80 +72,6 @@ request_free (Request *request)
+ 	g_free (request);
+ }
+ 
+-static void
+-handle_request_in_thread (GTask        *task,
+-                          gpointer      source_object,
+-                          gpointer      task_data,
+-                          GCancellable *cancellable)
+-{
+-	Request *request = task_data;
+-	gchar *buffer[1000];
+-	gboolean finished = FALSE;
+-	SoupMessageBody *message_body;
+-	GError *error = NULL;
+-	gssize count;
+-
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-        message_body = soup_server_message_get_response_body (request->message);
+-#else
+-        message_body = request->message->response_body;
+-#endif
+-
+-	while (!finished) {
+-		count = g_input_stream_read (request->istream,
+-		                             buffer, sizeof (buffer),
+-		                             cancellable, &error);
+-		if (count == -1) {
+-			g_task_return_error (task, error);
+-			break;
+-		} else if (count < sizeof (buffer)) {
+-			finished = TRUE;
+-		}
+-
+-		soup_message_body_append (message_body,
+-		                          SOUP_MEMORY_COPY,
+-		                          buffer, count);
+-	}
+-
+-	g_input_stream_close (request->istream, cancellable, NULL);
+-	soup_message_body_complete (message_body);
+-	g_task_return_boolean (task, TRUE);
+-}
+-
+-static void
+-request_finished_cb (GObject      *object,
+-                     GAsyncResult *result,
+-                     gpointer      user_data)
+-{
+-	Request *request = user_data;
+-	TrackerEndpointHttp *endpoint_http;
+-	GError *error = NULL;
+-
+-	endpoint_http = TRACKER_ENDPOINT_HTTP (request->endpoint);
+-
+-	if (!g_task_propagate_boolean (G_TASK (result), &error)) {
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-                soup_server_message_set_status (request->message, 500,
+-                                                error ? error->message :
+-                                                "No error message");
+-#else
+-		soup_message_set_status_full (request->message, 500,
+-		                              error ? error->message :
+-		                              "No error message");
+-#endif
+-		g_clear_error (&error);
+-	} else {
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-                soup_server_message_set_status (request->message, 200, NULL);
+-#else
+-		soup_message_set_status (request->message, 200);
+-#endif
+-	}
+-
+-	soup_server_unpause_message (endpoint_http->server, request->message);
+-	request_free (request);
+-}
+-
+ static void
+ query_async_cb (GObject      *object,
+                 GAsyncResult *result,
+@@ -163,141 +80,98 @@ query_async_cb (GObject      *object,
+ 	TrackerEndpointHttp *endpoint_http;
+ 	TrackerSparqlCursor *cursor;
+ 	Request *request = user_data;
++	GInputStream *stream;
+ 	GError *error = NULL;
+ 
+ 	endpoint_http = TRACKER_ENDPOINT_HTTP (request->endpoint);
+ 	cursor = tracker_sparql_connection_query_finish (TRACKER_SPARQL_CONNECTION (object),
+ 	                                                 result, &error);
+ 	if (error) {
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-                soup_server_message_set_status (request->message, 500, error->message);
+-#else
+-		soup_message_set_status_full (request->message, 500, error->message);
+-#endif
+-		soup_server_unpause_message (endpoint_http->server, request->message);
++		tracker_http_server_error (endpoint_http->server,
++		                           request->request,
++		                           500,
++		                           error->message);
+ 		request_free (request);
++		g_error_free (error);
+ 		return;
+ 	}
+ 
+-	request->istream = tracker_serializer_new (cursor, request->format);
+-	request->task = g_task_new (endpoint_http, endpoint_http->cancellable,
+-	                            request_finished_cb, request);
+-	g_task_set_task_data (request->task, request, NULL);
+-
+-	g_task_run_in_thread (request->task, handle_request_in_thread);
++	stream = tracker_serializer_new (cursor, request->format);
++	/* Consumes the input stream */
++	tracker_http_server_response (endpoint_http->server,
++	                              request->request,
++	                              request->format,
++	                              stream);
++	request_free (request);
+ }
+ 
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+ static gboolean
+-pick_format (SoupServerMessage       *message,
++pick_format (guint                    formats,
+              TrackerSerializerFormat *format)
+-#else
+-static gboolean
+-pick_format (SoupMessage             *message,
+-             TrackerSerializerFormat *format)
+-#endif
+ {
+-	SoupMessageHeaders *request_headers, *response_headers;
+-
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-        request_headers = soup_server_message_get_request_headers (message);
+-        response_headers = soup_server_message_get_response_headers (message);
+-#else
+-        request_headers = message->request_headers;
+-        response_headers = message->response_headers;
+-#endif
+-
+-	if (soup_message_headers_header_contains (request_headers, "Accept", JSON_TYPE)) {
+-		soup_message_headers_set_content_type (response_headers, JSON_TYPE, NULL);
+-		*format = TRACKER_SERIALIZER_FORMAT_JSON;
+-		return TRUE;
+-	} else if (soup_message_headers_header_contains (request_headers, "Accept", XML_TYPE)) {
+-		soup_message_headers_set_content_type (response_headers, XML_TYPE, NULL);
+-		*format = TRACKER_SERIALIZER_FORMAT_XML;
+-		return TRUE;
+-	} else {
+-		return FALSE;
++	TrackerSerializerFormat i;
++
++	for (i = 0; i < TRACKER_N_SERIALIZER_FORMATS; i++) {
++		if ((formats & (1 << i)) != 0) {
++			*format = i;
++			return TRUE;
++		}
+ 	}
+ 
+ 	return FALSE;
+ }
+ 
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+ static void
+-server_callback (SoupServer        *server,
+-	         SoupServerMessage *message,
+-                 const char        *path,
+-	         GHashTable        *query,
+-                 gpointer           user_data)
+-#else
+-static void
+-server_callback (SoupServer        *server,
+-                 SoupMessage       *message,
+-                 const char        *path,
+-                 GHashTable        *query,
+-                 SoupClientContext *client,
+-                 gpointer           user_data)
+-#endif
++http_server_request_cb (TrackerHttpServer  *server,
++                        GSocketAddress     *remote_address,
++                        const gchar        *path,
++                        GHashTable         *params,
++                        guint               formats,
++                        TrackerHttpRequest *request,
++                        gpointer            user_data)
+ {
+ 	TrackerEndpoint *endpoint = user_data;
+ 	TrackerSparqlConnection *conn;
+ 	TrackerSerializerFormat format;
+-	GSocketAddress *remote_address;
+ 	gboolean block = FALSE;
+ 	const gchar *sparql;
+-	Request *request;
++	Request *data;
+ 
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-        remote_address = soup_server_message_get_remote_address (message);
+-#else
+-	remote_address = soup_client_context_get_remote_address (client);
+-#endif
+ 	if (remote_address) {
+ 		g_signal_emit (endpoint, signals[BLOCK_REMOTE_ADDRESS], 0,
+ 		               remote_address, &block);
+ 	}
+ 
+ 	if (block) {
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-                soup_server_message_set_status (message, 500, "Remote address disallowed");
+-#else
+-		soup_message_set_status_full (message, 500, "Remote address disallowed");
+-#endif
++		tracker_http_server_error (server, request, 500,
++		                           "Remote address disallowed");
+ 		return;
+ 	}
+ 
+-	sparql = g_hash_table_lookup (query, "query");
++	sparql = g_hash_table_lookup (params, "query");
+ 	if (!sparql) {
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-                soup_server_message_set_status (message, 500, "No query given");
+-#else
+-		soup_message_set_status_full (message, 500, "No query given");
+-#endif
++		tracker_http_server_error (server, request, 500,
++		                           "No query given");
+ 		return;
+ 	}
+ 
+-	if (!pick_format (message, &format)) {
+-#if SOUP_CHECK_VERSION (2, 99, 2)
+-                soup_server_message_set_status (message, 500, "No recognized accepted formats");
+-#else
+-		soup_message_set_status_full (message, 500, "No recognized accepted formats");
+-#endif
++	if (!pick_format (formats, &format)) {
++		tracker_http_server_error (server, request, 500,
++		                           "No recognized accepted formats");
+ 		return;
+ 	}
+ 
+-	request = g_new0 (Request, 1);
+-	request->endpoint = endpoint;
+-	request->message = message;
+-	request->format = format;
++	data = g_new0 (Request, 1);
++	data->endpoint = endpoint;
++	data->request = request;
++	data->format = format;
+ 
+ 	conn = tracker_endpoint_get_sparql_connection (endpoint);
+ 	tracker_sparql_connection_query_async (conn,
+ 	                                       sparql,
+ 	                                       NULL,
+ 	                                       query_async_cb,
+-	                                       request);
+-
+-	soup_server_pause_message (server, message);
++	                                       data);
+ }
+ 
+ static gboolean
+@@ -309,18 +183,16 @@ tracker_endpoint_http_initable_init (GInitable     *initable,
+ 	TrackerEndpointHttp *endpoint_http = TRACKER_ENDPOINT_HTTP (endpoint);
+ 
+ 	endpoint_http->server =
+-		soup_server_new ("tls-certificate", endpoint_http->certificate,
+-		                 "server-header", SERVER_HEADER,
+-		                 NULL);
+-	soup_server_add_handler (endpoint_http->server,
+-	                         "/sparql",
+-	                         server_callback,
+-	                         initable,
+-	                         NULL);
+-
+-	return soup_server_listen_all (endpoint_http->server,
+-	                               endpoint_http->port,
+-	                               0, error);
++		tracker_http_server_new (endpoint_http->port,
++		                         endpoint_http->certificate,
++		                         cancellable,
++		                         error);
++	if (!endpoint_http->server)
++		return FALSE;
++
++	g_signal_connect (endpoint_http->server, "request",
++	                  G_CALLBACK (http_server_request_cb), initable);
++	return TRUE;
+ }
+ 
+ static void
+-- 
+2.38.1
+

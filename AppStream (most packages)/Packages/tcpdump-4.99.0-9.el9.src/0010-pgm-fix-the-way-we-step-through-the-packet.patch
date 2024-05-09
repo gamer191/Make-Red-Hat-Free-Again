@@ -1,0 +1,154 @@
+From 9ce43fa1e06b1ac2ddf1630a0e90337136ea27c5 Mon Sep 17 00:00:00 2001
+From: Guy Harris <gharris@sonic.net>
+Date: Mon, 21 Aug 2023 23:15:14 -0700
+Subject: [PATCH] pgm: fix the way we step through the packet.
+
+Step past the PGM header after we finish processing it and before we
+process the message-type-specific header.
+
+Step past the message-type-specific fixed-length header before we
+process the stuff after that header.
+
+This makes the code a bit clearer (by explicitly advancing bp by the
+size of the stuff we just processed, rather than doing so by trickery
+involving adding 1 to a pointer to a structure), and fixes the
+processing of message types that don't have a message-type-specific
+header (where we weren't stepping past the PGM header).  It also affects
+the way we handle messages of an unknown type.
+
+(cherry picked from commit 9a3eebde95cf1032ac68ae4312e2db14bb1fe58d)
+---
+ print-pgm.c               | 29 +++++++++++++++--------------
+ tests/pgm_opts_asan.out   |  2 +-
+ tests/pgm_opts_asan_2.out |  2 +-
+ tests/pgm_opts_asan_3.out |  2 +-
+ 4 files changed, 18 insertions(+), 17 deletions(-)
+
+diff --git a/print-pgm.c b/print-pgm.c
+index ccb0b46a..8a7e215b 100644
+--- a/print-pgm.c
++++ b/print-pgm.c
+@@ -220,13 +220,14 @@ pgm_print(netdissect_options *ndo,
+ 		     pgm->pgm_gsid[3],
+                      pgm->pgm_gsid[4],
+                      pgm->pgm_gsid[5]);
++	bp += sizeof(struct pgm_header);
+ 	switch (pgm_type_val) {
+ 	case PGM_SPM: {
+ 	    const struct pgm_spm *spm;
+ 
+-	    spm = (const struct pgm_spm *)(pgm + 1);
++	    spm = (const struct pgm_spm *)bp;
+ 	    ND_TCHECK_SIZE(spm);
+-	    bp = (const u_char *) (spm + 1);
++	    bp += sizeof(struct pgm_spm);
+ 
+ 	    switch (GET_BE_U_2(spm->pgms_nla_afi)) {
+ 	    case AFNUM_INET:
+@@ -256,9 +257,9 @@ pgm_print(netdissect_options *ndo,
+ 	    const struct pgm_poll *pgm_poll;
+ 	    uint32_t ivl, rnd, mask;
+ 
+-	    pgm_poll = (const struct pgm_poll *)(pgm + 1);
++	    pgm_poll = (const struct pgm_poll *)bp;
+ 	    ND_TCHECK_SIZE(pgm_poll);
+-	    bp = (const u_char *) (pgm_poll + 1);
++	    bp += sizeof(struct pgm_poll);
+ 
+ 	    switch (GET_BE_U_2(pgm_poll->pgmp_nla_afi)) {
+ 	    case AFNUM_INET:
+@@ -294,35 +295,35 @@ pgm_print(netdissect_options *ndo,
+ 	case PGM_POLR: {
+ 	    const struct pgm_polr *polr_msg;
+ 
+-	    polr_msg = (const struct pgm_polr *)(pgm + 1);
++	    polr_msg = (const struct pgm_polr *)bp;
+ 	    ND_TCHECK_SIZE(polr_msg);
+ 	    ND_PRINT("POLR seq %u round %u",
+ 			 GET_BE_U_4(polr_msg->pgmp_seq),
+ 			 GET_BE_U_2(polr_msg->pgmp_round));
+-	    bp = (const u_char *) (polr_msg + 1);
++	    bp += sizeof(struct pgm_polr);
+ 	    break;
+ 	}
+ 	case PGM_ODATA: {
+ 	    const struct pgm_data *odata;
+ 
+-	    odata = (const struct pgm_data *)(pgm + 1);
++	    odata = (const struct pgm_data *)bp;
+ 	    ND_TCHECK_SIZE(odata);
+ 	    ND_PRINT("ODATA trail %u seq %u",
+ 			 GET_BE_U_4(odata->pgmd_trailseq),
+ 			 GET_BE_U_4(odata->pgmd_seq));
+-	    bp = (const u_char *) (odata + 1);
++	    bp += sizeof(struct pgm_data);
+ 	    break;
+ 	}
+ 
+ 	case PGM_RDATA: {
+ 	    const struct pgm_data *rdata;
+ 
+-	    rdata = (const struct pgm_data *)(pgm + 1);
++	    rdata = (const struct pgm_data *)bp;
+ 	    ND_TCHECK_SIZE(rdata);
+ 	    ND_PRINT("RDATA trail %u seq %u",
+ 			 GET_BE_U_4(rdata->pgmd_trailseq),
+ 			 GET_BE_U_4(rdata->pgmd_seq));
+-	    bp = (const u_char *) (rdata + 1);
++	    bp += sizeof(struct pgm_data);
+ 	    break;
+ 	}
+ 
+@@ -332,9 +333,9 @@ pgm_print(netdissect_options *ndo,
+ 	    const struct pgm_nak *nak;
+ 	    char source_buf[INET6_ADDRSTRLEN], group_buf[INET6_ADDRSTRLEN];
+ 
+-	    nak = (const struct pgm_nak *)(pgm + 1);
++	    nak = (const struct pgm_nak *)bp;
+ 	    ND_TCHECK_SIZE(nak);
+-	    bp = (const u_char *) (nak + 1);
++	    bp += sizeof(struct pgm_nak);
+ 
+ 	    /*
+ 	     * Skip past the source, saving info along the way
+@@ -401,11 +402,11 @@ pgm_print(netdissect_options *ndo,
+ 	case PGM_ACK: {
+ 	    const struct pgm_ack *ack;
+ 
+-	    ack = (const struct pgm_ack *)(pgm + 1);
++	    ack = (const struct pgm_ack *)bp;
+ 	    ND_TCHECK_SIZE(ack);
+ 	    ND_PRINT("ACK seq %u",
+ 			 GET_BE_U_4(ack->pgma_rx_max_seq));
+-	    bp = (const u_char *) (ack + 1);
++	    bp += sizeof(struct pgm_ack);
+ 	    break;
+ 	}
+ 
+diff --git a/tests/pgm_opts_asan.out b/tests/pgm_opts_asan.out
+index 6cc9b065..7527bda3 100644
+--- a/tests/pgm_opts_asan.out
++++ b/tests/pgm_opts_asan.out
+@@ -1,2 +1,2 @@
+     1  00:04:16.587271427 IP (tos 0x41,ECT(1), id 0, offset 0, flags [none], proto PGM (113), length 32639, options (unknown 89 [bad length 232]), bad cksum 5959 (->9eb9)!)
+-    128.121.89.107 > 89.89.16.63: 128.121.89.107.4 > 89.89.16.63.225: PGM, length 0 0x3414eb1f0022 UNKNOWN type 0x1f OPTS LEN 225 OPT_1F [13]  OPT_06 [26]  PATH_NLA [4] [|pgm]
++    128.121.89.107 > 89.89.16.63: 128.121.89.107.4 > 89.89.16.63.225: PGM, length 0 0x3414eb1f0022 UNKNOWN type 0x1f[Bad OPT_LENGTH option, length 0 != 4]
+diff --git a/tests/pgm_opts_asan_2.out b/tests/pgm_opts_asan_2.out
+index 1785a571..53830c85 100644
+--- a/tests/pgm_opts_asan_2.out
++++ b/tests/pgm_opts_asan_2.out
+@@ -1,2 +1,2 @@
+     1  00:04:16.587271427 IP (tos 0x41,ECT(1), id 0, offset 0, flags [none], proto PGM (113), length 32639, options (unknown 89 [bad length 232]), bad cksum 5959 (->96b9)!)
+-    128.121.89.107 > 89.89.16.63: 128.121.89.107.4 > 89.89.16.63.225: PGM, length 0 0x3414eb1f0022 UNKNOWN type 0x1f OPTS LEN 225 OPT_1F [13]  OPT_06 [26] [Bad OPT_PGMCC_DATA option, length 4 < 12]
++    128.121.89.107 > 89.89.16.63: 128.121.89.107.4 > 89.89.16.63.225: PGM, length 0 0x3414eb1f0022 UNKNOWN type 0x1f[Bad OPT_LENGTH option, length 0 != 4]
+diff --git a/tests/pgm_opts_asan_3.out b/tests/pgm_opts_asan_3.out
+index 2e35f2fa..b8864e29 100644
+--- a/tests/pgm_opts_asan_3.out
++++ b/tests/pgm_opts_asan_3.out
+@@ -1,2 +1,2 @@
+     1  00:04:16.587271427 IP (tos 0x41,ECT(1), id 0, offset 0, flags [none], proto PGM (113), length 32639, options (unknown 89 [bad length 232]), bad cksum 5959 (->f814)!)
+-    128.121.89.16 > 0.89.16.63: 128.121.89.16.4 > 0.89.16.63.225: PGM, length 0 0x3414eb1f0022 UNKNOWN type 0x1f OPTS LEN 225 OPT_1F [13]  OPT_06 [26] [Bad OPT_REDIRECT option, length 4 < 8]
++    128.121.89.16 > 0.89.16.63: 128.121.89.16.4 > 0.89.16.63.225: PGM, length 0 0x3414eb1f0022 UNKNOWN type 0x1f[Bad OPT_LENGTH option, length 0 != 4]
+-- 
+2.41.0
+
