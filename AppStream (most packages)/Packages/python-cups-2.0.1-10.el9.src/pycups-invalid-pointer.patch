@@ -1,0 +1,21 @@
+diff --git a/cupsconnection.c b/cupsconnection.c
+index 132dd25..d54a7fa 100644
+--- a/cupsconnection.c
++++ b/cupsconnection.c
+@@ -3827,7 +3827,7 @@ Connection_printTestPage (Connection *self, PyObject *args, PyObject *kwds)
+   const char *datadir;
+   char filename[PATH_MAX];
+   char uri[HTTP_MAX_URI];
+-  ipp_t *request, *answer;
++  ipp_t *request, *answer = NULL;
+   ipp_attribute_t *attr;
+   char *resource;
+   int jobid = 0;
+@@ -3923,6 +3923,7 @@ Connection_printTestPage (Connection *self, PyObject *args, PyObject *kwds)
+     Connection_end_allow_threads (self);
+     if (answer && ippGetStatusCode (answer) == IPP_NOT_POSSIBLE) {
+       ippDelete (answer);
++      answer = NULL;
+       // Perhaps it's a class, not a printer.
+       construct_uri (uri, sizeof (uri),
+ 		     "ipp://localhost/classes/", printer);

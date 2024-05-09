@@ -1,0 +1,134 @@
+diff --color -Nur psutil-release-5.8.0.orig/psutil/tests/test_linux.py psutil-release-5.8.0/psutil/tests/test_linux.py
+--- psutil-release-5.8.0.orig/psutil/tests/test_linux.py	2020-12-18 16:45:00.000000000 -0800
++++ psutil-release-5.8.0/psutil/tests/test_linux.py	2021-01-10 15:38:31.104890945 -0800
+@@ -661,14 +661,13 @@
+             value = int(value.split('-')[1]) + 1
+             self.assertEqual(psutil.cpu_count(), value)
+ 
+-    @unittest.skipIf(not os.path.exists("/sys/devices/system/cpu"),
+-                     "/sys/devices/system/cpu does not exist")
++    @unittest.skip("Unreliable on mock")
+     def test_against_sysdev_cpu_num(self):
+         ls = os.listdir("/sys/devices/system/cpu")
+         count = len([x for x in ls if re.search(r"cpu\d+$", x) is not None])
+         self.assertEqual(psutil.cpu_count(), count)
+ 
+-    @unittest.skipIf(not which("nproc"), "nproc utility not available")
++    @unittest.skip("Unreliable on mock")
+     def test_against_nproc(self):
+         num = int(sh("nproc --all"))
+         self.assertEqual(psutil.cpu_count(logical=True), num)
+@@ -713,7 +712,7 @@
+                 m.called
+ 
+ 
+-@unittest.skipIf(not LINUX, "LINUX only")
++@unittest.skip("Unreliable in mock")
+ class TestSystemCPUCountPhysical(PsutilTestCase):
+ 
+     @unittest.skipIf(not which("lscpu"), "lscpu utility not available")
+@@ -745,7 +744,7 @@
+ @unittest.skipIf(not LINUX, "LINUX only")
+ class TestSystemCPUFrequency(PsutilTestCase):
+ 
+-    @unittest.skipIf(not HAS_CPU_FREQ, "not supported")
++    @unittest.skip("Unreliable in mock")
+     def test_emulate_use_second_file(self):
+         # https://github.com/giampaolo/psutil/issues/981
+         def path_exists_mock(path):
+@@ -759,7 +758,7 @@
+                         create=True):
+             assert psutil.cpu_freq()
+ 
+-    @unittest.skipIf(not HAS_CPU_FREQ, "not supported")
++    @unittest.skip("Unreliable in mock")
+     def test_emulate_use_cpuinfo(self):
+         # Emulate a case where /sys/devices/system/cpu/cpufreq* does not
+         # exist and /proc/cpuinfo is used instead.
+@@ -888,7 +887,7 @@
+                     self.assertEqual(freq.current, 200)
+ 
+ 
+-@unittest.skipIf(not LINUX, "LINUX only")
++@unittest.skip("Unreliable in mock")
+ class TestSystemCPUStats(PsutilTestCase):
+ 
+     def test_ctx_switches(self):
+@@ -2126,13 +2125,14 @@
+         value = tuple(map(int, value.split()[1:4]))
+         self.assertEqual(self.proc.gids(), value)
+ 
+-    @retry_on_failure()
++    @unittest.skip("Unreliable in mock")
+     def test_num_ctx_switches(self):
+         value = self.read_status_file("voluntary_ctxt_switches:")
+         self.assertEqual(self.proc.num_ctx_switches().voluntary, value)
+         value = self.read_status_file("nonvoluntary_ctxt_switches:")
+         self.assertEqual(self.proc.num_ctx_switches().involuntary, value)
+ 
++    @unittest.skip("Unreliable in mock")
+     def test_cpu_affinity(self):
+         value = self.read_status_file("Cpus_allowed_list:")
+         if '-' in str(value):
+diff --color -Nur psutil-release-5.8.0.orig/psutil/tests/test_misc.py psutil-release-5.8.0/psutil/tests/test_misc.py
+--- psutil-release-5.8.0.orig/psutil/tests/test_misc.py	2020-12-18 16:45:00.000000000 -0800
++++ psutil-release-5.8.0/psutil/tests/test_misc.py	2021-01-10 15:38:31.104890945 -0800
+@@ -355,7 +355,7 @@
+ 
+     def test_setup_script(self):
+         setup_py = os.path.join(ROOT_DIR, 'setup.py')
+-        if CI_TESTING and not os.path.exists(setup_py):
++        if not os.path.exists(setup_py):
+             return self.skipTest("can't find setup.py")
+         module = import_module_by_path(setup_py)
+         self.assertRaises(SystemExit, module.setup)
+diff --color -Nur psutil-release-5.8.0.orig/psutil/tests/test_system.py psutil-release-5.8.0/psutil/tests/test_system.py
+--- psutil-release-5.8.0.orig/psutil/tests/test_system.py	2020-12-18 16:45:00.000000000 -0800
++++ psutil-release-5.8.0/psutil/tests/test_system.py	2021-01-10 15:38:31.105890946 -0800
+@@ -198,7 +198,7 @@
+         self.assertGreater(bt, 0)
+         self.assertLess(bt, time.time())
+ 
+-    @unittest.skipIf(CI_TESTING and not psutil.users(), "unreliable on CI")
++    @unittest.skipIf(not psutil.users(), "unreliable on CI")
+     def test_users(self):
+         users = psutil.users()
+         self.assertNotEqual(users, [])
+@@ -510,7 +510,7 @@
+             if not AIX and name in ('ctx_switches', 'interrupts'):
+                 self.assertGreater(value, 0)
+ 
+-    @unittest.skipIf(not HAS_CPU_FREQ, "not suported")
++    @unittest.skip("Unreliable in mock")
+     def test_cpu_freq(self):
+         def check_ls(ls):
+             for nt in ls:
+@@ -579,6 +579,7 @@
+     def test_disk_usage_bytes(self):
+         psutil.disk_usage(b'.')
+ 
++    @unittest.skip("unreliable on CI")
+     def test_disk_partitions(self):
+         def check_ntuple(nt):
+             self.assertIsInstance(nt.device, str)
+@@ -828,7 +829,7 @@
+ 
+ class TestSensorsAPIs(PsutilTestCase):
+ 
+-    @unittest.skipIf(not HAS_SENSORS_TEMPERATURES, "not supported")
++    @unittest.skip("Unreliable in mock")
+     def test_sensors_temperatures(self):
+         temps = psutil.sensors_temperatures()
+         for name, entries in temps.items():
+diff --color -Nur psutil-release-5.8.0.orig/psutil/tests/test_testutils.py psutil-release-5.8.0/psutil/tests/test_testutils.py
+--- psutil-release-5.8.0.orig/psutil/tests/test_testutils.py	2020-12-18 16:45:00.000000000 -0800
++++ psutil-release-5.8.0/psutil/tests/test_testutils.py	2021-01-10 15:48:14.240695423 -0800
+@@ -364,7 +364,7 @@
+         self.assertRaises(ValueError, self.execute, lambda: 0, retries=-1)
+ 
+     @retry_on_failure()
+-    @unittest.skipIf(CI_TESTING, "skipped on CI")
++    @unittest.skip("Unreliable in mock")
+     def test_leak_mem(self):
+         ls = []
+ 

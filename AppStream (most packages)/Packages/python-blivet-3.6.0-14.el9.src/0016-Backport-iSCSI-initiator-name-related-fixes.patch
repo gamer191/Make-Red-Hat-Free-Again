@@ -1,0 +1,383 @@
+From 2d26f69abc2d793e753c0cddb3086264ca2b4e71 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Mon, 6 Mar 2023 10:51:42 +0100
+Subject: [PATCH 1/5] Allow changing iSCSI initiator name after setting it
+
+Resolves: rhbz#2221935
+---
+ blivet/iscsi.py | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/blivet/iscsi.py b/blivet/iscsi.py
+index 86451db3..0d063f2a 100644
+--- a/blivet/iscsi.py
++++ b/blivet/iscsi.py
+@@ -212,14 +212,23 @@ class iSCSI(object):
+     @initiator.setter
+     @storaged_iscsi_required(critical=True, eval_mode=util.EvalMode.onetime)
+     def initiator(self, val):
+-        if self.initiator_set and val != self._initiator:
+-            raise ValueError(_("Unable to change iSCSI initiator name once set"))
+         if len(val) == 0:
+             raise ValueError(_("Must provide an iSCSI initiator name"))
+ 
++        active = self._get_active_sessions()
++        if active:
++            raise errors.ISCSIError(_("Cannot change initiator name with an active session"))
++
+         log.info("Setting up iSCSI initiator name %s", self.initiator)
+         args = GLib.Variant("(sa{sv})", (val, None))
+         self._call_initiator_method("SetInitiatorName", args)
++
++        if self.initiator_set and val != self._initiator:
++            log.info("Restarting iscsid after initiator name change")
++            rc = util.run_program(["systemctl", "restart", "iscsid"])
++            if rc != 0:
++                raise errors.ISCSIError(_("Failed to restart iscsid after initiator name change"))
++
+         self._initiator = val
+ 
+     def active_nodes(self, target=None):
+-- 
+2.40.1
+
+
+From 7c226ed0e14efcdd6e562e357d8f3465ad43ef33 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Mon, 6 Mar 2023 15:10:28 +0100
+Subject: [PATCH 2/5] Add a basic test case for the iscsi module
+
+Related: rhbz#2221935
+---
+ misc/install-test-dependencies.yml |   3 +
+ tests/storage_tests/__init__.py    |   2 +
+ tests/storage_tests/iscsi_test.py  | 157 +++++++++++++++++++++++++++++
+ 3 files changed, 162 insertions(+)
+ create mode 100644 tests/storage_tests/iscsi_test.py
+
+diff --git a/tests/storage_tests/__init__.py b/tests/storage_tests/__init__.py
+index 3b2a6cc4..e69fcc34 100644
+--- a/tests/storage_tests/__init__.py
++++ b/tests/storage_tests/__init__.py
+@@ -3,3 +3,5 @@ from .formats_test import *
+ 
+ from .partitioning_test import *
+ from .unsupported_disklabel_test import *
++
++from .iscsi_test import *
+diff --git a/tests/storage_tests/iscsi_test.py b/tests/storage_tests/iscsi_test.py
+new file mode 100644
+index 00000000..00cc7c36
+--- /dev/null
++++ b/tests/storage_tests/iscsi_test.py
+@@ -0,0 +1,157 @@
++import glob
++import os
++import re
++import shutil
++import subprocess
++import unittest
++
++from contextlib import contextmanager
++
++from .storagetestcase import create_sparse_tempfile
++
++
++def read_file(filename, mode="r"):
++    with open(filename, mode) as f:
++        content = f.read()
++    return content
++
++
++@contextmanager
++def udev_settle():
++    try:
++        yield
++    finally:
++        os.system("udevadm settle")
++
++
++def _delete_backstore(name):
++    status = subprocess.call(["targetcli", "/backstores/fileio/ delete %s" % name],
++                             stdout=subprocess.DEVNULL)
++    if status != 0:
++        raise RuntimeError("Failed to delete the '%s' fileio backstore" % name)
++
++
++def delete_iscsi_target(iqn, backstore=None):
++    status = subprocess.call(["targetcli", "/iscsi delete %s" % iqn],
++                             stdout=subprocess.DEVNULL)
++    if status != 0:
++        raise RuntimeError("Failed to delete the '%s' iscsi device" % iqn)
++
++    if backstore is not None:
++        _delete_backstore(backstore)
++
++
++def create_iscsi_target(fpath, initiator_name=None):
++    """
++    Creates a new iSCSI target (using targetcli) on top of the
++    :param:`fpath` backing file.
++
++    :param str fpath: path of the backing file
++    :returns: iSCSI IQN, backstore name
++    :rtype: tuple of str
++
++    """
++
++    # "register" the backing file as a fileio backstore
++    store_name = os.path.basename(fpath)
++    status = subprocess.call(["targetcli", "/backstores/fileio/ create %s %s" % (store_name, fpath)], stdout=subprocess.DEVNULL)
++    if status != 0:
++        raise RuntimeError("Failed to register '%s' as a fileio backstore" % fpath)
++
++    out = subprocess.check_output(["targetcli", "/backstores/fileio/%s info" % store_name])
++    out = out.decode("utf-8")
++    store_wwn = None
++    for line in out.splitlines():
++        if line.startswith("wwn: "):
++            store_wwn = line[5:]
++    if store_wwn is None:
++        raise RuntimeError("Failed to determine '%s' backstore's wwn" % store_name)
++
++    # create a new iscsi device
++    out = subprocess.check_output(["targetcli", "/iscsi create"])
++    out = out.decode("utf-8")
++    match = re.match(r'Created target (.*).', out)
++    if match:
++        iqn = match.groups()[0]
++    else:
++        _delete_backstore(store_name)
++        raise RuntimeError("Failed to create a new iscsi target")
++
++    if initiator_name:
++        status = subprocess.call(["targetcli", "/iscsi/%s/tpg1/acls create %s" % (iqn, initiator_name)], stdout=subprocess.DEVNULL)
++        if status != 0:
++            delete_iscsi_target(iqn, store_name)
++            raise RuntimeError("Failed to set ACLs for '%s'" % iqn)
++
++    with udev_settle():
++        status = subprocess.call(["targetcli", "/iscsi/%s/tpg1/luns create /backstores/fileio/%s" % (iqn, store_name)], stdout=subprocess.DEVNULL)
++    if status != 0:
++        delete_iscsi_target(iqn, store_name)
++        raise RuntimeError("Failed to create a new LUN for '%s' using '%s'" % (iqn, store_name))
++
++    status = subprocess.call(["targetcli", "/iscsi/%s/tpg1 set attribute generate_node_acls=1" % iqn], stdout=subprocess.DEVNULL)
++    if status != 0:
++        raise RuntimeError("Failed to set ACLs for '%s'" % iqn)
++
++    return iqn, store_name
++
++
++@unittest.skipUnless(os.geteuid() == 0, "requires root privileges")
++@unittest.skipUnless(os.environ.get("JENKINS_HOME"), "jenkins only test")
++@unittest.skipUnless(shutil.which("iscsiadm"), "iscsiadm not available")
++class ISCSITestCase(unittest.TestCase):
++
++    _disk_size = 512 * 1024**2
++    initiator = 'iqn.1994-05.com.redhat:iscsi-test'
++
++    def setUp(self):
++        self.addCleanup(self._clean_up)
++
++        self._dev_file = None
++        self.dev = None
++
++        self._dev_file = create_sparse_tempfile("blivet_test", self._disk_size)
++        try:
++            self.dev, self.backstore = create_iscsi_target(self._dev_file, self.initiator)
++        except RuntimeError as e:
++            raise RuntimeError("Failed to setup targetcli device for testing: %s" % e)
++
++    def _force_logout(self):
++        subprocess.call(["iscsiadm", "--mode", "node", "--logout", "--name", self.dev], stdout=subprocess.DEVNULL)
++
++    def _clean_up(self):
++        self._force_logout()
++        delete_iscsi_target(self.dev, self.backstore)
++        os.unlink(self._dev_file)
++
++    def test_discover_login(self):
++        from blivet.iscsi import iscsi, has_iscsi
++
++        if not has_iscsi():
++            self.skipTest("iSCSI not available, skipping")
++
++        iscsi.initiator = self.initiator
++        nodes = iscsi.discover("127.0.0.1")
++        self.assertTrue(nodes)
++
++        if len(nodes) > 1:
++            self.skipTest("Discovered more than one iSCSI target on localhost, skipping")
++
++        self.assertEqual(nodes[0].address, "127.0.0.1")
++        self.assertEqual(nodes[0].port, 3260)
++        self.assertEqual(nodes[0].name, self.dev)
++
++        # change the initiator name
++        iscsi.initiator = self.initiator + "_1"
++        self.assertEqual(iscsi.initiator, self.initiator + "_1")
++
++        # try to login
++        ret, err = iscsi.log_into_node(nodes[0])
++        self.assertTrue(ret, "Login failed: %s" % err)
++
++        # check the session for initiator name
++        sessions = glob.glob("/sys/class/iscsi_session/*/")
++        self.assertTrue(sessions)
++        self.assertEqual(len(sessions), 1)
++        initiator = read_file(sessions[0] + "initiatorname").strip()
++        self.assertEqual(initiator, iscsi.initiator)
+-- 
+2.40.1
+
+
+From dfd0c59a901f54ecfd8f538a2bb004a2e5ab6eec Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Mon, 6 Mar 2023 15:14:40 +0100
+Subject: [PATCH 3/5] tests: Use blivet-specific prefix for targetcli backing
+ files
+
+The code is originally from libblockdev hence the "bd" prefix, we
+should use a different prefix for blivet to be able to identify
+which test suite failed to clean the files.
+
+Related: rhbz#2221935
+---
+ tests/storage_tests/storagetestcase.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/storage_tests/storagetestcase.py b/tests/storage_tests/storagetestcase.py
+index 35d57ce9..9f859977 100644
+--- a/tests/storage_tests/storagetestcase.py
++++ b/tests/storage_tests/storagetestcase.py
+@@ -39,7 +39,7 @@ def create_sparse_tempfile(name, size):
+         :param size: the file size (in bytes)
+         :returns: the path to the newly created file
+     """
+-    (fd, path) = tempfile.mkstemp(prefix="bd.", suffix="-%s" % name)
++    (fd, path) = tempfile.mkstemp(prefix="blivet.", suffix="-%s" % name)
+     os.close(fd)
+     create_sparse_file(path, size)
+     return path
+-- 
+2.40.1
+
+
+From 492fc9b8dfc2d4aa7cb44baa4408570babcb5e96 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed, 19 Jul 2023 13:57:39 +0200
+Subject: [PATCH 4/5] iscsi: Save firmware initiator name to
+ /etc/iscsi/initiatorname.iscsi
+
+Resolves: rhbz#2221932
+---
+ blivet/iscsi.py | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/blivet/iscsi.py b/blivet/iscsi.py
+index 0d063f2a..8080a671 100644
+--- a/blivet/iscsi.py
++++ b/blivet/iscsi.py
+@@ -160,6 +160,11 @@ class iSCSI(object):
+                 self._initiator = initiatorname
+             except Exception as e:  # pylint: disable=broad-except
+                 log.info("failed to get initiator name from iscsi firmware: %s", str(e))
++            else:
++                # write the firmware initiator to /etc/iscsi/initiatorname.iscsi
++                log.info("Setting up firmware iSCSI initiator name %s", self.initiator)
++                args = GLib.Variant("(sa{sv})", (initiatorname, None))
++                self._call_initiator_method("SetInitiatorName", args)
+ 
+     # So that users can write iscsi() to get the singleton instance
+     def __call__(self):
+-- 
+2.40.1
+
+
+From 768d90815b7f95d0d6d278397fd6fd12a0490b5d Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed, 19 Jul 2023 10:38:45 +0200
+Subject: [PATCH 5/5] tests: Improve iscsi_test.ISCSITestCase
+
+Changed how we create the initiator name ACLs based on RTT test
+case for rhbz#2084043 and also improved the test case itself.
+
+Related: rhbz#2221935
+---
+ tests/storage_tests/iscsi_test.py | 36 +++++++++++++++++++++----------
+ 1 file changed, 25 insertions(+), 11 deletions(-)
+
+diff --git a/tests/storage_tests/iscsi_test.py b/tests/storage_tests/iscsi_test.py
+index 00cc7c36..6cc83a59 100644
+--- a/tests/storage_tests/iscsi_test.py
++++ b/tests/storage_tests/iscsi_test.py
+@@ -77,21 +77,17 @@ def create_iscsi_target(fpath, initiator_name=None):
+         _delete_backstore(store_name)
+         raise RuntimeError("Failed to create a new iscsi target")
+ 
+-    if initiator_name:
+-        status = subprocess.call(["targetcli", "/iscsi/%s/tpg1/acls create %s" % (iqn, initiator_name)], stdout=subprocess.DEVNULL)
+-        if status != 0:
+-            delete_iscsi_target(iqn, store_name)
+-            raise RuntimeError("Failed to set ACLs for '%s'" % iqn)
+-
+     with udev_settle():
+         status = subprocess.call(["targetcli", "/iscsi/%s/tpg1/luns create /backstores/fileio/%s" % (iqn, store_name)], stdout=subprocess.DEVNULL)
+     if status != 0:
+         delete_iscsi_target(iqn, store_name)
+         raise RuntimeError("Failed to create a new LUN for '%s' using '%s'" % (iqn, store_name))
+ 
+-    status = subprocess.call(["targetcli", "/iscsi/%s/tpg1 set attribute generate_node_acls=1" % iqn], stdout=subprocess.DEVNULL)
+-    if status != 0:
+-        raise RuntimeError("Failed to set ACLs for '%s'" % iqn)
++    if initiator_name:
++        status = subprocess.call(["targetcli", "/iscsi/%s/tpg1/acls create %s" % (iqn, initiator_name)], stdout=subprocess.DEVNULL)
++        if status != 0:
++            delete_iscsi_target(iqn, store_name)
++            raise RuntimeError("Failed to set ACLs for '%s'" % iqn)
+ 
+     return iqn, store_name
+ 
+@@ -130,6 +126,7 @@ class ISCSITestCase(unittest.TestCase):
+         if not has_iscsi():
+             self.skipTest("iSCSI not available, skipping")
+ 
++        # initially set the initiator to the correct/allowed one
+         iscsi.initiator = self.initiator
+         nodes = iscsi.discover("127.0.0.1")
+         self.assertTrue(nodes)
+@@ -141,11 +138,28 @@ class ISCSITestCase(unittest.TestCase):
+         self.assertEqual(nodes[0].port, 3260)
+         self.assertEqual(nodes[0].name, self.dev)
+ 
+-        # change the initiator name
++        # change the initiator name to a wrong one
+         iscsi.initiator = self.initiator + "_1"
+         self.assertEqual(iscsi.initiator, self.initiator + "_1")
+ 
+-        # try to login
++        # check the change made it to /etc/iscsi/initiatorname.iscsi
++        initiator_file = read_file("/etc/iscsi/initiatorname.iscsi").strip()
++        self.assertEqual(initiator_file, "InitiatorName=%s" % self.initiator + "_1")
++
++        # try to login (should fail)
++        ret, err = iscsi.log_into_node(nodes[0])
++        self.assertFalse(ret)
++        self.assertIn("authorization failure", err)
++
++        # change the initiator name back to the correct one
++        iscsi.initiator = self.initiator
++        self.assertEqual(iscsi.initiator, self.initiator)
++
++        # check the change made it to /etc/iscsi/initiatorname.iscsi
++        initiator_file = read_file("/etc/iscsi/initiatorname.iscsi").strip()
++        self.assertEqual(initiator_file, "InitiatorName=%s" % self.initiator)
++
++        # try to login (should work now)
+         ret, err = iscsi.log_into_node(nodes[0])
+         self.assertTrue(ret, "Login failed: %s" % err)
+ 
+-- 
+2.40.1
+

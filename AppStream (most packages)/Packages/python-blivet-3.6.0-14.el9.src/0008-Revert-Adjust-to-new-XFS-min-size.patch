@@ -1,0 +1,160 @@
+From 9618b84f94187efddc7316c2546bed923a91ecf9 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 3 Nov 2022 08:36:27 +0100
+Subject: [PATCH 1/2] Revert "Set XFS minimal size to 300 MiB"
+
+This reverts commit 307d49833771d161314bae50c68e70dc35c3bb36.
+---
+ blivet/formats/fs.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/blivet/formats/fs.py b/blivet/formats/fs.py
+index 8c346aa5..33922f3a 100644
+--- a/blivet/formats/fs.py
++++ b/blivet/formats/fs.py
+@@ -1091,7 +1091,7 @@ class XFS(FS):
+     _modules = ["xfs"]
+     _labelfs = fslabeling.XFSLabeling()
+     _uuidfs = fsuuid.XFSUUID()
+-    _min_size = Size("300 MiB")
++    _min_size = Size("16 MiB")
+     _max_size = Size("16 EiB")
+     _formattable = True
+     _linux_native = True
+-- 
+2.38.1
+
+
+From 24d94922d6879baa85aaa101f6b21efa568a9cbc Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 3 Nov 2022 08:36:39 +0100
+Subject: [PATCH 2/2] Revert "tests: Create bigger devices for XFS testing"
+
+This reverts commit 467cb8024010b2cabb1e92d9e64f6d3cbe949ad9.
+---
+ tests/storage_tests/formats_test/fs_test.py       | 7 +++----
+ tests/storage_tests/formats_test/fslabeling.py    | 4 +---
+ tests/storage_tests/formats_test/fsuuid.py        | 4 +---
+ tests/storage_tests/formats_test/labeling_test.py | 2 --
+ tests/storage_tests/formats_test/uuid_test.py     | 3 ---
+ 5 files changed, 5 insertions(+), 15 deletions(-)
+
+diff --git a/tests/storage_tests/formats_test/fs_test.py b/tests/storage_tests/formats_test/fs_test.py
+index cf8fb441..97f4cbbe 100644
+--- a/tests/storage_tests/formats_test/fs_test.py
++++ b/tests/storage_tests/formats_test/fs_test.py
+@@ -54,7 +54,6 @@ class ReiserFSTestCase(fstesting.FSAsRoot):
+ 
+ class XFSTestCase(fstesting.FSAsRoot):
+     _fs_class = fs.XFS
+-    _DEVICE_SIZE = Size("500 MiB")
+ 
+     def can_resize(self, an_fs):
+         resize_tasks = (an_fs._resize, an_fs._size_info)
+@@ -96,12 +95,12 @@ class XFSTestCase(fstesting.FSAsRoot):
+             self.assertFalse(an_fs.resizable)
+             # Not resizable, so can not do resizing actions.
+             with self.assertRaises(DeviceFormatError):
+-                an_fs.target_size = Size("300 MiB")
++                an_fs.target_size = Size("64 MiB")
+             with self.assertRaises(DeviceFormatError):
+                 an_fs.do_resize()
+         else:
+             disk = DiskDevice(os.path.basename(self.loop_devices[0]))
+-            part = self._create_partition(disk, Size("300 MiB"))
++            part = self._create_partition(disk, Size("50 MiB"))
+             an_fs = self._fs_class()
+             an_fs.device = part.path
+             self.assertIsNone(an_fs.create())
+@@ -114,7 +113,7 @@ class XFSTestCase(fstesting.FSAsRoot):
+             part = self._create_partition(disk, size=part.size + Size("40 MiB"))
+ 
+             # Try a reasonable target size
+-            TARGET_SIZE = Size("325 MiB")
++            TARGET_SIZE = Size("64 MiB")
+             an_fs.target_size = TARGET_SIZE
+             self.assertEqual(an_fs.target_size, TARGET_SIZE)
+             self.assertNotEqual(an_fs._size, TARGET_SIZE)
+diff --git a/tests/storage_tests/formats_test/fslabeling.py b/tests/storage_tests/formats_test/fslabeling.py
+index ebe0b70a..0e0dc261 100644
+--- a/tests/storage_tests/formats_test/fslabeling.py
++++ b/tests/storage_tests/formats_test/fslabeling.py
+@@ -21,10 +21,8 @@ class LabelingAsRoot(loopbackedtestcase.LoopBackedTestCase):
+     _invalid_label = abc.abstractproperty(
+         doc="A label which is invalid for this filesystem.")
+ 
+-    _DEVICE_SIZE = Size("100 MiB")
+-
+     def __init__(self, methodName='run_test'):
+-        super(LabelingAsRoot, self).__init__(methodName=methodName, device_spec=[self._DEVICE_SIZE])
++        super(LabelingAsRoot, self).__init__(methodName=methodName, device_spec=[Size("100 MiB")])
+ 
+     def setUp(self):
+         an_fs = self._fs_class()
+diff --git a/tests/storage_tests/formats_test/fsuuid.py b/tests/storage_tests/formats_test/fsuuid.py
+index 0b9762fd..16aa19a6 100644
+--- a/tests/storage_tests/formats_test/fsuuid.py
++++ b/tests/storage_tests/formats_test/fsuuid.py
+@@ -23,11 +23,9 @@ class SetUUID(loopbackedtestcase.LoopBackedTestCase):
+     _invalid_uuid = abc.abstractproperty(
+         doc="An invalid UUID for this filesystem.")
+ 
+-    _DEVICE_SIZE = Size("100 MiB")
+-
+     def __init__(self, methodName='run_test'):
+         super(SetUUID, self).__init__(methodName=methodName,
+-                                      device_spec=[self._DEVICE_SIZE])
++                                      device_spec=[Size("100 MiB")])
+ 
+     def setUp(self):
+         an_fs = self._fs_class()
+diff --git a/tests/storage_tests/formats_test/labeling_test.py b/tests/storage_tests/formats_test/labeling_test.py
+index 0702260a..d24e6619 100644
+--- a/tests/storage_tests/formats_test/labeling_test.py
++++ b/tests/storage_tests/formats_test/labeling_test.py
+@@ -1,7 +1,6 @@
+ import unittest
+ 
+ from blivet.formats import device_formats
+-from blivet.size import Size
+ import blivet.formats.fs as fs
+ import blivet.formats.swap as swap
+ 
+@@ -62,7 +61,6 @@ class InitializationTestCase(unittest.TestCase):
+ class XFSTestCase(fslabeling.CompleteLabelingAsRoot):
+     _fs_class = fs.XFS
+     _invalid_label = "root filesystem"
+-    _DEVICE_SIZE = Size("500 MiB")
+ 
+ 
+ class FATFSTestCase(fslabeling.CompleteLabelingAsRoot):
+diff --git a/tests/storage_tests/formats_test/uuid_test.py b/tests/storage_tests/formats_test/uuid_test.py
+index af35c0ee..ee8d452e 100644
+--- a/tests/storage_tests/formats_test/uuid_test.py
++++ b/tests/storage_tests/formats_test/uuid_test.py
+@@ -2,7 +2,6 @@ import unittest
+ 
+ import blivet.formats.fs as fs
+ import blivet.formats.swap as swap
+-from blivet.size import Size
+ 
+ from . import fsuuid
+ 
+@@ -53,14 +52,12 @@ class XFSTestCase(fsuuid.SetUUIDWithMkFs):
+     _fs_class = fs.XFS
+     _invalid_uuid = "abcdefgh-ijkl-mnop-qrst-uvwxyz123456"
+     _valid_uuid = "97e3d40f-dca8-497d-8b86-92f257402465"
+-    _DEVICE_SIZE = Size("500 MiB")
+ 
+ 
+ class XFSAfterTestCase(fsuuid.SetUUIDAfterMkFs):
+     _fs_class = fs.XFS
+     _invalid_uuid = "abcdefgh-ijkl-mnop-qrst-uvwxyz123456"
+     _valid_uuid = "97e3d40f-dca8-497d-8b86-92f257402465"
+-    _DEVICE_SIZE = Size("500 MiB")
+ 
+ 
+ class FATFSTestCase(fsuuid.SetUUIDWithMkFs):
+-- 
+2.38.1
+

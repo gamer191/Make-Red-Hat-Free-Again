@@ -1,0 +1,13 @@
+diff -up jmespath-0.9.4/tests/test_compliance.py.orig jmespath-0.9.4/tests/test_compliance.py
+--- jmespath-0.9.4/tests/test_compliance.py.orig	2017-05-13 19:21:34.000000000 +0200
++++ jmespath-0.9.4/tests/test_compliance.py	2021-06-29 11:34:10.355125102 +0200
+@@ -3,7 +3,8 @@ from pprint import pformat
+ from tests import OrderedDict
+ from tests import json
+ 
+-from nose.tools import assert_equal
++import unittest
++assert_equal = unittest.TestCase().assertEqual
+ 
+ from jmespath.visitor import Options
+ 

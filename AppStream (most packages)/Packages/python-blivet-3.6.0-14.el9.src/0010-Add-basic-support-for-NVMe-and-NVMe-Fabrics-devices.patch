@@ -1,0 +1,590 @@
+From 9383855c8a15e6d7c4033cd8d7ae8310b462d166 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Tue, 18 Oct 2022 10:38:00 +0200
+Subject: [PATCH 1/3] Add a basic support for NVMe and NVMe Fabrics devices
+
+This adds two new device types: NVMeNamespaceDevice and
+NVMeFabricsNamespaceDevice mostly to allow to differentiate
+between "local" and "remote" NVMe devices. The new libblockdev
+NVMe plugin is required for full functionality.
+---
+ blivet/__init__.py                   |   6 +-
+ blivet/devices/__init__.py           |   2 +-
+ blivet/devices/disk.py               | 101 ++++++++++++++++++++++
+ blivet/devices/lib.py                |   1 +
+ blivet/populator/helpers/__init__.py |   2 +-
+ blivet/populator/helpers/disk.py     |  64 ++++++++++++++
+ blivet/udev.py                       |  33 +++++++
+ blivet/util.py                       |   9 ++
+ tests/unit_tests/populator_test.py   | 124 +++++++++++++++++++++++++++
+ 9 files changed, 339 insertions(+), 3 deletions(-)
+
+diff --git a/blivet/__init__.py b/blivet/__init__.py
+index bbc7ea3a..3b9e659e 100644
+--- a/blivet/__init__.py
++++ b/blivet/__init__.py
+@@ -67,6 +67,10 @@ if arch.is_s390():
+ else:
+     _REQUESTED_PLUGIN_NAMES = set(("swap", "crypto", "loop", "mdraid", "mpath", "dm", "nvdimm"))
+ 
++# nvme plugin is not generally available
++if hasattr(blockdev.Plugin, "NVME"):
++    _REQUESTED_PLUGIN_NAMES.add("nvme")
++
+ _requested_plugins = blockdev.plugin_specs_from_names(_REQUESTED_PLUGIN_NAMES)
+ # XXX force non-dbus LVM plugin
+ lvm_plugin = blockdev.PluginSpec()
+@@ -74,7 +78,7 @@ lvm_plugin.name = blockdev.Plugin.LVM
+ lvm_plugin.so_name = "libbd_lvm.so.2"
+ _requested_plugins.append(lvm_plugin)
+ try:
+-    # do not check for dependencies during libblockdev initializtion, do runtime
++    # do not check for dependencies during libblockdev initialization, do runtime
+     # checks instead
+     blockdev.switch_init_checks(False)
+     succ_, avail_plugs = blockdev.try_reinit(require_plugins=_requested_plugins, reload=False, log_func=log_bd_message)
+diff --git a/blivet/devices/__init__.py b/blivet/devices/__init__.py
+index 8bb0a979..4d16466e 100644
+--- a/blivet/devices/__init__.py
++++ b/blivet/devices/__init__.py
+@@ -22,7 +22,7 @@
+ from .lib import device_path_to_name, device_name_to_disk_by_path, ParentList
+ from .device import Device
+ from .storage import StorageDevice
+-from .disk import DiskDevice, DiskFile, DMRaidArrayDevice, MultipathDevice, iScsiDiskDevice, FcoeDiskDevice, DASDDevice, ZFCPDiskDevice, NVDIMMNamespaceDevice
++from .disk import DiskDevice, DiskFile, DMRaidArrayDevice, MultipathDevice, iScsiDiskDevice, FcoeDiskDevice, DASDDevice, ZFCPDiskDevice, NVDIMMNamespaceDevice, NVMeNamespaceDevice, NVMeFabricsNamespaceDevice
+ from .partition import PartitionDevice
+ from .dm import DMDevice, DMLinearDevice, DMCryptDevice, DMIntegrityDevice, DM_MAJORS
+ from .luks import LUKSDevice, IntegrityDevice
+diff --git a/blivet/devices/disk.py b/blivet/devices/disk.py
+index bc4a1b5e..b5e25939 100644
+--- a/blivet/devices/disk.py
++++ b/blivet/devices/disk.py
+@@ -22,10 +22,13 @@
+ 
+ import gi
+ gi.require_version("BlockDev", "2.0")
++gi.require_version("GLib", "2.0")
+ 
+ from gi.repository import BlockDev as blockdev
++from gi.repository import GLib
+ 
+ import os
++from collections import namedtuple
+ 
+ from .. import errors
+ from .. import util
+@@ -725,3 +728,101 @@ class NVDIMMNamespaceDevice(DiskDevice):
+     @property
+     def sector_size(self):
+         return self._sector_size
++
++
++NVMeController = namedtuple("NVMeController", ["name", "serial", "nvme_ver", "id", "subsysnqn"])
++
++
++class NVMeNamespaceDevice(DiskDevice):
++
++    """ NVMe namespace """
++    _type = "nvme"
++    _packages = ["nvme-cli"]
++
++    def __init__(self, device, **kwargs):
++        """
++            :param name: the device name (generally a device node's basename)
++            :type name: str
++            :keyword exists: does this device exist?
++            :type exists: bool
++            :keyword size: the device's size
++            :type size: :class:`~.size.Size`
++            :keyword parents: a list of parent devices
++            :type parents: list of :class:`StorageDevice`
++            :keyword format: this device's formatting
++            :type format: :class:`~.formats.DeviceFormat` or a subclass of it
++            :keyword nsid: namespace ID
++            :type nsid: int
++        """
++        self.nsid = kwargs.pop("nsid", 0)
++
++        DiskDevice.__init__(self, device, **kwargs)
++
++        self._clear_local_tags()
++        self.tags.add(Tags.local)
++        self.tags.add(Tags.nvme)
++
++        self._controllers = None
++
++    @property
++    def controllers(self):
++        if self._controllers is not None:
++            return self._controllers
++
++        self._controllers = []
++        if not hasattr(blockdev.Plugin, "NVME"):
++            # the nvme plugin is not generally available
++            log.debug("Failed to get controllers for %s: libblockdev NVME plugin is not available", self.name)
++            return self._controllers
++
++        try:
++            controllers = blockdev.nvme_find_ctrls_for_ns(self.sysfs_path)
++        except GLib.GError as err:
++            log.debug("Failed to get controllers for %s: %s", self.name, str(err))
++            return self._controllers
++
++        for controller in controllers:
++            try:
++                cpath = util.get_path_by_sysfs_path(controller, "char")
++            except RuntimeError as err:
++                log.debug("Failed to find controller %s: %s", controller, str(err))
++                continue
++            try:
++                cinfo = blockdev.nvme_get_controller_info(cpath)
++            except GLib.GError as err:
++                log.debug("Failed to get controller info for %s: %s", cpath, str(err))
++                continue
++            self._controllers.append(NVMeController(name=os.path.basename(cpath),
++                                                    serial=cinfo.serial_number,
++                                                    nvme_ver=cinfo.nvme_ver,
++                                                    id=cinfo.ctrl_id,
++                                                    subsysnqn=cinfo.subsysnqn))
++
++        return self._controllers
++
++
++class NVMeFabricsNamespaceDevice(NVMeNamespaceDevice, NetworkStorageDevice):
++
++    """ NVMe fabrics namespace """
++    _type = "nvme-fabrics"
++    _packages = ["nvme-cli"]
++
++    def __init__(self, device, **kwargs):
++        """
++            :param name: the device name (generally a device node's basename)
++            :type name: str
++            :keyword exists: does this device exist?
++            :type exists: bool
++            :keyword size: the device's size
++            :type size: :class:`~.size.Size`
++            :keyword parents: a list of parent devices
++            :type parents: list of :class:`StorageDevice`
++            :keyword format: this device's formatting
++            :type format: :class:`~.formats.DeviceFormat` or a subclass of it
++        """
++        NVMeNamespaceDevice.__init__(self, device, **kwargs)
++        NetworkStorageDevice.__init__(self)
++
++        self._clear_local_tags()
++        self.tags.add(Tags.remote)
++        self.tags.add(Tags.nvme)
+diff --git a/blivet/devices/lib.py b/blivet/devices/lib.py
+index 1bda0bab..b3c4c5b0 100644
+--- a/blivet/devices/lib.py
++++ b/blivet/devices/lib.py
+@@ -32,6 +32,7 @@ class Tags(str, Enum):
+     """Tags that describe various classes of disk."""
+     local = 'local'
+     nvdimm = 'nvdimm'
++    nvme = 'nvme'
+     remote = 'remote'
+     removable = 'removable'
+     ssd = 'ssd'
+diff --git a/blivet/populator/helpers/__init__.py b/blivet/populator/helpers/__init__.py
+index c5ac412f..50ab4de8 100644
+--- a/blivet/populator/helpers/__init__.py
++++ b/blivet/populator/helpers/__init__.py
+@@ -6,7 +6,7 @@ from .formatpopulator import FormatPopulator
+ 
+ from .btrfs import BTRFSFormatPopulator
+ from .boot import AppleBootFormatPopulator, EFIFormatPopulator, MacEFIFormatPopulator
+-from .disk import DiskDevicePopulator, iScsiDevicePopulator, FCoEDevicePopulator, MDBiosRaidDevicePopulator, DASDDevicePopulator, ZFCPDevicePopulator, NVDIMMNamespaceDevicePopulator
++from .disk import DiskDevicePopulator, iScsiDevicePopulator, FCoEDevicePopulator, MDBiosRaidDevicePopulator, DASDDevicePopulator, ZFCPDevicePopulator, NVDIMMNamespaceDevicePopulator, NVMeNamespaceDevicePopulator, NVMeFabricsNamespaceDevicePopulator
+ from .disklabel import DiskLabelFormatPopulator
+ from .dm import DMDevicePopulator
+ from .dmraid import DMRaidFormatPopulator
+diff --git a/blivet/populator/helpers/disk.py b/blivet/populator/helpers/disk.py
+index 9db7b810..9ed1eebe 100644
+--- a/blivet/populator/helpers/disk.py
++++ b/blivet/populator/helpers/disk.py
+@@ -22,13 +22,16 @@
+ 
+ import gi
+ gi.require_version("BlockDev", "2.0")
++gi.require_version("GLib", "2.0")
+ 
+ from gi.repository import BlockDev as blockdev
++from gi.repository import GLib
+ 
+ from ... import udev
+ from ... import util
+ from ...devices import DASDDevice, DiskDevice, FcoeDiskDevice, iScsiDiskDevice
+ from ...devices import MDBiosRaidArrayDevice, ZFCPDiskDevice, NVDIMMNamespaceDevice
++from ...devices import NVMeNamespaceDevice, NVMeFabricsNamespaceDevice
+ from ...devices import device_path_to_name
+ from ...storage_log import log_method_call
+ from .devicepopulator import DevicePopulator
+@@ -251,3 +254,64 @@ class NVDIMMNamespaceDevicePopulator(DiskDevicePopulator):
+ 
+         log.info("%s is an NVDIMM namespace device", udev.device_get_name(self.data))
+         return kwargs
++
++
++class NVMeNamespaceDevicePopulator(DiskDevicePopulator):
++    priority = 20
++
++    _device_class = NVMeNamespaceDevice
++
++    @classmethod
++    def match(cls, data):
++        return (super(NVMeNamespaceDevicePopulator, NVMeNamespaceDevicePopulator).match(data) and
++                udev.device_is_nvme_namespace(data) and not udev.device_is_nvme_fabrics(data))
++
++    def _get_kwargs(self):
++        kwargs = super(NVMeNamespaceDevicePopulator, self)._get_kwargs()
++
++        log.info("%s is an NVMe local namespace device", udev.device_get_name(self.data))
++
++        if not hasattr(blockdev.Plugin, "NVME"):
++            # the nvme plugin is not generally available
++            return kwargs
++
++        path = udev.device_get_devname(self.data)
++        try:
++            ninfo = blockdev.nvme_get_namespace_info(path)
++        except GLib.GError as err:
++            log.debug("Failed to get namespace info for %s: %s", path, str(err))
++        else:
++            kwargs["nsid"] = ninfo.nsid
++
++        log.info("%s is an NVMe local namespace device", udev.device_get_name(self.data))
++        return kwargs
++
++
++class NVMeFabricsNamespaceDevicePopulator(DiskDevicePopulator):
++    priority = 20
++
++    _device_class = NVMeFabricsNamespaceDevice
++
++    @classmethod
++    def match(cls, data):
++        return (super(NVMeFabricsNamespaceDevicePopulator, NVMeFabricsNamespaceDevicePopulator).match(data) and
++                udev.device_is_nvme_namespace(data) and udev.device_is_nvme_fabrics(data))
++
++    def _get_kwargs(self):
++        kwargs = super(NVMeFabricsNamespaceDevicePopulator, self)._get_kwargs()
++
++        log.info("%s is an NVMe fabrics namespace device", udev.device_get_name(self.data))
++
++        if not hasattr(blockdev.Plugin, "NVME"):
++            # the nvme plugin is not generally available
++            return kwargs
++
++        path = udev.device_get_devname(self.data)
++        try:
++            ninfo = blockdev.nvme_get_namespace_info(path)
++        except GLib.GError as err:
++            log.debug("Failed to get namespace info for %s: %s", path, str(err))
++        else:
++            kwargs["nsid"] = ninfo.nsid
++
++        return kwargs
+diff --git a/blivet/udev.py b/blivet/udev.py
+index efbc53d6..533a1edc 100644
+--- a/blivet/udev.py
++++ b/blivet/udev.py
+@@ -1023,6 +1023,39 @@ def device_is_nvdimm_namespace(info):
+     return ninfo is not None
+ 
+ 
++def device_is_nvme_namespace(info):
++    if info.get("DEVTYPE") != "disk":
++        return False
++
++    if not info.get("SYS_PATH"):
++        return False
++
++    device = pyudev.Devices.from_sys_path(global_udev, info.get("SYS_PATH"))
++    while device:
++        if device.subsystem and device.subsystem.startswith("nvme"):
++            return True
++        device = device.parent
++
++    return False
++
++
++def device_is_nvme_fabrics(info):
++    if not device_is_nvme_namespace(info):
++        return False
++
++    if not hasattr(blockdev.Plugin, "NVME") or not blockdev.is_plugin_available(blockdev.Plugin.NVME):  # pylint: disable=no-member
++        # nvme plugin is not available -- even if this is an nvme fabrics device we
++        # don't have tools to work with it, so we should pretend it's just a normal nvme
++        return False
++
++    controllers = blockdev.nvme_find_ctrls_for_ns(info.get("SYS_PATH", ""))
++    if not controllers:
++        return False
++
++    transport = util.get_sysfs_attr(controllers[0], "transport")
++    return transport in ("rdma", "fc", "tcp", "loop")
++
++
+ def device_is_hidden(info):
+     sysfs_path = device_get_sysfs_path(info)
+     hidden = util.get_sysfs_attr(sysfs_path, "hidden")
+diff --git a/blivet/util.py b/blivet/util.py
+index 0e578aea..3040ee5a 100644
+--- a/blivet/util.py
++++ b/blivet/util.py
+@@ -432,6 +432,15 @@ def get_sysfs_path_by_name(dev_node, class_name="block"):
+                            "for '%s' (it is not at '%s')" % (dev_node, dev_path))
+ 
+ 
++def get_path_by_sysfs_path(sysfs_path, dev_type="block"):
++    """ Return device path for a given device sysfs path. """
++
++    dev = get_sysfs_attr(sysfs_path, "dev")
++    if not dev or not os.path.exists("/dev/%s/%s" % (dev_type, dev)):
++        raise RuntimeError("get_path_by_sysfs_path: Could not find device for %s" % sysfs_path)
++    return os.path.realpath("/dev/%s/%s" % (dev_type, dev))
++
++
+ def get_cow_sysfs_path(dev_path, dev_sysfsPath):
+     """ Return sysfs path of cow device for a given device.
+     """
+diff --git a/tests/unit_tests/populator_test.py b/tests/unit_tests/populator_test.py
+index 369fe878..1ee29b57 100644
+--- a/tests/unit_tests/populator_test.py
++++ b/tests/unit_tests/populator_test.py
+@@ -13,6 +13,7 @@ from gi.repository import BlockDev as blockdev
+ from blivet.devices import DiskDevice, DMDevice, FileDevice, LoopDevice
+ from blivet.devices import MDRaidArrayDevice, MultipathDevice, OpticalDevice
+ from blivet.devices import PartitionDevice, StorageDevice, NVDIMMNamespaceDevice
++from blivet.devices import NVMeNamespaceDevice, NVMeFabricsNamespaceDevice
+ from blivet.devicelibs import lvm
+ from blivet.devicetree import DeviceTree
+ from blivet.formats import get_device_format_class, get_format, DeviceFormat
+@@ -21,6 +22,7 @@ from blivet.populator.helpers import DiskDevicePopulator, DMDevicePopulator, Loo
+ from blivet.populator.helpers import LVMDevicePopulator, MDDevicePopulator, MultipathDevicePopulator
+ from blivet.populator.helpers import OpticalDevicePopulator, PartitionDevicePopulator
+ from blivet.populator.helpers import LVMFormatPopulator, MDFormatPopulator, NVDIMMNamespaceDevicePopulator
++from blivet.populator.helpers import NVMeNamespaceDevicePopulator, NVMeFabricsNamespaceDevicePopulator
+ from blivet.populator.helpers import get_format_helper, get_device_helper
+ from blivet.populator.helpers.boot import AppleBootFormatPopulator, EFIFormatPopulator, MacEFIFormatPopulator
+ from blivet.populator.helpers.formatpopulator import FormatPopulator
+@@ -591,6 +593,128 @@ class NVDIMMNamespaceDevicePopulatorTestCase(PopulatorHelperTestCase):
+         self.assertTrue(device in devicetree.devices)
+ 
+ 
++class NVMeNamespaceDevicePopulatorTestCase(PopulatorHelperTestCase):
++    helper_class = NVMeNamespaceDevicePopulator
++
++    @patch("os.path.join")
++    @patch("blivet.udev.device_is_cdrom", return_value=False)
++    @patch("blivet.udev.device_is_dm", return_value=False)
++    @patch("blivet.udev.device_is_loop", return_value=False)
++    @patch("blivet.udev.device_is_md", return_value=False)
++    @patch("blivet.udev.device_is_partition", return_value=False)
++    @patch("blivet.udev.device_is_disk", return_value=True)
++    @patch("blivet.udev.device_is_nvme_fabrics", return_value=False)
++    @patch("blivet.udev.device_is_nvme_namespace", return_value=True)
++    def test_match(self, *args):
++        """Test matching of NVMe namespace device populator."""
++        device_is_nvme_namespace = args[0]
++        self.assertTrue(self.helper_class.match(None))
++        device_is_nvme_namespace.return_value = False
++        self.assertFalse(self.helper_class.match(None))
++
++    @patch("os.path.join")
++    @patch("blivet.udev.device_is_cdrom", return_value=False)
++    @patch("blivet.udev.device_is_dm", return_value=False)
++    @patch("blivet.udev.device_is_loop", return_value=False)
++    @patch("blivet.udev.device_is_md", return_value=False)
++    @patch("blivet.udev.device_is_partition", return_value=False)
++    @patch("blivet.udev.device_is_disk", return_value=True)
++    @patch("blivet.udev.device_is_nvme_fabrics", return_value=False)
++    @patch("blivet.udev.device_is_nvme_namespace", return_value=True)
++    def test_get_helper(self, *args):
++        """Test get_device_helper for NVMe namespaces."""
++        device_is_nvme_namespace = args[0]
++        data = {}
++        self.assertEqual(get_device_helper(data), self.helper_class)
++
++        # verify that setting one of the required True return values to False prevents success
++        device_is_nvme_namespace.return_value = False
++        self.assertNotEqual(get_device_helper(data), self.helper_class)
++        device_is_nvme_namespace.return_value = True
++
++    @patch("blivet.udev.device_get_name")
++    def test_run(self, *args):
++        """Test disk device populator."""
++        device_get_name = args[0]
++
++        devicetree = DeviceTree()
++
++        # set up some fake udev data to verify handling of specific entries
++        data = {'SYS_PATH': 'dummy', 'DEVNAME': 'dummy', 'ID_PATH': 'dummy'}
++
++        device_name = "nop"
++        device_get_name.return_value = device_name
++        helper = self.helper_class(devicetree, data)
++
++        device = helper.run()
++
++        self.assertIsInstance(device, NVMeNamespaceDevice)
++        self.assertTrue(device.exists)
++        self.assertTrue(device.is_disk)
++        self.assertTrue(device in devicetree.devices)
++
++
++class NVMeFabricsNamespaceDevicePopulatorTestCase(PopulatorHelperTestCase):
++    helper_class = NVMeFabricsNamespaceDevicePopulator
++
++    @patch("os.path.join")
++    @patch("blivet.udev.device_is_cdrom", return_value=False)
++    @patch("blivet.udev.device_is_dm", return_value=False)
++    @patch("blivet.udev.device_is_loop", return_value=False)
++    @patch("blivet.udev.device_is_md", return_value=False)
++    @patch("blivet.udev.device_is_partition", return_value=False)
++    @patch("blivet.udev.device_is_disk", return_value=True)
++    @patch("blivet.udev.device_is_nvme_namespace", return_value=True)
++    @patch("blivet.udev.device_is_nvme_fabrics", return_value=True)
++    def test_match(self, *args):
++        """Test matching of NVMe namespace device populator."""
++        device_is_nvme_fabrics = args[0]
++        self.assertTrue(self.helper_class.match(None))
++        device_is_nvme_fabrics.return_value = False
++        self.assertFalse(self.helper_class.match(None))
++
++    @patch("os.path.join")
++    @patch("blivet.udev.device_is_cdrom", return_value=False)
++    @patch("blivet.udev.device_is_dm", return_value=False)
++    @patch("blivet.udev.device_is_loop", return_value=False)
++    @patch("blivet.udev.device_is_md", return_value=False)
++    @patch("blivet.udev.device_is_partition", return_value=False)
++    @patch("blivet.udev.device_is_disk", return_value=True)
++    @patch("blivet.udev.device_is_nvme_namespace", return_value=True)
++    @patch("blivet.udev.device_is_nvme_fabrics", return_value=True)
++    def test_get_helper(self, *args):
++        """Test get_device_helper for NVMe namespaces."""
++        device_is_nvme_fabrics = args[0]
++        data = {}
++        self.assertEqual(get_device_helper(data), self.helper_class)
++
++        # verify that setting one of the required True return values to False prevents success
++        device_is_nvme_fabrics.return_value = False
++        self.assertNotEqual(get_device_helper(data), self.helper_class)
++        device_is_nvme_fabrics.return_value = True
++
++    @patch("blivet.udev.device_get_name")
++    def test_run(self, *args):
++        """Test disk device populator."""
++        device_get_name = args[0]
++
++        devicetree = DeviceTree()
++
++        # set up some fake udev data to verify handling of specific entries
++        data = {'SYS_PATH': 'dummy', 'DEVNAME': 'dummy', 'ID_PATH': 'dummy'}
++
++        device_name = "nop"
++        device_get_name.return_value = device_name
++        helper = self.helper_class(devicetree, data)
++
++        device = helper.run()
++
++        self.assertIsInstance(device, NVMeFabricsNamespaceDevice)
++        self.assertTrue(device.exists)
++        self.assertTrue(device.is_disk)
++        self.assertTrue(device in devicetree.devices)
++
++
+ class MDDevicePopulatorTestCase(PopulatorHelperTestCase):
+     helper_class = MDDevicePopulator
+ 
+-- 
+2.38.1
+
+
+From af6ad7ff2f08180672690910d453158bcd463936 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Fri, 2 Dec 2022 12:20:47 +0100
+Subject: [PATCH 2/3] Add transport and address to NVMeController info
+
+---
+ blivet/devices/disk.py | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/blivet/devices/disk.py b/blivet/devices/disk.py
+index b5e25939..796b5b03 100644
+--- a/blivet/devices/disk.py
++++ b/blivet/devices/disk.py
+@@ -730,7 +730,8 @@ class NVDIMMNamespaceDevice(DiskDevice):
+         return self._sector_size
+ 
+ 
+-NVMeController = namedtuple("NVMeController", ["name", "serial", "nvme_ver", "id", "subsysnqn"])
++NVMeController = namedtuple("NVMeController", ["name", "serial", "nvme_ver", "id", "subsysnqn",
++                                               "transport", "transport_address"])
+ 
+ 
+ class NVMeNamespaceDevice(DiskDevice):
+@@ -792,11 +793,15 @@ class NVMeNamespaceDevice(DiskDevice):
+             except GLib.GError as err:
+                 log.debug("Failed to get controller info for %s: %s", cpath, str(err))
+                 continue
++            ctrans = util.get_sysfs_attr(controller, "transport")
++            ctaddr = util.get_sysfs_attr(controller, "address")
+             self._controllers.append(NVMeController(name=os.path.basename(cpath),
+                                                     serial=cinfo.serial_number,
+                                                     nvme_ver=cinfo.nvme_ver,
+                                                     id=cinfo.ctrl_id,
+-                                                    subsysnqn=cinfo.subsysnqn))
++                                                    subsysnqn=cinfo.subsysnqn,
++                                                    transport=ctrans,
++                                                    transport_address=ctaddr))
+ 
+         return self._controllers
+ 
+-- 
+2.38.1
+
+
+From a04538936ff62958c272b5e2b2657d177df1ef13 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 8 Dec 2022 13:15:33 +0100
+Subject: [PATCH 3/3] Add additional identifiers to NVMeNamespaceDevice
+
+---
+ blivet/devices/disk.py           | 2 ++
+ blivet/populator/helpers/disk.py | 3 +++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/blivet/devices/disk.py b/blivet/devices/disk.py
+index 796b5b03..8842b4dc 100644
+--- a/blivet/devices/disk.py
++++ b/blivet/devices/disk.py
+@@ -756,6 +756,8 @@ class NVMeNamespaceDevice(DiskDevice):
+             :type nsid: int
+         """
+         self.nsid = kwargs.pop("nsid", 0)
++        self.eui64 = kwargs.pop("eui64", "")
++        self.nguid = kwargs.pop("nguid", "")
+ 
+         DiskDevice.__init__(self, device, **kwargs)
+ 
+diff --git a/blivet/populator/helpers/disk.py b/blivet/populator/helpers/disk.py
+index 9ed1eebe..cf20d302 100644
+--- a/blivet/populator/helpers/disk.py
++++ b/blivet/populator/helpers/disk.py
+@@ -282,6 +282,9 @@ class NVMeNamespaceDevicePopulator(DiskDevicePopulator):
+             log.debug("Failed to get namespace info for %s: %s", path, str(err))
+         else:
+             kwargs["nsid"] = ninfo.nsid
++            kwargs["uuid"] = ninfo.uuid
++            kwargs["eui64"] = ninfo.eui64
++            kwargs["nguid"] = ninfo.nguid
+ 
+         log.info("%s is an NVMe local namespace device", udev.device_get_name(self.data))
+         return kwargs
+-- 
+2.38.1
+

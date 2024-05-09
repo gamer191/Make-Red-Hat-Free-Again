@@ -1,0 +1,265 @@
+From eb16230427fc1081f8515e6ad69ccf99ca521e5d Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Tue, 4 Apr 2023 13:31:40 +0200
+Subject: [PATCH 1/2] Add support for filesystem online resize
+
+Resolves: rhbz#2168680
+---
+ blivet/devices/lvm.py       | 13 ++++++++-----
+ blivet/devices/partition.py | 11 ++++++-----
+ blivet/flags.py             |  3 +++
+ blivet/formats/fs.py        | 32 ++++++++++++++++++++++++++++----
+ blivet/formats/fslib.py     |  7 +++++++
+ 5 files changed, 52 insertions(+), 14 deletions(-)
+
+diff --git a/blivet/devices/lvm.py b/blivet/devices/lvm.py
+index c3132457..ca45c4b5 100644
+--- a/blivet/devices/lvm.py
++++ b/blivet/devices/lvm.py
+@@ -42,6 +42,7 @@ from .. import errors
+ from .. import util
+ from ..storage_log import log_method_call
+ from .. import udev
++from ..flags import flags
+ from ..size import Size, KiB, MiB, ROUND_UP, ROUND_DOWN
+ from ..static_data.lvm_info import lvs_info
+ from ..tasks import availability
+@@ -2729,12 +2730,14 @@ class LVMLogicalVolumeDevice(LVMLogicalVolumeBase, LVMInternalLogicalVolumeMixin
+         # Setup VG parents (in case they are dmraid partitions for example)
+         self.vg.setup_parents(orig=True)
+ 
+-        if self.original_format.exists:
+-            self.original_format.teardown()
+-        if self.format.exists:
+-            self.format.teardown()
++        if not flags.allow_online_fs_resize:
++            if self.original_format.exists:
++                self.original_format.teardown()
++            if self.format.exists:
++                self.format.teardown()
++
++            udev.settle()
+ 
+-        udev.settle()
+         blockdev.lvm.lvresize(self.vg.name, self._name, self.size)
+ 
+     @type_specific
+diff --git a/blivet/devices/partition.py b/blivet/devices/partition.py
+index 0e9250ce..6ae4b8d3 100644
+--- a/blivet/devices/partition.py
++++ b/blivet/devices/partition.py
+@@ -745,11 +745,12 @@ class PartitionDevice(StorageDevice):
+         if not self.exists:
+             raise errors.DeviceError("device has not been created")
+ 
+-        # don't teardown when resizing luks
+-        if self.format.type == "luks" and self.children:
+-            self.children[0].format.teardown()
+-        else:
+-            self.teardown()
++        if not flags.allow_online_fs_resize:
++            # don't teardown when resizing luks
++            if self.format.type == "luks" and self.children:
++                self.children[0].format.teardown()
++            else:
++                self.teardown()
+ 
+         if not self.sysfs_path:
+             return
+diff --git a/blivet/flags.py b/blivet/flags.py
+index 6364164d..ecfa7ad7 100644
+--- a/blivet/flags.py
++++ b/blivet/flags.py
+@@ -91,6 +91,9 @@ class Flags(object):
+ 
+         self.debug_threads = False
+ 
++        # Allow online filesystem resizes
++        self.allow_online_fs_resize = False
++
+     def get_boot_cmdline(self):
+         with open("/proc/cmdline") as f:
+             buf = f.read().strip()
+diff --git a/blivet/formats/fs.py b/blivet/formats/fs.py
+index 33922f3a..3f553eb0 100644
+--- a/blivet/formats/fs.py
++++ b/blivet/formats/fs.py
+@@ -56,7 +56,7 @@ from ..i18n import N_
+ from .. import udev
+ from ..mounts import mounts_cache
+ 
+-from .fslib import kernel_filesystems
++from .fslib import kernel_filesystems, FSResize
+ 
+ import logging
+ log = logging.getLogger("blivet")
+@@ -88,6 +88,9 @@ class FS(DeviceFormat):
+     # value is already unpredictable and can change in the future...
+     _metadata_size_factor = 1.0
+ 
++    # support for resize: grow/shrink, online/offline
++    _resize_support = 0
++
+     config_actions_map = {"label": "write_label"}
+ 
+     def __init__(self, **kwargs):
+@@ -436,12 +439,27 @@ class FS(DeviceFormat):
+             self.write_uuid()
+ 
+     def _pre_resize(self):
+-        # file systems need a check before being resized
+-        self.do_check()
++        if self.status:
++            if flags.allow_online_fs_resize:
++                if self.target_size > self.size and not self._resize_support & FSResize.ONLINE_GROW:
++                    raise FSError("This filesystem doesn't support online growing")
++                if self.target_size < self.size and not self._resize_support & FSResize.ONLINE_SHRINK:
++                    raise FSError("This filesystem doesn't support online shrinking")
++            else:
++                raise FSError("Resizing of mounted filesystems is disabled")
++
++        if self.status:
++            # fsck tools in general don't allow checks on mounted filesystems
++            log.debug("Filesystem on %s is mounted, not checking", self.device)
++        else:
++            # file systems need a check before being resized
++            self.do_check()
++
+         super(FS, self)._pre_resize()
+ 
+     def _post_resize(self):
+-        self.do_check()
++        if not self.status:
++            self.do_check()
+         super(FS, self)._post_resize()
+ 
+     def do_check(self):
+@@ -838,6 +856,7 @@ class Ext2FS(FS):
+     _formattable = True
+     _supported = True
+     _resizable = True
++    _resize_support = FSResize.ONLINE_GROW | FSResize.OFFLINE_GROW | FSResize.OFFLINE_SHRINK
+     _linux_native = True
+     _max_size = Size("8 TiB")
+     _dump = True
+@@ -1097,6 +1116,7 @@ class XFS(FS):
+     _linux_native = True
+     _supported = True
+     _resizable = True
++    _resize_support = FSResize.ONLINE_GROW | FSResize.OFFLINE_GROW
+     _packages = ["xfsprogs"]
+     _fsck_class = fsck.XFSCK
+     _info_class = fsinfo.XFSInfo
+@@ -1247,6 +1267,7 @@ class NTFS(FS):
+     _labelfs = fslabeling.NTFSLabeling()
+     _uuidfs = fsuuid.NTFSUUID()
+     _resizable = True
++    _resize_support = FSResize.OFFLINE_GROW | FSResize.OFFLINE_SHRINK
+     _formattable = True
+     _supported = True
+     _min_size = Size("1 MiB")
+@@ -1490,6 +1511,9 @@ class TmpFS(NoDevFS):
+         # same, nothing actually needs to be set
+         pass
+ 
++    def _pre_resize(self):
++        self.do_check()
++
+     def do_resize(self):
+         # Override superclass method to record whether mount options
+         # should include an explicit size specification.
+diff --git a/blivet/formats/fslib.py b/blivet/formats/fslib.py
+index ea93b1fd..8722e942 100644
+--- a/blivet/formats/fslib.py
++++ b/blivet/formats/fslib.py
+@@ -36,3 +36,10 @@ def update_kernel_filesystems():
+ 
+ 
+ update_kernel_filesystems()
++
++
++class FSResize():
++    OFFLINE_SHRINK = 1 << 1
++    OFFLINE_GROW = 1 << 2
++    ONLINE_SHRINK = 1 << 3
++    ONLINE_GROW = 1 << 4
+-- 
+2.40.1
+
+
+From 3fce5d0bfd7b09a976ff49feed15077477c6a425 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 6 Apr 2023 14:02:11 +0200
+Subject: [PATCH 2/2] Add a test case for filesystem online resize
+
+Related: rhbz#2168680
+---
+ tests/storage_tests/formats_test/fs_test.py | 43 ++++++++++++++++++++-
+ 1 file changed, 42 insertions(+), 1 deletion(-)
+
+diff --git a/tests/storage_tests/formats_test/fs_test.py b/tests/storage_tests/formats_test/fs_test.py
+index 97f4cbbe..1d42dc21 100644
+--- a/tests/storage_tests/formats_test/fs_test.py
++++ b/tests/storage_tests/formats_test/fs_test.py
+@@ -6,9 +6,10 @@ import parted
+ 
+ import blivet.formats.fs as fs
+ from blivet.size import Size, ROUND_DOWN
+-from blivet.errors import DeviceFormatError
++from blivet.errors import DeviceFormatError, FSError
+ from blivet.formats import get_format
+ from blivet.devices import PartitionDevice, DiskDevice
++from blivet.flags import flags
+ 
+ from .loopbackedtestcase import LoopBackedTestCase
+ 
+@@ -26,6 +27,46 @@ class Ext3FSTestCase(Ext2FSTestCase):
+ class Ext4FSTestCase(Ext3FSTestCase):
+     _fs_class = fs.Ext4FS
+ 
++    def test_online_resize(self):
++        an_fs = self._fs_class()
++        if not an_fs.formattable:
++            self.skipTest("can not create filesystem %s" % an_fs.name)
++        an_fs.device = self.loop_devices[0]
++        self.assertIsNone(an_fs.create())
++        an_fs.update_size_info()
++
++        if not self.can_resize(an_fs):
++            self.skipTest("filesystem is not resizable")
++
++        # shrink offline first (ext doesn't support online shrinking)
++        TARGET_SIZE = Size("64 MiB")
++        an_fs.target_size = TARGET_SIZE
++        self.assertEqual(an_fs.target_size, TARGET_SIZE)
++        self.assertNotEqual(an_fs._size, TARGET_SIZE)
++        self.assertIsNone(an_fs.do_resize())
++
++        with tempfile.TemporaryDirectory() as mountpoint:
++            an_fs.mount(mountpoint=mountpoint)
++
++            # grow back when mounted
++            TARGET_SIZE = Size("100 MiB")
++            an_fs.target_size = TARGET_SIZE
++            self.assertEqual(an_fs.target_size, TARGET_SIZE)
++            self.assertNotEqual(an_fs._size, TARGET_SIZE)
++
++            # should fail, online resize disabled by default
++            with self.assertRaisesRegex(FSError, "Resizing of mounted filesystems is disabled"):
++                an_fs.do_resize()
++
++            # enable online resize
++            flags.allow_online_fs_resize = True
++            an_fs.do_resize()
++            flags.allow_online_fs_resize = False
++            self._test_sizes(an_fs)
++            self.assertEqual(an_fs.system_mountpoint, mountpoint)
++
++            an_fs.unmount()
++
+ 
+ class FATFSTestCase(fstesting.FSAsRoot):
+     _fs_class = fs.FATFS
+-- 
+2.40.1
+

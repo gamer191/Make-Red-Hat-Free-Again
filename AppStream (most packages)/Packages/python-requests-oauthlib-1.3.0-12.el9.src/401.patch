@@ -1,0 +1,89 @@
+From 62d8d04f49f731839ccd4a2c448ac08c8a1ab493 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20G=C3=B3rny?= <mgorny@gentoo.org>
+Date: Mon, 16 Mar 2020 12:34:23 +0100
+Subject: [PATCH] Prefer unittest.mock over external mock package
+
+Prefer using unittest.mock over external mock package to avoid
+extraneous dependencies in Python 3.3+.  Install 'mock' only for older
+Python versions.
+---
+ setup.py                     | 2 +-
+ tests/test_core.py           | 4 ++--
+ tests/test_oauth1_session.py | 4 ++--
+ tests/test_oauth2_session.py | 4 ++--
+ tox.ini                      | 2 +-
+ 5 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/setup.py b/setup.py
+index 1532c17..2e8dd82 100644
+--- a/setup.py
++++ b/setup.py
+@@ -63,6 +63,6 @@ def readall(path):
+         "Programming Language :: Python :: Implementation :: PyPy",
+     ],
+     zip_safe=False,
+-    tests_require=["mock", "requests-mock"],
++    tests_require=['mock;python_version<"3.3"', "requests-mock"],
+     test_suite="tests",
+ )
+diff --git a/tests/test_core.py b/tests/test_core.py
+index ea4575f..971ee6c 100644
+--- a/tests/test_core.py
++++ b/tests/test_core.py
+@@ -8,9 +8,9 @@
+ import unittest
+ 
+ try:
+-    import mock
+-except ImportError:
+     from unittest import mock
++except ImportError:
++    import mock
+ 
+ 
+ @mock.patch("oauthlib.oauth1.rfc5849.generate_timestamp")
+diff --git a/tests/test_oauth1_session.py b/tests/test_oauth1_session.py
+index 1dd2b2f..ad0578f 100644
+--- a/tests/test_oauth1_session.py
++++ b/tests/test_oauth1_session.py
+@@ -9,9 +9,9 @@
+ from requests_oauthlib import OAuth1Session
+ 
+ try:
+-    import mock
+-except ImportError:
+     from unittest import mock
++except ImportError:
++    import mock
+ 
+ try:
+     import cryptography
+diff --git a/tests/test_oauth2_session.py b/tests/test_oauth2_session.py
+index cfc6236..2f7b227 100644
+--- a/tests/test_oauth2_session.py
++++ b/tests/test_oauth2_session.py
+@@ -9,9 +9,9 @@
+ from unittest import TestCase
+ 
+ try:
+-    import mock
+-except ImportError:
+     from unittest import mock
++except ImportError:
++    import mock
+ 
+ from oauthlib.common import urlencode
+ from oauthlib.oauth2 import TokenExpiredError, OAuth2Error
+diff --git a/tox.ini b/tox.ini
+index abc641a..0db1117 100644
+--- a/tox.ini
++++ b/tox.ini
+@@ -4,7 +4,7 @@ envlist = py27, py34, py35, py36, py37, pypy, pypy3
+ [testenv]
+ deps=
+     -r{toxinidir}/requirements.txt
+-    mock
++    mock;python_version<"3.3"
+     coveralls
+     requests-mock
+ commands= coverage run --source=requests_oauthlib -m unittest discover

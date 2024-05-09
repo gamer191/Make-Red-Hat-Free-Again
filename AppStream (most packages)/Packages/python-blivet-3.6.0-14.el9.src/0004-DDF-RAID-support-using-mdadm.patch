@@ -1,0 +1,86 @@
+From 4ad6f485a1e569feb5fd23ffcf78e08a7756e084 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed, 17 Aug 2022 14:24:21 +0200
+Subject: [PATCH 1/2] Use MD populator instead of DM to handle DDF RAID format
+
+---
+ blivet/formats/dmraid.py | 2 +-
+ blivet/formats/mdraid.py | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/blivet/formats/dmraid.py b/blivet/formats/dmraid.py
+index 2ba9dcfe..ce15905d 100644
+--- a/blivet/formats/dmraid.py
++++ b/blivet/formats/dmraid.py
+@@ -43,7 +43,7 @@ class DMRaidMember(DeviceFormat):
+     #
+     #     One problem that presents is the possibility of someone passing
+     #     a dmraid member to the MDRaidArrayDevice constructor.
+-    _udev_types = ["adaptec_raid_member", "ddf_raid_member",
++    _udev_types = ["adaptec_raid_member",
+                    "hpt37x_raid_member", "hpt45x_raid_member",
+                    "isw_raid_member",
+                    "jmicron_raid_member", "lsi_mega_raid_member",
+diff --git a/blivet/formats/mdraid.py b/blivet/formats/mdraid.py
+index 41ddef81..4aa3f3b0 100644
+--- a/blivet/formats/mdraid.py
++++ b/blivet/formats/mdraid.py
+@@ -41,7 +41,7 @@ class MDRaidMember(DeviceFormat):
+     """ An mdraid member disk. """
+     _type = "mdmember"
+     _name = N_("software RAID")
+-    _udev_types = ["linux_raid_member"]
++    _udev_types = ["linux_raid_member", "ddf_raid_member"]
+     parted_flag = PARTITION_RAID
+     _formattable = True                 # can be formatted
+     _supported = True                   # is supported
+-- 
+2.37.3
+
+
+From abc7e018f43976cdab286d67207d515a74693d16 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed, 17 Aug 2022 14:24:58 +0200
+Subject: [PATCH 2/2] Do not read DDF RAID UUID from udev
+
+The UUID we get from udev isn't the array UUID, we need to get
+that using libblockdev.
+---
+ blivet/populator/helpers/mdraid.py | 16 ++++++++++------
+ 1 file changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/blivet/populator/helpers/mdraid.py b/blivet/populator/helpers/mdraid.py
+index 3479e3f7..a7602d20 100644
+--- a/blivet/populator/helpers/mdraid.py
++++ b/blivet/populator/helpers/mdraid.py
+@@ -98,17 +98,21 @@ class MDFormatPopulator(FormatPopulator):
+ 
+     def _get_kwargs(self):
+         kwargs = super(MDFormatPopulator, self)._get_kwargs()
+-        try:
+-            # ID_FS_UUID contains the array UUID
+-            kwargs["md_uuid"] = udev.device_get_uuid(self.data)
+-        except KeyError:
+-            log.warning("mdraid member %s has no md uuid", udev.device_get_name(self.data))
++        kwargs["biosraid"] = udev.device_is_biosraid_member(self.data)
++        if not kwargs["biosraid"]:
++            try:
++                # ID_FS_UUID contains the array UUID
++                kwargs["md_uuid"] = udev.device_get_uuid(self.data)
++            except KeyError:
++                log.warning("mdraid member %s has no md uuid", udev.device_get_name(self.data))
++        else:
++            # for BIOS RAIDs we can't get the UUID from udev, we'll get it from mdadm in `run` below
++            kwargs["md_uuid"] = None
+ 
+         # reset the uuid to the member-specific value
+         # this will be None for members of v0 metadata arrays
+         kwargs["uuid"] = udev.device_get_md_device_uuid(self.data)
+ 
+-        kwargs["biosraid"] = udev.device_is_biosraid_member(self.data)
+         return kwargs
+ 
+     def run(self):
+-- 
+2.37.3
+

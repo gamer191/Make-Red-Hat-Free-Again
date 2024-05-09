@@ -1,0 +1,28 @@
+From f27bdff18e98548f4c094b8cce23ca2d6270e30d Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Mon, 16 Jul 2018 14:26:11 +0200
+Subject: [PATCH] Remove btrfs from requested libblockdev plugins
+
+---
+ blivet/__init__.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/blivet/__init__.py b/blivet/__init__.py
+index 62cc539a..bbc7ea3a 100644
+--- a/blivet/__init__.py
++++ b/blivet/__init__.py
+@@ -63,9 +63,9 @@ gi.require_version("BlockDev", "2.0")
+ from gi.repository import GLib
+ from gi.repository import BlockDev as blockdev
+ if arch.is_s390():
+-    _REQUESTED_PLUGIN_NAMES = set(("btrfs", "swap", "crypto", "loop", "mdraid", "mpath", "dm", "s390", "nvdimm"))
++    _REQUESTED_PLUGIN_NAMES = set(("swap", "crypto", "loop", "mdraid", "mpath", "dm", "s390", "nvdimm"))
+ else:
+-    _REQUESTED_PLUGIN_NAMES = set(("btrfs", "swap", "crypto", "loop", "mdraid", "mpath", "dm", "nvdimm"))
++    _REQUESTED_PLUGIN_NAMES = set(("swap", "crypto", "loop", "mdraid", "mpath", "dm", "nvdimm"))
+ 
+ _requested_plugins = blockdev.plugin_specs_from_names(_REQUESTED_PLUGIN_NAMES)
+ # XXX force non-dbus LVM plugin
+-- 
+2.37.3
+

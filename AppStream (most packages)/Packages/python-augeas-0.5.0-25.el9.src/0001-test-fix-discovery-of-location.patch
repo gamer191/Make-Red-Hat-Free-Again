@@ -1,0 +1,27 @@
+From d93e1563add8c40450556b7d74520439ee792bd9 Mon Sep 17 00:00:00 2001
+From: Pino Toscano <ptoscano@redhat.com>
+Date: Fri, 12 Oct 2018 12:50:18 +0200
+Subject: [PATCH] test: fix discovery of location
+
+Use __file__ to detect the location of the script instead of sys.argv,
+so it will work also when loaded as module.
+---
+ test/test_augeas.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/test/test_augeas.py b/test/test_augeas.py
+index 10edbe6..7474841 100644
+--- a/test/test_augeas.py
++++ b/test/test_augeas.py
+@@ -4,7 +4,7 @@ import unittest
+ import sys
+ import os
+ 
+-__mydir = os.path.dirname(sys.argv[0])
++__mydir = os.path.dirname(os.path.abspath(__file__))
+ if not os.path.isdir(__mydir):
+     __mydir = os.getcwd()
+ 
+-- 
+2.21.0
+

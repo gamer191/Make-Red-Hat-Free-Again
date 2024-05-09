@@ -1,0 +1,68 @@
+From 1af0d3c37a93e431790e641a329a7f34dabf291a Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 2 Mar 2023 12:34:42 +0100
+Subject: [PATCH] Fix setting kickstart data
+
+When changing our code to PEP8 compliant we also changed some
+pykickstart properties like onPart by accident. This PR fixes this.
+
+Resolves: rhbz#2174296
+---
+ blivet/devices/btrfs.py     | 4 ++--
+ blivet/devices/lvm.py       | 2 +-
+ blivet/devices/partition.py | 6 +++---
+ 3 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/blivet/devices/btrfs.py b/blivet/devices/btrfs.py
+index 1ae6a04d..3f56624e 100644
+--- a/blivet/devices/btrfs.py
++++ b/blivet/devices/btrfs.py
+@@ -498,8 +498,8 @@ class BTRFSVolumeDevice(BTRFSDevice, ContainerDevice, RaidDevice):
+
+     def populate_ksdata(self, data):
+         super(BTRFSVolumeDevice, self).populate_ksdata(data)
+-        data.data_level = self.data_level.name if self.data_level else None
+-        data.metadata_level = self.metadata_level.name if self.metadata_level else None
++        data.dataLevel = self.data_level.name if self.data_level else None
++        data.metaDataLevel = self.metadata_level.name if self.metadata_level else None
+         data.devices = ["btrfs.%d" % p.id for p in self.parents]
+         data.preexist = self.exists
+
+diff --git a/blivet/devices/lvm.py b/blivet/devices/lvm.py
+index 41358e9b..c3132457 100644
+--- a/blivet/devices/lvm.py
++++ b/blivet/devices/lvm.py
+@@ -1161,7 +1161,7 @@ class LVMLogicalVolumeBase(DMDevice, RaidDevice):
+
+             if self.req_grow:
+                 # base size could be literal or percentage
+-                data.max_size_mb = self.req_max_size.convert_to(MiB)
++                data.maxSizeMB = self.req_max_size.convert_to(MiB)
+         elif data.resize:
+             data.size = self.target_size.convert_to(MiB)
+
+diff --git a/blivet/devices/partition.py b/blivet/devices/partition.py
+index 89d907c2..0e9250ce 100644
+--- a/blivet/devices/partition.py
++++ b/blivet/devices/partition.py
+@@ -982,14 +982,14 @@ class PartitionDevice(StorageDevice):
+             data.size = self.req_base_size.round_to_nearest(MiB, rounding=ROUND_DOWN).convert_to(spec=MiB)
+             data.grow = self.req_grow
+             if self.req_grow:
+-                data.max_size_mb = self.req_max_size.convert_to(MiB)
++                data.maxSizeMB = self.req_max_size.convert_to(MiB)
+
+             # data.disk = self.disk.name                      # by-id
+             if self.req_disks and len(self.req_disks) == 1:
+                 data.disk = self.disk.name
+-            data.prim_only = self.req_primary
++            data.primOnly = self.req_primary
+         else:
+-            data.on_part = self.name                     # by-id
++            data.onPart = self.name                     # by-id
+
+             if data.resize:
+                 # on s390x in particular, fractional sizes are reported, which
+--
+2.40.1
+

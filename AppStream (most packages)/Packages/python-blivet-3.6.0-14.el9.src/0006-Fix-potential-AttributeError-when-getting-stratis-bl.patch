@@ -1,0 +1,45 @@
+From 7931a74e691979dd23a16e7a017b4ef5bc296b79 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Tue, 18 Oct 2022 12:28:37 +0200
+Subject: [PATCH] Fix potential AttributeError when getting stratis blockdev
+ info
+
+---
+ blivet/static_data/stratis_info.py | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/blivet/static_data/stratis_info.py b/blivet/static_data/stratis_info.py
+index bd1c5a18..42f230ee 100644
+--- a/blivet/static_data/stratis_info.py
++++ b/blivet/static_data/stratis_info.py
+@@ -124,20 +124,22 @@ class StratisInfo(object):
+             log.error("Failed to get DBus properties of '%s'", blockdev_path)
+             return None
+ 
++        blockdev_uuid = str(uuid.UUID(properties["Uuid"]))
++
+         pool_path = properties["Pool"]
+         if pool_path == "/":
+             pool_name = ""
++            return StratisBlockdevInfo(path=properties["Devnode"], uuid=blockdev_uuid,
++                                       pool_name="", pool_uuid="", object_path=blockdev_path)
+         else:
+             pool_info = self._get_pool_info(properties["Pool"])
+             if not pool_info:
+                 return None
+             pool_name = pool_info.name
+ 
+-        blockdev_uuid = str(uuid.UUID(properties["Uuid"]))
+-
+-        return StratisBlockdevInfo(path=properties["Devnode"], uuid=blockdev_uuid,
+-                                   pool_name=pool_name, pool_uuid=pool_info.uuid,
+-                                   object_path=blockdev_path)
++            return StratisBlockdevInfo(path=properties["Devnode"], uuid=blockdev_uuid,
++                                       pool_name=pool_name, pool_uuid=pool_info.uuid,
++                                       object_path=blockdev_path)
+ 
+     def _get_locked_pools_info(self):
+         locked_pools = []
+-- 
+2.37.3
+

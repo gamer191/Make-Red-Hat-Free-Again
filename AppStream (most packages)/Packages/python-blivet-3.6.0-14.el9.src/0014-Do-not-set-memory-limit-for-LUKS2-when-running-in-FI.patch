@@ -1,0 +1,133 @@
+From c2b06150df0b876c7d442097b6c9ca90c9ca2ecc Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 4 May 2023 11:35:44 +0200
+Subject: [PATCH] Do not set memory limit for LUKS2 when running in FIPS mode
+
+With FIPS enabled LUKS uses pbkdf and not argon so the memory
+limit is not a valid parameter.
+
+Resolves: rhbz#2193096
+---
+ blivet/devicelibs/crypto.py                   | 11 +++++++
+ blivet/formats/luks.py                        | 12 ++++----
+ tests/unit_tests/formats_tests/luks_test.py   | 30 +++++++++++++++++++
+ .../unit_tests/formats_tests/methods_test.py  |  3 +-
+ 4 files changed, 50 insertions(+), 6 deletions(-)
+
+diff --git a/blivet/devicelibs/crypto.py b/blivet/devicelibs/crypto.py
+index f0caf0f7..68e68db1 100644
+--- a/blivet/devicelibs/crypto.py
++++ b/blivet/devicelibs/crypto.py
+@@ -21,6 +21,7 @@
+ #
+
+ import hashlib
++import os
+
+ import gi
+ gi.require_version("BlockDev", "2.0")
+@@ -100,3 +101,13 @@ def calculate_integrity_metadata_size(device_size, algorithm=DEFAULT_INTEGRITY_A
+     jsize = (jsize / SECTOR_SIZE + 1) * SECTOR_SIZE  # round up to sector
+
+     return msize + jsize
++
++
++def is_fips_enabled():
++    if not os.path.exists("/proc/sys/crypto/fips_enabled"):
++        # if the file doesn't exist, we are definitely not in FIPS mode
++        return False
++
++    with open("/proc/sys/crypto/fips_enabled", "r") as f:
++        enabled = f.read()
++    return enabled.strip() == "1"
+diff --git a/blivet/formats/luks.py b/blivet/formats/luks.py
+index 2637e0c5..adf3c711 100644
+--- a/blivet/formats/luks.py
++++ b/blivet/formats/luks.py
+@@ -303,11 +303,13 @@ class LUKS(DeviceFormat):
+             if luks_data.pbkdf_args:
+                 self.pbkdf_args = luks_data.pbkdf_args
+             else:
+-                mem_limit = crypto.calculate_luks2_max_memory()
+-                if mem_limit:
+-                    self.pbkdf_args = LUKS2PBKDFArgs(max_memory_kb=int(mem_limit.convert_to(KiB)))
+-                    luks_data.pbkdf_args = self.pbkdf_args
+-                    log.info("PBKDF arguments for LUKS2 not specified, using defaults with memory limit %s", mem_limit)
++                # argon is not used with FIPS so we don't need to adjust the memory when in FIPS mode
++                if not crypto.is_fips_enabled():
++                    mem_limit = crypto.calculate_luks2_max_memory()
++                    if mem_limit:
++                        self.pbkdf_args = LUKS2PBKDFArgs(max_memory_kb=int(mem_limit.convert_to(KiB)))
++                        luks_data.pbkdf_args = self.pbkdf_args
++                        log.info("PBKDF arguments for LUKS2 not specified, using defaults with memory limit %s", mem_limit)
+
+         if self.pbkdf_args:
+             pbkdf = blockdev.CryptoLUKSPBKDF(type=self.pbkdf_args.type,
+diff --git a/tests/unit_tests/formats_tests/luks_test.py b/tests/unit_tests/formats_tests/luks_test.py
+index ec7b7592..1127e968 100644
+--- a/tests/unit_tests/formats_tests/luks_test.py
++++ b/tests/unit_tests/formats_tests/luks_test.py
+@@ -6,9 +6,14 @@ except ImportError:
+ import unittest
+
+ from blivet.formats.luks import LUKS
++from blivet.size import Size
++from blivet.static_data import luks_data
+
+
+ class LUKSNodevTestCase(unittest.TestCase):
++    def setUp(self):
++        luks_data.pbkdf_args = None
++
+     def test_create_discard_option(self):
+         # flags.discard_new=False --> no discard
+         fmt = LUKS(exists=False)
+@@ -51,6 +56,31 @@ class LUKSNodevTestCase(unittest.TestCase):
+         fmt = LUKS(cipher="aes-cbc-plain64")
+         self.assertEqual(fmt.key_size, 0)
+
++    def test_luks2_pbkdf_memory_fips(self):
++        fmt = LUKS()
++        with patch("blivet.formats.luks.blockdev.crypto") as bd:
++            # fips enabled, pbkdf memory should not be set
++            with patch("blivet.formats.luks.crypto") as crypto:
++                attrs = {"is_fips_enabled.return_value": True,
++                         "get_optimal_luks_sector_size.return_value": 0,
++                         "calculate_luks2_max_memory.return_value": Size("256 MiB")}
++                crypto.configure_mock(**attrs)
++
++                fmt._create()
++                crypto.calculate_luks2_max_memory.assert_not_called()
++                self.assertEqual(bd.luks_format.call_args[1]["extra"].pbkdf.max_memory_kb, 0)
++
++            # fips disabled, pbkdf memory should be set
++            with patch("blivet.formats.luks.crypto") as crypto:
++                attrs = {"is_fips_enabled.return_value": False,
++                         "get_optimal_luks_sector_size.return_value": 0,
++                         "calculate_luks2_max_memory.return_value": Size("256 MiB")}
++                crypto.configure_mock(**attrs)
++
++                fmt._create()
++                crypto.calculate_luks2_max_memory.assert_called()
++                self.assertEqual(bd.luks_format.call_args[1]["extra"].pbkdf.max_memory_kb, 256 * 1024)
++
+     def test_sector_size(self):
+         fmt = LUKS()
+         self.assertEqual(fmt.luks_sector_size, 512)
+diff --git a/tests/unit_tests/formats_tests/methods_test.py b/tests/unit_tests/formats_tests/methods_test.py
+index 2743b7db..5d30c260 100644
+--- a/tests/unit_tests/formats_tests/methods_test.py
++++ b/tests/unit_tests/formats_tests/methods_test.py
+@@ -366,7 +366,8 @@ class LUKSMethodsTestCase(FormatMethodsTestCase):
+
+     def _test_create_backend(self):
+         self.format.exists = False
+-        self.format.create()
++        with patch("blivet.devicelibs.crypto.is_fips_enabled", return_value=False):
++            self.format.create()
+         self.assertTrue(self.patches["blockdev"].crypto.luks_format.called)  # pylint: disable=no-member
+
+     def _test_setup_backend(self):
+--
+2.40.1
+

@@ -1,0 +1,77 @@
+From 789dd296988aa9da17d97ece1efc33f9e232648e Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 13 Oct 2022 10:47:52 +0200
+Subject: [PATCH] Revert "Remove the Blivet.roots attribute"
+
+This reverts commit 19a826073345ca6b57a8f9a95ec855892320300e.
+---
+ blivet/blivet.py        | 21 +++++++++++++++++++++
+ blivet/devicefactory.py |  3 +++
+ 2 files changed, 24 insertions(+)
+
+diff --git a/blivet/blivet.py b/blivet/blivet.py
+index bf72ee9c..dc066b03 100644
+--- a/blivet/blivet.py
++++ b/blivet/blivet.py
+@@ -88,6 +88,7 @@ class Blivet(object):
+         self.devicetree = DeviceTree(ignored_disks=self.ignored_disks,
+                                      exclusive_disks=self.exclusive_disks,
+                                      disk_images=self.disk_images)
++        self.roots = []
+ 
+     @property
+     def short_product_name(self):
+@@ -1314,5 +1315,25 @@ class Blivet(object):
+             p = partition.disk.format.parted_disk.getPartitionByPath(partition.path)
+             partition.parted_partition = p
+ 
++        for root in new.roots:
++            root.swaps = [new.devicetree.get_device_by_id(d.id, hidden=True) for d in root.swaps]
++            root.swaps = [s for s in root.swaps if s]
++
++            removed = set()
++            for (mountpoint, old_dev) in root.mounts.items():
++                if old_dev is None:
++                    continue
++
++                new_dev = new.devicetree.get_device_by_id(old_dev.id, hidden=True)
++                if new_dev is None:
++                    # if the device has been removed don't include this
++                    # mountpoint at all
++                    removed.add(mountpoint)
++                else:
++                    root.mounts[mountpoint] = new_dev
++
++            for mnt in removed:
++                del root.mounts[mnt]
++
+         log.debug("finished Blivet copy")
+         return new
+diff --git a/blivet/devicefactory.py b/blivet/devicefactory.py
+index 8105bfc7..6f460f6d 100644
+--- a/blivet/devicefactory.py
++++ b/blivet/devicefactory.py
+@@ -383,6 +383,7 @@ class DeviceFactory(object):
+         # used for error recovery
+         self.__devices = []
+         self.__actions = []
++        self.__roots = []
+ 
+     def _is_container_encrypted(self):
+         return all(isinstance(p, LUKSDevice) for p in self.device.container.parents)
+@@ -994,10 +995,12 @@ class DeviceFactory(object):
+         _blivet_copy = self.storage.copy()
+         self.__devices = _blivet_copy.devicetree._devices
+         self.__actions = _blivet_copy.devicetree._actions
++        self.__roots = _blivet_copy.roots
+ 
+     def _revert_devicetree(self):
+         self.storage.devicetree._devices = self.__devices
+         self.storage.devicetree._actions = self.__actions
++        self.storage.roots = self.__roots
+ 
+ 
+ class PartitionFactory(DeviceFactory):
+-- 
+2.37.3
+

@@ -1,0 +1,28 @@
+From 845c65358e3ba6e5972df1dd37756be97130cc90 Mon Sep 17 00:00:00 2001
+From: zdohnal <zdohnal@redhat.com>
+Date: Fri, 28 Aug 2020 08:23:24 +0200
+Subject: [PATCH] postscriptdriver.prov: ignore driverless utilities
+
+Driverless utilities are generic tools for driverless support, which generate 'drivers' based on communication with a device, so it is not usable to try to generate rpm tags for specific models.
+Creating generic ```postscriptdriver(driverless)``` doesn't make sense too, because utilities are shipped within core printing packages (CUPS/cups-filters), so just ignore postscriptdriver tag creation for them.
+---
+ postscriptdriver.prov | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/postscriptdriver.prov b/postscriptdriver.prov
+index 7447def..c9e3cee 100755
+--- a/postscriptdriver.prov
++++ b/postscriptdriver.prov
+@@ -243,7 +243,8 @@ class TagBuilder:
+         self.ids = DeviceIDs ()
+ 
+         for path in paths:
+-            if path.find ("/usr/lib/cups/driver/") != -1:
++            if path.find ("/usr/lib/cups/driver/") != -1 and \
++               path.find("driverless") == -1:
+                 try:
+                     self.ids += DynamicDriver (path).list ()
+                 except TimedOut:
+-- 
+2.26.2
+

@@ -1,0 +1,205 @@
+From 7a86d4306e3022b73035e21f66d515174264700e Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 9 Mar 2023 13:18:42 +0100
+Subject: [PATCH 1/2] Add support for specifying stripe size for RAID LVs
+
+---
+ blivet/devices/lvm.py                        | 28 +++++++++++++++++---
+ tests/storage_tests/devices_test/lvm_test.py | 12 +++++++--
+ tests/unit_tests/devices_test/lvm_test.py    | 27 +++++++++++++++++++
+ 3 files changed, 61 insertions(+), 6 deletions(-)
+
+diff --git a/blivet/devices/lvm.py b/blivet/devices/lvm.py
+index b8595d63..41358e9b 100644
+--- a/blivet/devices/lvm.py
++++ b/blivet/devices/lvm.py
+@@ -659,7 +659,8 @@ class LVMLogicalVolumeBase(DMDevice, RaidDevice):
+ 
+     def __init__(self, name, parents=None, size=None, uuid=None, seg_type=None,
+                  fmt=None, exists=False, sysfs_path='', grow=None, maxsize=None,
+-                 percent=None, cache_request=None, pvs=None, from_lvs=None):
++                 percent=None, cache_request=None, pvs=None, from_lvs=None,
++                 stripe_size=0):
+ 
+         if not exists:
+             if seg_type not in [None, "linear", "thin", "thin-pool", "cache", "vdo-pool", "vdo", "cache-pool"] + lvm.raid_seg_types:
+@@ -756,6 +757,15 @@ class LVMLogicalVolumeBase(DMDevice, RaidDevice):
+         if self._pv_specs:
+             self._assign_pv_space()
+ 
++        self._stripe_size = stripe_size
++        if not self.exists and self._stripe_size:
++            if self.seg_type not in lvm.raid_seg_types:
++                raise errors.DeviceError("Stripe size can be specified only for RAID volumes")
++            if self.seg_type in ("raid1", "RAID1", "1", 1, "mirror"):
++                raise errors.DeviceError("Specifying stripe size is not allowed for RAID1 or mirror")
++            if self.cache:
++                raise errors.DeviceError("Creating cached LVs with custom stripe size is not supported")
++
+     def _assign_pv_space(self):
+         if not self.is_raid_lv:
+             # nothing to do for non-RAID (and thus non-striped) LVs here
+@@ -2295,7 +2305,7 @@ class LVMLogicalVolumeDevice(LVMLogicalVolumeBase, LVMInternalLogicalVolumeMixin
+                  parent_lv=None, int_type=None, origin=None, vorigin=False,
+                  metadata_size=None, chunk_size=None, profile=None, from_lvs=None,
+                  compression=False, deduplication=False, index_memory=0,
+-                 write_policy=None, cache_mode=None, attach_to=None):
++                 write_policy=None, cache_mode=None, attach_to=None, stripe_size=0):
+         """
+             :param name: the device name (generally a device node's basename)
+             :type name: str
+@@ -2375,6 +2385,11 @@ class LVMLogicalVolumeDevice(LVMLogicalVolumeBase, LVMInternalLogicalVolumeMixin
+                                 be attached to when created
+             :type attach_to: :class:`LVMLogicalVolumeDevice`
+ 
++            For RAID LVs only:
++
++            :keyword stripe_size: size of the RAID stripe
++            :type stripe_size: :class:`~.size.Size`
++
+         """
+ 
+         if isinstance(parents, (list, ParentList)):
+@@ -2395,7 +2410,8 @@ class LVMLogicalVolumeDevice(LVMLogicalVolumeBase, LVMInternalLogicalVolumeMixin
+         LVMCachePoolMixin.__init__(self, metadata_size, cache_mode, attach_to)
+         LVMLogicalVolumeBase.__init__(self, name, parents, size, uuid, seg_type,
+                                       fmt, exists, sysfs_path, grow, maxsize,
+-                                      percent, cache_request, pvs, from_lvs)
++                                      percent, cache_request, pvs, from_lvs,
++                                      stripe_size)
+         LVMVDOPoolMixin.__init__(self, compression, deduplication, index_memory,
+                                  write_policy)
+         LVMVDOLogicalVolumeMixin.__init__(self)
+@@ -2651,8 +2667,12 @@ class LVMLogicalVolumeDevice(LVMLogicalVolumeBase, LVMInternalLogicalVolumeMixin
+             pvs = [spec.pv.path for spec in self._pv_specs]
+             pvs = pvs or None
+ 
++            extra = dict()
++            if self._stripe_size:
++                extra["stripesize"] = str(int(self._stripe_size.convert_to("KiB")))
++
+             blockdev.lvm.lvcreate(self.vg.name, self._name, self.size,
+-                                  type=self.seg_type, pv_list=pvs)
++                                  type=self.seg_type, pv_list=pvs, **extra)
+         else:
+             fast_pvs = [pv.path for pv in self.cache.fast_pvs]
+ 
+diff --git a/tests/storage_tests/devices_test/lvm_test.py b/tests/storage_tests/devices_test/lvm_test.py
+index a055fc27..97ef1c4b 100644
+--- a/tests/storage_tests/devices_test/lvm_test.py
++++ b/tests/storage_tests/devices_test/lvm_test.py
+@@ -1,4 +1,5 @@
+ import os
++import subprocess
+ 
+ from ..storagetestcase import StorageTestCase
+ 
+@@ -127,7 +128,7 @@ class LVMTestCase(StorageTestCase):
+         self.assertTrue(snap.is_snapshot_lv)
+         self.assertEqual(snap.origin, thinlv)
+ 
+-    def _test_lvm_raid(self, seg_type, raid_level):
++    def _test_lvm_raid(self, seg_type, raid_level, stripe_size=0):
+         disk1 = self.storage.devicetree.get_device_by_path(self.vdevs[0])
+         self.assertIsNotNone(disk1)
+         self.storage.initialize_disk(disk1)
+@@ -151,7 +152,7 @@ class LVMTestCase(StorageTestCase):
+ 
+         raidlv = self.storage.new_lv(fmt_type="ext4", size=blivet.size.Size("50 MiB"),
+                                      parents=[vg], name="blivetTestRAIDLV",
+-                                     seg_type=seg_type, pvs=[pv1, pv2])
++                                     seg_type=seg_type, pvs=[pv1, pv2], stripe_size=stripe_size)
+         self.storage.create_device(raidlv)
+ 
+         self.storage.do_it()
+@@ -163,9 +164,16 @@ class LVMTestCase(StorageTestCase):
+         self.assertEqual(raidlv.raid_level, raid_level)
+         self.assertEqual(raidlv.seg_type, seg_type)
+ 
++        if stripe_size:
++            out = subprocess.check_output(["lvs", "-o", "stripe_size", "--noheadings", "--nosuffix", "--units=b", raidlv.vg.name + "/" + raidlv.lvname])
++            self.assertEqual(out.decode().strip(), str(int(stripe_size.convert_to())))
++
+     def test_lvm_raid_raid0(self):
+         self._test_lvm_raid("raid0", blivet.devicelibs.raid.RAID0)
+ 
++    def test_lvm_raid_raid0_stripe_size(self):
++        self._test_lvm_raid("raid0", blivet.devicelibs.raid.RAID0, stripe_size=blivet.size.Size("1 MiB"))
++
+     def test_lvm_raid_striped(self):
+         self._test_lvm_raid("striped", blivet.devicelibs.raid.Striped)
+ 
+diff --git a/tests/unit_tests/devices_test/lvm_test.py b/tests/unit_tests/devices_test/lvm_test.py
+index 995c2da4..d7b55224 100644
+--- a/tests/unit_tests/devices_test/lvm_test.py
++++ b/tests/unit_tests/devices_test/lvm_test.py
+@@ -363,6 +363,33 @@ class LVMDeviceTest(unittest.TestCase):
+         self.assertEqual(pv.format.free, Size("264 MiB"))
+         self.assertEqual(pv2.format.free, Size("256 MiB"))
+ 
++    def test_lvm_logical_volume_raid_stripe_size(self):
++        pv = StorageDevice("pv1", fmt=blivet.formats.get_format("lvmpv"),
++                           size=Size("1025 MiB"))
++        pv2 = StorageDevice("pv2", fmt=blivet.formats.get_format("lvmpv"),
++                            size=Size("513 MiB"))
++        vg = LVMVolumeGroupDevice("testvg", parents=[pv, pv2])
++
++        with self.assertRaises(blivet.errors.DeviceError):
++            # non-raid LV
++            lv = LVMLogicalVolumeDevice("testlv", parents=[vg], size=Size("1 GiB"),
++                                        fmt=blivet.formats.get_format("xfs"),
++                                        exists=False, stripe_size=Size("1 MiB"))
++
++        with self.assertRaises(blivet.errors.DeviceError):
++            # raid1 LV
++            lv = LVMLogicalVolumeDevice("testlv", parents=[vg], size=Size("1 GiB"),
++                                        fmt=blivet.formats.get_format("xfs"),
++                                        exists=False, seg_type="raid1", pvs=[pv, pv2],
++                                        stripe_size=Size("1 MiB"))
++
++        lv = LVMLogicalVolumeDevice("testlv", parents=[vg], size=Size("1 GiB"),
++                                    fmt=blivet.formats.get_format("xfs"),
++                                    exists=False, seg_type="raid0", pvs=[pv, pv2],
++                                    stripe_size=Size("1 MiB"))
++
++        self.assertEqual(lv._stripe_size, Size("1 MiB"))
++
+     def test_target_size(self):
+         pv = StorageDevice("pv1", fmt=blivet.formats.get_format("lvmpv"),
+                            size=Size("1 GiB"))
+-- 
+2.40.1
+
+
+From bbfd1a70abe8271f5fe3d29fe2be3bb8a1c6ecbc Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed, 3 May 2023 08:55:31 +0200
+Subject: [PATCH 2/2] Revert "tests: Skip test_lvcreate_type on CentOS/RHEL 9"
+
+This reverts commit 16b90071145d2d0f19a38f3003561a0cc9d6e281.
+
+The kernel issue was resolved, we no longer need to skip the test.
+---
+ tests/skip.yml | 6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/tests/skip.yml b/tests/skip.yml
+index 66b34493..c0ca0eaf 100644
+--- a/tests/skip.yml
++++ b/tests/skip.yml
+@@ -24,12 +24,6 @@
+ 
+ ---
+ 
+-- test: storage_tests.devices_test.lvm_test.LVMTestCase.test_lvm_raid
+-  skip_on:
+-    - distro: "centos"
+-      version: "9"
+-      reason: "Creating RAID 1 LV on CentOS/RHEL 9 causes a system deadlock"
+-
+ - test: storage_tests.formats_test.fs_test.XFSTestCase.test_resize
+   skip_on:
+     - distro: ["centos", "enterprise_linux"]
+-- 
+2.40.1
+

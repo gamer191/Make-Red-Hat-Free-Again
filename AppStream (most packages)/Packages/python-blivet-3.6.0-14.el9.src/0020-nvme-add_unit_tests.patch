@@ -1,0 +1,67 @@
+From c807e234dfd07f3d0005c71501f0300284cd580b Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed, 6 Dec 2023 11:47:31 +0100
+Subject: [PATCH] tests: Add a simple unit test for the NVMe module
+
+---
+ tests/unit_tests/__init__.py  |  1 +
+ tests/unit_tests/nvme_test.py | 38 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 39 insertions(+)
+ create mode 100644 tests/unit_tests/nvme_test.py
+
+diff --git a/tests/unit_tests/__init__.py b/tests/unit_tests/__init__.py
+index 589366e0f..62bef67f5 100644
+--- a/tests/unit_tests/__init__.py
++++ b/tests/unit_tests/__init__.py
+@@ -9,6 +9,7 @@
+ from .devicetree_test import *
+ from .events_test import *
+ from .misc_test import *
++from .nvme_test import *
+ from .parentlist_test import *
+ from .populator_test import *
+ from .size_test import *
+diff --git a/tests/unit_tests/nvme_test.py b/tests/unit_tests/nvme_test.py
+new file mode 100644
+index 000000000..cb948687f
+--- /dev/null
++++ b/tests/unit_tests/nvme_test.py
+@@ -0,0 +1,38 @@
++import unittest
++
++try:
++    from unittest.mock import patch
++except ImportError:
++    from mock import patch
++
++from blivet.nvme import nvme
++
++
++class NVMeModuleTestCase(unittest.TestCase):
++
++    host_nqn = "nqn.2014-08.org.nvmexpress:uuid:01234567-8900-abcd-efff-abcdabcdabcd"
++
++    @patch("blivet.nvme.os")
++    @patch("blivet.nvme.blockdev")
++    def test_nvme_module(self, bd, os):
++        self.assertIsNotNone(nvme)
++        bd.nvme_get_host_nqn.return_value = self.host_nqn
++        bd.nvme_get_host_id.return_value = None  # None = generate from host_nqn
++        os.path.isdir.return_value = False
++
++        # startup
++        with patch.object(nvme, "write") as write:
++            nvme.startup()
++            write.assert_called_once_with("/", overwrite=False)
++
++        self.assertTrue(nvme.started)
++        self.assertEqual(nvme._hostnqn, self.host_nqn)
++        self.assertEqual(nvme._hostid, "01234567-8900-abcd-efff-abcdabcdabcd")
++
++        # write
++        with patch("blivet.nvme.open") as op:
++            nvme.write("/test")
++
++            os.makedirs.assert_called_with("/test/etc/nvme/", 0o755)
++            op.assert_any_call("/test/etc/nvme/hostnqn", "w")
++            op.assert_any_call("/test/etc/nvme/hostid", "w")

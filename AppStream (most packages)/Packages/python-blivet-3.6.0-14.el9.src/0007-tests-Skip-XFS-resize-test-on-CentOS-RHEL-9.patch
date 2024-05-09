@@ -1,0 +1,27 @@
+From b747c4ed07937f54a546ffb2f2c8c95e0797dd6c Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 20 Oct 2022 15:19:29 +0200
+Subject: [PATCH] tests: Skip XFS resize test on CentOS/RHEL 9
+
+Partitions on loop devices are broken on CentOS/RHEL 9.
+---
+ tests/skip.yml | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/tests/skip.yml b/tests/skip.yml
+index 568c3fff..66b34493 100644
+--- a/tests/skip.yml
++++ b/tests/skip.yml
+@@ -29,3 +29,9 @@
+     - distro: "centos"
+       version: "9"
+       reason: "Creating RAID 1 LV on CentOS/RHEL 9 causes a system deadlock"
++
++- test: storage_tests.formats_test.fs_test.XFSTestCase.test_resize
++  skip_on:
++    - distro: ["centos", "enterprise_linux"]
++      version: "9"
++      reason: "Creating partitions on loop devices is broken on CentOS/RHEL 9 latest kernel"
+-- 
+2.37.3
+

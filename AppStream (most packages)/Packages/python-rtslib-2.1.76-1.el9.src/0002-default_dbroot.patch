@@ -1,0 +1,29 @@
+diff --git a/rtslib/root.py b/rtslib/root.py
+index ac40752..8e9724b 100644
+--- a/rtslib/root.py
++++ b/rtslib/root.py
+@@ -166,19 +166,19 @@ class RTSRoot(CFSNode):
+             self._dbroot = self._default_dbroot
+             return
+         self._dbroot = fread(dbroot_path)
+-        if self._dbroot != self._preferred_dbroot:
++        if self._dbroot != self._default_dbroot:
+             try:
+-                fwrite(dbroot_path, self._preferred_dbroot+"\n")
++                fwrite(dbroot_path, self._default_dbroot+"\n")
+             except:
+-                if not os.path.isdir(self._preferred_dbroot):
++                if not os.path.isdir(self._default_dbroot):
+                     raise RTSLibError("Cannot set dbroot to {}. Please check if this directory exists."
+-                                      .format(self._preferred_dbroot))
++                                      .format(self._default_dbroot))
+                 else:
+                     # Writing to dbroot_path after devices have been registered will make the kernel emit this error:
+                     # db_root: cannot be changed: target devices registered
+                     from warnings import warn
+                     warn("Cannot set dbroot to {}. Target devices have already been registered."
+-                         .format(self._preferred_dbroot))
++                         .format(self._default_dbroot))
+                     return
+ 
+             self._dbroot = fread(dbroot_path)

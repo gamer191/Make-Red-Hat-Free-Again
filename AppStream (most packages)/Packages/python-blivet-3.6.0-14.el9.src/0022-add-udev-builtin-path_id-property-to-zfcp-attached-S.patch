@@ -1,0 +1,60 @@
+From d7708bca72f4a7d0bfa732912e2087bd6aa8f379 Mon Sep 17 00:00:00 2001
+From: Steffen Maier <maier@linux.ibm.com>
+Date: Thu, 23 Feb 2023 13:28:50 +0100
+Subject: [PATCH] add udev-builtin-path_id property to zfcp-attached SCSI disks
+
+so anaconda can use it to display path_id information for multipath
+members
+
+Signed-off-by: Steffen Maier <maier@linux.ibm.com>
+---
+ blivet/devices/disk.py           | 2 ++
+ blivet/populator/helpers/disk.py | 1 +
+ tests/unit_tests/tags_test.py    | 2 +-
+ 3 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/blivet/devices/disk.py b/blivet/devices/disk.py
+index 8842b4dc..746f6d58 100644
+--- a/blivet/devices/disk.py
++++ b/blivet/devices/disk.py
+@@ -556,10 +556,12 @@ class ZFCPDiskDevice(DiskDevice):
+             :keyword hba_id: ???
+             :keyword wwpn: ???
+             :keyword fcp_lun: ???
++            :keyword id_path: string from udev-builtin-path_id
+         """
+         self.hba_id = kwargs.pop("hba_id")
+         self.wwpn = kwargs.pop("wwpn")
+         self.fcp_lun = kwargs.pop("fcp_lun")
++        self.id_path = kwargs.pop("id_path")
+         DiskDevice.__init__(self, device, **kwargs)
+         self._clear_local_tags()
+         self.tags.add(Tags.remote)
+diff --git a/blivet/populator/helpers/disk.py b/blivet/populator/helpers/disk.py
+index cf20d302..92e85688 100644
+--- a/blivet/populator/helpers/disk.py
++++ b/blivet/populator/helpers/disk.py
+@@ -223,6 +223,7 @@ class ZFCPDevicePopulator(DiskDevicePopulator):
+     def _get_kwargs(self):
+         kwargs = super(ZFCPDevicePopulator, self)._get_kwargs()
+ 
++        kwargs["id_path"] = udev.device_get_path(self.data)
+         for attr in ['hba_id', 'wwpn', 'fcp_lun']:
+             kwargs[attr] = udev.device_get_zfcp_attribute(self.data, attr=attr)
+ 
+diff --git a/tests/unit_tests/tags_test.py b/tests/unit_tests/tags_test.py
+index 49a2d72e..15fa2a40 100644
+--- a/tests/unit_tests/tags_test.py
++++ b/tests/unit_tests/tags_test.py
+@@ -72,7 +72,7 @@ class DeviceTagsTest(unittest.TestCase):
+         fcoe_device = FcoeDiskDevice('test6', nic=None, identifier=None, id_path=None)
+         self.assertIn(Tags.remote, fcoe_device.tags)
+         self.assertNotIn(Tags.local, fcoe_device.tags)
+-        zfcp_device = ZFCPDiskDevice('test7', hba_id=None, wwpn=None, fcp_lun=None)
++        zfcp_device = ZFCPDiskDevice('test7', hba_id=None, wwpn=None, fcp_lun=None, id_path=None)
+         self.assertIn(Tags.remote, zfcp_device.tags)
+         self.assertNotIn(Tags.local, zfcp_device.tags)
+ 
+-- 
+2.43.0
+

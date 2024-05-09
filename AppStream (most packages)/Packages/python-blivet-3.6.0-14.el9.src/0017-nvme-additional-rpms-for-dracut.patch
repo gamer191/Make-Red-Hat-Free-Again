@@ -1,0 +1,26 @@
+From 9dcd32dd85f7f45c3fe6c8d7b1de3b4c322c6807 Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Mon, 11 Sep 2023 13:50:24 +0200
+Subject: [PATCH] nvme: Require additional rpms for dracut
+
+The '95nvmf' dracut module needs a couple more packages
+for the NBFT (NVMe over TCP) to work - such as networking.
+Local PCIe NVMe devices have no special needs.
+---
+ blivet/devices/disk.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/blivet/devices/disk.py b/blivet/devices/disk.py
+index 2b49ef685..5053f7bb8 100644
+--- a/blivet/devices/disk.py
++++ b/blivet/devices/disk.py
+@@ -725,7 +725,8 @@ class NVMeFabricsNamespaceDevice(NVMeNamespaceDevice, NetworkStorageDevice):
+ 
+     """ NVMe fabrics namespace """
+     _type = "nvme-fabrics"
+-    _packages = ["nvme-cli"]
++    # dracut '95nvmf' module dependencies
++    _packages = ["nvme-cli", "dracut-network"]
+ 
+     def __init__(self, device, **kwargs):
+         """

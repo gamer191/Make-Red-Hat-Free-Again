@@ -1,0 +1,172 @@
+From 517f17481685afbabea6750b57d71a736f9a157e Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Thu, 25 May 2023 17:02:39 +0200
+Subject: [PATCH] Do not add new PVs to the LVM devices file if it doesn't
+ exist and VGs are present
+
+If there is a preexisting VG on the system when we create a new PV
+and the LVM devices file doesn't exist we will create it and add
+only the new PV to it which means the preexisting VG will now be
+ignored by LVM tools. This change skips adding newly created PVs
+to the devices file in the same way 'pvcreate' and 'vgcreate' do.
+---
+ blivet/devicelibs/lvm.py                     |  3 +
+ blivet/formats/lvmpv.py                      | 17 ++++-
+ tests/unit_tests/formats_tests/__init__.py   |  1 +
+ tests/unit_tests/formats_tests/lvmpv_test.py | 73 ++++++++++++++++++++
+ 4 files changed, 91 insertions(+), 3 deletions(-)
+ create mode 100644 tests/unit_tests/formats_tests/lvmpv_test.py
+
+diff --git a/blivet/devicelibs/lvm.py b/blivet/devicelibs/lvm.py
+index 16a8e8f8..dc7d0cbe 100644
+--- a/blivet/devicelibs/lvm.py
++++ b/blivet/devicelibs/lvm.py
+@@ -84,6 +84,9 @@ if hasattr(blockdev.LVMTech, "DEVICES"):
+ else:
+     HAVE_LVMDEVICES = False
+ 
++
++LVM_DEVICES_FILE = "/etc/lvm/devices/system.devices"
++
+ # list of devices that LVM is allowed to use
+ # with LVM >= 2.0.13 we'll use this for the --devices option and when creating
+ # the /etc/lvm/devices/system.devices file
+diff --git a/blivet/formats/lvmpv.py b/blivet/formats/lvmpv.py
+index cb01b2f3..65acedbe 100644
+--- a/blivet/formats/lvmpv.py
++++ b/blivet/formats/lvmpv.py
+@@ -36,7 +36,7 @@ from ..size import Size
+ from ..errors import PhysicalVolumeError
+ from . import DeviceFormat, register_device_format
+ from .. import udev
+-from ..static_data.lvm_info import pvs_info
++from ..static_data.lvm_info import pvs_info, vgs_info
+ 
+ import logging
+ log = logging.getLogger("blivet")
+@@ -121,10 +121,21 @@ class LVMPhysicalVolume(DeviceFormat):
+     def supported(self):
+         return super(LVMPhysicalVolume, self).supported and self._plugin.available
+ 
+-    def lvmdevices_add(self):
++    def lvmdevices_add(self, force=True):
++        """ Add this PV to the LVM system devices file
++            :keyword force: whether to add the PV even if the system devices file doesn't exist and
++                            VGs are present in the system
++            :type force: bool
++        """
++
+         if not lvm.HAVE_LVMDEVICES:
+             raise PhysicalVolumeError("LVM devices file feature is not supported")
+ 
++        if not os.path.exists(lvm.LVM_DEVICES_FILE) and vgs_info.cache and not force:
++            log.debug("Not adding %s to devices file: %s doesn't exist and there are VGs present in the system",
++                      self.device, lvm.LVM_DEVICES_FILE)
++            return
++
+         try:
+             blockdev.lvm.devices_add(self.device)
+         except blockdev.LVMError as e:
+@@ -151,7 +162,7 @@ class LVMPhysicalVolume(DeviceFormat):
+                 # with lvmdbusd we need to call the pvcreate without --devices otherwise lvmdbusd
+                 # wouldn't be able to find the newly created pv and the call would fail
+                 blockdev.lvm.pvcreate(self.device, data_alignment=self.data_alignment, extra=[ea_yes])
+-                self.lvmdevices_add()
++                self.lvmdevices_add(force=False)
+         else:
+             blockdev.lvm.pvcreate(self.device, data_alignment=self.data_alignment, extra=[ea_yes])
+ 
+diff --git a/tests/unit_tests/formats_tests/__init__.py b/tests/unit_tests/formats_tests/__init__.py
+index d678900b..95c7a25b 100644
+--- a/tests/unit_tests/formats_tests/__init__.py
++++ b/tests/unit_tests/formats_tests/__init__.py
+@@ -2,6 +2,7 @@ from .device_test import *
+ from .disklabel_test import *
+ from .init_test import *
+ from .luks_test import *
++from .lvmpv_test import *
+ from .methods_test import *
+ from .misc_test import *
+ from .selinux_test import *
+diff --git a/tests/unit_tests/formats_tests/lvmpv_test.py b/tests/unit_tests/formats_tests/lvmpv_test.py
+new file mode 100644
+index 00000000..6490c7d4
+--- /dev/null
++++ b/tests/unit_tests/formats_tests/lvmpv_test.py
+@@ -0,0 +1,73 @@
++try:
++    from unittest.mock import patch
++except ImportError:
++    from mock import patch
++
++from contextlib import contextmanager
++
++import unittest
++
++from blivet.formats.lvmpv import LVMPhysicalVolume
++
++
++class LVMPVNodevTestCase(unittest.TestCase):
++
++    @contextmanager
++    def patches(self):
++        patchers = dict()
++        mocks = dict()
++
++        patchers["blockdev"] = patch("blivet.formats.lvmpv.blockdev")
++        patchers["lvm"] = patch("blivet.formats.lvmpv.lvm")
++        patchers["vgs_info"] = patch("blivet.formats.lvmpv.vgs_info")
++        patchers["os"] = patch("blivet.formats.lvmpv.os")
++
++        for name, patcher in patchers.items():
++            mocks[name] = patcher.start()
++
++        yield mocks
++
++        for patcher in patchers.values():
++            patcher.stop()
++
++    def test_lvm_devices(self):
++        fmt = LVMPhysicalVolume(device="/dev/test")
++
++        with self.patches() as mock:
++            # LVM devices file not enabled/supported -> devices_add should not be called
++            mock["lvm"].HAVE_LVMDEVICES = False
++
++            fmt._create()
++
++            mock["blockdev"].lvm.devices_add.assert_not_called()
++
++        with self.patches() as mock:
++            # LVM devices file enabled and devices file exists -> devices_add should be called
++            mock["lvm"].HAVE_LVMDEVICES = True
++            mock["os"].path.exists.return_value = True
++
++            fmt._create()
++
++            mock["blockdev"].lvm.devices_add.assert_called_with("/dev/test")
++
++        with self.patches() as mock:
++            # LVM devices file enabled and devices file doesn't exist
++            # and no existing VGs present -> devices_add should be called
++            mock["lvm"].HAVE_LVMDEVICES = True
++            mock["os"].path.exists.return_value = False
++            mock["vgs_info"].cache = {}
++
++            fmt._create()
++
++            mock["blockdev"].lvm.devices_add.assert_called_with("/dev/test")
++
++        with self.patches() as mock:
++            # LVM devices file enabled and devices file doesn't exist
++            # and existing VGs present -> devices_add should not be called
++            mock["lvm"].HAVE_LVMDEVICES = True
++            mock["os"].path.exists.return_value = False
++            mock["vgs_info"].cache = {"fake_vg_uuid": "fake_vg_data"}
++
++            fmt._create()
++
++            mock["blockdev"].lvm.devices_add.assert_not_called()
+-- 
+2.43.0
+

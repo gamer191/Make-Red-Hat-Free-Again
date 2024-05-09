@@ -1,0 +1,57 @@
+From 2aba050e74dc5df483da022dcf436b101c7a4301 Mon Sep 17 00:00:00 2001
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed, 11 Jan 2023 14:59:24 +0100
+Subject: [PATCH] Default to encryption sector size 512 for LUKS devices
+
+We are currently letting cryptsetup decide the optimal encryption
+sector size for LUKS. The problem is that for disks with physical
+sector size 4096 cryptsetup will default to 4096 encryption sector
+size even if the drive logical sector size is 512 which means
+these disks cannot be combined with other 512 logical sector size
+disks in LVM. This requires a more sophisticated solution in the
+future, but for now just default to 512 if not specified by the
+user otherwise.
+
+Resolves: rhbz#2103800
+---
+ blivet/formats/luks.py                      | 10 +++++++---
+ tests/unit_tests/formats_tests/luks_test.py |  2 +-
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/blivet/formats/luks.py b/blivet/formats/luks.py
+index 8de4911f..2637e0c5 100644
+--- a/blivet/formats/luks.py
++++ b/blivet/formats/luks.py
+@@ -166,9 +166,13 @@ class LUKS(DeviceFormat):
+             if self.pbkdf_args.type == "pbkdf2" and self.pbkdf_args.max_memory_kb:
+                 log.warning("Memory limit is not used for pbkdf2 and it will be ignored.")
+ 
+-        self.luks_sector_size = kwargs.get("luks_sector_size") or 0
+-        if self.luks_sector_size and self.luks_version != "luks2":
+-            raise ValueError("Sector size argument is valid only for LUKS version 2.")
++        self.luks_sector_size = kwargs.get("luks_sector_size")
++        if self.luks_version == "luks2":
++            if self.luks_sector_size is None:
++                self.luks_sector_size = 512  # XXX we don't want cryptsetup choose automatically here so fallback to 512
++        else:
++            if self.luks_sector_size:
++                raise ValueError("Sector size argument is valid only for LUKS version 2.")
+ 
+     def __repr__(self):
+         s = DeviceFormat.__repr__(self)
+diff --git a/tests/unit_tests/formats_tests/luks_test.py b/tests/unit_tests/formats_tests/luks_test.py
+index 5ae6acfe..ec7b7592 100644
+--- a/tests/unit_tests/formats_tests/luks_test.py
++++ b/tests/unit_tests/formats_tests/luks_test.py
+@@ -53,7 +53,7 @@ class LUKSNodevTestCase(unittest.TestCase):
+ 
+     def test_sector_size(self):
+         fmt = LUKS()
+-        self.assertEqual(fmt.luks_sector_size, 0)
++        self.assertEqual(fmt.luks_sector_size, 512)
+ 
+         with self.assertRaises(ValueError):
+             fmt = LUKS(luks_version="luks1", luks_sector_size=4096)
+-- 
+2.39.0
+
