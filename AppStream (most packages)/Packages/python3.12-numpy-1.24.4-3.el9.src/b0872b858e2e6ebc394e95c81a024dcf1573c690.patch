@@ -1,0 +1,46 @@
+From b0872b858e2e6ebc394e95c81a024dcf1573c690 Mon Sep 17 00:00:00 2001
+From: Ralf Gommers <ralf.gommers@gmail.com>
+Date: Mon, 19 Jun 2023 11:07:19 +0200
+Subject: [PATCH] TST: skip refcount related tests on py312
+
+Python 3.12 has immortal refcounts; the initial and final
+values will be the same when accessing `sys.getrefcount` inside a
+test.
+
+Closes gh-23986
+---
+ numpy/core/tests/test_dtype.py      | 5 +++++
+ numpy/core/tests/test_regression.py | 4 ++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/numpy/core/tests/test_dtype.py b/numpy/core/tests/test_dtype.py
+index 454bcfa7cc1..9c88ddb5cd7 100644
+--- a/numpy/core/tests/test_dtype.py
++++ b/numpy/core/tests/test_dtype.py
+@@ -755,6 +755,11 @@ def iter_struct_object_dtypes():
+     yield pytest.param(dt, p, 12, obj, id="<structured subarray 2>")
+ 
+ 
++@pytest.mark.skipif(
++    sys.version_info >= (3, 12),
++    reason="Python 3.12 has immortal refcounts, this test will no longer "
++           "work. See gh-23986"
++)
+ @pytest.mark.skipif(not HAS_REFCOUNT, reason="Python lacks refcounts")
+ class TestStructuredObjectRefcounting:
+     """These tests cover various uses of complicated structured types which
+diff --git a/numpy/core/tests/test_regression.py b/numpy/core/tests/test_regression.py
+index e415ecccf9f..35763f843da 100644
+--- a/numpy/core/tests/test_regression.py
++++ b/numpy/core/tests/test_regression.py
+@@ -1465,6 +1465,10 @@ def test_structured_arrays_with_objects1(self):
+         x[x.nonzero()] = x.ravel()[:1]
+         assert_(x[0, 1] == x[0, 0])
+ 
++    @pytest.mark.skipif(
++        sys.version_info >= (3, 12),
++        reason="Python 3.12 has immortal refcounts, this test no longer works."
++    )
+     @pytest.mark.skipif(not HAS_REFCOUNT, reason="Python lacks refcounts")
+     def test_structured_arrays_with_objects2(self):
+         # Ticket #1299 second test

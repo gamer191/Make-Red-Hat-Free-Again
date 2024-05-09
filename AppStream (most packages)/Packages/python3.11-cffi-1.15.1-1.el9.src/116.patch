@@ -1,0 +1,103 @@
+From 9c7d865e17ec16a847090a3e0d1498b698b99756 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Miro=20Hron=C4=8Dok?= <miro@hroncok.cz>
+Date: Mon, 14 Nov 2022 12:30:12 +0100
+Subject: [PATCH 1/2] Drop py.code usage from tests, no longer depend on the
+ deprecated py package
+
+--HG--
+branch : py.code
+---
+ README.md                                     | 2 +-
+ requirements.txt                              | 1 -
+ testing/cffi0/test_zintegration.py            | 3 ++-
+ testing/cffi1/test_dlopen_unicode_literals.py | 4 ++--
+ 4 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/README.md b/README.md
+index b4b84884..d39d88da 100644
+--- a/README.md
++++ b/README.md
+@@ -30,7 +30,7 @@ Testing/development tips
+ 
+ To run tests under CPython, run::
+ 
+-    pip install pytest py  # if you don't have pytest and py already
++    pip install pytest    # if you don't have pytest already
+     pip install pycparser
+     python setup.py build_ext -f -i
+     pytest c/ testing/
+diff --git a/requirements.txt b/requirements.txt
+index 881a093f..a97f0282 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,3 +1,2 @@
+ pycparser
+ pytest
+-py
+diff --git a/testing/cffi0/test_zintegration.py b/testing/cffi0/test_zintegration.py
+index d6a02ce0..ca2d4642 100644
+--- a/testing/cffi0/test_zintegration.py
++++ b/testing/cffi0/test_zintegration.py
+@@ -1,5 +1,6 @@
+ import py, os, sys, shutil
+ import subprocess
++import textwrap
+ from testing.udir import udir
+ import pytest
+ 
+@@ -66,7 +67,7 @@ def really_run_setup_and_program(dirname, venv_dir_and_paths, python_snippet):
+         remove(os.path.join(basedir, '__pycache__'))
+     olddir = os.getcwd()
+     python_f = udir.join('x.py')
+-    python_f.write(py.code.Source(python_snippet))
++    python_f.write(textwrap.dedent(python_snippet))
+     try:
+         os.chdir(str(SNIPPET_DIR.join(dirname)))
+         if os.name == 'nt':
+diff --git a/testing/cffi1/test_dlopen_unicode_literals.py b/testing/cffi1/test_dlopen_unicode_literals.py
+index e792866e..dc955a57 100644
+--- a/testing/cffi1/test_dlopen_unicode_literals.py
++++ b/testing/cffi1/test_dlopen_unicode_literals.py
+@@ -1,4 +1,4 @@
+-import py, os
++import os
+ 
+ s = """from __future__ import unicode_literals
+ """
+@@ -6,4 +6,4 @@ s = """from __future__ import unicode_literals
+ with open(os.path.join(os.path.dirname(__file__), 'test_dlopen.py')) as f:
+     s += f.read()
+ 
+-exec(py.code.compile(s))
++exec(compile(s, filename='test_dlopen.py', mode='exec'))
+-- 
+GitLab
+
+
+From 4c1551037965864cfe5494647af014e2390d077c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Miro=20Hron=C4=8Dok?= <miro@hroncok.cz>
+Date: Mon, 14 Nov 2022 13:12:31 +0100
+Subject: [PATCH 2/2] Make the space count consistent with the past
+
+--HG--
+branch : py.code
+---
+ README.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/README.md b/README.md
+index d39d88da..21c82b84 100644
+--- a/README.md
++++ b/README.md
+@@ -30,7 +30,7 @@ Testing/development tips
+ 
+ To run tests under CPython, run::
+ 
+-    pip install pytest    # if you don't have pytest already
++    pip install pytest     # if you don't have pytest already
+     pip install pycparser
+     python setup.py build_ext -f -i
+     pytest c/ testing/
+-- 
+GitLab
+

@@ -1,0 +1,53 @@
+From 9b068e5a68d9efd9c2403e9499b2c381b6c1d3a6 Mon Sep 17 00:00:00 2001
+From: Matt Haberland <mhaberla@calpoly.edu>
+Date: Fri, 21 Apr 2023 07:07:41 -0700
+Subject: [PATCH 1/2] MAINT: optimize: fix test_milp_timeout
+
+---
+ scipy/optimize/tests/test_milp.py | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/scipy/optimize/tests/test_milp.py b/scipy/optimize/tests/test_milp.py
+index 51996642..1f60fce3 100644
+--- a/scipy/optimize/tests/test_milp.py
++++ b/scipy/optimize/tests/test_milp.py
+@@ -279,9 +279,7 @@ _msg_iter = "Iteration limit reached. (HiGHS Status 14:"
+ 
+ @pytest.mark.skipif(np.intp(0).itemsize < 8,
+                     reason="Unhandled 32-bit GCC FP bug")
+-@pytest.mark.slow
+-@pytest.mark.timeout(360)
+-@pytest.mark.parametrize(["options", "msg"], [({"time_limit": 10}, _msg_time),
++@pytest.mark.parametrize(["options", "msg"], [({"time_limit": 0.1}, _msg_time),
+                                               ({"node_limit": 1}, _msg_iter)])
+ def test_milp_timeout_16545(options, msg):
+     # Ensure solution is not thrown away if MILP solver times out
+-- 
+2.40.0
+
+
+From 024568a4f4292e7b22643f40ae61d33d273cf674 Mon Sep 17 00:00:00 2001
+From: Matt Haberland <mhaberla@calpoly.edu>
+Date: Sat, 22 Apr 2023 15:43:07 -0700
+Subject: [PATCH 2/2] Update scipy/optimize/tests/test_milp.py
+
+[skip ci]
+---
+ scipy/optimize/tests/test_milp.py | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/scipy/optimize/tests/test_milp.py b/scipy/optimize/tests/test_milp.py
+index 1f60fce3..42dae29a 100644
+--- a/scipy/optimize/tests/test_milp.py
++++ b/scipy/optimize/tests/test_milp.py
+@@ -279,6 +279,7 @@ _msg_iter = "Iteration limit reached. (HiGHS Status 14:"
+ 
+ @pytest.mark.skipif(np.intp(0).itemsize < 8,
+                     reason="Unhandled 32-bit GCC FP bug")
++@pytest.mark.slow
+ @pytest.mark.parametrize(["options", "msg"], [({"time_limit": 0.1}, _msg_time),
+                                               ({"node_limit": 1}, _msg_iter)])
+ def test_milp_timeout_16545(options, msg):
+-- 
+2.40.0
+
