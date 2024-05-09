@@ -1,0 +1,33 @@
+From 423119599c7a98dc51dda6e5260c992e21438d60 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Mar 31 2021 16:40:10 +0000
+Subject: extension: Do not relayout on scale changes
+
+
+This makes the background logo position flicker as we enter the
+overview. This actor is part of the BackgroundActor actor hierarchy,
+and can be left to scale neatly with it.
+
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1943938
+
+---
+
+diff --git a/extension.js b/extension.js
+index d1bf35b..edf2868 100644
+--- a/extension.js
++++ b/extension.js
+@@ -25,13 +25,6 @@ var IconContainer = GObject.registerClass(
+ class IconContainer extends St.Widget {
+     _init(params) {
+         super._init(params);
+-
+-        this.connect('notify::scale-x', () => {
+-            this.queue_relayout();
+-        });
+-        this.connect('notify::scale-y', () => {
+-            this.queue_relayout();
+-        });
+     }
+ 
+     vfunc_get_preferred_width(forHeight) {
+

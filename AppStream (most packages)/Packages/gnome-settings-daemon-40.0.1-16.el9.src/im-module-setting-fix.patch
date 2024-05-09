@@ -1,0 +1,561 @@
+From 6ab152961de63dec953981aea24a7f0b4e7949ec Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Fri, 3 Dec 2021 23:38:50 +0100
+Subject: [PATCH 1/3] xsettings: Adopt code to look up GTK IM module
+
+Right now, gsd-keyboard and gsd-xsettings have a strange relation
+where the first sets the gtk-im-module dconf setting for the latter
+to read the setting and forward it through XSettings.
+
+Since this detection is highly X11 specific, make it happen in the
+Xsettings daemon itself, from the relevant setting and device presence.
+
+This makes users still able to shoot themselves in the foot by changing
+the setting, X11 clients able to be told to switch to ibus if it turns
+out necessary, and Wayland clients unaffected otherwise.
+
+Related: https://gitlab.gnome.org/GNOME/gtk/-/issues/4443
+---
+ plugins/keyboard/gsd-keyboard-manager.c   | 147 ---------------------
+ plugins/xsettings/gsd-xsettings-manager.c | 153 ++++++++++++++++++++++
+ 2 files changed, 153 insertions(+), 147 deletions(-)
+
+diff --git a/plugins/keyboard/gsd-keyboard-manager.c b/plugins/keyboard/gsd-keyboard-manager.c
+index cb4ea98b..d41393bc 100644
+--- a/plugins/keyboard/gsd-keyboard-manager.c
++++ b/plugins/keyboard/gsd-keyboard-manager.c
+@@ -57,10 +57,6 @@
+ 
+ #define GNOME_DESKTOP_INTERFACE_DIR "org.gnome.desktop.interface"
+ 
+-#define KEY_GTK_IM_MODULE    "gtk-im-module"
+-#define GTK_IM_MODULE_SIMPLE "gtk-im-context-simple"
+-#define GTK_IM_MODULE_IBUS   "ibus"
+-
+ #define GNOME_DESKTOP_INPUT_SOURCES_DIR "org.gnome.desktop.input-sources"
+ 
+ #define KEY_INPUT_SOURCES        "sources"
+@@ -71,9 +67,6 @@
+ 
+ #define DEFAULT_LAYOUT "us"
+ 
+-#define GNOME_A11Y_APPLICATIONS_INTERFACE_DIR "org.gnome.desktop.a11y.applications"
+-#define KEY_OSK_ENABLED "screen-keyboard-enabled"
+-
+ struct _GsdKeyboardManager
+ {
+         GObject    parent;
+@@ -81,21 +74,14 @@ struct _GsdKeyboardManager
+         guint      start_idle_id;
+         GSettings *settings;
+         GSettings *input_sources_settings;
+-        GSettings *a11y_settings;
+         GDBusProxy *localed;
+         GCancellable *cancellable;
+-
+-        GdkDeviceManager *device_manager;
+-        guint device_added_id;
+-        guint device_removed_id;
+ };
+ 
+ static void     gsd_keyboard_manager_class_init  (GsdKeyboardManagerClass *klass);
+ static void     gsd_keyboard_manager_init        (GsdKeyboardManager      *keyboard_manager);
+ static void     gsd_keyboard_manager_finalize    (GObject                 *object);
+ 
+-static void     update_gtk_im_module (GsdKeyboardManager *manager);
+-
+ G_DEFINE_TYPE (GsdKeyboardManager, gsd_keyboard_manager, G_TYPE_OBJECT)
+ 
+ static gpointer manager_object = NULL;
+@@ -218,121 +204,6 @@ settings_changed (GSettings          *settings,
+ 
+ }
+ 
+-static void
+-device_added_cb (GdkDeviceManager   *device_manager,
+-                 GdkDevice          *device,
+-                 GsdKeyboardManager *manager)
+-{
+-        GdkInputSource source;
+-
+-        source = gdk_device_get_source (device);
+-        if (source == GDK_SOURCE_TOUCHSCREEN) {
+-                update_gtk_im_module (manager);
+-        }
+-}
+-
+-static void
+-device_removed_cb (GdkDeviceManager   *device_manager,
+-                   GdkDevice          *device,
+-                   GsdKeyboardManager *manager)
+-{
+-        GdkInputSource source;
+-
+-        source = gdk_device_get_source (device);
+-        if (source == GDK_SOURCE_TOUCHSCREEN)
+-                update_gtk_im_module (manager);
+-}
+-
+-static void
+-set_devicepresence_handler (GsdKeyboardManager *manager)
+-{
+-        GdkDeviceManager *device_manager;
+-
+-        if (gnome_settings_is_wayland ())
+-                return;
+-
+-        device_manager = gdk_display_get_device_manager (gdk_display_get_default ());
+-
+-        manager->device_added_id = g_signal_connect (G_OBJECT (device_manager), "device-added",
+-                                                           G_CALLBACK (device_added_cb), manager);
+-        manager->device_removed_id = g_signal_connect (G_OBJECT (device_manager), "device-removed",
+-                                                             G_CALLBACK (device_removed_cb), manager);
+-        manager->device_manager = device_manager;
+-}
+-
+-static gboolean
+-need_ibus (GVariant *sources)
+-{
+-        GVariantIter iter;
+-        const gchar *type;
+-
+-        g_variant_iter_init (&iter, sources);
+-        while (g_variant_iter_next (&iter, "(&s&s)", &type, NULL))
+-                if (g_str_equal (type, INPUT_SOURCE_TYPE_IBUS))
+-                        return TRUE;
+-
+-        return FALSE;
+-}
+-
+-static gboolean
+-need_osk (GsdKeyboardManager *manager)
+-{
+-        gboolean has_touchscreen = FALSE;
+-        GList *devices;
+-        GdkSeat *seat;
+-
+-        if (g_settings_get_boolean (manager->a11y_settings,
+-                                    KEY_OSK_ENABLED))
+-                return TRUE;
+-
+-        seat = gdk_display_get_default_seat (gdk_display_get_default ());
+-        devices = gdk_seat_get_slaves (seat, GDK_SEAT_CAPABILITY_TOUCH);
+-
+-        has_touchscreen = devices != NULL;
+-
+-        g_list_free (devices);
+-
+-        return has_touchscreen;
+-}
+-
+-static void
+-set_gtk_im_module (GsdKeyboardManager *manager,
+-                   GSettings          *settings,
+-                   GVariant           *sources)
+-{
+-        const gchar *new_module;
+-        gchar *current_module;
+-
+-        if (need_ibus (sources) || need_osk (manager))
+-                new_module = GTK_IM_MODULE_IBUS;
+-        else
+-                new_module = GTK_IM_MODULE_SIMPLE;
+-
+-        current_module = g_settings_get_string (settings, KEY_GTK_IM_MODULE);
+-        if (!g_str_equal (current_module, new_module))
+-                g_settings_set_string (settings, KEY_GTK_IM_MODULE, new_module);
+-        g_free (current_module);
+-}
+-
+-static void
+-update_gtk_im_module (GsdKeyboardManager *manager)
+-{
+-        GSettings *interface_settings;
+-        GVariant *sources;
+-
+-        /* Gtk+ uses the IM module advertised in XSETTINGS so, if we
+-         * have IBus input sources, we want it to load that
+-         * module. Otherwise we can use the default "simple" module
+-         * which is builtin gtk+
+-         */
+-        interface_settings = g_settings_new (GNOME_DESKTOP_INTERFACE_DIR);
+-        sources = g_settings_get_value (manager->input_sources_settings,
+-                                        KEY_INPUT_SOURCES);
+-        set_gtk_im_module (manager, interface_settings, sources);
+-        g_object_unref (interface_settings);
+-        g_variant_unref (sources);
+-}
+-
+ static void
+ get_sources_from_xkb_config (GsdKeyboardManager *manager)
+ {
+@@ -580,18 +451,7 @@ start_keyboard_idle_cb (GsdKeyboardManager *manager)
+ 
+         manager->settings = g_settings_new (GSD_KEYBOARD_DIR);
+ 
+-	set_devicepresence_handler (manager);
+-
+         manager->input_sources_settings = g_settings_new (GNOME_DESKTOP_INPUT_SOURCES_DIR);
+-        g_signal_connect_swapped (manager->input_sources_settings,
+-                                  "changed::" KEY_INPUT_SOURCES,
+-                                  G_CALLBACK (update_gtk_im_module), manager);
+-
+-        manager->a11y_settings = g_settings_new (GNOME_A11Y_APPLICATIONS_INTERFACE_DIR);
+-        g_signal_connect_swapped (manager->a11y_settings,
+-                                  "changed::" KEY_OSK_ENABLED,
+-                                  G_CALLBACK (update_gtk_im_module), manager);
+-        update_gtk_im_module (manager);
+ 
+         manager->cancellable = g_cancellable_new ();
+ 
+@@ -645,14 +505,7 @@ gsd_keyboard_manager_stop (GsdKeyboardManager *manager)
+ 
+         g_clear_object (&manager->settings);
+         g_clear_object (&manager->input_sources_settings);
+-        g_clear_object (&manager->a11y_settings);
+         g_clear_object (&manager->localed);
+-
+-        if (manager->device_manager != NULL) {
+-                g_signal_handler_disconnect (manager->device_manager, manager->device_added_id);
+-                g_signal_handler_disconnect (manager->device_manager, manager->device_removed_id);
+-                manager->device_manager = NULL;
+-        }
+ }
+ 
+ static void
+diff --git a/plugins/xsettings/gsd-xsettings-manager.c b/plugins/xsettings/gsd-xsettings-manager.c
+index 5f1b4583..1aa020db 100644
+--- a/plugins/xsettings/gsd-xsettings-manager.c
++++ b/plugins/xsettings/gsd-xsettings-manager.c
+@@ -56,6 +56,9 @@
+ #define PRIVACY_SETTINGS_SCHEMA     "org.gnome.desktop.privacy"
+ #define WM_SETTINGS_SCHEMA        "org.gnome.desktop.wm.preferences"
+ #define A11Y_SCHEMA               "org.gnome.desktop.a11y"
++#define A11Y_INTERFACE_SCHEMA     "org.gnome.desktop.a11y.interface"
++#define A11Y_APPLICATIONS_SCHEMA   "org.gnome.desktop.a11y.applications"
++#define INPUT_SOURCES_SCHEMA       "org.gnome.desktop.input-sources"
+ #define CLASSIC_WM_SETTINGS_SCHEMA "org.gnome.shell.extensions.classic-overrides"
+ 
+ #define XSETTINGS_PLUGIN_SCHEMA "org.gnome.settings-daemon.plugins.xsettings"
+@@ -72,9 +75,18 @@
+ #define FONT_HINTING_KEY      "font-hinting"
+ #define FONT_RGBA_ORDER_KEY   "font-rgba-order"
+ 
++#define INPUT_SOURCES_KEY      "sources"
++#define OSK_ENABLED_KEY        "screen-keyboard-enabled"
++#define GTK_IM_MODULE_KEY      "gtk-im-module"
++
+ #define GTK_SETTINGS_DBUS_PATH "/org/gtk/Settings"
+ #define GTK_SETTINGS_DBUS_NAME "org.gtk.Settings"
+ 
++#define INPUT_SOURCE_TYPE_IBUS "ibus"
++
++#define GTK_IM_MODULE_SIMPLE "gtk-im-context-simple"
++#define GTK_IM_MODULE_IBUS   "ibus"
++
+ static const gchar introspection_xml[] =
+ "<node name='/org/gtk/Settings'>"
+ "  <interface name='org.gtk.Settings'>"
+@@ -277,6 +289,11 @@ struct _GsdXSettingsManager
+         FcMonitor         *fontconfig_monitor;
+         gint64             fontconfig_timestamp;
+ 
++        GSettings         *interface_settings;
++        GSettings         *input_sources_settings;
++        GSettings         *a11y_settings;
++        GdkSeat           *user_seat;
++
+         GsdXSettingsGtk   *gtk;
+ 
+         guint              introspect_properties_changed_id;
+@@ -286,6 +303,9 @@ struct _GsdXSettingsManager
+         guint              display_config_watch_id;
+         guint              monitors_changed_id;
+ 
++        guint              device_added_id;
++        guint              device_removed_id;
++
+         guint              shell_name_watch_id;
+         gboolean           have_shell;
+ 
+@@ -1291,6 +1311,112 @@ migrate_settings (void)
+                                     mouse_entries, G_N_ELEMENTS (mouse_entries));
+ }
+ 
++static gboolean
++need_ibus (GsdXSettingsManager *manager)
++{
++        GVariant *sources;
++        GVariantIter iter;
++        const gchar *type;
++        gboolean needs_ibus = FALSE;
++
++        sources = g_settings_get_value (manager->input_sources_settings,
++                                        INPUT_SOURCES_KEY);
++
++        g_variant_iter_init (&iter, sources);
++        while (g_variant_iter_next (&iter, "(&s&s)", &type, NULL)) {
++                if (g_str_equal (type, INPUT_SOURCE_TYPE_IBUS)) {
++                        needs_ibus = TRUE;
++                        break;
++                }
++        }
++
++        g_variant_unref (sources);
++
++        return needs_ibus;
++}
++
++static gboolean
++need_osk (GsdXSettingsManager *manager)
++{
++        gboolean has_touchscreen = FALSE;
++        GList *devices;
++        GdkSeat *seat;
++
++        if (g_settings_get_boolean (manager->a11y_settings,
++                                    OSK_ENABLED_KEY))
++                return TRUE;
++
++        seat = gdk_display_get_default_seat (gdk_display_get_default ());
++        devices = gdk_seat_get_slaves (seat, GDK_SEAT_CAPABILITY_TOUCH);
++
++        has_touchscreen = devices != NULL;
++
++        g_list_free (devices);
++
++        return has_touchscreen;
++}
++
++static void
++update_gtk_im_module (GsdXSettingsManager *manager)
++{
++        const gchar *module;
++        gchar *setting;
++
++        setting = g_settings_get_string (manager->interface_settings,
++                                         GTK_IM_MODULE_KEY);
++        if (setting && *setting)
++                module = setting;
++        else if (need_ibus (manager) || need_osk (manager))
++                module = GTK_IM_MODULE_IBUS;
++        else
++                module = GTK_IM_MODULE_SIMPLE;
++
++        xsettings_manager_set_string (manager->manager, "Gtk/IMModule", module);
++        g_free (setting);
++}
++
++static void
++device_added_cb (GdkSeat             *user_seat,
++                 GdkDevice           *device,
++                 GsdXSettingsManager *manager)
++{
++        GdkInputSource source;
++
++        source = gdk_device_get_source (device);
++        if (source == GDK_SOURCE_TOUCHSCREEN) {
++                update_gtk_im_module (manager);
++        }
++}
++
++static void
++device_removed_cb (GdkSeat             *user_seat,
++                   GdkDevice           *device,
++                   GsdXSettingsManager *manager)
++{
++        GdkInputSource source;
++
++        source = gdk_device_get_source (device);
++        if (source == GDK_SOURCE_TOUCHSCREEN)
++                update_gtk_im_module (manager);
++}
++
++static void
++set_devicepresence_handler (GsdXSettingsManager *manager)
++{
++        GdkSeat *user_seat;
++
++        if (gnome_settings_is_wayland ())
++                return;
++
++        user_seat = gdk_display_get_default_seat (gdk_display_get_default ());
++
++        manager->device_added_id = g_signal_connect (G_OBJECT (user_seat), "device-added",
++                                                     G_CALLBACK (device_added_cb), manager);
++        manager->device_removed_id = g_signal_connect (G_OBJECT (user_seat), "device-removed",
++                                                       G_CALLBACK (device_removed_cb), manager);
++        manager->user_seat = user_seat;
++}
++
+ gboolean
+ gsd_xsettings_manager_start (GsdXSettingsManager *manager,
+                              GError             **error)
+@@ -1312,6 +1438,23 @@ gsd_xsettings_manager_start (GsdXSettingsManager *manager,
+                 return FALSE;
+         }
+ 
++	set_devicepresence_handler (manager);
++        manager->interface_settings = g_settings_new (INTERFACE_SETTINGS_SCHEMA);
++        g_signal_connect_swapped (manager->interface_settings,
++                                  "changed::" GTK_IM_MODULE_KEY,
++                                  G_CALLBACK (update_gtk_im_module), manager);
++
++        manager->input_sources_settings = g_settings_new (INPUT_SOURCES_SCHEMA);
++        g_signal_connect_swapped (manager->input_sources_settings,
++                                  "changed::" INPUT_SOURCES_KEY,
++                                  G_CALLBACK (update_gtk_im_module), manager);
++
++        manager->a11y_settings = g_settings_new (A11Y_APPLICATIONS_SCHEMA);
++        g_signal_connect_swapped (manager->a11y_settings,
++                                  "changed::" OSK_ENABLED_KEY,
++                                  G_CALLBACK (update_gtk_im_module), manager);
++        update_gtk_im_module (manager);
++
+         manager->monitors_changed_id =
+                 g_dbus_connection_signal_subscribe (manager->dbus_connection,
+                                                     "org.gnome.Mutter.DisplayConfig",
+@@ -1507,6 +1650,16 @@ gsd_xsettings_manager_stop (GsdXSettingsManager *manager)
+                 g_object_unref (manager->gtk);
+                 manager->gtk = NULL;
+         }
++
++        if (manager->user_seat != NULL) {
++                g_signal_handler_disconnect (manager->user_seat, manager->device_added_id);
++                g_signal_handler_disconnect (manager->user_seat, manager->device_removed_id);
++                manager->user_seat = NULL;
++        }
++
++        g_clear_object (&manager->a11y_settings);
++        g_clear_object (&manager->input_sources_settings);
++        g_clear_object (&manager->interface_settings);
+ }
+ 
+ static void
+-- 
+2.37.1
+
+
+From c1de15e0c7f145491482045c688e9f2d444cb041 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Tue, 15 Mar 2022 13:31:23 +0100
+Subject: [PATCH 2/3] keyboard: "Migrate" gtk-im-context setting before giving
+ control to user
+
+This setting used to be modified by gsd-keyboard at runtime, but it no
+longer does. We want to leave this setting in a pristine state before
+we lend control to the user in order to avoid setting leftovers make
+GTK and others use the unintended IM module.
+
+Since the setting is actually staying on the same schema/path, there is
+no nice mechanism that would help us in doing a one-time port, so rely
+on a file at ~/.cache to make this happen once. In the common case, it
+just adds one stat() more at startup.
+
+After this migration is done, the gtk-im-module setting can be considered
+in full control of the user.
+---
+ plugins/keyboard/gsd-keyboard-manager.c | 35 +++++++++++++++++++++++++
+ 1 file changed, 35 insertions(+)
+
+diff --git a/plugins/keyboard/gsd-keyboard-manager.c b/plugins/keyboard/gsd-keyboard-manager.c
+index d41393bc..15247c78 100644
+--- a/plugins/keyboard/gsd-keyboard-manager.c
++++ b/plugins/keyboard/gsd-keyboard-manager.c
+@@ -67,6 +67,8 @@
+ 
+ #define DEFAULT_LAYOUT "us"
+ 
++#define SETTINGS_PORTED_FILE ".gsd-keyboard.settings-ported"
++
+ struct _GsdKeyboardManager
+ {
+         GObject    parent;
+@@ -541,6 +543,14 @@ gsd_keyboard_manager_finalize (GObject *object)
+         G_OBJECT_CLASS (gsd_keyboard_manager_parent_class)->finalize (object);
+ }
+ 
++static GVariant *
++reset_gtk_im_module (GVariant *variant,
++                     GVariant *old_default,
++                     GVariant *new_default)
++{
++        return NULL;
++}
++
+ static void
+ migrate_keyboard_settings (void)
+ {
+@@ -550,12 +560,37 @@ migrate_keyboard_settings (void)
+                 { "delay",                  "delay",                  NULL },
+                 { "remember-numlock-state", "remember-numlock-state", NULL },
+         };
++        g_autofree char *filename = NULL;
+ 
+         gsd_settings_migrate_check ("org.gnome.settings-daemon.peripherals.keyboard.deprecated",
+                                     "/org/gnome/settings-daemon/peripherals/keyboard/",
+                                     "org.gnome.desktop.peripherals.keyboard",
+                                     "/org/gnome/desktop/peripherals/keyboard/",
+                                     entries, G_N_ELEMENTS (entries));
++
++        /* In prior versions to GNOME 42, the gtk-im-module setting was
++         * owned by gsd-keyboard. Reset it once before giving it back
++         * to the user.
++         */
++        filename = g_build_filename (g_get_user_config_dir (),
++                                     SETTINGS_PORTED_FILE,
++                                     NULL);
++
++        if (!g_file_test (filename, G_FILE_TEST_EXISTS)) {
++                GsdSettingsMigrateEntry im_entry[] = {
++                        { "gtk-im-module", "gtk-im-module", reset_gtk_im_module },
++                };
++                g_autoptr(GError) error = NULL;
++
++                gsd_settings_migrate_check ("org.gnome.desktop.interface",
++                                            "/org/gnome/desktop/interface/",
++                                            "org.gnome.desktop.interface",
++                                            "/org/gnome/desktop/interface/",
++                                            im_entry, G_N_ELEMENTS (im_entry));
++
++                if (!g_file_set_contents (filename, "", -1, &error))
++                        g_warning ("Error migrating gtk-im-module: %s", error->message);
++        }
+ }
+ 
+ GsdKeyboardManager *
+-- 
+2.37.1
+
+
+From 46452c04aee1bfd51e23a53dba89ac95e0c06823 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Fri, 29 Apr 2022 14:37:27 +0200
+Subject: [PATCH 3/3] xsettings: Remove direct mapping from gtk-im-module to
+ Gtk/IMModule
+
+This is now handled dynamically since commit e2d268eb00, so we should
+not tie dconf setting and Xsetting automatically here. Doing so, we
+are clobbering the dynamic value on startup, making it only effective
+on later changes.
+
+Fixes: https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/issues/682
+---
+ plugins/xsettings/gsd-xsettings-manager.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/plugins/xsettings/gsd-xsettings-manager.c b/plugins/xsettings/gsd-xsettings-manager.c
+index 1aa020db..d692cefb 100644
+--- a/plugins/xsettings/gsd-xsettings-manager.c
++++ b/plugins/xsettings/gsd-xsettings-manager.c
+@@ -498,7 +498,6 @@ static TranslationEntry translations [] = {
+         { "org.gnome.desktop.interface", "cursor-blink-time",      "Net/CursorBlinkTime",     translate_int_int },
+         { "org.gnome.desktop.interface", "cursor-blink-timeout",   "Gtk/CursorBlinkTimeout",  translate_int_int },
+         { "org.gnome.desktop.interface", "gtk-theme",              "Net/ThemeName",           translate_string_string },
+-        { "org.gnome.desktop.interface", "gtk-im-module",          "Gtk/IMModule",            translate_string_string },
+         { "org.gnome.desktop.interface", "icon-theme",             "Net/IconThemeName",       translate_string_string },
+         { "org.gnome.desktop.interface", "cursor-theme",           "Gtk/CursorThemeName",     translate_string_string },
+         { "org.gnome.desktop.interface", "gtk-enable-primary-paste", "Gtk/EnablePrimaryPaste", translate_bool_int },
+-- 
+2.37.1
+

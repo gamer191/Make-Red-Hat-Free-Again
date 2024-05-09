@@ -1,0 +1,12 @@
+diff -up gimp-2.10.24/etc/gimprc.in.external-help-browser gimp-2.10.24/etc/gimprc.in
+--- gimp-2.10.24/etc/gimprc.in.external-help-browser	2021-04-03 00:02:39.312656132 +0200
++++ gimp-2.10.24/etc/gimprc.in	2021-04-03 00:03:27.360453285 +0200
+@@ -836,7 +836,7 @@
+ # Sets the browser used by the help system.  Possible values are gimp and
+ # web-browser.
+ # 
+-# (help-browser web-browser)
++(help-browser web-browser)
+ 
+ # When enabled, a search of actions will also return inactive actions. 
+ # Possible values are yes and no.

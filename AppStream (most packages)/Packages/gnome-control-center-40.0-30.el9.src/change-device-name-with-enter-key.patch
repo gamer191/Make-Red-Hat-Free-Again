@@ -1,0 +1,81 @@
+From 8eab500540c1631dbdc760bca617a581e2969ed6 Mon Sep 17 00:00:00 2001
+From: Felipe Borges <felipeborges@gnome.org>
+Date: Mon, 1 Aug 2022 10:57:07 +0200
+Subject: [PATCH] info-overview: Allow changing "Device Name" by pressing
+ "Enter"
+
+The hostname/device name dialog has only a GtkEntry. So a user
+navigating with only a keyboard should be able to apply their
+changes by pressing "Enter".
+---
+ panels/info-overview/cc-info-overview-panel.c | 34 +++++++++++++++++++
+ .../info-overview/cc-info-overview-panel.ui   |  1 +
+ 2 files changed, 35 insertions(+)
+
+diff --git a/panels/info-overview/cc-info-overview-panel.c b/panels/info-overview/cc-info-overview-panel.c
+index a2cb70755..e8881d70d 100644
+--- a/panels/info-overview/cc-info-overview-panel.c
++++ b/panels/info-overview/cc-info-overview-panel.c
+@@ -818,6 +818,38 @@ on_device_name_entry_changed (CcInfoOverviewPanel *self)
+                             g_strcmp0 (current_hostname, new_hostname) != 0);
+ }
+ 
++static void
++update_device_name (CcInfoOverviewPanel *self)
++{
++  const gchar *hostname;
++
++  /* We simply change the CcHostnameEntry text. CcHostnameEntry
++   * listens to changes and updates hostname on change.
++   */
++  hostname = gtk_entry_get_text (GTK_ENTRY (self->device_name_entry));
++  gtk_entry_set_text (GTK_ENTRY (self->hostname_entry), hostname);
++}
++
++static void
++on_hostname_editor_dialog_response_cb (GtkDialog           *dialog,
++                                       gint                 response,
++                                       CcInfoOverviewPanel *self)
++{
++  if (response == GTK_RESPONSE_APPLY)
++    {
++      update_device_name (self);
++    }
++
++  gtk_window_close (GTK_WINDOW (dialog));
++}
++
++static void
++on_device_name_entry_activated_cb (CcInfoOverviewPanel *self)
++{
++  update_device_name (self);
++  gtk_window_close (GTK_WINDOW (self->hostname_editor));
++}
++
+ static void
+ open_hostname_edit_dialog (CcInfoOverviewPanel *self)
+ {
+@@ -906,6 +938,8 @@ cc_info_overview_panel_class_init (CcInfoOverviewPanelClass *klass)
+ 
+   gtk_widget_class_bind_template_callback (widget_class, cc_info_panel_row_activated_cb);
+   gtk_widget_class_bind_template_callback (widget_class, on_device_name_entry_changed);
++  gtk_widget_class_bind_template_callback (widget_class, on_device_name_entry_activated_cb);
++  gtk_widget_class_bind_template_callback (widget_class, on_hostname_editor_dialog_response_cb);
+ 
+   g_type_ensure (CC_TYPE_LIST_ROW);
+   g_type_ensure (CC_TYPE_HOSTNAME_ENTRY);
+diff --git a/panels/info-overview/cc-info-overview-panel.ui b/panels/info-overview/cc-info-overview-panel.ui
+index 2f5d3cf8b..adf3b5409 100644
+--- a/panels/info-overview/cc-info-overview-panel.ui
++++ b/panels/info-overview/cc-info-overview-panel.ui
+@@ -219,6 +219,7 @@
+           <object class="GtkEntry" id="device_name_entry">
+             <property name="visible">True</property>
+             <signal name="changed" handler="on_device_name_entry_changed" swapped="yes"/>
++            <signal name="activate" handler="on_device_name_entry_activated_cb" swapped="yes" />
+           </object>
+         </child>
+       </object>
+-- 
+2.34.1
+

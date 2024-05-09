@@ -1,0 +1,60 @@
+From 62289dff5cb2e615a277b72f034fa42f45aad639 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 15 Dec 2022 15:14:08 +0100
+Subject: [PATCH] desktopManager: Hook into LayoutManager to create grids
+
+Right now we track the `monitors-changed` signal to recreate the
+per-monitor grids. Usually that's enough, but if something else
+causes backgrounds to update, we'll end up without desktop icons
+until some other change (settings, mounts, monitor/resolution
+changes, ...) results in a reload of the grid.
+
+To address this, hook into LayoutManager to always create the grid
+when backgrounds are updated.
+---
+ extensions/desktop-icons/desktopManager.js | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/extensions/desktop-icons/desktopManager.js b/extensions/desktop-icons/desktopManager.js
+index 08bc82b7..74d0e6bd 100644
+--- a/extensions/desktop-icons/desktopManager.js
++++ b/extensions/desktop-icons/desktopManager.js
+@@ -83,7 +83,6 @@ var DesktopManager = GObject.registerClass({
+         this._discreteGpuAvailable = false;
+         this._rubberBandActive = false;
+ 
+-        this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => this._recreateDesktopIcons());
+         this._rubberBand = new St.Widget({ style_class: 'rubber-band' });
+         this._rubberBand.hide();
+         Main.layoutManager._backgroundGroup.add_child(this._rubberBand);
+@@ -109,6 +108,13 @@ var DesktopManager = GObject.registerClass({
+             return origCapturedEvent.bind(this._grabHelper)(event);
+         };
+ 
++        this._origUpdateBackgrounds =
++            Main.layoutManager._updateBackgrounds;
++        Main.layoutManager._updateBackgrounds = () => {
++            this._origUpdateBackgrounds.call(Main.layoutManager);
++            this._recreateDesktopIcons();
++        };
++
+         this._addDesktopIcons();
+         this._monitorDesktopFolder();
+ 
+@@ -843,9 +849,10 @@ var DesktopManager = GObject.registerClass({
+             GLib.source_remove(this._deleteChildrenId);
+         this._deleteChildrenId = 0;
+ 
+-        if (this._monitorsChangedId)
+-            Main.layoutManager.disconnect(this._monitorsChangedId);
+-        this._monitorsChangedId = 0;
++        if (this._origUpdateBackgrounds)
++            Main.layoutManager._updateBackgrounds = this._origUpdateBackgrounds;
++        delete this._origUpdateBackgrounds;
++
+         if (this._stageReleaseEventId)
+             global.stage.disconnect(this._stageReleaseEventId);
+         this._stageReleaseEventId = 0;
+-- 
+2.38.1
+

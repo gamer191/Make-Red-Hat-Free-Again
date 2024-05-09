@@ -1,0 +1,100 @@
+From ec802e39a5dfb252e2d18b8cb95f713724180565 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Mon, 15 May 2023 10:48:15 -0400
+Subject: [PATCH] authPrompt: Disregard smartcard status changes events if
+ VERIFICATION_IN_PROGRESS
+
+commit c8bb45b41c3a13ef161103f649aa18938e028a70 introduced a new
+verification state, VERIFICATION_IN_PROGRESS, to detect when the user
+has already interacted with the authentication service, so the auth
+prompt can rate limit the number of times the user can cancel
+authentication attempts with the escape key (without also rate limiting
+the number of times they hit escape to go back to the clock without
+interacting with the authentication service).
+
+That means there are now two states that represent the
+user actively undergoing verification: VERIFYING and
+VERIFICATION_IN_PROGRESS.
+
+It's inappropriate to reset the smartcard service if the user is
+actively conversing with it. We try to check for that by looking at the
+original verification state, VERIFYING, but we unfortunately, neglected
+to account for the new VERIFICATION_IN_PROGRESS state.
+
+This commit fixes that oversight, and allows users to again pre-type
+their smartcard pin at the clock before inserting their smartcard.
+---
+ js/gdm/authPrompt.js | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/js/gdm/authPrompt.js b/js/gdm/authPrompt.js
+index 4da91e096..e961f396e 100644
+--- a/js/gdm/authPrompt.js
++++ b/js/gdm/authPrompt.js
+@@ -327,61 +327,62 @@ var AuthPrompt = GObject.registerClass({
+     _onShowChoiceList(userVerifier, serviceName, promptMessage, choiceList) {
+         if (this._queryingService)
+             this.clear();
+ 
+         this._queryingService = serviceName;
+ 
+         if (this._preemptiveAnswer)
+             this._preemptiveAnswer = null;
+ 
+         this.setChoiceList(promptMessage, choiceList);
+         this.updateSensitivity(true);
+         this.emit('prompted');
+     }
+ 
+     _onCredentialManagerAuthenticated() {
+         if (this.verificationStatus != AuthPromptStatus.VERIFICATION_SUCCEEDED)
+             this.reset();
+     }
+ 
+     _onSmartcardStatusChanged() {
+         this.smartcardDetected = this._userVerifier.smartcardDetected;
+ 
+         // Most of the time we want to reset if the user inserts or removes
+         // a smartcard. Smartcard insertion "preempts" what the user was
+         // doing, and smartcard removal aborts the preemption.
+         // The exceptions are: 1) Don't reset on smartcard insertion if we're already verifying
+         //                        with a smartcard
+         //                     2) Don't reset if we've already succeeded at verification and
+         //                        the user is getting logged in.
+         if (this._userVerifier.serviceIsDefault(GdmUtil.SMARTCARD_SERVICE_NAME) &&
+-            this.verificationStatus == AuthPromptStatus.VERIFYING &&
++            (this.verificationStatus === AuthPromptStatus.VERIFYING ||
++             this.verificationStatus === AuthPromptStatus.VERIFICATION_IN_PROGRESS) &&
+             this.smartcardDetected)
+             return;
+ 
+         if (this.verificationStatus != AuthPromptStatus.VERIFICATION_SUCCEEDED)
+             this.reset();
+     }
+ 
+     _onShowMessage(_userVerifier, serviceName, message, type) {
+         this.setMessage(serviceName, message, type);
+         this.emit('prompted');
+     }
+ 
+     _onVerificationFailed(userVerifier, serviceName, canRetry) {
+         const wasQueryingService = this._queryingService === serviceName;
+ 
+         if (wasQueryingService) {
+             this._queryingService = null;
+             this.clear();
+         }
+ 
+         this.updateSensitivity(canRetry);
+         this.setActorInDefaultButtonWell(null);
+ 
+         if (!canRetry)
+             this.verificationStatus = AuthPromptStatus.VERIFICATION_FAILED;
+ 
+         if (wasQueryingService)
+             Util.wiggle(this._entry);
+     }
+ 
+-- 
+2.39.1
+

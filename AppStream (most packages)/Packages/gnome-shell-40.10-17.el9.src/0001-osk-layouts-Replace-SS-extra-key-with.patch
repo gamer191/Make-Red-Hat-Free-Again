@@ -1,0 +1,281 @@
+From be3a2303cf9ed4077955aaa9fae1fc4cbe2da277 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Tue, 24 Jan 2023 17:49:24 +0100
+Subject: [PATCH] =?UTF-8?q?osk-layouts:=20Replace=20"SS"=20extra=20key=20w?=
+ =?UTF-8?q?ith=20"=E1=BA=9E"?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The on-screen keyboard only handles a single keyval per key, so the
+current upper-case version of the German "ß" ends up as "S" instead
+of the expected "SS".
+
+It is possible to change the keyboard code to emulate multiple key
+presses/releases for that particular case, but then luckily a proper
+upper-case form exists nowadays: "ẞ".
+
+That seems more appropriate for a single key than a dedicated "SS"
+key, so replace it in all layouts that include it. Anybody who prefers
+the traditional "SS" can easily tap "S" twice.
+
+Part-of:
+<https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/2612>
+---
+ data/osk-layouts/cz.json  | 2 +-
+ data/osk-layouts/de.json  | 2 +-
+ data/osk-layouts/dk.json  | 2 +-
+ data/osk-layouts/ee.json  | 2 +-
+ data/osk-layouts/epo.json | 2 +-
+ data/osk-layouts/fi.json  | 2 +-
+ data/osk-layouts/hr.json  | 2 +-
+ data/osk-layouts/ke.json  | 2 +-
+ data/osk-layouts/lt.json  | 2 +-
+ data/osk-layouts/lv.json  | 2 +-
+ data/osk-layouts/no.json  | 2 +-
+ data/osk-layouts/pl.json  | 2 +-
+ data/osk-layouts/ro.json  | 2 +-
+ data/osk-layouts/se.json  | 2 +-
+ data/osk-layouts/sk.json  | 2 +-
+ data/osk-layouts/tr.json  | 2 +-
+ data/osk-layouts/uk.json  | 2 +-
+ data/osk-layouts/us.json  | 2 +-
+ 18 files changed, 18 insertions(+), 18 deletions(-)
+
+diff --git a/data/osk-layouts/cz.json b/data/osk-layouts/cz.json
+index 9bad07402..526cb9cb6 100644
+--- a/data/osk-layouts/cz.json
++++ b/data/osk-layouts/cz.json
+@@ -246,7 +246,7 @@
+           [
+             "S",
+             "Š",
+-            "SS",
++            "ẞ",
+             "Ś"
+           ],
+           [
+diff --git a/data/osk-layouts/de.json b/data/osk-layouts/de.json
+index 751a85603..3b1cb34b2 100644
+--- a/data/osk-layouts/de.json
++++ b/data/osk-layouts/de.json
+@@ -208,7 +208,7 @@
+           ],
+           [
+             "S",
+-            "SS",
++            "ẞ",
+             "Ś",
+             "Š"
+           ],
+diff --git a/data/osk-layouts/dk.json b/data/osk-layouts/dk.json
+index 80df9ae65..7bc6feaf3 100644
+--- a/data/osk-layouts/dk.json
++++ b/data/osk-layouts/dk.json
+@@ -218,7 +218,7 @@
+           ],
+           [
+             "S",
+-            "SS",
++            "ẞ",
+             "Ś",
+             "Š"
+           ],
+diff --git a/data/osk-layouts/ee.json b/data/osk-layouts/ee.json
+index 5fd2f11fa..b42b0afc9 100644
+--- a/data/osk-layouts/ee.json
++++ b/data/osk-layouts/ee.json
+@@ -281,7 +281,7 @@
+           [
+             "S",
+             "Š",
+-            "SS",
++            "ẞ",
+             "Ś",
+             "Ş"
+           ],
+diff --git a/data/osk-layouts/epo.json b/data/osk-layouts/epo.json
+index 71f9ef8d9..d7257625f 100644
+--- a/data/osk-layouts/epo.json
++++ b/data/osk-layouts/epo.json
+@@ -316,7 +316,7 @@
+           ],
+           [
+             "S",
+-            "SS",
++            "ẞ",
+             "Š",
+             "Ś",
+             "Ș",
+diff --git a/data/osk-layouts/fi.json b/data/osk-layouts/fi.json
+index 3ba5b567c..d664b0ec5 100644
+--- a/data/osk-layouts/fi.json
++++ b/data/osk-layouts/fi.json
+@@ -200,7 +200,7 @@
+           [
+             "S",
+             "Š",
+-            "SS",
++            "ẞ",
+             "Ś"
+           ],
+           [
+diff --git a/data/osk-layouts/hr.json b/data/osk-layouts/hr.json
+index ff0d1d09a..e4977796a 100644
+--- a/data/osk-layouts/hr.json
++++ b/data/osk-layouts/hr.json
+@@ -168,7 +168,7 @@
+             "S",
+             "Š",
+             "Ś",
+-            "SS"
++            "ẞ"
+           ],
+           [
+             "D",
+diff --git a/data/osk-layouts/ke.json b/data/osk-layouts/ke.json
+index 9c3e93565..2bd5b09d0 100644
+--- a/data/osk-layouts/ke.json
++++ b/data/osk-layouts/ke.json
+@@ -217,7 +217,7 @@
+           ],
+           [
+             "S",
+-            "SS"
++            "ẞ"
+           ],
+           [
+             "D"
+diff --git a/data/osk-layouts/lt.json b/data/osk-layouts/lt.json
+index 7cd5352a8..a43ff9146 100644
+--- a/data/osk-layouts/lt.json
++++ b/data/osk-layouts/lt.json
+@@ -270,7 +270,7 @@
+           [
+             "S",
+             "Š",
+-            "SS",
++            "ẞ",
+             "Ś",
+             "Ş"
+           ],
+diff --git a/data/osk-layouts/lv.json b/data/osk-layouts/lv.json
+index bab6ae3d7..d72c93c25 100644
+--- a/data/osk-layouts/lv.json
++++ b/data/osk-layouts/lv.json
+@@ -268,7 +268,7 @@
+           [
+             "S",
+             "Š",
+-            "SS",
++            "ẞ",
+             "Ś",
+             "Ş"
+           ],
+diff --git a/data/osk-layouts/no.json b/data/osk-layouts/no.json
+index a70be9ca0..0df786853 100644
+--- a/data/osk-layouts/no.json
++++ b/data/osk-layouts/no.json
+@@ -218,7 +218,7 @@
+           ],
+           [
+             "S",
+-            "SS",
++            "ẞ",
+             "Ś",
+             "Š"
+           ],
+diff --git a/data/osk-layouts/pl.json b/data/osk-layouts/pl.json
+index 4b08cd5d3..8583bd64c 100644
+--- a/data/osk-layouts/pl.json
++++ b/data/osk-layouts/pl.json
+@@ -212,7 +212,7 @@
+           [
+             "S",
+             "Ś",
+-            "SS",
++            "ẞ",
+             "Š"
+           ],
+           [
+diff --git a/data/osk-layouts/ro.json b/data/osk-layouts/ro.json
+index c690f4ecd..8d4676126 100644
+--- a/data/osk-layouts/ro.json
++++ b/data/osk-layouts/ro.json
+@@ -188,7 +188,7 @@
+           [
+             "S",
+             "Ș",
+-            "SS",
++            "ẞ",
+             "Ś",
+             "Š"
+           ],
+diff --git a/data/osk-layouts/se.json b/data/osk-layouts/se.json
+index 513a0b897..0ebb756e7 100644
+--- a/data/osk-layouts/se.json
++++ b/data/osk-layouts/se.json
+@@ -245,7 +245,7 @@
+             "Ś",
+             "Š",
+             "Ş",
+-            "SS"
++            "ẞ"
+           ],
+           [
+             "D",
+diff --git a/data/osk-layouts/sk.json b/data/osk-layouts/sk.json
+index 678232b82..a74ad0b61 100644
+--- a/data/osk-layouts/sk.json
++++ b/data/osk-layouts/sk.json
+@@ -269,7 +269,7 @@
+           [
+             "S",
+             "Š",
+-            "SS",
++            "ẞ",
+             "Ś",
+             "Ş"
+           ],
+diff --git a/data/osk-layouts/tr.json b/data/osk-layouts/tr.json
+index b3786cc88..8243aafad 100644
+--- a/data/osk-layouts/tr.json
++++ b/data/osk-layouts/tr.json
+@@ -202,7 +202,7 @@
+           [
+             "S",
+             "Ş",
+-            "SS",
++            "ẞ",
+             "Ś",
+             "Š"
+           ],
+diff --git a/data/osk-layouts/uk.json b/data/osk-layouts/uk.json
+index c36a723a0..19f5aa6d9 100644
+--- a/data/osk-layouts/uk.json
++++ b/data/osk-layouts/uk.json
+@@ -216,7 +216,7 @@
+           ],
+           [
+             "S",
+-            "SS"
++            "ẞ"
+           ],
+           [
+             "D"
+diff --git a/data/osk-layouts/us.json b/data/osk-layouts/us.json
+index 94dd6d3ad..dd0cd368f 100644
+--- a/data/osk-layouts/us.json
++++ b/data/osk-layouts/us.json
+@@ -216,7 +216,7 @@
+           ],
+           [
+             "S",
+-            "SS"
++            "ẞ"
+           ],
+           [
+             "D"
+-- 
+2.38.1
+

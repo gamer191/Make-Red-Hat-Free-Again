@@ -1,0 +1,36 @@
+From c18b7b7819f17f5d14be1ba2760653f3d93b81b1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Mon, 1 Feb 2021 18:26:00 +0100
+Subject: [PATCH] extensionDownloader: Refuse to override system extensions
+
+The website allows to "update" system extensions by installing the
+upstream version into the user's home directory.
+
+Prevent that by refusing to download and install extensions that are
+already installed system-wide.
+---
+ js/ui/extensionDownloader.js | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/js/ui/extensionDownloader.js b/js/ui/extensionDownloader.js
+index 6a3b2b488..471ddab14 100644
+--- a/js/ui/extensionDownloader.js
++++ b/js/ui/extensionDownloader.js
+@@ -17,6 +17,14 @@ var REPOSITORY_URL_UPDATE   = 'https://extensions.gnome.org/update-info/';
+ let _httpSession;
+ 
+ function installExtension(uuid, invocation) {
++    const oldExt = Main.extensionManager.lookup(uuid);
++    if (oldExt && oldExt.type === ExtensionUtils.ExtensionType.SYSTEM) {
++        log('extensionDownloader: Trying to replace system extension %s'.format(uuid));
++        invocation.return_dbus_error('org.gnome.Shell.InstallError',
++            'System extensions cannot be replaced');
++        return;
++    }
++
+     let params = { uuid,
+                    shell_version: Config.PACKAGE_VERSION };
+ 
+-- 
+2.31.1
+

@@ -1,0 +1,33 @@
+From b73a07c20a522b3be0e096625c21d5606bcb7d82 Mon Sep 17 00:00:00 2001
+From: Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
+Date: Mon, 21 Jun 2021 16:32:50 -0300
+Subject: [PATCH] introspect: Allowlist GNOME portal
+
+It too implements app listing and introspection, so list it in the
+allowlist.
+
+Part-of:
+<https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1894>
+---
+ js/misc/introspect.js | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/js/misc/introspect.js b/js/misc/introspect.js
+index f3c938af9..45eee81ce 100644
+--- a/js/misc/introspect.js
++++ b/js/misc/introspect.js
+@@ -1,7 +1,10 @@
+ /* exported IntrospectService */
+ const { Gio, GLib, Meta, Shell, St } = imports.gi;
+ 
+-const APP_ALLOWLIST = ['org.freedesktop.impl.portal.desktop.gtk'];
++const APP_ALLOWLIST = [
++    'org.freedesktop.impl.portal.desktop.gtk',
++    'org.freedesktop.impl.portal.desktop.gnome',
++];
+ 
+ const INTROSPECT_DBUS_API_VERSION = 3;
+ 
+-- 
+2.38.1
+

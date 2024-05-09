@@ -1,0 +1,29 @@
+From ba4208c00504439bad19de4680fac68210767798 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 27 Jan 2021 11:51:28 +0100
+Subject: [PATCH] desktop-icons: Update Japanese translation
+
+---
+ po/ja.po | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/po/ja.po b/po/ja.po
+index 8eb7725..ddf1eb7 100644
+--- a/po/ja.po
++++ b/po/ja.po
+@@ -897,11 +897,7 @@ msgstr "押し込み量 (ピクセル)"
+ #: desktopGrid.js:359
+ #, fuzzy
+ msgid "Display Settings"
+-msgstr ""
+-"#-#-#-#-#  ja.po (gnome-shell-extensions master)  #-#-#-#-#\n"
+-"ディスプレイ設定\n"
+-"#-#-#-#-#  ja.po (desktop-icons master)  #-#-#-#-#\n"
+-"ディスプレイの設定"
++msgstr "ディスプレイ設定"
+ 
+ #: schemas/org.gnome.shell.extensions.desktop-icons.gschema.xml:11
+ #, fuzzy
+-- 
+2.32.0
+

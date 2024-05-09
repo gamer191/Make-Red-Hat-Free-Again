@@ -1,0 +1,26 @@
+From 523602887f92b448b497e99bf56d0b9f1ef376f7 Mon Sep 17 00:00:00 2001
+From: Kalev Lember <klember@redhat.com>
+Date: Mon, 6 Sep 2021 21:12:38 +0200
+Subject: [PATCH] data: Require org.gnome.SettingsDaemon.Subscription
+
+Make sure the gnome-settings-daemon subman plugin gets started on
+session startup.
+---
+ data/meson.build | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/data/meson.build b/data/meson.build
+index e02b80d3..1684a99e 100644
+--- a/data/meson.build
++++ b/data/meson.build
+@@ -24,6 +24,7 @@ required_components = {
+     'org.gnome.SettingsDaemon.Sharing',
+     'org.gnome.SettingsDaemon.Smartcard',
+     'org.gnome.SettingsDaemon.Sound',
++    'org.gnome.SettingsDaemon.Subscription',
+     'org.gnome.SettingsDaemon.UsbProtection',
+     'org.gnome.SettingsDaemon.Wacom',
+     'org.gnome.SettingsDaemon.XSettings',
+-- 
+2.31.1
+

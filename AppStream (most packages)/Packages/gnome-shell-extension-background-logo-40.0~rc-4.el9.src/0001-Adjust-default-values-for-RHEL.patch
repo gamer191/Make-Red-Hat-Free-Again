@@ -1,0 +1,34 @@
+From ca8d41f48b41f181e86804b940b2737b4255e4ef Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Mon, 28 Feb 2022 13:49:34 +0100
+Subject: [PATCH] Adjust default values for RHEL
+
+---
+ .../org.fedorahosted.background-logo-extension.gschema.xml    | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/schemas/org.fedorahosted.background-logo-extension.gschema.xml b/schemas/org.fedorahosted.background-logo-extension.gschema.xml
+index 74bc3a8..f7e8f07 100644
+--- a/schemas/org.fedorahosted.background-logo-extension.gschema.xml
++++ b/schemas/org.fedorahosted.background-logo-extension.gschema.xml
+@@ -13,7 +13,7 @@
+   <schema path="/org/fedorahosted/background-logo-extension/"
+           id="org.fedorahosted.background-logo-extension">
+     <key type="s" name="logo-file">
+-      <default>'/usr/share/fedora-logos/fedora_lightbackground.svg'</default>
++      <default>'/usr/share/redhat-logos/fedora_logo_darkbackground.svg'</default>
+       <summary>Logo file</summary>
+       <description>The full logo file path</description>
+     </key>
+@@ -29,7 +29,7 @@
+     </key>
+     <key type="d" name="logo-size">
+       <range min="5.0" max="15.0"/>
+-      <default>9.0</default>
++      <default>15.0</default>
+       <summary>Logo size</summary>
+       <description>The logo size in percent relative to the screen width</description>
+     </key>
+-- 
+2.35.1
+

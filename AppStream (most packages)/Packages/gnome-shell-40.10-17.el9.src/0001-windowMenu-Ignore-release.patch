@@ -1,0 +1,26 @@
+From b3cac57511575e1265ab0ebd9c7465a6ade913e8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 28 Sep 2023 14:34:24 +0200
+Subject: [PATCH] windowMenu: Ignore release
+
+If the menu was open on button-press, make sure it is kept open
+until explicitly dismissed, regardless of the pointer position.
+---
+ js/ui/windowMenu.js | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/js/ui/windowMenu.js b/js/ui/windowMenu.js
+index 3449f759da..ad5c2a74cc 100644
+--- a/js/ui/windowMenu.js
++++ b/js/ui/windowMenu.js
+@@ -229,6 +229,7 @@ var WindowMenuManager = class {
+         let menu = new WindowMenu(window, this._sourceActor);
+ 
+         this._manager.addMenu(menu);
++        this._manager.ignoreRelease();
+ 
+         menu.connect('activate', () => {
+             window.check_alive(global.get_current_time());
+-- 
+2.41.0
+

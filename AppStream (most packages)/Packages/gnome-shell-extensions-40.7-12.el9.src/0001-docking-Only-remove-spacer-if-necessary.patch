@@ -1,0 +1,29 @@
+From 3edf3c0be7638bf9161c0d192dd3c2de1e3b9845 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 14 Dec 2023 14:41:04 +0100
+Subject: [PATCH] docking: Only remove spacer if necessary
+
+There may not be a main dock at the time when restoring the dash.
+
+Handle that case by not removing a non-existent spacer, instead of
+triggering an error.
+---
+ extensions/dash-to-dock/docking.js | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/extensions/dash-to-dock/docking.js b/extensions/dash-to-dock/docking.js
+index daa9de59..14e2ced6 100644
+--- a/extensions/dash-to-dock/docking.js
++++ b/extensions/dash-to-dock/docking.js
+@@ -1796,7 +1796,7 @@ var DockManager = class DashToDock_DockManager {
+ 
+         let overviewControls = Main.overview._overview._controls;
+         Main.overview._overview._controls.layout_manager._dash = this._oldDash;
+-        if (this.mainDock._dashSpacer) {
++        if (this.mainDock?._dashSpacer) {
+             Main.overview._overview._controls.remove_child(this.mainDock._dashSpacer);
+         }
+ 
+-- 
+2.43.0
+

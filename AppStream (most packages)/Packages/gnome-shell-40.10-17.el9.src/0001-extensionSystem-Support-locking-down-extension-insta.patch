@@ -1,0 +1,92 @@
+From 91449e6a19af63eebaf5f97f85ba44f69259075a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Sat, 10 Feb 2024 00:58:27 +0100
+Subject: [PATCH] extensionSystem: Support locking down extension installation
+
+Currently extensions can only be locked down completely by
+restricting the `enabled-extensions` key via dconf.
+
+This is too restrictive for environments that want to allow users
+to customize their system with extensions, while still limiting
+the set of possible extensions.
+
+To fill that gap, add a new `allow-extension-installation` setting,
+which restricts extensions to system extensions when disabled.
+
+As the setting is mainly intended for locking down by system
+administrators, there is no attempt to load/unload extensions
+on settings changes.
+---
+ data/org.gnome.shell.gschema.xml.in | 11 +++++++++++
+ js/ui/extensionDownloader.js        |  6 ++++++
+ js/ui/extensionSystem.js            |  8 ++++++--
+ 3 files changed, 23 insertions(+), 2 deletions(-)
+
+diff --git a/data/org.gnome.shell.gschema.xml.in b/data/org.gnome.shell.gschema.xml.in
+index 6f1c424bad..b5921983cd 100644
+--- a/data/org.gnome.shell.gschema.xml.in
++++ b/data/org.gnome.shell.gschema.xml.in
+@@ -40,6 +40,17 @@
+         the “enabled-extension” setting.
+       </description>
+     </key>
++    <key name="allow-extension-installation" type="b">
++      <default>true</default>
++      <summary>Allow extension installation</summary>
++      <description>
++        Allow users to install extensions in their home folder. If disabled,
++        the InstallRemoteExtension D-Bus method will fail, and extensions
++        are only loaded from system directories on startup.
++        It does not affect extensions that are already loaded, so a change
++        only takes full effect on the next login.
++      </description>
++    </key>
+     <key name="disable-extension-version-validation" type="b">
+       <default>false</default>
+       <summary>Disables the validation of extension version compatibility</summary>
+diff --git a/js/ui/extensionDownloader.js b/js/ui/extensionDownloader.js
+index 471ddab147..01ed165c01 100644
+--- a/js/ui/extensionDownloader.js
++++ b/js/ui/extensionDownloader.js
+@@ -17,6 +17,12 @@ var REPOSITORY_URL_UPDATE   = 'https://extensions.gnome.org/update-info/';
+ let _httpSession;
+ 
+ function installExtension(uuid, invocation) {
++    if (!global.settings.get_boolean('allow-extension-installation')) {
++        invocation.return_dbus_error('org.gnome.Shell.InstallError',
++            'Extension installation is not allowed');
++        return;
++    }
++
+     const oldExt = Main.extensionManager.lookup(uuid);
+     if (oldExt && oldExt.type === ExtensionUtils.ExtensionType.SYSTEM) {
+         log('extensionDownloader: Trying to replace system extension %s'.format(uuid));
+diff --git a/js/ui/extensionSystem.js b/js/ui/extensionSystem.js
+index 937f861994..528d9ea450 100644
+--- a/js/ui/extensionSystem.js
++++ b/js/ui/extensionSystem.js
+@@ -64,7 +64,10 @@ var ExtensionManager = class {
+ 
+     get updatesSupported() {
+         const appSys = Shell.AppSystem.get_default();
+-        return appSys.lookup_app('org.gnome.Extensions.desktop') !== null;
++        const hasUpdatesApp =
++            appSys.lookup_app('org.gnome.Extensions.desktop') !== null;
++        const allowed = global.settings.get_boolean('allow-extension-installation');
++        return allowed && hasUpdatesApp;
+     }
+ 
+     lookup(uuid) {
+@@ -595,7 +598,8 @@ var ExtensionManager = class {
+         this._enabledExtensions = this._getEnabledExtensions();
+ 
+         let perUserDir = Gio.File.new_for_path(global.userdatadir);
+-        FileUtils.collectFromDatadirs('extensions', true, (dir, info) => {
++        const includeUserDir = global.settings.get_boolean('allow-extension-installation');
++        FileUtils.collectFromDatadirs('extensions', includeUserDir, (dir, info) => {
+             let fileType = info.get_file_type();
+             if (fileType != Gio.FileType.DIRECTORY)
+                 return;
+-- 
+2.43.0
+

@@ -1,0 +1,25 @@
+From 1e699b55f3dc84b2ddbc5acd03424240eddbe06c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 9 Mar 2017 14:44:32 +0100
+Subject: [PATCH 3/3] appFavorites: Add terminal
+
+---
+ data/org.gnome.shell.gschema.xml.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/data/org.gnome.shell.gschema.xml.in b/data/org.gnome.shell.gschema.xml.in
+index 35ddaf4a9..d5ea1e35f 100644
+--- a/data/org.gnome.shell.gschema.xml.in
++++ b/data/org.gnome.shell.gschema.xml.in
+@@ -50,7 +50,7 @@
+       </description>
+     </key>
+     <key name="favorite-apps" type="as">
+-      <default>[ 'firefox.desktop', 'org.gnome.Calendar.desktop', 'org.gnome.Music.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Software.desktop', 'yelp.desktop' ]</default>
++      <default>[ 'firefox.desktop', 'org.gnome.Calendar.desktop', 'org.gnome.Music.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Software.desktop', 'yelp.desktop', 'org.gnome.Terminal.desktop' ]</default>
+       <summary>List of desktop file IDs for favorite applications</summary>
+       <description>
+         The applications corresponding to these identifiers
+-- 
+2.31.1
+

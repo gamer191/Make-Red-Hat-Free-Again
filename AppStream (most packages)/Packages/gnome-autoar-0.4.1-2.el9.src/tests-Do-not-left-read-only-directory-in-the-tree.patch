@@ -1,0 +1,42 @@
+From 0f528ab688d4b01c51c0d33c3893854aae3d80ac Mon Sep 17 00:00:00 2001
+From: Ondrej Holy <oholy@redhat.com>
+Date: Tue, 30 Nov 2021 10:53:22 +0100
+Subject: [PATCH] tests: Do not left read-only directory in the tree
+
+Currently, various tools fail to remove the read-only directory, which
+is created as an output from the test suite. This for example breaks
+package building when tests are enabled. Let's make it writable again
+when test is done to fix the issue.
+
+Fixes: https://gitlab.gnome.org/GNOME/gnome-autoar/-/issues/34
+---
+ tests/test-extract-unit.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/tests/test-extract-unit.c b/tests/test-extract-unit.c
+index 615ba22..5965f48 100644
+--- a/tests/test-extract-unit.c
++++ b/tests/test-extract-unit.c
+@@ -1264,6 +1264,7 @@ test_readonly_directory (void)
+   g_autoptr (ExtractTest) extract_test = NULL;
+   g_autoptr (ExtractTestData) data = NULL;
+   g_autoptr (GFile) archive = NULL;
++  g_autoptr (GFile) readonly = NULL;
+   g_autoptr (AutoarExtractor) extractor = NULL;
+ 
+   extract_test = extract_test_new ("test-readonly-directory");
+@@ -1285,6 +1286,11 @@ test_readonly_directory (void)
+   g_assert_no_error (data->error);
+   g_assert_true (data->completed_signalled);
+   assert_reference_and_output_match (extract_test);
++
++  /* Make the directory writable again to avoid issues when deleting. */
++  readonly = g_file_get_child (extract_test->output, "arextract");
++  g_file_set_attribute_uint32 (readonly, G_FILE_ATTRIBUTE_UNIX_MODE, 0755,
++                               G_FILE_QUERY_INFO_NONE, NULL, NULL);
+ }
+ 
+ static void
+-- 
+2.33.1
+

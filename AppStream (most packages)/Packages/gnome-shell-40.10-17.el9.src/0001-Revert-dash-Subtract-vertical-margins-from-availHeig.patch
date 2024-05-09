@@ -1,0 +1,25 @@
+From a8c8b7ef31f7219157b94148b771f6f663928dea Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Tue, 19 Apr 2022 19:17:48 +0200
+Subject: [PATCH] Revert "dash: Subtract vertical margins from availHeight"
+
+This reverts commit 0de0a1f5940784eb4a7ca9ecf5e92f5277ceb0d8.
+---
+ js/ui/dash.js | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/js/ui/dash.js b/js/ui/dash.js
+index f35cc2e25..0f1ca2c4c 100644
+--- a/js/ui/dash.js
++++ b/js/ui/dash.js
+@@ -610,7 +610,6 @@ var Dash = GObject.registerClass({
+                        (iconChildren.length - 1) * spacing;
+ 
+         let availHeight = this._maxHeight;
+-        availHeight -= this.margin_top + this.margin_bottom;
+         availHeight -= this._background.get_theme_node().get_vertical_padding();
+         availHeight -= themeNode.get_vertical_padding();
+         availHeight -= buttonHeight - iconHeight;
+-- 
+2.35.1
+

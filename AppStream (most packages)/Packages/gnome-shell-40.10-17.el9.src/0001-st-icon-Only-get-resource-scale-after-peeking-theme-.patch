@@ -1,0 +1,36 @@
+From 187b851530f5e76786784ec9df235304c8ddede8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 4 Aug 2021 19:46:34 +0200
+Subject: [PATCH] st/icon: Only get resource-scale after peeking theme node
+
+If an actor is not on any stage view, then it doesn't have a valid
+resource scale, which will hit an assert later.
+
+When that is the case (for example when running headless), we expect
+that there is no valid theme node (yet) either, so simply moving
+the clutter_actor_get_resource_scale() call after peeking at the
+theme node is enough to avoid the crash.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/4522
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1935>
+---
+ src/st/st-icon.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/st/st-icon.c b/src/st/st-icon.c
+index 0405d85259..e4d6e05f94 100644
+--- a/src/st/st-icon.c
++++ b/src/st/st-icon.c
+@@ -462,6 +462,8 @@ st_icon_update (StIcon *icon)
+ 
+   resource_scale = clutter_actor_get_resource_scale (CLUTTER_ACTOR (icon));
+ 
++  resource_scale = clutter_actor_get_resource_scale (CLUTTER_ACTOR (icon));
++
+   stage = clutter_actor_get_stage (CLUTTER_ACTOR (icon));
+   context = st_theme_context_get_for_stage (CLUTTER_STAGE (stage));
+   g_object_get (context, "scale-factor", &paint_scale, NULL);
+-- 
+2.31.1
+

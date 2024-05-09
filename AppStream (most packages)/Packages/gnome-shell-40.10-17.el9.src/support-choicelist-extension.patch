@@ -1,0 +1,1210 @@
+From f821b65401284cc31f68f0eb1b2e71ae3a90a122 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Tue, 18 Jul 2017 12:58:14 -0400
+Subject: [PATCH 1/2] gdm: Add AuthList control
+
+Ultimately, we want to add support for GDM's new ChoiceList
+PAM extension.  That extension allows PAM modules to present
+a list of choices to the user. Before we can support that
+extension, however, we need to have a list control in the
+login-screen/unlock screen.  This commit adds that control.
+
+For the most part, it's a copy-and-paste of the gdm userlist,
+but with less features.  It lacks API specific to the users,
+lacks the built in timed login indicator, etc. It does feature
+a label heading.
+---
+ .../widgets/_login-dialog.scss                |  26 +++
+ js/gdm/authList.js                            | 176 ++++++++++++++++++
+ js/js-resources.gresource.xml                 |   1 +
+ 3 files changed, 203 insertions(+)
+ create mode 100644 js/gdm/authList.js
+
+diff --git a/data/theme/gnome-shell-sass/widgets/_login-dialog.scss b/data/theme/gnome-shell-sass/widgets/_login-dialog.scss
+index 84539342d..f68d5de99 100644
+--- a/data/theme/gnome-shell-sass/widgets/_login-dialog.scss
++++ b/data/theme/gnome-shell-sass/widgets/_login-dialog.scss
+@@ -86,60 +86,86 @@
+   .caps-lock-warning-label,
+   .login-dialog-message-warning {
+     color: $osd_fg_color;
+   }
+ }
+ 
+ .login-dialog-logo-bin { padding: 24px 0px; }
+ .login-dialog-banner { color: darken($osd_fg_color,10%); }
+ .login-dialog-button-box { width: 23em; spacing: 5px; }
+ .login-dialog-message { text-align: center; }
+ .login-dialog-message-hint, .login-dialog-message {
+   color: darken($osd_fg_color, 20%);
+   min-height: 2.75em;
+ }
+ .login-dialog-user-selection-box { padding: 100px 0px; }
+ .login-dialog-not-listed-label {
+   padding-left: 2px;
+   .login-dialog-not-listed-button:focus &,
+   .login-dialog-not-listed-button:hover & {
+     color: $osd_fg_color;
+   }
+ }
+ 
+ .login-dialog-not-listed-label {
+   @include fontsize($base_font_size - 1);
+   font-weight: bold;
+   color: darken($osd_fg_color,30%);
+   padding-top: 1em;
+ }
+ 
++.login-dialog-auth-list-view { -st-vfade-offset: 1em; }
++.login-dialog-auth-list {
++  spacing: 6px;
++  margin-left: 2em;
++}
++
++.login-dialog-auth-list-title {
++  margin-left: 2em;
++}
++
++.login-dialog-auth-list-item {
++  border-radius: $base_border_radius + 4px;
++  padding: 6px;
++  color: darken($osd_fg_color,30%);
++  &:focus, &:selected { background-color: $selected_bg_color; color: $selected_fg_color; }
++}
++
++.login-dialog-auth-list-label {
++  @include fontsize($base_font_size + 2);
++  font-weight: bold;
++  padding-left: 15px;
++
++  &:ltr { padding-left: 14px; text-align: left; }
++  &:rtl { padding-right: 14px; text-align: right; }
++}
++
+ .login-dialog-user-list-view { -st-vfade-offset: 1em; }
+ .login-dialog-user-list {
+   spacing: 12px;
+   width: 23em;
+   &:expanded .login-dialog-user-list-item:selected { background-color: $selected_bg_color; color: $selected_fg_color; }
+   &:expanded .login-dialog-user-list-item:logged-in { border-right: 2px solid $selected_bg_color; }
+ }
+ 
+ .login-dialog-user-list-item {
+   border-radius: $base_border_radius + 4px;
+   padding: 6px;
+   color: darken($osd_fg_color,30%);
+   &:ltr .user-widget { padding-right: 1em; }
+   &:rtl .user-widget { padding-left: 1em; }
+   .login-dialog-timed-login-indicator {
+     height: 2px;
+     margin-top: 6px;
+     background-color: $osd_fg_color;
+   }
+   &:focus .login-dialog-timed-login-indicator { background-color: $selected_fg_color; }
+ }
+ 
+ .user-widget-label {
+   color: $osd_fg_color;
+ }
+ 
+ .user-widget.horizontal .user-widget-label {
+   @include fontsize($base_font_size + 2);
+   font-weight: bold;
+   padding-left: 15px;
+diff --git a/js/gdm/authList.js b/js/gdm/authList.js
+new file mode 100644
+index 000000000..fb223a972
+--- /dev/null
++++ b/js/gdm/authList.js
+@@ -0,0 +1,176 @@
++// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
++/*
++ * Copyright 2017 Red Hat, Inc
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2, or (at your option)
++ * any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, see <http://www.gnu.org/licenses/>.
++ */
++/* exported AuthList */
++
++const { Clutter, GObject, Meta, St } = imports.gi;
++
++const SCROLL_ANIMATION_TIME = 500;
++
++const AuthListItem = GObject.registerClass({
++    Signals: { 'activate': {} },
++}, class AuthListItem extends St.Button {
++    _init(key, text) {
++        this.key = key;
++        const label = new St.Label({
++            text,
++            style_class: 'login-dialog-auth-list-label',
++            y_align: Clutter.ActorAlign.CENTER,
++            x_expand: false,
++        });
++
++        super._init({
++            style_class: 'login-dialog-auth-list-item',
++            button_mask: St.ButtonMask.ONE | St.ButtonMask.THREE,
++            can_focus: true,
++            child: label,
++            reactive: true,
++        });
++
++        this.connect('key-focus-in',
++            () => this._setSelected(true));
++        this.connect('key-focus-out',
++            () => this._setSelected(false));
++        this.connect('notify::hover',
++            () => this._setSelected(this.hover));
++
++        this.connect('clicked', this._onClicked.bind(this));
++    }
++
++    _onClicked() {
++        this.emit('activate');
++    }
++
++    _setSelected(selected) {
++        if (selected) {
++            this.add_style_pseudo_class('selected');
++            this.grab_key_focus();
++        } else {
++            this.remove_style_pseudo_class('selected');
++        }
++    }
++});
++
++var AuthList = GObject.registerClass({
++    Signals: {
++        'activate': { param_types: [GObject.TYPE_STRING] },
++        'item-added': { param_types: [AuthListItem.$gtype] },
++    },
++}, class AuthList extends St.BoxLayout {
++    _init() {
++        super._init({
++            vertical: true,
++            style_class: 'login-dialog-auth-list-layout',
++            x_align: Clutter.ActorAlign.START,
++            y_align: Clutter.ActorAlign.CENTER,
++        });
++
++        this.label = new St.Label({ style_class: 'login-dialog-auth-list-title' });
++        this.add_child(this.label);
++
++        this._scrollView = new St.ScrollView({
++            style_class: 'login-dialog-auth-list-view',
++        });
++        this._scrollView.set_policy(
++            St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
++        this.add_child(this._scrollView);
++
++        this._box = new St.BoxLayout({
++            vertical: true,
++            style_class: 'login-dialog-auth-list',
++            pseudo_class: 'expanded',
++        });
++
++        this._scrollView.add_actor(this._box);
++        this._items = new Map();
++
++        this.connect('key-focus-in', this._moveFocusToItems.bind(this));
++    }
++
++    _moveFocusToItems() {
++        let hasItems = this.numItems > 0;
++
++        if (!hasItems)
++            return;
++
++        if (global.stage.get_key_focus() !== this)
++            return;
++
++        let focusSet = this.navigate_focus(null, St.DirectionType.TAB_FORWARD, false);
++        if (!focusSet) {
++            Meta.later_add(Meta.LaterType.BEFORE_REDRAW, () => {
++                this._moveFocusToItems();
++                return false;
++            });
++        }
++    }
++
++    _onItemActivated(activatedItem) {
++        this.emit('activate', activatedItem.key);
++    }
++
++    scrollToItem(item) {
++        let box = item.get_allocation_box();
++
++        let adjustment = this._scrollView.get_vscroll_bar().get_adjustment();
++
++        let value = (box.y1 + adjustment.step_increment / 2.0) - (adjustment.page_size / 2.0);
++        adjustment.ease(value, {
++            duration: SCROLL_ANIMATION_TIME,
++            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
++        });
++    }
++
++    addItem(key, text) {
++        this.removeItem(key);
++
++        let item = new AuthListItem(key, text);
++        this._box.add(item);
++
++        this._items.set(key, item);
++
++        item.connect('activate', this._onItemActivated.bind(this));
++
++        // Try to keep the focused item front-and-center
++        item.connect('key-focus-in', () => this.scrollToItem(item));
++
++        this._moveFocusToItems();
++
++        this.emit('item-added', item);
++    }
++
++    removeItem(key) {
++        if (!this._items.has(key))
++            return;
++
++        let item = this._items.get(key);
++
++        item.destroy();
++
++        this._items.delete(key);
++    }
++
++    get numItems() {
++        return this._items.size;
++    }
++
++    clear() {
++        this.label.text = '';
++        this._box.destroy_all_children();
++        this._items.clear();
++    }
++});
+diff --git a/js/js-resources.gresource.xml b/js/js-resources.gresource.xml
+index e65e0e9cf..b2c603a55 100644
+--- a/js/js-resources.gresource.xml
++++ b/js/js-resources.gresource.xml
+@@ -1,33 +1,34 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <gresources>
+   <gresource prefix="/org/gnome/shell">
++    <file>gdm/authList.js</file>
+     <file>gdm/authPrompt.js</file>
+     <file>gdm/batch.js</file>
+     <file>gdm/loginDialog.js</file>
+     <file>gdm/oVirt.js</file>
+     <file>gdm/credentialManager.js</file>
+     <file>gdm/vmware.js</file>
+     <file>gdm/realmd.js</file>
+     <file>gdm/util.js</file>
+ 
+     <file>misc/config.js</file>
+     <file>misc/extensionUtils.js</file>
+     <file>misc/fileUtils.js</file>
+     <file>misc/gnomeSession.js</file>
+     <file>misc/history.js</file>
+     <file>misc/ibusManager.js</file>
+     <file>misc/inputMethod.js</file>
+     <file>misc/introspect.js</file>
+     <file>misc/jsParse.js</file>
+     <file>misc/keyboardManager.js</file>
+     <file>misc/loginManager.js</file>
+     <file>misc/modemManager.js</file>
+     <file>misc/objectManager.js</file>
+     <file>misc/params.js</file>
+     <file>misc/parentalControlsManager.js</file>
+     <file>misc/permissionStore.js</file>
+     <file>misc/smartcardManager.js</file>
+     <file>misc/systemActions.js</file>
+     <file>misc/util.js</file>
+     <file>misc/weather.js</file>
+ 
+-- 
+2.34.1
+
+From 5a2fda2fe2526f81c4dbbee6512182f19fc76a74 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Mon, 17 Jul 2017 16:48:03 -0400
+Subject: [PATCH 2/2] gdmUtil: Enable support for GDM's ChoiceList PAM
+ extension
+
+This commit hooks up support for GDM's ChoiceList PAM extension.
+---
+ js/gdm/authPrompt.js  | 71 +++++++++++++++++++++++++++++++++++++++++--
+ js/gdm/loginDialog.js |  5 +++
+ js/gdm/util.js        | 28 +++++++++++++++++
+ js/ui/unlockDialog.js |  7 +++++
+ 4 files changed, 109 insertions(+), 2 deletions(-)
+
+diff --git a/js/gdm/authPrompt.js b/js/gdm/authPrompt.js
+index 84c608b2f..4da91e096 100644
+--- a/js/gdm/authPrompt.js
++++ b/js/gdm/authPrompt.js
+@@ -1,36 +1,37 @@
+ // -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+ /* exported AuthPrompt */
+ 
+ const { Clutter, GLib, GObject, Meta, Pango, Shell, St } = imports.gi;
+ 
+ const Animation = imports.ui.animation;
++const AuthList = imports.gdm.authList;
+ const Batch = imports.gdm.batch;
+ const GdmUtil = imports.gdm.util;
+ const OVirt = imports.gdm.oVirt;
+ const Vmware = imports.gdm.vmware;
+ const Params = imports.misc.params;
+ const ShellEntry = imports.ui.shellEntry;
+ const UserWidget = imports.ui.userWidget;
+ const Util = imports.misc.util;
+ 
+ var DEFAULT_BUTTON_WELL_ICON_SIZE = 16;
+ var DEFAULT_BUTTON_WELL_ANIMATION_DELAY = 1000;
+ var DEFAULT_BUTTON_WELL_ANIMATION_TIME = 300;
+ 
+ var MESSAGE_FADE_OUT_ANIMATION_TIME = 500;
+ 
+ var AuthPromptMode = {
+     UNLOCK_ONLY: 0,
+     UNLOCK_OR_LOG_IN: 1,
+ };
+ 
+ var AuthPromptStatus = {
+     NOT_VERIFYING: 0,
+     VERIFYING: 1,
+     VERIFICATION_FAILED: 2,
+     VERIFICATION_SUCCEEDED: 3,
+     VERIFICATION_CANCELLED: 4,
+     VERIFICATION_IN_PROGRESS: 5,
+ };
+ 
+ var BeginRequestType = {
+@@ -48,144 +49,164 @@ var AuthPrompt = GObject.registerClass({
+         'reset': { param_types: [GObject.TYPE_UINT] },
+     },
+ }, class AuthPrompt extends St.BoxLayout {
+     _init(gdmClient, mode) {
+         super._init({
+             style_class: 'login-dialog-prompt-layout',
+             vertical: true,
+             x_expand: true,
+             x_align: Clutter.ActorAlign.CENTER,
+         });
+ 
+         this.verificationStatus = AuthPromptStatus.NOT_VERIFYING;
+ 
+         this._gdmClient = gdmClient;
+         this._mode = mode;
+         this._defaultButtonWellActor = null;
+         this._cancelledRetries = 0;
+ 
+         this._idleMonitor = Meta.IdleMonitor.get_core();
+ 
+         let reauthenticationOnly;
+         if (this._mode == AuthPromptMode.UNLOCK_ONLY)
+             reauthenticationOnly = true;
+         else if (this._mode == AuthPromptMode.UNLOCK_OR_LOG_IN)
+             reauthenticationOnly = false;
+ 
+         this._userVerifier = new GdmUtil.ShellUserVerifier(this._gdmClient, { reauthenticationOnly });
+ 
+         this._userVerifier.connect('ask-question', this._onAskQuestion.bind(this));
+         this._userVerifier.connect('show-message', this._onShowMessage.bind(this));
++        this._userVerifier.connect('show-choice-list', this._onShowChoiceList.bind(this));
+         this._userVerifier.connect('verification-failed', this._onVerificationFailed.bind(this));
+         this._userVerifier.connect('verification-complete', this._onVerificationComplete.bind(this));
+         this._userVerifier.connect('reset', this._onReset.bind(this));
+         this._userVerifier.connect('smartcard-status-changed', this._onSmartcardStatusChanged.bind(this));
+         this._userVerifier.connect('credential-manager-authenticated', this._onCredentialManagerAuthenticated.bind(this));
+         this.smartcardDetected = this._userVerifier.smartcardDetected;
+ 
+         this.connect('destroy', this._onDestroy.bind(this));
+ 
+         this._userWell = new St.Bin({
+             x_expand: true,
+             y_expand: true,
+         });
+         this.add_child(this._userWell);
+ 
+         this._hasCancelButton = this._mode === AuthPromptMode.UNLOCK_OR_LOG_IN;
+ 
+-        this._initEntryRow();
++        this._initInputRow();
+ 
+         let capsLockPlaceholder = new St.Label();
+         this.add_child(capsLockPlaceholder);
+ 
+         this._capsLockWarningLabel = new ShellEntry.CapsLockWarning({
+             x_expand: true,
+             x_align: Clutter.ActorAlign.CENTER,
+         });
+         this.add_child(this._capsLockWarningLabel);
+ 
+         this._capsLockWarningLabel.bind_property('visible',
+             capsLockPlaceholder, 'visible',
+             GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.INVERT_BOOLEAN);
+ 
+         this._message = new St.Label({
+             opacity: 0,
+             styleClass: 'login-dialog-message',
+             y_expand: true,
+             x_expand: true,
+             y_align: Clutter.ActorAlign.START,
+             x_align: Clutter.ActorAlign.CENTER,
+         });
+         this._message.clutter_text.line_wrap = true;
+         this._message.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+         this.add_child(this._message);
+     }
+ 
+     _onDestroy() {
+         if (this._preemptiveAnswerWatchId) {
+             this._idleMonitor.remove_watch(this._preemptiveAnswerWatchId);
+             this._preemptiveAnswerWatchId = 0;
+         }
+ 
+         this._userVerifier.destroy();
+         this._userVerifier = null;
+     }
+ 
+     vfunc_key_press_event(keyPressEvent) {
+         if (keyPressEvent.keyval == Clutter.KEY_Escape)
+             this.cancel();
+         return super.vfunc_key_press_event(keyPressEvent);
+     }
+ 
+-    _initEntryRow() {
++    _initInputRow() {
+         this._mainBox = new St.BoxLayout({
+             style_class: 'login-dialog-button-box',
+             vertical: false,
+         });
+         this.add_child(this._mainBox);
+ 
+         this.cancelButton = new St.Button({
+             style_class: 'modal-dialog-button button cancel-button',
+             accessible_name: _('Cancel'),
+             button_mask: St.ButtonMask.ONE | St.ButtonMask.THREE,
+             reactive: this._hasCancelButton,
+             can_focus: this._hasCancelButton,
+             x_align: Clutter.ActorAlign.START,
+             y_align: Clutter.ActorAlign.CENTER,
+             child: new St.Icon({ icon_name: 'go-previous-symbolic' }),
+         });
+         if (this._hasCancelButton)
+             this.cancelButton.connect('clicked', () => this.cancel());
+         else
+             this.cancelButton.opacity = 0;
+         this._mainBox.add_child(this.cancelButton);
+ 
++        this._authList = new AuthList.AuthList();
++        this._authList.set({
++            visible: false,
++        });
++        this._authList.connect('activate', (list, key) => {
++            this._authList.reactive = false;
++            this._authList.ease({
++                opacity: 0,
++                duration: MESSAGE_FADE_OUT_ANIMATION_TIME,
++                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
++                onComplete: () => {
++                    this._authList.clear();
++                    this._authList.hide();
++                    this._userVerifier.selectChoice(this._queryingService, key);
++                },
++            });
++        });
++        this._mainBox.add_child(this._authList);
++
+         let entryParams = {
+             style_class: 'login-dialog-prompt-entry',
+             can_focus: true,
+             x_expand: true,
+         };
+ 
+         this._entry = null;
+ 
+         this._textEntry = new St.Entry(entryParams);
+         ShellEntry.addContextMenu(this._textEntry, { actionMode: Shell.ActionMode.NONE });
+ 
+         this._passwordEntry = new St.PasswordEntry(entryParams);
+         ShellEntry.addContextMenu(this._passwordEntry, { actionMode: Shell.ActionMode.NONE });
+ 
+         this._entry = this._passwordEntry;
+         this._mainBox.add_child(this._entry);
+         this._entry.grab_key_focus();
+ 
+         this._timedLoginIndicator = new St.Bin({
+             style_class: 'login-dialog-timed-login-indicator',
+             scale_x: 0,
+         });
+ 
+         this.add_child(this._timedLoginIndicator);
+ 
+         [this._textEntry, this._passwordEntry].forEach(entry => {
+             entry.clutter_text.connect('text-changed', () => {
+                 if (!this._userVerifier.hasPendingMessages && this._queryingService && !this._preemptiveAnswer)
+                     this._fadeOutMessage();
+             });
+@@ -276,60 +297,74 @@ var AuthPrompt = GObject.registerClass({
+             this._entry = this._textEntry;
+         }
+         this._capsLockWarningLabel.visible = secret;
+     }
+ 
+     _onAskQuestion(verifier, serviceName, question, secret) {
+         if (this._queryingService)
+             this.clear();
+ 
+         this._queryingService = serviceName;
+         if (this._preemptiveAnswer) {
+             this._userVerifier.answerQuery(this._queryingService, this._preemptiveAnswer);
+             this._preemptiveAnswer = null;
+             return;
+         }
+ 
+         this._updateEntry(secret);
+ 
+         // Hack: The question string comes directly from PAM, if it's "Password:"
+         // we replace it with our own to allow localization, if it's something
+         // else we remove the last colon and any trailing or leading spaces.
+         if (question === 'Password:' || question === 'Password: ')
+             this.setQuestion(_('Password'));
+         else
+             this.setQuestion(question.replace(/: *$/, '').trim());
+ 
+         this.updateSensitivity(true);
+         this.emit('prompted');
+     }
+ 
++    _onShowChoiceList(userVerifier, serviceName, promptMessage, choiceList) {
++        if (this._queryingService)
++            this.clear();
++
++        this._queryingService = serviceName;
++
++        if (this._preemptiveAnswer)
++            this._preemptiveAnswer = null;
++
++        this.setChoiceList(promptMessage, choiceList);
++        this.updateSensitivity(true);
++        this.emit('prompted');
++    }
++
+     _onCredentialManagerAuthenticated() {
+         if (this.verificationStatus != AuthPromptStatus.VERIFICATION_SUCCEEDED)
+             this.reset();
+     }
+ 
+     _onSmartcardStatusChanged() {
+         this.smartcardDetected = this._userVerifier.smartcardDetected;
+ 
+         // Most of the time we want to reset if the user inserts or removes
+         // a smartcard. Smartcard insertion "preempts" what the user was
+         // doing, and smartcard removal aborts the preemption.
+         // The exceptions are: 1) Don't reset on smartcard insertion if we're already verifying
+         //                        with a smartcard
+         //                     2) Don't reset if we've already succeeded at verification and
+         //                        the user is getting logged in.
+         if (this._userVerifier.serviceIsDefault(GdmUtil.SMARTCARD_SERVICE_NAME) &&
+             this.verificationStatus == AuthPromptStatus.VERIFYING &&
+             this.smartcardDetected)
+             return;
+ 
+         if (this.verificationStatus != AuthPromptStatus.VERIFICATION_SUCCEEDED)
+             this.reset();
+     }
+ 
+     _onShowMessage(_userVerifier, serviceName, message, type) {
+         this.setMessage(serviceName, message, type);
+         this.emit('prompted');
+     }
+ 
+     _onVerificationFailed(userVerifier, serviceName, canRetry) {
+@@ -411,109 +446,141 @@ var AuthPrompt = GObject.registerClass({
+         if (actor) {
+             if (isSpinner)
+                 this._spinner.play();
+ 
+             if (!animate) {
+                 actor.opacity = 255;
+             } else {
+                 actor.ease({
+                     opacity: 255,
+                     duration: DEFAULT_BUTTON_WELL_ANIMATION_TIME,
+                     delay: DEFAULT_BUTTON_WELL_ANIMATION_DELAY,
+                     mode: Clutter.AnimationMode.LINEAR,
+                 });
+             }
+         }
+ 
+         this._defaultButtonWellActor = actor;
+     }
+ 
+     startSpinning() {
+         this.setActorInDefaultButtonWell(this._spinner, true);
+     }
+ 
+     stopSpinning() {
+         this.setActorInDefaultButtonWell(null, false);
+     }
+ 
+     clear() {
+         this._entry.text = '';
+         this.stopSpinning();
++        this._authList.clear();
++        this._authList.hide();
+     }
+ 
+     setQuestion(question) {
+         if (this._preemptiveAnswerWatchId) {
+             this._idleMonitor.remove_watch(this._preemptiveAnswerWatchId);
+             this._preemptiveAnswerWatchId = 0;
+         }
+ 
+         this._entry.hint_text = question;
+ 
++        this._authList.hide();
+         this._entry.show();
+         this._entry.grab_key_focus();
+     }
+ 
++    _fadeInChoiceList() {
++        this._authList.set({
++            opacity: 0,
++            visible: true,
++            reactive: false,
++        });
++        this._authList.ease({
++            opacity: 255,
++            duration: MESSAGE_FADE_OUT_ANIMATION_TIME,
++            transition: Clutter.AnimationMode.EASE_OUT_QUAD,
++            onComplete: () => (this._authList.reactive = true),
++        });
++    }
++
++    setChoiceList(promptMessage, choiceList) {
++        this._authList.clear();
++        this._authList.label.text = promptMessage;
++        for (let key in choiceList) {
++            let text = choiceList[key];
++            this._authList.addItem(key, text);
++        }
++
++        this._entry.hide();
++        if (this._message.text === '')
++            this._message.hide();
++        this._fadeInChoiceList();
++    }
++
+     getAnswer() {
+         let text;
+ 
+         if (this._preemptiveAnswer) {
+             text = this._preemptiveAnswer;
+             this._preemptiveAnswer = null;
+         } else {
+             text = this._entry.get_text();
+         }
+ 
+         return text;
+     }
+ 
+     _fadeOutMessage() {
+         if (this._message.opacity == 0)
+             return;
+         this._message.remove_all_transitions();
+         this._message.ease({
+             opacity: 0,
+             duration: MESSAGE_FADE_OUT_ANIMATION_TIME,
+             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+         });
+     }
+ 
+     setMessage(serviceName, message, type) {
+         if (type == GdmUtil.MessageType.ERROR)
+             this._message.add_style_class_name('login-dialog-message-warning');
+         else
+             this._message.remove_style_class_name('login-dialog-message-warning');
+ 
+         if (type == GdmUtil.MessageType.HINT)
+             this._message.add_style_class_name('login-dialog-message-hint');
+         else
+             this._message.remove_style_class_name('login-dialog-message-hint');
+ 
++        this._message.show();
+         if (message) {
+             this._message.remove_all_transitions();
+             this._message.text = message;
+             this._message.opacity = 255;
+         } else {
+             this._message.opacity = 0;
+         }
+ 
+         if (type === GdmUtil.MessageType.ERROR &&
+             this._userVerifier.serviceIsFingerprint(serviceName)) {
+             // TODO: Use Await for wiggle to be over before unfreezing the user verifier queue
+             const wiggleParameters = {
+                 duration: 65,
+                 wiggleCount: 3,
+             };
+             this._userVerifier.increaseCurrentMessageTimeout(
+                 wiggleParameters.duration * (wiggleParameters.wiggleCount + 2));
+             Util.wiggle(this._message, wiggleParameters);
+         }
+     }
+ 
+     updateSensitivity(sensitive) {
+         if (this._entry.reactive === sensitive)
+             return;
+ 
+         this._entry.reactive = sensitive;
+ 
+         if (sensitive) {
+             this._entry.grab_key_focus();
+         } else {
+diff --git a/js/gdm/loginDialog.js b/js/gdm/loginDialog.js
+index d2a82b43d..41dd99646 100644
+--- a/js/gdm/loginDialog.js
++++ b/js/gdm/loginDialog.js
+@@ -391,60 +391,65 @@ var SessionMenuButton = GObject.registerClass({
+             let item = new PopupMenu.PopupMenuItem(sessionName);
+             this._menu.addMenuItem(item);
+             this._items[id] = item;
+ 
+             item.connect('activate', () => {
+                 this.setActiveSession(id);
+                 this.emit('session-activated', this._activeSessionId);
+             });
+         }
+     }
+ });
+ 
+ var LoginDialog = GObject.registerClass({
+     Signals: {
+         'failed': {},
+         'wake-up-screen': {},
+     },
+ }, class LoginDialog extends St.Widget {
+     _init(parentActor) {
+         super._init({ style_class: 'login-dialog', visible: false });
+ 
+         this.get_accessible().set_role(Atk.Role.WINDOW);
+ 
+         this.add_constraint(new Layout.MonitorConstraint({ primary: true }));
+         this.connect('destroy', this._onDestroy.bind(this));
+         parentActor.add_child(this);
+ 
+         this._userManager = AccountsService.UserManager.get_default();
+         this._gdmClient = new Gdm.Client();
+ 
++        try {
++            this._gdmClient.set_enabled_extensions([Gdm.UserVerifierChoiceList.interface_info().name]);
++        } catch (e) {
++        }
++
+         this._settings = new Gio.Settings({ schema_id: GdmUtil.LOGIN_SCREEN_SCHEMA });
+ 
+         this._settings.connect('changed::%s'.format(GdmUtil.BANNER_MESSAGE_KEY),
+                                this._updateBanner.bind(this));
+         this._settings.connect('changed::%s'.format(GdmUtil.BANNER_MESSAGE_TEXT_KEY),
+                                this._updateBanner.bind(this));
+         this._settings.connect('changed::%s'.format(GdmUtil.DISABLE_USER_LIST_KEY),
+                                this._updateDisableUserList.bind(this));
+         this._settings.connect('changed::%s'.format(GdmUtil.LOGO_KEY),
+                                this._updateLogo.bind(this));
+ 
+         this._textureCache = St.TextureCache.get_default();
+         this._updateLogoTextureId = this._textureCache.connect('texture-file-changed',
+                                                                this._updateLogoTexture.bind(this));
+ 
+         this._userSelectionBox = new St.BoxLayout({ style_class: 'login-dialog-user-selection-box',
+                                                     x_align: Clutter.ActorAlign.CENTER,
+                                                     y_align: Clutter.ActorAlign.CENTER,
+                                                     vertical: true,
+                                                     visible: false });
+         this.add_child(this._userSelectionBox);
+ 
+         this._userList = new UserList();
+         this._userSelectionBox.add_child(this._userList);
+ 
+         this._authPrompt = new AuthPrompt.AuthPrompt(this._gdmClient, AuthPrompt.AuthPromptMode.UNLOCK_OR_LOG_IN);
+         this._authPrompt.connect('prompted', this._onPrompted.bind(this));
+         this._authPrompt.connect('reset', this._onReset.bind(this));
+         this._authPrompt.hide();
+         this.add_child(this._authPrompt);
+diff --git a/js/gdm/util.js b/js/gdm/util.js
+index e62114cb1..3f327400f 100644
+--- a/js/gdm/util.js
++++ b/js/gdm/util.js
+@@ -211,90 +211,98 @@ var ShellUserVerifier = class {
+         this._cancellable = new Gio.Cancellable();
+         this._hold = hold;
+         this._userName = userName;
+         this.reauthenticating = false;
+ 
+         this._checkForFingerprintReader();
+ 
+         // If possible, reauthenticate an already running session,
+         // so any session specific credentials get updated appropriately
+         if (userName)
+             this._openReauthenticationChannel(userName);
+         else
+             this._getUserVerifier();
+     }
+ 
+     cancel() {
+         if (this._cancellable)
+             this._cancellable.cancel();
+ 
+         if (this._userVerifier) {
+             this._userVerifier.call_cancel_sync(null);
+             this.clear();
+         }
+     }
+ 
+     _clearUserVerifier() {
+         if (this._userVerifier) {
+             this._disconnectSignals();
+             this._userVerifier.run_dispose();
+             this._userVerifier = null;
++            if (this._userVerifierChoiceList) {
++                this._userVerifierChoiceList.run_dispose();
++                this._userVerifierChoiceList = null;
++            }
+         }
+     }
+ 
+     clear() {
+         if (this._cancellable) {
+             this._cancellable.cancel();
+             this._cancellable = null;
+         }
+ 
+         this._clearUserVerifier();
+         this._clearMessageQueue();
+     }
+ 
+     destroy() {
+         this.cancel();
+ 
+         this._settings.run_dispose();
+         this._settings = null;
+ 
+         this._smartcardManager.disconnect(this._smartcardInsertedId);
+         this._smartcardManager.disconnect(this._smartcardRemovedId);
+         this._smartcardManager = null;
+ 
+         for (let service in this._credentialManagers) {
+             let credentialManager = this._credentialManagers[service];
+             credentialManager.disconnect(credentialManager._authenticatedSignalId);
+             credentialManager = null;
+         }
+     }
+ 
++    selectChoice(serviceName, key) {
++        this._userVerifierChoiceList.call_select_choice(serviceName, key, this._cancellable, null);
++    }
++
+     answerQuery(serviceName, answer) {
+         if (!this.hasPendingMessages) {
+             this._userVerifier.call_answer_query(serviceName, answer, this._cancellable, null);
+         } else {
+             const cancellable = this._cancellable;
+             let signalId = this.connect('no-more-messages', () => {
+                 this.disconnect(signalId);
+                 if (!cancellable.is_cancelled())
+                     this._userVerifier.call_answer_query(serviceName, answer, cancellable, null);
+             });
+         }
+     }
+ 
+     _getIntervalForMessage(message) {
+         if (!message)
+             return 0;
+ 
+         // We probably could be smarter here
+         return message.length * USER_READ_TIME;
+     }
+ 
+     finishMessageQueue() {
+         if (!this.hasPendingMessages)
+             return;
+ 
+         this._messageQueue = [];
+ 
+         this.emit('no-more-messages');
+     }
+ 
+@@ -429,103 +437,116 @@ var ShellUserVerifier = class {
+     _reportInitError(where, error, serviceName) {
+         logError(error, where);
+         this._hold.release();
+ 
+         this._queueMessage(serviceName, _('Authentication error'), MessageType.ERROR);
+         this._failCounter++;
+         this._verificationFailed(serviceName, false);
+     }
+ 
+     async _openReauthenticationChannel(userName) {
+         try {
+             this._clearUserVerifier();
+             this._userVerifier = await this._client.open_reauthentication_channel(
+                 userName, this._cancellable);
+         } catch (e) {
+             if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                 return;
+             if (e.matches(Gio.DBusError, Gio.DBusError.ACCESS_DENIED) &&
+                 !this._reauthOnly) {
+                 // Gdm emits org.freedesktop.DBus.Error.AccessDenied when there
+                 // is no session to reauthenticate. Fall back to performing
+                 // verification from this login session
+                 this._getUserVerifier();
+                 return;
+             }
+ 
+             this._reportInitError('Failed to open reauthentication channel', e);
+             return;
+         }
+ 
++        if (this._client.get_user_verifier_choice_list)
++            this._userVerifierChoiceList = this._client.get_user_verifier_choice_list();
++        else
++            this._userVerifierChoiceList = null;
++
+         this.reauthenticating = true;
+         this._connectSignals();
+         this._beginVerification();
+         this._hold.release();
+     }
+ 
+     async _getUserVerifier() {
+         try {
+             this._clearUserVerifier();
+             this._userVerifier =
+                 await this._client.get_user_verifier(this._cancellable);
+         } catch (e) {
+             if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                 return;
+             this._reportInitError('Failed to obtain user verifier', e);
+             return;
+         }
+ 
++        if (this._client.get_user_verifier_choice_list)
++            this._userVerifierChoiceList = this._client.get_user_verifier_choice_list();
++        else
++            this._userVerifierChoiceList = null;
++
+         this._connectSignals();
+         this._beginVerification();
+         this._hold.release();
+     }
+ 
+     _connectSignals() {
+         this._disconnectSignals();
+         this._signalIds = [];
+ 
+         let id = this._userVerifier.connect('info', this._onInfo.bind(this));
+         this._signalIds.push(id);
+         id = this._userVerifier.connect('problem', this._onProblem.bind(this));
+         this._signalIds.push(id);
+         id = this._userVerifier.connect('info-query', this._onInfoQuery.bind(this));
+         this._signalIds.push(id);
+         id = this._userVerifier.connect('secret-info-query', this._onSecretInfoQuery.bind(this));
+         this._signalIds.push(id);
+         id = this._userVerifier.connect('conversation-stopped', this._onConversationStopped.bind(this));
+         this._signalIds.push(id);
+         id = this._userVerifier.connect('service-unavailable', this._onServiceUnavailable.bind(this));
+         this._signalIds.push(id);
+         id = this._userVerifier.connect('reset', this._onReset.bind(this));
+         this._signalIds.push(id);
+         id = this._userVerifier.connect('verification-complete', this._onVerificationComplete.bind(this));
+         this._signalIds.push(id);
++
++        if (this._userVerifierChoiceList)
++            this._userVerifierChoiceList.connect('choice-query', this._onChoiceListQuery.bind(this));
+     }
+ 
+     _disconnectSignals() {
+         if (!this._signalIds || !this._userVerifier)
+             return;
+ 
+         this._signalIds.forEach(s => this._userVerifier.disconnect(s));
+         this._signalIds = [];
+     }
+ 
+     _getForegroundService() {
+         if (this._preemptingService)
+             return this._preemptingService;
+ 
+         return this._defaultService;
+     }
+ 
+     serviceIsForeground(serviceName) {
+         return serviceName == this._getForegroundService();
+     }
+ 
+     serviceIsDefault(serviceName) {
+         return serviceName == this._defaultService;
+     }
+ 
+     serviceIsFingerprint(serviceName) {
+         return this._fingerprintReaderType !== FingerprintReaderType.NONE &&
+             serviceName === FINGERPRINT_SERVICE_NAME;
+     }
+ 
+@@ -554,60 +575,67 @@ var ShellUserVerifier = class {
+             } else {
+                 await this._userVerifier.call_begin_verification(
+                     serviceName, this._cancellable);
+             }
+         } catch (e) {
+             if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                 return;
+             if (!this.serviceIsForeground(serviceName)) {
+                 logError(e, 'Failed to start %s for %s'.format(serviceName, this._userName));
+                 this._hold.release();
+                 return;
+             }
+             this._reportInitError(this._userName
+                 ? 'Failed to start %s verification for user'.format(serviceName)
+                 : 'Failed to start %s verification'.format(serviceName), e,
+             serviceName);
+             return;
+         }
+         this._hold.release();
+     }
+ 
+     _beginVerification() {
+         this._startService(this._getForegroundService());
+ 
+         if (this._userName &&
+             this._fingerprintReaderType !== FingerprintReaderType.NONE &&
+             !this.serviceIsForeground(FINGERPRINT_SERVICE_NAME))
+             this._startService(FINGERPRINT_SERVICE_NAME);
+     }
+ 
++    _onChoiceListQuery(client, serviceName, promptMessage, list) {
++        if (!this.serviceIsForeground(serviceName))
++            return;
++
++        this.emit('show-choice-list', serviceName, promptMessage, list.deep_unpack());
++    }
++
+     _onInfo(client, serviceName, info) {
+         if (this.serviceIsForeground(serviceName)) {
+             this._queueMessage(serviceName, info, MessageType.INFO);
+         } else if (this.serviceIsFingerprint(serviceName)) {
+             // We don't show fingerprint messages directly since it's
+             // not the main auth service. Instead we use the messages
+             // as a cue to display our own message.
+             if (this._fingerprintReaderType === FingerprintReaderType.SWIPE) {
+                 // Translators: this message is shown below the password entry field
+                 // to indicate the user can swipe their finger on the fingerprint reader
+                 this._queueMessage(serviceName, _('(or swipe finger across reader)'),
+                     MessageType.HINT);
+             } else {
+                 // Translators: this message is shown below the password entry field
+                 // to indicate the user can place their finger on the fingerprint reader instead
+                 this._queueMessage(serviceName, _('(or place finger on reader)'),
+                     MessageType.HINT);
+             }
+         }
+     }
+ 
+     _onProblem(client, serviceName, problem) {
+         const isFingerprint = this.serviceIsFingerprint(serviceName);
+ 
+         if (!this.serviceIsForeground(serviceName) && !isFingerprint)
+             return;
+ 
+         this._queuePriorityMessage(serviceName, problem, MessageType.ERROR);
+ 
+         if (isFingerprint) {
+diff --git a/js/ui/unlockDialog.js b/js/ui/unlockDialog.js
+index 5b55cb08a..f4655b25b 100644
+--- a/js/ui/unlockDialog.js
++++ b/js/ui/unlockDialog.js
+@@ -466,60 +466,67 @@ class UnlockDialogLayout extends Clutter.LayoutManager {
+             else
+                 actorBox.x1 = box.x2 - (natWidth * 2);
+ 
+             actorBox.y1 = box.y2 - (natHeight * 2);
+             actorBox.x2 = actorBox.x1 + natWidth;
+             actorBox.y2 = actorBox.y1 + natHeight;
+ 
+             this._switchUserButton.allocate(actorBox);
+         }
+     }
+ });
+ 
+ var UnlockDialog = GObject.registerClass({
+     Signals: {
+         'failed': {},
+         'wake-up-screen': {},
+     },
+ }, class UnlockDialog extends St.Widget {
+     _init(parentActor) {
+         super._init({
+             accessible_role: Atk.Role.WINDOW,
+             style_class: 'unlock-dialog',
+             visible: false,
+             reactive: true,
+         });
+ 
+         parentActor.add_child(this);
+ 
+         this._gdmClient = new Gdm.Client();
+ 
++        try {
++            this._gdmClient.set_enabled_extensions([
++                Gdm.UserVerifierChoiceList.interface_info().name,
++            ]);
++        } catch (e) {
++        }
++
+         this._adjustment = new St.Adjustment({
+             actor: this,
+             lower: 0,
+             upper: 2,
+             page_size: 1,
+             page_increment: 1,
+         });
+         this._adjustment.connect('notify::value', () => {
+             this._setTransitionProgress(this._adjustment.value);
+         });
+ 
+         this._swipeTracker = new SwipeTracker.SwipeTracker(this,
+             Clutter.Orientation.VERTICAL,
+             Shell.ActionMode.UNLOCK_SCREEN);
+         this._swipeTracker.connect('begin', this._swipeBegin.bind(this));
+         this._swipeTracker.connect('update', this._swipeUpdate.bind(this));
+         this._swipeTracker.connect('end', this._swipeEnd.bind(this));
+ 
+         this.connect('scroll-event', (o, event) => {
+             if (this._swipeTracker.canHandleScrollEvent(event))
+                 return Clutter.EVENT_PROPAGATE;
+ 
+             let direction = event.get_scroll_direction();
+             if (direction === Clutter.ScrollDirection.UP)
+                 this._showClock();
+             else if (direction === Clutter.ScrollDirection.DOWN)
+                 this._showPrompt();
+             return Clutter.EVENT_STOP;
+         });
+ 
+-- 
+2.34.1
+

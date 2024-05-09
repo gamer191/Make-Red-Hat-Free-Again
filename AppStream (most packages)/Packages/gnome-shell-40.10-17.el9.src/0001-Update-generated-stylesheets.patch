@@ -1,0 +1,364 @@
+From 678cdd9e0da851da78527fa827d71a80273510b0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@redhat.com>
+Date: Tue, 8 Feb 2022 14:18:04 -0500
+
+---
+ data/theme/gnome-shell-high-contrast.css | 36 ++++++++++++++++++++++++
+ data/theme/gnome-shell.css               | 36 ++++++++++++++++++++++++
+ 2 files changed, 72 insertions(+)
+
+diff --git a/data/theme/gnome-shell-high-contrast.css b/data/theme/gnome-shell-high-contrast.css
+index b73f407..90f363c 100644
+--- a/data/theme/gnome-shell-high-contrast.css
++++ b/data/theme/gnome-shell-high-contrast.css
+@@ -1223,60 +1223,63 @@ StScrollBar {
+     -panel-corner-border-color: transparent;
+     -panel-corner-opacity: 1;
+     transition-duration: 250ms; }
+   #panel .panel-button {
+     font-weight: bold;
+     color: #ddd;
+     -natural-hpadding: 12px;
+     -minimum-hpadding: 6px;
+     transition-duration: 150ms;
+     border: 3px solid transparent;
+     border-radius: 99px; }
+     #panel .panel-button.clock-display .clock {
+       transition-duration: 150ms;
+       border: 3px solid transparent;
+       border-radius: 99px; }
+     #panel .panel-button:hover, #panel .panel-button:active, #panel .panel-button:overview, #panel .panel-button:focus, #panel .panel-button:checked {
+       box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.2); }
+       #panel .panel-button.clock-display:hover, #panel .panel-button.clock-display:active, #panel .panel-button.clock-display:overview, #panel .panel-button.clock-display:focus, #panel .panel-button.clock-display:checked {
+         box-shadow: none; }
+         #panel .panel-button.clock-display:hover .clock, #panel .panel-button.clock-display:active .clock, #panel .panel-button.clock-display:overview .clock, #panel .panel-button.clock-display:focus .clock, #panel .panel-button.clock-display:checked .clock {
+           box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.2); }
+     #panel .panel-button .system-status-icon {
+       icon-size: 1.09em;
+       padding: 5px;
+       margin: 0 4px; }
+     #panel .panel-button .panel-status-indicators-box .system-status-icon,
+     #panel .panel-button .panel-status-menu-box .system-status-icon {
+       margin: 0; }
+     #panel .panel-button .app-menu-icon {
+       -st-icon-style: symbolic; }
++    #panel .panel-button .panel-logo-icon {
++      padding-right: .4em;
++      icon-size: 1em; }
+     #panel #panelActivities.panel-button {
+       -natural-hpadding: 18px; }
+   #panel.unlock-screen .panel-button:hover, #panel.unlock-screen .panel-button:active, #panel.unlock-screen .panel-button:overview, #panel.unlock-screen .panel-button:focus, #panel.unlock-screen .panel-button:checked, #panel.login-screen .panel-button:hover, #panel.login-screen .panel-button:active, #panel.login-screen .panel-button:overview, #panel.login-screen .panel-button:focus, #panel.login-screen .panel-button:checked, #panel:overview .panel-button:hover, #panel:overview .panel-button:active, #panel:overview .panel-button:overview, #panel:overview .panel-button:focus, #panel:overview .panel-button:checked {
+     box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.15); }
+     #panel.unlock-screen .panel-button.clock-display:hover, #panel.unlock-screen .panel-button.clock-display:active, #panel.unlock-screen .panel-button.clock-display:overview, #panel.unlock-screen .panel-button.clock-display:focus, #panel.unlock-screen .panel-button.clock-display:checked, #panel.login-screen .panel-button.clock-display:hover, #panel.login-screen .panel-button.clock-display:active, #panel.login-screen .panel-button.clock-display:overview, #panel.login-screen .panel-button.clock-display:focus, #panel.login-screen .panel-button.clock-display:checked, #panel:overview .panel-button.clock-display:hover, #panel:overview .panel-button.clock-display:active, #panel:overview .panel-button.clock-display:overview, #panel:overview .panel-button.clock-display:focus, #panel:overview .panel-button.clock-display:checked {
+       box-shadow: none; }
+       #panel.unlock-screen .panel-button.clock-display:hover .clock, #panel.unlock-screen .panel-button.clock-display:active .clock, #panel.unlock-screen .panel-button.clock-display:overview .clock, #panel.unlock-screen .panel-button.clock-display:focus .clock, #panel.unlock-screen .panel-button.clock-display:checked .clock, #panel.login-screen .panel-button.clock-display:hover .clock, #panel.login-screen .panel-button.clock-display:active .clock, #panel.login-screen .panel-button.clock-display:overview .clock, #panel.login-screen .panel-button.clock-display:focus .clock, #panel.login-screen .panel-button.clock-display:checked .clock, #panel:overview .panel-button.clock-display:hover .clock, #panel:overview .panel-button.clock-display:active .clock, #panel:overview .panel-button.clock-display:overview .clock, #panel:overview .panel-button.clock-display:focus .clock, #panel:overview .panel-button.clock-display:checked .clock {
+         box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.15); }
+   #panel .panel-status-indicators-box,
+   #panel .panel-status-menu-box {
+     spacing: 2px; }
+   #panel .power-status.panel-status-indicators-box {
+     spacing: 0; }
+   #panel .screencast-indicator,
+   #panel .remote-access-indicator {
+     color: #f57900; }
+ 
+ #appMenu {
+   spacing: 6px; }
+   #appMenu .label-shadow {
+     color: transparent; }
+ 
+ #appMenu .panel-status-menu-box {
+   padding: 0 6px;
+   spacing: 6px; }
+ 
+ /* Activities Ripple */
+ .ripple-box {
+   background-color: rgba(158, 196, 235, 0.3);
+   box-shadow: 0 0 2px 2px #4a90d9;
+@@ -2039,74 +2042,107 @@ StScrollBar {
+     width: 2.18em;
+     height: 2.18em;
+     border-color: #202020;
+     background-color: #202020; }
+     .login-dialog .cancel-button StIcon,
+     .login-dialog .switch-user-button StIcon,
+     .login-dialog .login-dialog-session-list-button StIcon,
+     .unlock-dialog .cancel-button StIcon,
+     .unlock-dialog .switch-user-button StIcon,
+     .unlock-dialog .login-dialog-session-list-button StIcon {
+       icon-size: 1.09em; }
+   .login-dialog .caps-lock-warning-label,
+   .login-dialog .login-dialog-message-warning,
+   .unlock-dialog .caps-lock-warning-label,
+   .unlock-dialog .login-dialog-message-warning {
+     color: #eeeeec; }
+ 
+ .login-dialog-logo-bin {
+   padding: 24px 0px; }
+ 
+ .login-dialog-banner {
+   color: #d6d6d1; }
+ 
+ .login-dialog-button-box {
+   width: 23em;
+   spacing: 5px; }
+ 
+ .login-dialog-message {
+   text-align: center; }
+ 
++.login-dialog-message-hint, .login-dialog-message {
++  color: #bebeb6;
++  min-height: 2.75em; }
++
+ .login-dialog-user-selection-box {
+   padding: 100px 0px; }
+ 
+ .login-dialog-not-listed-label {
+   padding-left: 2px; }
+   .login-dialog-not-listed-button:focus .login-dialog-not-listed-label, .login-dialog-not-listed-button:hover .login-dialog-not-listed-label {
+     color: #eeeeec; }
+ 
+ .login-dialog-not-listed-label {
+   font-size: 10pt;
+   font-weight: bold;
+   color: #a6a69b;
+   padding-top: 1em; }
+ 
++.login-dialog-auth-list-view {
++  -st-vfade-offset: 1em; }
++
++.login-dialog-auth-list {
++  spacing: 6px;
++  margin-left: 2em; }
++
++.login-dialog-auth-list-title {
++  margin-left: 2em; }
++
++.login-dialog-auth-list-item {
++  border-radius: 12px;
++  padding: 6px;
++  color: #a6a69b; }
++  .login-dialog-auth-list-item:focus, .login-dialog-auth-list-item:selected {
++    background-color: #215d9c;
++    color: #ffffff; }
++
++.login-dialog-auth-list-label {
++  font-size: 13pt;
++  font-weight: bold;
++  padding-left: 15px; }
++  .login-dialog-auth-list-label:ltr {
++    padding-left: 14px;
++    text-align: left; }
++  .login-dialog-auth-list-label:rtl {
++    padding-right: 14px;
++    text-align: right; }
++
+ .login-dialog-user-list-view {
+   -st-vfade-offset: 1em; }
+ 
+ .login-dialog-user-list {
+   spacing: 12px;
+   width: 23em; }
+   .login-dialog-user-list:expanded .login-dialog-user-list-item:selected {
+     background-color: #215d9c;
+     color: #ffffff; }
+   .login-dialog-user-list:expanded .login-dialog-user-list-item:logged-in {
+     border-right: 2px solid #215d9c; }
+ 
+ .login-dialog-user-list-item {
+   border-radius: 12px;
+   padding: 6px;
+   color: #a6a69b; }
+   .login-dialog-user-list-item:ltr .user-widget {
+     padding-right: 1em; }
+   .login-dialog-user-list-item:rtl .user-widget {
+     padding-left: 1em; }
+   .login-dialog-user-list-item .login-dialog-timed-login-indicator {
+     height: 2px;
+     margin-top: 6px;
+     background-color: #eeeeec; }
+   .login-dialog-user-list-item:focus .login-dialog-timed-login-indicator {
+     background-color: #ffffff; }
+ 
+ .user-widget-label {
+   color: #eeeeec; }
+ 
+diff --git a/data/theme/gnome-shell.css b/data/theme/gnome-shell.css
+index f93819b..d3d7fc8 100644
+--- a/data/theme/gnome-shell.css
++++ b/data/theme/gnome-shell.css
+@@ -1223,60 +1223,63 @@ StScrollBar {
+     -panel-corner-border-color: transparent;
+     -panel-corner-opacity: 1;
+     transition-duration: 250ms; }
+   #panel .panel-button {
+     font-weight: bold;
+     color: #ddd;
+     -natural-hpadding: 12px;
+     -minimum-hpadding: 6px;
+     transition-duration: 150ms;
+     border: 3px solid transparent;
+     border-radius: 99px; }
+     #panel .panel-button.clock-display .clock {
+       transition-duration: 150ms;
+       border: 3px solid transparent;
+       border-radius: 99px; }
+     #panel .panel-button:hover, #panel .panel-button:active, #panel .panel-button:overview, #panel .panel-button:focus, #panel .panel-button:checked {
+       box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.2); }
+       #panel .panel-button.clock-display:hover, #panel .panel-button.clock-display:active, #panel .panel-button.clock-display:overview, #panel .panel-button.clock-display:focus, #panel .panel-button.clock-display:checked {
+         box-shadow: none; }
+         #panel .panel-button.clock-display:hover .clock, #panel .panel-button.clock-display:active .clock, #panel .panel-button.clock-display:overview .clock, #panel .panel-button.clock-display:focus .clock, #panel .panel-button.clock-display:checked .clock {
+           box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.2); }
+     #panel .panel-button .system-status-icon {
+       icon-size: 1.09em;
+       padding: 5px;
+       margin: 0 4px; }
+     #panel .panel-button .panel-status-indicators-box .system-status-icon,
+     #panel .panel-button .panel-status-menu-box .system-status-icon {
+       margin: 0; }
+     #panel .panel-button .app-menu-icon {
+       -st-icon-style: symbolic; }
++    #panel .panel-button .panel-logo-icon {
++      padding-right: .4em;
++      icon-size: 1em; }
+     #panel #panelActivities.panel-button {
+       -natural-hpadding: 18px; }
+   #panel.unlock-screen .panel-button:hover, #panel.unlock-screen .panel-button:active, #panel.unlock-screen .panel-button:overview, #panel.unlock-screen .panel-button:focus, #panel.unlock-screen .panel-button:checked, #panel.login-screen .panel-button:hover, #panel.login-screen .panel-button:active, #panel.login-screen .panel-button:overview, #panel.login-screen .panel-button:focus, #panel.login-screen .panel-button:checked, #panel:overview .panel-button:hover, #panel:overview .panel-button:active, #panel:overview .panel-button:overview, #panel:overview .panel-button:focus, #panel:overview .panel-button:checked {
+     box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.15); }
+     #panel.unlock-screen .panel-button.clock-display:hover, #panel.unlock-screen .panel-button.clock-display:active, #panel.unlock-screen .panel-button.clock-display:overview, #panel.unlock-screen .panel-button.clock-display:focus, #panel.unlock-screen .panel-button.clock-display:checked, #panel.login-screen .panel-button.clock-display:hover, #panel.login-screen .panel-button.clock-display:active, #panel.login-screen .panel-button.clock-display:overview, #panel.login-screen .panel-button.clock-display:focus, #panel.login-screen .panel-button.clock-display:checked, #panel:overview .panel-button.clock-display:hover, #panel:overview .panel-button.clock-display:active, #panel:overview .panel-button.clock-display:overview, #panel:overview .panel-button.clock-display:focus, #panel:overview .panel-button.clock-display:checked {
+       box-shadow: none; }
+       #panel.unlock-screen .panel-button.clock-display:hover .clock, #panel.unlock-screen .panel-button.clock-display:active .clock, #panel.unlock-screen .panel-button.clock-display:overview .clock, #panel.unlock-screen .panel-button.clock-display:focus .clock, #panel.unlock-screen .panel-button.clock-display:checked .clock, #panel.login-screen .panel-button.clock-display:hover .clock, #panel.login-screen .panel-button.clock-display:active .clock, #panel.login-screen .panel-button.clock-display:overview .clock, #panel.login-screen .panel-button.clock-display:focus .clock, #panel.login-screen .panel-button.clock-display:checked .clock, #panel:overview .panel-button.clock-display:hover .clock, #panel:overview .panel-button.clock-display:active .clock, #panel:overview .panel-button.clock-display:overview .clock, #panel:overview .panel-button.clock-display:focus .clock, #panel:overview .panel-button.clock-display:checked .clock {
+         box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.15); }
+   #panel .panel-status-indicators-box,
+   #panel .panel-status-menu-box {
+     spacing: 2px; }
+   #panel .power-status.panel-status-indicators-box {
+     spacing: 0; }
+   #panel .screencast-indicator,
+   #panel .remote-access-indicator {
+     color: #f57900; }
+ 
+ #appMenu {
+   spacing: 6px; }
+   #appMenu .label-shadow {
+     color: transparent; }
+ 
+ #appMenu .panel-status-menu-box {
+   padding: 0 6px;
+   spacing: 6px; }
+ 
+ /* Activities Ripple */
+ .ripple-box {
+   background-color: rgba(188, 214, 246, 0.3);
+   box-shadow: 0 0 2px 2px #629fea;
+@@ -2039,74 +2042,107 @@ StScrollBar {
+     width: 2.18em;
+     height: 2.18em;
+     border-color: #202020;
+     background-color: #202020; }
+     .login-dialog .cancel-button StIcon,
+     .login-dialog .switch-user-button StIcon,
+     .login-dialog .login-dialog-session-list-button StIcon,
+     .unlock-dialog .cancel-button StIcon,
+     .unlock-dialog .switch-user-button StIcon,
+     .unlock-dialog .login-dialog-session-list-button StIcon {
+       icon-size: 1.09em; }
+   .login-dialog .caps-lock-warning-label,
+   .login-dialog .login-dialog-message-warning,
+   .unlock-dialog .caps-lock-warning-label,
+   .unlock-dialog .login-dialog-message-warning {
+     color: #eeeeec; }
+ 
+ .login-dialog-logo-bin {
+   padding: 24px 0px; }
+ 
+ .login-dialog-banner {
+   color: #d6d6d1; }
+ 
+ .login-dialog-button-box {
+   width: 23em;
+   spacing: 5px; }
+ 
+ .login-dialog-message {
+   text-align: center; }
+ 
++.login-dialog-message-hint, .login-dialog-message {
++  color: #bebeb6;
++  min-height: 2.75em; }
++
+ .login-dialog-user-selection-box {
+   padding: 100px 0px; }
+ 
+ .login-dialog-not-listed-label {
+   padding-left: 2px; }
+   .login-dialog-not-listed-button:focus .login-dialog-not-listed-label, .login-dialog-not-listed-button:hover .login-dialog-not-listed-label {
+     color: #eeeeec; }
+ 
+ .login-dialog-not-listed-label {
+   font-size: 10pt;
+   font-weight: bold;
+   color: #a6a69b;
+   padding-top: 1em; }
+ 
++.login-dialog-auth-list-view {
++  -st-vfade-offset: 1em; }
++
++.login-dialog-auth-list {
++  spacing: 6px;
++  margin-left: 2em; }
++
++.login-dialog-auth-list-title {
++  margin-left: 2em; }
++
++.login-dialog-auth-list-item {
++  border-radius: 12px;
++  padding: 6px;
++  color: #a6a69b; }
++  .login-dialog-auth-list-item:focus, .login-dialog-auth-list-item:selected {
++    background-color: #1b6acb;
++    color: #fff; }
++
++.login-dialog-auth-list-label {
++  font-size: 13pt;
++  font-weight: bold;
++  padding-left: 15px; }
++  .login-dialog-auth-list-label:ltr {
++    padding-left: 14px;
++    text-align: left; }
++  .login-dialog-auth-list-label:rtl {
++    padding-right: 14px;
++    text-align: right; }
++
+ .login-dialog-user-list-view {
+   -st-vfade-offset: 1em; }
+ 
+ .login-dialog-user-list {
+   spacing: 12px;
+   width: 23em; }
+   .login-dialog-user-list:expanded .login-dialog-user-list-item:selected {
+     background-color: #1b6acb;
+     color: #fff; }
+   .login-dialog-user-list:expanded .login-dialog-user-list-item:logged-in {
+     border-right: 2px solid #1b6acb; }
+ 
+ .login-dialog-user-list-item {
+   border-radius: 12px;
+   padding: 6px;
+   color: #a6a69b; }
+   .login-dialog-user-list-item:ltr .user-widget {
+     padding-right: 1em; }
+   .login-dialog-user-list-item:rtl .user-widget {
+     padding-left: 1em; }
+   .login-dialog-user-list-item .login-dialog-timed-login-indicator {
+     height: 2px;
+     margin-top: 6px;
+     background-color: #eeeeec; }
+   .login-dialog-user-list-item:focus .login-dialog-timed-login-indicator {
+     background-color: #fff; }
+ 
+ .user-widget-label {
+   color: #eeeeec; }
+ 
+-- 
+2.34.1
+

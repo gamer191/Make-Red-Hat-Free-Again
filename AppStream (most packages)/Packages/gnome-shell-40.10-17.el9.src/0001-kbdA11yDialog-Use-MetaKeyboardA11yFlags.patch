@@ -1,0 +1,51 @@
+From bd4fef8354ff0730c1e96a47d77adbb4a4d7beaa Mon Sep 17 00:00:00 2001
+From: Olivier Fourdan <ofourdan@redhat.com>
+Date: Tue, 14 Jun 2022 16:38:27 +0200
+Subject: [PATCH] kbdA11yDialog: Use MetaKeyboardA11yFlags
+
+The change in mutter to move keyboard accessibility into backends needs
+to be applied in gnome-shell as well, otherwise the keyboard
+accessibility dialog cannot work.
+
+Closes: https://gitlab.gnome.org/GNOME/mutter/-/issues/2306
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/2334>
+---
+ js/ui/kbdA11yDialog.js | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/js/ui/kbdA11yDialog.js b/js/ui/kbdA11yDialog.js
+index a45e02443..60ec161a6 100644
+--- a/js/ui/kbdA11yDialog.js
++++ b/js/ui/kbdA11yDialog.js
+@@ -1,5 +1,5 @@
+ /* exported KbdA11yDialog */
+-const { Clutter, Gio, GObject } = imports.gi;
++const { Clutter, Gio, GObject, Meta } = imports.gi;
+ 
+ const Dialog = imports.ui.dialog;
+ const ModalDialog = imports.ui.modalDialog;
+@@ -25,17 +25,17 @@ class KbdA11yDialog extends GObject.Object {
+         let title, description;
+         let key, enabled;
+ 
+-        if (whatChanged & Clutter.KeyboardA11yFlags.SLOW_KEYS_ENABLED) {
++        if (whatChanged & Meta.KeyboardA11yFlags.SLOW_KEYS_ENABLED) {
+             key = KEY_SLOW_KEYS_ENABLED;
+-            enabled = (newFlags & Clutter.KeyboardA11yFlags.SLOW_KEYS_ENABLED) > 0;
++            enabled = (newFlags & Meta.KeyboardA11yFlags.SLOW_KEYS_ENABLED) > 0;
+             title = enabled
+                 ? _("Slow Keys Turned On")
+                 : _("Slow Keys Turned Off");
+             description = _('You just held down the Shift key for 8 seconds. This is the shortcut ' +
+                             'for the Slow Keys feature, which affects the way your keyboard works.');
+-        } else if (whatChanged & Clutter.KeyboardA11yFlags.STICKY_KEYS_ENABLED) {
++        } else if (whatChanged & Meta.KeyboardA11yFlags.STICKY_KEYS_ENABLED) {
+             key = KEY_STICKY_KEYS_ENABLED;
+-            enabled = (newFlags & Clutter.KeyboardA11yFlags.STICKY_KEYS_ENABLED) > 0;
++            enabled = (newFlags & Meta.KeyboardA11yFlags.STICKY_KEYS_ENABLED) > 0;
+             title = enabled
+                 ? _("Sticky Keys Turned On")
+                 : _("Sticky Keys Turned Off");
+-- 
+2.36.1
+

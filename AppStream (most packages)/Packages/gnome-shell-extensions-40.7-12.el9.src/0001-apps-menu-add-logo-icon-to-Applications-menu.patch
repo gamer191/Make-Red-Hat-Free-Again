@@ -1,0 +1,66 @@
+From 08e720c793baa0cb12ed99c4333c75df46e3a9ed Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Tue, 21 Jan 2014 16:48:17 -0500
+Subject: [PATCH] apps-menu: add logo icon to Applications menu
+
+Brand requested it.
+---
+ extensions/apps-menu/extension.js | 22 +++++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/extensions/apps-menu/extension.js b/extensions/apps-menu/extension.js
+index e36b0fe..983a4e7 100644
+--- a/extensions/apps-menu/extension.js
++++ b/extensions/apps-menu/extension.js
+@@ -364,13 +364,24 @@ class ApplicationsButton extends PanelMenu.Button {
+         // role ATK_ROLE_MENU like other elements of the panel.
+         this.accessible_role = Atk.Role.LABEL;
+ 
++        const hbox = new St.BoxLayout({ style_class: 'panel-status-menu-box' });
++
++        const iconFile = Gio.File.new_for_path(
++            '/usr/share/icons/hicolor/scalable/apps/start-here.svg');
++        this._icon = new St.Icon({
++            gicon: new Gio.FileIcon({ file: iconFile }),
++            style_class: 'panel-logo-icon',
++        });
++        hbox.add_actor(this._icon);
++
+         this._label = new St.Label({
+             text: _('Applications'),
+             y_expand: true,
+             y_align: Clutter.ActorAlign.CENTER,
+         });
++        hbox.add_actor(this._label);
+ 
+-        this.add_actor(this._label);
++        this.add_actor(hbox);
+         this.name = 'panelApplications';
+         this.label_actor = this._label;
+ 
+@@ -404,6 +415,14 @@ class ApplicationsButton extends PanelMenu.Button {
+         this._display();
+         this._installedChangedId = appSys.connect('installed-changed',
+             this._onTreeChanged.bind(this));
++        this._sessionUpdatedId = Main.sessionMode.connect('updated',
++            this._sessionUpdated.bind(this));
++        this._sessionUpdated();
++    }
++
++    _sessionUpdated() {
++        this._icon.visible =
++            !Main.sessionMode.panel.left.includes('activities');
+     }
+ 
+     _onTreeChanged() {
+@@ -429,6 +448,7 @@ class ApplicationsButton extends PanelMenu.Button {
+ 
+         Main.overview.disconnect(this._showingId);
+         Main.overview.disconnect(this._hidingId);
++        Main.sessionMode.disconnect(this._sessionUpdatedId);
+         appSys.disconnect(this._installedChangedId);
+         this._tree.disconnect(this._treeChangedId);
+         this._tree = null;
+-- 
+2.32.0
+

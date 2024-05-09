@@ -1,0 +1,38 @@
+From 79049292451b9bb23ad92c572a438585ca37246b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 27 Oct 2021 15:18:20 +0200
+Subject: [PATCH] welcomeDialog: Adapt dialog title
+
+Use RHEL branding instead of the upstream GNOME XX one.
+---
+ js/ui/welcomeDialog.js | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/js/ui/welcomeDialog.js b/js/ui/welcomeDialog.js
+index 9d99f0035..783fd1108 100644
+--- a/js/ui/welcomeDialog.js
++++ b/js/ui/welcomeDialog.js
+@@ -1,9 +1,8 @@
+ // -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+ /* exported WelcomeDialog */
+ 
+-const { Clutter, GObject, Shell, St } = imports.gi;
++const { Clutter, GLib, GObject, Shell, St } = imports.gi;
+ 
+-const Config = imports.misc.config;
+ const Dialog = imports.ui.dialog;
+ const Main = imports.ui.main;
+ const ModalDialog = imports.ui.modalDialog;
+@@ -32,8 +31,7 @@ class WelcomeDialog extends ModalDialog.ModalDialog {
+     }
+ 
+     _buildLayout() {
+-        const [majorVersion] = Config.PACKAGE_VERSION.split('.');
+-        const title = _('Welcome to GNOME %s').format(majorVersion);
++        const title = _('Welcome to %s').format(GLib.get_os_info('NAME'));
+         const description = _('If you want to learn your way around, check out the tour.');
+         const content = new Dialog.MessageDialogContent({ title, description });
+ 
+-- 
+2.33.1
+

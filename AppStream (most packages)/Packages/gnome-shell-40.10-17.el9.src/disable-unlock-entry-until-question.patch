@@ -1,0 +1,176 @@
+From 6739f213965c2b6a41c21b446095f393f9d86e43 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Wed, 30 Sep 2015 12:51:24 -0400
+Subject: [PATCH 1/3] authPrompt: don't fade out auth messages if user types
+ password up front
+
+Right now we fade out any stale auth messages as soon as the user starts
+typing. This behavior doesn't really make sense if the user is typing up
+front, before a password is asked.
+---
+ js/gdm/authPrompt.js | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/js/gdm/authPrompt.js b/js/gdm/authPrompt.js
+index 4844b9ee0..149e5ad4a 100644
+--- a/js/gdm/authPrompt.js
++++ b/js/gdm/authPrompt.js
+@@ -179,7 +179,7 @@ var AuthPrompt = GObject.registerClass({
+ 
+         [this._textEntry, this._passwordEntry].forEach(entry => {
+             entry.clutter_text.connect('text-changed', () => {
+-                if (!this._userVerifier.hasPendingMessages)
++                if (!this._userVerifier.hasPendingMessages && this._queryingService && !this._preemptiveAnswer)
+                     this._fadeOutMessage();
+             });
+ 
+-- 
+2.31.1
+
+
+From 2b84c3d611120ae2f60386d5c637b84d1958398d Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Wed, 30 Sep 2015 14:36:33 -0400
+Subject: [PATCH 2/3] authPrompt: don't spin unless answering question
+
+---
+ js/gdm/authPrompt.js | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/js/gdm/authPrompt.js b/js/gdm/authPrompt.js
+index 149e5ad4a..c5643d046 100644
+--- a/js/gdm/authPrompt.js
++++ b/js/gdm/authPrompt.js
+@@ -243,13 +243,14 @@ var AuthPrompt = GObject.registerClass({
+         this.verificationStatus = AuthPromptStatus.VERIFICATION_IN_PROGRESS;
+         this.updateSensitivity(false);
+ 
+-        if (shouldSpin)
+-            this.startSpinning();
++        if (this._queryingService) {
++            if (shouldSpin)
++                this.startSpinning();
+ 
+-        if (this._queryingService)
+             this._userVerifier.answerQuery(this._queryingService, this._entry.text);
+-        else
++        } else {
+             this._preemptiveAnswer = this._entry.text;
++        }
+ 
+         this.emit('next');
+     }
+-- 
+2.31.1
+
+
+From 56360c872e01b0554b4d8b53dddba5407d4e889b Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Mon, 5 Oct 2015 15:26:18 -0400
+Subject: [PATCH 3/3] authPrompt: stop accepting preemptive answer if user
+ stops typing
+
+We only want to allow the user to type the preemptive password in
+one smooth motion.  If they start to type, and then stop typing,
+we should discard their preemptive password as expired.
+
+Typing ahead the password is just a convenience for users who don't
+want to manually lift the shift before typing their passwords, after
+all.
+---
+ js/gdm/authPrompt.js | 37 ++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 36 insertions(+), 1 deletion(-)
+
+diff --git a/js/gdm/authPrompt.js b/js/gdm/authPrompt.js
+index c5643d046..84c608b2f 100644
+--- a/js/gdm/authPrompt.js
++++ b/js/gdm/authPrompt.js
+@@ -1,7 +1,7 @@
+ // -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+ /* exported AuthPrompt */
+ 
+-const { Clutter, GLib, GObject, Pango, Shell, St } = imports.gi;
++const { Clutter, GLib, GObject, Meta, Pango, Shell, St } = imports.gi;
+ 
+ const Animation = imports.ui.animation;
+ const Batch = imports.gdm.batch;
+@@ -63,6 +63,8 @@ var AuthPrompt = GObject.registerClass({
+         this._defaultButtonWellActor = null;
+         this._cancelledRetries = 0;
+ 
++        this._idleMonitor = Meta.IdleMonitor.get_core();
++
+         let reauthenticationOnly;
+         if (this._mode == AuthPromptMode.UNLOCK_ONLY)
+             reauthenticationOnly = true;
+@@ -119,6 +121,11 @@ var AuthPrompt = GObject.registerClass({
+     }
+ 
+     _onDestroy() {
++        if (this._preemptiveAnswerWatchId) {
++            this._idleMonitor.remove_watch(this._preemptiveAnswerWatchId);
++            this._preemptiveAnswerWatchId = 0;
++        }
++
+         this._userVerifier.destroy();
+         this._userVerifier = null;
+     }
+@@ -250,6 +257,11 @@ var AuthPrompt = GObject.registerClass({
+             this._userVerifier.answerQuery(this._queryingService, this._entry.text);
+         } else {
+             this._preemptiveAnswer = this._entry.text;
++
++            if (this._preemptiveAnswerWatchId) {
++                this._idleMonitor.remove_watch(this._preemptiveAnswerWatchId);
++                this._preemptiveAnswerWatchId = 0;
++            }
+         }
+ 
+         this.emit('next');
+@@ -429,6 +441,11 @@ var AuthPrompt = GObject.registerClass({
+     }
+ 
+     setQuestion(question) {
++        if (this._preemptiveAnswerWatchId) {
++            this._idleMonitor.remove_watch(this._preemptiveAnswerWatchId);
++            this._preemptiveAnswerWatchId = 0;
++        }
++
+         this._entry.hint_text = question;
+ 
+         this._entry.show();
+@@ -530,6 +547,19 @@ var AuthPrompt = GObject.registerClass({
+             this._updateEntry(false);
+     }
+ 
++    _onUserStoppedTypePreemptiveAnswer() {
++        if (!this._preemptiveAnswerWatchId ||
++            this._preemptiveAnswer ||
++            this._queryingService)
++            return;
++
++        this._idleMonitor.remove_watch(this._preemptiveAnswerWatchId);
++        this._preemptiveAnswerWatchId = 0;
++
++        this._entry.text = '';
++        this.updateSensitivity(false);
++    }
++
+     reset() {
+         let oldStatus = this.verificationStatus;
+         this.verificationStatus = AuthPromptStatus.NOT_VERIFYING;
+@@ -537,6 +567,11 @@ var AuthPrompt = GObject.registerClass({
+         this.cancelButton.can_focus = this._hasCancelButton;
+         this._preemptiveAnswer = null;
+ 
++        if (this._preemptiveAnswerWatchId)
++            this._idleMonitor.remove_watch(this._preemptiveAnswerWatchId);
++        this._preemptiveAnswerWatchId = this._idleMonitor.add_idle_watch(500,
++            this._onUserStoppedTypePreemptiveAnswer.bind(this));
++
+         if (this._userVerifier)
+             this._userVerifier.cancel();
+ 
+-- 
+2.31.1
+

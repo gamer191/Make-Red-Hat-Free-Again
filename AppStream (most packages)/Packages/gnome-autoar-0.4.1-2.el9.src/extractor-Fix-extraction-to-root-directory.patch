@@ -1,0 +1,44 @@
+From 7237276439281abfedd619ecf6f5c17fae411137 Mon Sep 17 00:00:00 2001
+From: Ondrej Holy <oholy@redhat.com>
+Date: Tue, 30 Nov 2021 13:45:07 +0100
+Subject: [PATCH] extractor: Fix extraction to root directory
+
+An extraction to the root of an archive which contains the "/" path
+leads to crashes. Let's handle this rare corner case.
+
+Relates: https://gitlab.gnome.org/GNOME/gnome-autoar/-/issues/38
+---
+ gnome-autoar/autoar-extractor.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/gnome-autoar/autoar-extractor.c b/gnome-autoar/autoar-extractor.c
+index bb60901..ab68c47 100644
+--- a/gnome-autoar/autoar-extractor.c
++++ b/gnome-autoar/autoar-extractor.c
+@@ -857,6 +857,14 @@ autoar_extractor_get_common_prefix (GList *files,
+   while (!g_file_has_parent (prefix, root)) {
+     file = g_file_get_parent (prefix);
+     g_object_unref (prefix);
++
++    /* This can happen if the archive contains the "/" path and the destination
++     * is "/" as well.
++     */
++    if (file == NULL) {
++      return NULL;
++    }
++
+     prefix = file;
+   }
+ 
+@@ -984,7 +992,7 @@ autoar_extractor_do_write_entry (AutoarExtractor      *self,
+   {
+     GFile *parent;
+     parent = g_file_get_parent (dest);
+-    if (!g_file_query_exists (parent, self->cancellable))
++    if (parent && !g_file_query_exists (parent, self->cancellable))
+       g_file_make_directory_with_parents (parent,
+                                           self->cancellable,
+                                           NULL);
+-- 
+2.33.1
+

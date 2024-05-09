@@ -1,0 +1,58 @@
+From 7e94d682985ac4ff422da73b5878f4f005eff67b Mon Sep 17 00:00:00 2001
+From: Mohammed Sadiq <sadiq@sadiqpk.org>
+Date: Tue, 10 Aug 2021 15:22:30 +0530
+Subject: [PATCH] status/network: Use wwan settings panel for GSM/LTE Modems
+
+GSM/UMTS/LTE modems now have better support with wwan panel in GNOME
+Settings.  So, if the modem supports, open wwan panel, otherwise
+fallback to opening network panel when "Mobile Broadband Settings"
+item is clicked.
+
+See https://gitlab.gnome.org/GNOME/gnome-control-center/-/merge_requests/583
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1942>
+---
+ js/ui/status/network.js | 19 +++++++++++++++++--
+ 1 file changed, 17 insertions(+), 2 deletions(-)
+
+diff --git a/js/ui/status/network.js b/js/ui/status/network.js
+index f510f90ae..fe82fcb08 100644
+--- a/js/ui/status/network.js
++++ b/js/ui/status/network.js
+@@ -543,7 +543,11 @@ var NMDeviceModem = class extends NMConnectionDevice {
+     constructor(client, device) {
+         super(client, device);
+ 
+-        this.item.menu.addSettingsAction(_("Mobile Broadband Settings"), 'gnome-network-panel.desktop');
++        const settingsPanel = this._useWwanPanel()
++            ? 'gnome-wwan-panel.desktop'
++            : 'gnome-network-panel.desktop';
++
++        this.item.menu.addSettingsAction(_('Mobile Broadband Settings'), settingsPanel);
+ 
+         this._mobileDevice = null;
+ 
+@@ -573,8 +577,19 @@ var NMDeviceModem = class extends NMConnectionDevice {
+         return NMConnectionCategory.WWAN;
+     }
+ 
++    _useWwanPanel() {
++        // Currently, wwan panel doesn't support CDMA_EVDO modems
++        const supportedCaps =
++            NM.DeviceModemCapabilities.GSM_UMTS |
++            NM.DeviceModemCapabilities.LTE;
++        return this._device.current_capabilities & supportedCaps;
++    }
++
+     _autoConnect() {
+-        launchSettingsPanel('network', 'connect-3g', this._device.get_path());
++        if (this._useWwanPanel())
++            launchSettingsPanel('wwan', 'show-device', this._device.udi);
++        else
++            launchSettingsPanel('network', 'connect-3g', this._device.get_path());
+     }
+ 
+     _sessionUpdated() {
+-- 
+2.31.1
+

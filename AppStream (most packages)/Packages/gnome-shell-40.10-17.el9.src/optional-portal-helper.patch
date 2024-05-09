@@ -1,0 +1,51 @@
+diff --git a/js/portalHelper/main.js b/js/portalHelper/main.js
+index 25f866281..a221c3b88 100644
+--- a/js/portalHelper/main.js
++++ b/js/portalHelper/main.js
+@@ -4,10 +4,17 @@ imports.gi.versions.Soup = '2.4';
+ 
+ const Format = imports.format;
+ const Gettext = imports.gettext;
+-const { Gio, GLib, GObject, Gtk, Pango, Soup, WebKit2: WebKit } = imports.gi;
++const { Gio, GLib, GObject, Gtk, Pango, Soup } = imports.gi;
+ 
+ const _ = Gettext.gettext;
+ 
++let WebKit;
++try {
++    WebKit = imports.gi.WebKit2;
++} catch {
++    WebKit = null;
++}
++
+ const Config = imports.misc.config;
+ const { loadInterfaceXML } = imports.misc.fileUtils;
+ 
+@@ -346,6 +353,11 @@ function initEnvironment() {
+ function main(argv) {
+     initEnvironment();
+ 
++    if (!WebKit) {
++        log('WebKit2 typelib is not installed, captive portal helper will be disabled');
++        return 1;
++    }
++
+     if (!WebKit.WebContext.new_ephemeral) {
+         log('WebKitGTK 2.16 is required for the portal-helper, see https://bugzilla.gnome.org/show_bug.cgi?id=780453');
+         return 1;
+diff --git a/js/ui/status/network.js b/js/ui/status/network.js
+index 01c83c86b..8c5bd8dcb 100644
+--- a/js/ui/status/network.js
++++ b/js/ui/status/network.js
+@@ -2070,7 +2070,9 @@ class Indicator extends PanelMenu.SystemIndicator {
+             new PortalHelperProxy(Gio.DBus.session, 'org.gnome.Shell.PortalHelper',
+                                   '/org/gnome/Shell/PortalHelper', (proxy, error) => {
+                                       if (error) {
+-                                          log('Error launching the portal helper: %s'.format(error));
++                                          // Timeout is expected if WebKit is unavailable
++                                          if (!error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.TIMED_OUT))
++                                              log('Error launching the portal helper: ' + error);
+                                           return;
+                                       }
+ 
+

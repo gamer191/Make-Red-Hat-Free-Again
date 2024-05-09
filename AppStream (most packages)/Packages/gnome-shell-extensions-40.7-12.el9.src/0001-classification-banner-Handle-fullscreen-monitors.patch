@@ -1,0 +1,68 @@
+From ffba821e1142c3cb96b9ced24dd1f161f0609d2a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 14 Dec 2022 16:55:51 +0100
+Subject: [PATCH] classification-banner: Handle fullscreen monitors
+
+When a monitor is in fullscreen, we don't want its classification
+banner to be offset by an imaginary panel, but at the top of the
+screen.
+---
+ extensions/classification-banner/extension.js | 22 +++++++++++++++----
+ 1 file changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/extensions/classification-banner/extension.js b/extensions/classification-banner/extension.js
+index cc046e01..ea788022 100644
+--- a/extensions/classification-banner/extension.js
++++ b/extensions/classification-banner/extension.js
+@@ -27,16 +27,19 @@ const Main = imports.ui.main;
+ const ClassificationBanner = GObject.registerClass(
+ class ClassificationBanner extends Clutter.Actor {
+     _init(index) {
++        const constraint = new Layout.MonitorConstraint({index});
+         super._init({
+             layout_manager: new Clutter.BinLayout(),
+-            constraints: new Layout.MonitorConstraint({
+-                work_area: true,
+-                index,
+-            }),
++            constraints: constraint,
+         });
++        this._monitorConstraint = constraint;
+ 
+         this._settings = ExtensionUtils.getSettings();
+         this.connect('destroy', () => {
++            if (this._fullscreenChangedId)
++                global.display.disconnect(this._fullscreenChangedId);
++            delete this._fullscreenChangedId;
++
+             this._settings?.run_dispose();
+             this._settings = null;
+         });
+@@ -94,6 +97,11 @@ class ClassificationBanner extends Clutter.Actor {
+             userLabel, 'visible',
+             Gio.SettingsBindFlags.GET);
+ 
++        this._fullscreenChangedId =
++            global.display.connect('in-fullscreen-changed',
++                () => this._updateMonitorConstraint());
++        this._updateMonitorConstraint();
++
+         this._settings.connect('changed::color',
+             () => this._updateStyles());
+         this._settings.connect('changed::background-color',
+@@ -110,6 +118,12 @@ class ClassificationBanner extends Clutter.Actor {
+         return `${key}: rgba(${red},${green},${blue},${alpha / 255});`;
+     }
+ 
++    _updateMonitorConstraint() {
++        const {index} = this._monitorConstraint;
++        this._monitorConstraint.work_area =
++            !global.display.get_monitor_in_fullscreen(index);
++    }
++
+     _updateStyles() {
+         const bgStyle = this._getColorSetting('background-color');
+         const fgStyle = this._getColorSetting('color');
+-- 
+2.38.1
+

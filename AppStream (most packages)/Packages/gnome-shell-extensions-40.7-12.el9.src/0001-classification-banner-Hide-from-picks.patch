@@ -1,0 +1,39 @@
+From b9ba6b8708c18fb14033150fdb02a508457e0a17 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Fri, 2 Feb 2024 15:39:32 +0100
+Subject: [PATCH] classification-banner: Hide from picks
+
+Banners are laid out via a fullscreen actor. While the actor is
+not reactive, it can still interfere with picks (for example
+during drag-and-drop operations).
+
+Avoid that by explicitly hiding the actor from picks.
+---
+ extensions/classification-banner/extension.js | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/extensions/classification-banner/extension.js b/extensions/classification-banner/extension.js
+index ea788022..2bde741e 100644
+--- a/extensions/classification-banner/extension.js
++++ b/extensions/classification-banner/extension.js
+@@ -18,7 +18,7 @@
+ 
+ /* exported init */
+ 
+-const { Clutter, Gio, GLib, GObject, St } = imports.gi;
++const { Clutter, Gio, GLib, GObject, Shell, St } = imports.gi;
+ 
+ const ExtensionUtils = imports.misc.extensionUtils;
+ const Layout = imports.ui.layout;
+@@ -34,6 +34,8 @@ class ClassificationBanner extends Clutter.Actor {
+         });
+         this._monitorConstraint = constraint;
+ 
++        Shell.util_set_hidden_from_pick(this, true);
++
+         this._settings = ExtensionUtils.getSettings();
+         this.connect('destroy', () => {
+             if (this._fullscreenChangedId)
+-- 
+2.43.0
+

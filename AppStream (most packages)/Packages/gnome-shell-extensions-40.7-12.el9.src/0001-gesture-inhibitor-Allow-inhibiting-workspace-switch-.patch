@@ -1,0 +1,40 @@
+From c70a1fa37f68687b8c0a013d2328e6262f8419d0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Fri, 9 Dec 2022 15:31:08 +0100
+Subject: [PATCH] gesture-inhibitor: Allow inhibiting workspace switch gesture
+
+---
+ extensions/gesture-inhibitor/extension.js                     | 1 +
+ .../org.gnome.shell.extensions.gesture-inhibitor.gschema.xml  | 4 ++++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/extensions/gesture-inhibitor/extension.js b/extensions/gesture-inhibitor/extension.js
+index fb8a6dc0..d103d5b8 100644
+--- a/extensions/gesture-inhibitor/extension.js
++++ b/extensions/gesture-inhibitor/extension.js
+@@ -48,6 +48,7 @@ class Extension {
+             { setting: 'app-switch', action: this._appSwitch },
+             { setting: 'show-osk', action: this._showOsk },
+             { setting: 'unfullscreen', action: this._unfullscreen },
++            { setting: 'workspace-switch', action: Main.wm._workspaceAnimation._swipeTracker },
+         ];
+ 
+         this._enabledDesc = Object.getOwnPropertyDescriptor(
+diff --git a/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml b/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml
+index 4bdf9260..b06d027a 100644
+--- a/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml
++++ b/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml
+@@ -12,6 +12,10 @@
+       <default>true</default>
+       <summary>Application switch gesture</summary>
+     </key>
++    <key name="workspace-switch" type="b">
++      <default>true</default>
++      <summary>Workspace switch gesture</summary>
++    </key>
+     <key name="unfullscreen" type="b">
+       <default>true</default>
+       <summary>Unfullscreen gesture</summary>
+-- 
+2.38.1
+

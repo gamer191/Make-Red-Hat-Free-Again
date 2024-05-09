@@ -1,0 +1,101 @@
+From 8b7f222e75d006cc3573c9b545c26d6fac56b5ce Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Sabri=20=C3=9Cnal?= <libreajans@gmail.com>
+Date: Fri, 3 Apr 2020 15:09:26 +0300
+Subject: [PATCH 1/2] gl-application.c: add four shortcuts
+
+F1: Help
+Ctrl+E: Export
+Ctrl+N: New window
+Ctrl+question: Keyboard shortcuts
+---
+ src/gl-application.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/src/gl-application.c b/src/gl-application.c
+index c20052c..b2ef1f7 100644
+--- a/src/gl-application.c
++++ b/src/gl-application.c
+@@ -178,67 +178,80 @@ on_monospace_font_name_changed (GSettings *settings,
+     }
+ }
+ 
+ static GActionEntry actions[] = {
+     { "new-window", on_new_window },
+     { "help", on_help },
+     { "about", on_about }
+ };
+ 
+ static void
+ gl_application_startup (GApplication *application)
+ {
+     g_action_map_add_action_entries (G_ACTION_MAP (application), actions,
+                                      G_N_ELEMENTS (actions), application);
+ 
+     /* Calls gtk_init() with no arguments. */
+     G_APPLICATION_CLASS (gl_application_parent_class)->startup (application);
+ 
+     /* gtk_init() calls setlocale(), so gettext must be called after that. */
+     g_set_application_name (_(PACKAGE_NAME));
+     gtk_window_set_default_icon_name (PACKAGE_TARNAME);
+ }
+ 
+ static void
+ gl_application_activate (GApplication *application)
+ {
+     GtkWidget *window;
+     GlApplicationPrivate *priv;
+     const gchar * const close_accel[] = { "<Primary>w", NULL };
+     const gchar * const search_accel[] = { "<Primary>f", NULL };
++    const gchar * const export_accel[] = { "<Primary>e", NULL };
++    const gchar * const help_accel[] = { "F1", NULL };
++    const gchar * const new_window_accel[] = { "<Primary>n", NULL };
++    const gchar * const help_overlay_accel[] = { "<Primary>question", NULL };
+ 
+     window = gl_window_new (GTK_APPLICATION (application));
+     gtk_widget_show (window);
+     gtk_application_set_accels_for_action (GTK_APPLICATION (application),
+                                            "win.close", close_accel);
+     gtk_application_set_accels_for_action (GTK_APPLICATION (application),
+                                            "win.search", search_accel);
++    gtk_application_set_accels_for_action (GTK_APPLICATION (application),
++                                           "win.export", export_accel);
++    gtk_application_set_accels_for_action (GTK_APPLICATION (application),
++                                           "app.help", help_accel);
++    gtk_application_set_accels_for_action (GTK_APPLICATION (application),
++                                           "app.new-window", new_window_accel);
++    gtk_application_set_accels_for_action (GTK_APPLICATION (application),
++                                           "win.show-help-overlay",
++                                           help_overlay_accel);
+ 
+     priv = gl_application_get_instance_private (GL_APPLICATION (application));
+ 
+     on_monospace_font_name_changed (priv->desktop, DESKTOP_MONOSPACE_FONT_NAME,
+                                     priv);
+ }
+ 
+ static const GOptionEntry options[] =
+ {
+     { "version", 'v', 0, G_OPTION_ARG_NONE, NULL,
+       N_("Print version information and exit"), NULL },
+     { NULL }
+ };
+ 
+ static gint
+ gl_application_handle_local_options (GApplication *application,
+                                      GVariantDict *options)
+ {
+     if (g_variant_dict_contains (options, "version"))
+     {
+         g_print ("%s - Version %s\n", g_get_application_name (), PACKAGE_VERSION);
+         return 0;
+     }
+ 
+     return -1;
+ }
+ 
+ static void
+ gl_application_finalize (GObject *object)
+ {
+-- 
+2.35.1
+

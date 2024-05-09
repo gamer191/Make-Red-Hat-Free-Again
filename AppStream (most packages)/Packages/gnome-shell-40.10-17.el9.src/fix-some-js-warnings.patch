@@ -1,0 +1,184 @@
+From 05a5f4641c8ad6337ccb46e63abcaf27dd7eb852 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Tue, 9 Jun 2020 19:42:21 +0200
+Subject: [PATCH 1/4] popupMenu: Guard against non-menu-item children
+
+This avoid a harmless but annoying warning.
+---
+ js/ui/popupMenu.js | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/js/ui/popupMenu.js b/js/ui/popupMenu.js
+index 11528560d..144c600d7 100644
+--- a/js/ui/popupMenu.js
++++ b/js/ui/popupMenu.js
+@@ -773,7 +773,8 @@ var PopupMenuBase = class {
+     }
+ 
+     _getMenuItems() {
+-        return this.box.get_children().map(a => a._delegate).filter(item => {
++        const children = this.box.get_children().filter(a => a._delegate !== undefined);
++        return children.map(a => a._delegate).filter(item => {
+             return item instanceof PopupBaseMenuItem || item instanceof PopupMenuSection;
+         });
+     }
+-- 
+2.31.1
+
+
+From e5b2c2b3cfd0443fa83fd1f6f56f65fefa5186c3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Tue, 9 Jun 2020 19:48:06 +0200
+Subject: [PATCH 2/4] st/shadow: Check pipeline when painting
+
+We shouldn't simply assume that st_shadow_helper_update() has been
+called before paint() or that the pipeline was created successfully.
+---
+ src/st/st-shadow.c | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/src/st/st-shadow.c b/src/st/st-shadow.c
+index ab3eaa856..d53808698 100644
+--- a/src/st/st-shadow.c
++++ b/src/st/st-shadow.c
+@@ -296,9 +296,10 @@ st_shadow_helper_paint (StShadowHelper  *helper,
+                         ClutterActorBox *actor_box,
+                         guint8           paint_opacity)
+ {
+-  _st_paint_shadow_with_opacity (helper->shadow,
+-                                 framebuffer,
+-                                 helper->pipeline,
+-                                 actor_box,
+-                                 paint_opacity);
++  if (helper->pipeline != NULL)
++    _st_paint_shadow_with_opacity (helper->shadow,
++                                   framebuffer,
++                                   helper->pipeline,
++                                   actor_box,
++                                   paint_opacity);
+ }
+-- 
+2.31.1
+
+
+From 0f7656d85af51339d14217b9a673442a18df3de8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 8 Jul 2021 19:10:05 +0200
+Subject: [PATCH 3/4] messageTray: Always remove destroyed banners
+
+Currently we only mark the banner as removed if it is destroyed
+while in SHOWN or SHOWING state, but not if we're already HIDING
+(for example in response to `NotificationBanner::done-displaying`).
+
+If this happens, we'll try to destroy the notification again at
+the end of the transition, which leads to (harmless but annoying)
+log spam since Notifications were turned into GObjects (that are
+disposed when destroyed).
+
+Address this by always marking destroyed banners as removed, while
+still only triggering a state update while shown (or in the process
+of being shown).
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/4457
+---
+ js/ui/messageTray.js | 23 +++++++++++++----------
+ 1 file changed, 13 insertions(+), 10 deletions(-)
+
+diff --git a/js/ui/messageTray.js b/js/ui/messageTray.js
+index 1dab00a70..ccf56fc5b 100644
+--- a/js/ui/messageTray.js
++++ b/js/ui/messageTray.js
+@@ -1022,17 +1022,20 @@ var MessageTray = GObject.registerClass({
+     }
+ 
+     _onNotificationDestroy(notification) {
+-        if (this._notification == notification && (this._notificationState == State.SHOWN || this._notificationState == State.SHOWING)) {
+-            this._updateNotificationTimeout(0);
+-            this._notificationRemoved = true;
+-            this._updateState();
+-            return;
+-        }
++        this._notificationRemoved = this._notification === notification;
+ 
+-        let index = this._notificationQueue.indexOf(notification);
+-        if (index != -1) {
+-            this._notificationQueue.splice(index, 1);
+-            this.emit('queue-changed');
++        if (this._notificationRemoved) {
++            if (this._notificationState === State.SHOWN ||
++                this._notificationState === State.SHOWING) {
++                this._updateNotificationTimeout(0);
++                this._updateState();
++            }
++        } else {
++            const index = this._notificationQueue.indexOf(notification);
++            if (index !== -1) {
++                this._notificationQueue.splice(index, 1);
++                this.emit('queue-changed');
++            }
+         }
+     }
+ 
+-- 
+2.31.1
+
+
+From 8652836521d0729ce230268c7b448cdb393d5b47 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 8 Jul 2021 19:23:38 +0200
+Subject: [PATCH 4/4] shellInfo: Don't destroy source on undo
+
+Destroying the source from an action callback will result in the
+notification being destroyed twice:
+
+ - source.destroy() destroys all its notifications
+
+ - a notification destroys itself after an action
+   was activated
+
+This results in unwanted log spam when attempting to dispose the
+notification for a second time.
+
+There is actually no good reason for destroying the source explicitly,
+as sources already self-destruct with their last notification.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/4457
+---
+ js/ui/overview.js | 13 +------------
+ 1 file changed, 1 insertion(+), 12 deletions(-)
+
+diff --git a/js/ui/overview.js b/js/ui/overview.js
+index 529779ea8..c71b11389 100644
+--- a/js/ui/overview.js
++++ b/js/ui/overview.js
+@@ -25,16 +25,6 @@ var OVERVIEW_ACTIVATION_TIMEOUT = 0.5;
+ var ShellInfo = class {
+     constructor() {
+         this._source = null;
+-        this._undoCallback = null;
+-    }
+-
+-    _onUndoClicked() {
+-        if (this._undoCallback)
+-            this._undoCallback();
+-        this._undoCallback = null;
+-
+-        if (this._source)
+-            this._source.destroy();
+     }
+ 
+     setMessage(text, options) {
+@@ -64,9 +54,8 @@ var ShellInfo = class {
+             notification.update(text, null, { clear: true });
+         }
+ 
+-        this._undoCallback = undoCallback;
+         if (undoCallback)
+-            notification.addAction(_("Undo"), this._onUndoClicked.bind(this));
++            notification.addAction(_('Undo'), () => undoCallback());
+ 
+         this._source.showNotification(notification);
+     }
+-- 
+2.31.1
+

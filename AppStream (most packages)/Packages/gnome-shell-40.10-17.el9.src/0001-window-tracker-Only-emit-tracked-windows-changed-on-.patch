@@ -1,0 +1,44 @@
+From e3823964957ba4dcc86b21db09b280b9299bc8cc Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Fri, 10 Feb 2023 15:07:50 +0100
+Subject: [PATCH] window-tracker: Only emit ::tracked-windows-changed on title
+ changes
+
+Since commit a1d650ce27, window title changes are listened for in the
+ShellWindowTracker in order to emit ::tracked-windows-changed when
+there are window title changes.
+
+The rest of the things that happen in between (removing the window
+from a ShellApp, possibly have it destroyed, and possibly creating a
+new ShellApp to re-insert the window) are superfluous and even result
+in the altTab switcher popup ending up confused about the applications
+available.
+
+Only emit the signal so changes can be followed on D-Bus, but avoid
+the ShellApp fiddling otherwise.
+
+Fixes: a1d650ce27 - window-tracker: Emit 'tracked-windows-changed' on title changes
+
+Closes: https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/6385
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/2634>
+(cherry picked from commit 41c91c7a3b7f186720a0a518ef2211cb744421f3)
+---
+ src/shell-window-tracker.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/shell-window-tracker.c b/src/shell-window-tracker.c
+index bc14040d9b..01143dfd7f 100644
+--- a/src/shell-window-tracker.c
++++ b/src/shell-window-tracker.c
+@@ -524,7 +524,7 @@ on_title_changed (MetaWindow  *window,
+                   gpointer     user_data)
+ {
+   ShellWindowTracker *self = SHELL_WINDOW_TRACKER (user_data);
+-  tracked_window_changed (self, window);
++  g_signal_emit (self, signals[TRACKED_WINDOWS_CHANGED], 0);
+ }
+ 
+ static void
+-- 
+2.31.1
+

@@ -1,0 +1,108 @@
+From 2a1dd773a529c89b5f9577b53ae3c88aea2efc48 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Tue, 17 Jan 2023 20:31:21 +0100
+Subject: [PATCH] desktop-icons: Don't use blocking IO
+
+---
+ extensions/desktop-icons/desktopManager.js | 45 +++++++++++++++-------
+ 1 file changed, 32 insertions(+), 13 deletions(-)
+
+diff --git a/extensions/desktop-icons/desktopManager.js b/extensions/desktop-icons/desktopManager.js
+index 74d0e6bd..75b2a22a 100644
+--- a/extensions/desktop-icons/desktopManager.js
++++ b/extensions/desktop-icons/desktopManager.js
+@@ -54,6 +54,21 @@ function findMonitorIndexForPos(x, y) {
+     return getDpy().get_monitor_index_for_rect(new Meta.Rectangle({x, y}));
+ }
+ 
++async function queryInfo(file, attributes = DesktopIconsUtil.DEFAULT_ATTRIBUTES, cancellable = null) {
++    const flags = Gio.FileQueryInfoFlags.NONE;
++    const priority = GLib.PRIORITY_DEFAULT;
++    return new Promise((resolve, reject) => {
++        file.query_info_async(attributes, flags, priority, cancellable, (o, res) => {
++            try {
++                const info = file.query_info_finish(res);
++                resolve(info);
++            } catch (e) {
++                reject(e);
++            }
++        });
++    });
++}
++
+ 
+ var DesktopManager = GObject.registerClass({
+     Properties: {
+@@ -272,9 +287,7 @@ var DesktopManager = GObject.registerClass({
+ 
+         if (!this._unixMode) {
+             let desktopDir = DesktopIconsUtil.getDesktopDir();
+-            let fileInfo = desktopDir.query_info(Gio.FILE_ATTRIBUTE_UNIX_MODE,
+-                                                 Gio.FileQueryInfoFlags.NONE,
+-                                                 null);
++            let fileInfo = await queryInfo(desktopDir, Gio.FILE_ATTRIBUTE_UNIX_MODE);
+             this._unixMode = fileInfo.get_attribute_uint32(Gio.FILE_ATTRIBUTE_UNIX_MODE);
+             this._setWritableByOthers((this._unixMode & S_IWOTH) != 0);
+         }
+@@ -283,7 +296,7 @@ var DesktopManager = GObject.registerClass({
+             let items = [];
+             for (let item of await this._enumerateDesktop())
+                 items.push(item);
+-            for (let item of this._getMounts())
++            for (let item of await this._getMounts())
+                 items.push(item);
+ 
+             let tmpFileItems = new Map();
+@@ -328,14 +341,22 @@ var DesktopManager = GObject.registerClass({
+                 Gio.FileQueryInfoFlags.NONE,
+                 GLib.PRIORITY_DEFAULT,
+                 this._desktopEnumerateCancellable,
+-                (source, result) => {
++                async (source, result) => {
+                     try {
+                         let fileEnum = source.enumerate_children_finish(result);
++                        let extraFolders = await Promise.all(DesktopIconsUtil.getExtraFolders()
++                            .map(async ([folder, extras]) => {
++                                const info = await queryInfo(folder,
++                                    DesktopIconsUtil.DEFAULT_ATTRIBUTES,
++                                    this._desktopEnumerateCancellable);
++                                return [folder, info, extras];
++                            }));
++
+                         let resultGenerator = function *() {
++                            for (let [newFolder, info, extras] of extraFolders)
++                                yield [newFolder, info, extras];
++
+                             let info;
+-                            for (let [newFolder, extras] of DesktopIconsUtil.getExtraFolders()) {
+-                                yield [newFolder, newFolder.query_info(DesktopIconsUtil.DEFAULT_ATTRIBUTES, Gio.FileQueryInfoFlags.NONE, this._desktopEnumerateCancellable), extras];
+-                            }
+                             while ((info = fileEnum.next_file(null)))
+                                 yield [fileEnum.get_child(info), info, Prefs.FileType.NONE];
+                         }.bind(this);
+@@ -359,19 +380,17 @@ var DesktopManager = GObject.registerClass({
+         this._monitorDesktopDir.connect('changed', (obj, file, otherFile, eventType) => this._updateDesktopIfChanged(file, otherFile, eventType));
+     }
+ 
+-    _getMounts() {
++    async _getMounts() {
+         let files = [];
+         if (!Prefs.settings.get_boolean('show-mount'))
+             return files;
+ 
+-        this._mountMonitor.get_mounts().forEach( mount => {
++        this._mountMonitor.get_mounts().forEach(async mount => {
+             if (this._isNetworkMount(mount))
+                 return;
+ 
+             let file = mount.get_root();
+-            let info = file.query_info(DesktopIconsUtil.DEFAULT_ATTRIBUTES,
+-                                       Gio.FileQueryInfoFlags.NONE,
+-                                       null);
++            let info = await queryInfo(file);
+             files.push([file, info, Prefs.FileType.MOUNT_DISK]);
+         });
+ 
+-- 
+2.38.1
+

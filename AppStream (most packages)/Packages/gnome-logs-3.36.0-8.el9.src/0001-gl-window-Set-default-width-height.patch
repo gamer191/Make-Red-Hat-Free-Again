@@ -1,0 +1,55 @@
+From ef4c13a2ec49d94495370bcdb0870252ba43bfd5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Guido=20G=C3=BCnther?= <agx@sigxcpu.org>
+Date: Tue, 27 Jul 2021 11:35:09 +0200
+Subject: [PATCH] gl-window: Set default-{width,height}
+
+Instead of limiting the minimal size rather make those values the
+default so the window can shring to smaller sizes on e.g. phones.
+---
+ data/gl-window.ui | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/data/gl-window.ui b/data/gl-window.ui
+index e20569d..28e3fc8 100644
+--- a/data/gl-window.ui
++++ b/data/gl-window.ui
+@@ -1,34 +1,34 @@
+ <interface domain="gnome-logs">
+     <template class="GlWindow" parent="GtkApplicationWindow">
+-        <property name="height-request">780</property>
+-        <property name="width-request">1200</property>
++        <property name="default-width">1200</property>
++        <property name="default-height">600</property>
+         <signal name="key-press-event" handler="on_gl_window_key_press_event"/>
+         <child type="titlebar">
+             <object class="GlEventToolbar" id="event_toolbar">
+             </object>
+         </child>
+         <child>
+             <object class="GtkBox" id="event_box">
+                 <property name="orientation">vertical</property>
+                 <property name="visible">True</property>
+                 <child>
+                     <object class="GtkInfoBar" id="info_bar">
+                         <property name="message-type">GTK_MESSAGE_ERROR</property>
+                         <child>
+                             <object class="GtkButtonBox" id="action_area">
+                                 <property name="visible">True</property>
+                                 <property name="orientation">horizontal</property>
+                                 <property name="layout_style">center</property>
+                                 <child>
+                                     <object class="GtkButton" id="help_button">
+                                         <property name="visible">True</property>
+                                         <property name="halign">center</property>
+                                         <property name="label" translatable="yes">Help</property>
+                                         <signal name="clicked" handler="on_help_button_clicked" object="GlWindow"/>
+                                     </object>
+                                 </child>
+                                 <child>
+                                     <object class="GtkButton" id="ignore_button">
+                                         <property name="visible">True</property>
+                                         <property name="halign">center</property>
+                                         <property name="label" translatable="yes">Ignore</property>
+-- 
+2.35.1
+

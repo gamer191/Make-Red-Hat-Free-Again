@@ -1,0 +1,107 @@
+From ad431c28788ac1a4ec815cc4985cdb09a1a82226 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Mon, 11 Sep 2023 19:20:14 +0200
+Subject: [PATCH 1/2] status/network: Fix fallback SSID label
+
+We currently only return the fallback label if the string returned
+from the ssid was invalid or couldn't be transformed to UTF-8.
+
+If the ssid parameter itself is empty, we throw an error.
+
+Handle this case as well, as callers otherwise would need to duplicate
+the existing error path themselves.
+---
+ js/ui/status/network.js | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/js/ui/status/network.js b/js/ui/status/network.js
+index 1f17ca8f97..99a8d51f82 100644
+--- a/js/ui/status/network.js
++++ b/js/ui/status/network.js
+@@ -67,7 +67,9 @@ function signalToIcon(value) {
+ }
+ 
+ function ssidToLabel(ssid) {
+-    let label = NM.utils_ssid_to_utf8(ssid.get_data());
++    let label;
++    if (ssid)
++        label = NM.utils_ssid_to_utf8(ssid.get_data());
+     if (!label)
+         label = _("<unknown>");
+     return label;
+-- 
+2.41.0
+
+
+From 0409f18446cb55a45187e00feadb12e4389381dd Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 30 Aug 2023 01:47:00 +0200
+Subject: [PATCH 2/2] status/network: Use connection name with hidden AP
+
+When connected to an OWE transition network, NetworkManager
+reports the connected API with a hidden SSID.
+
+Handle this by using the active connection's name before
+ultimately falling back to the device name.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/6918
+
+Part-of:
+<https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/2927>
+---
+ js/ui/status/network.js | 28 +++++++++++++++++++---------
+ 1 file changed, 19 insertions(+), 9 deletions(-)
+
+diff --git a/js/ui/status/network.js b/js/ui/status/network.js
+index 99a8d51f82..b407d8e78d 100644
+--- a/js/ui/status/network.js
++++ b/js/ui/status/network.js
+@@ -1395,26 +1395,36 @@ var NMDeviceWireless = class {
+     _getStatus() {
+         let ap = this._device.active_access_point;
+ 
+-        if (this._isHotSpotMaster())
++        if (this._isHotSpotMaster()) {
+             /* Translators: %s is a network identifier */
+             return _("%s Hotspot Active").format(this._description);
+-        else if (this._device.state >= NM.DeviceState.PREPARE &&
+-                 this._device.state < NM.DeviceState.ACTIVATED)
++        } else if (this._device.state >= NM.DeviceState.PREPARE &&
++                 this._device.state < NM.DeviceState.ACTIVATED) {
+             /* Translators: %s is a network identifier */
+             return _("%s Connecting").format(this._description);
+-        else if (ap)
+-            return ssidToLabel(ap.get_ssid());
+-        else if (!this._client.wireless_hardware_enabled)
++        } else if (ap) {
++            const ssid = ap.get_ssid();
++            if (ssid)
++                return ssidToLabel(ssid);
++
++            // Use connection name when connected to hidden AP
++            const activeConnection = this._device.get_active_connection();
++            if (activeConnection)
++                return activeConnection.connection.get_id();
++
++            return ssidToLabel(null);
++        } else if (!this._client.wireless_hardware_enabled) {
+             /* Translators: %s is a network identifier */
+             return _("%s Hardware Disabled").format(this._description);
+-        else if (!this._client.wireless_enabled)
++        } else if (!this._client.wireless_enabled) {
+             /* Translators: %s is a network identifier */
+             return _("%s Off").format(this._description);
+-        else if (this._device.state == NM.DeviceState.DISCONNECTED)
++        } else if (this._device.state == NM.DeviceState.DISCONNECTED) {
+             /* Translators: %s is a network identifier */
+             return _("%s Not Connected").format(this._description);
+-        else
++        } else {
+             return '';
++        }
+     }
+ 
+     _getMenuIcon() {
+-- 
+2.41.0
+

@@ -1,0 +1,1353 @@
+From eb26ea5e1bb0c6fc978aae5db99ed3427b34175b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Fri, 1 Apr 2022 19:40:31 +0200
+Subject: [PATCH 01/12] shell/global: Expose shim context property
+
+Parts of the following commits rely on the ShellGlobal:context
+property that was added in GNOME 41 to expose the MetaContext
+(likewise a GNOME 41 addition).
+
+To prepare for that, expose a small shim object as context
+property that mimicks the expected upstream API.
+---
+ src/shell-global.c | 92 ++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 92 insertions(+)
+
+diff --git a/src/shell-global.c b/src/shell-global.c
+index 24e771f52..805c73145 100644
+--- a/src/shell-global.c
++++ b/src/shell-global.c
+@@ -47,6 +47,9 @@
+ 
+ static ShellGlobal *the_object = NULL;
+ 
++#define SHIM_TYPE_META_CONTEXT shim_meta_context_get_type ()
++G_DECLARE_FINAL_TYPE (ShimMetaContext, shim_meta_context, SHIM, META_CONTEXT, GObject)
++
+ struct _ShellGlobal {
+   GObject parent;
+ 
+@@ -54,6 +57,7 @@ struct _ShellGlobal {
+ 
+   MetaBackend *backend;
+   MetaDisplay *meta_display;
++  ShimMetaContext *meta_context;
+   MetaWorkspaceManager *workspace_manager;
+   Display *xdisplay;
+ 
+@@ -92,6 +96,7 @@ enum {
+ 
+   PROP_SESSION_MODE,
+   PROP_BACKEND,
++  PROP_CONTEXT,
+   PROP_DISPLAY,
+   PROP_WORKSPACE_MANAGER,
+   PROP_SCREEN_WIDTH,
+@@ -235,6 +240,9 @@ shell_global_get_property(GObject         *object,
+     case PROP_BACKEND:
+       g_value_set_object (value, global->backend);
+       break;
++    case PROP_CONTEXT:
++      g_value_set_object (value, global->meta_context);
++      break;
+     case PROP_DISPLAY:
+       g_value_set_object (value, global->meta_display);
+       break;
+@@ -514,6 +522,13 @@ shell_global_class_init (ShellGlobalClass *klass)
+                                                         "MetaBackend object",
+                                                         META_TYPE_BACKEND,
+                                                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
++  g_object_class_install_property (gobject_class,
++                                   PROP_CONTEXT,
++                                   g_param_spec_object ("context",
++                                                        "Context",
++                                                        "MetaContext object",
++                                                        G_TYPE_OBJECT,
++                                                        G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+   g_object_class_install_property (gobject_class,
+                                    PROP_DISPLAY,
+                                    g_param_spec_object ("display",
+@@ -996,6 +1011,7 @@ _shell_global_set_plugin (ShellGlobal *global,
+ 
+   display = meta_plugin_get_display (plugin);
+   global->meta_display = display;
++  global->meta_context = g_object_new (SHIM_TYPE_META_CONTEXT, NULL);
+   global->workspace_manager = meta_display_get_workspace_manager (display);
+ 
+   global->stage = CLUTTER_STAGE (meta_get_stage_for_display (display));
+@@ -1888,3 +1904,79 @@ _shell_global_locate_pointer (ShellGlobal *global)
+ {
+   g_signal_emit (global, shell_global_signals[LOCATE_POINTER], 0);
+ }
++
++enum {
++  SHIM_PROP_0,
++
++  SHIM_PROP_UNSAFE_MODE,
++
++  N_SHIM_PROPS
++};
++
++static GParamSpec *shim_obj_props [N_SHIM_PROPS];
++
++struct _ShimMetaContext
++{
++  GObject parent_instance;
++};
++
++G_DEFINE_TYPE (ShimMetaContext, shim_meta_context, G_TYPE_OBJECT);
++
++static void
++shim_meta_context_get_property (GObject    *object,
++                                guint       prop_id,
++                                GValue     *value,
++                                GParamSpec *pspec)
++{
++  switch (prop_id)
++    {
++    case SHIM_PROP_UNSAFE_MODE:
++      {
++        gboolean unsafe_mode;
++
++        g_object_get (meta_get_backend (), "unsafe-mode", &unsafe_mode, NULL);
++        g_value_set_boolean (value, unsafe_mode);
++      }
++      break;
++    default:
++      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
++    }
++}
++
++static void
++shim_meta_context_set_property (GObject      *object,
++                                guint         prop_id,
++                                const GValue *value,
++                                GParamSpec   *pspec)
++{
++  switch (prop_id)
++    {
++    case SHIM_PROP_UNSAFE_MODE:
++      g_object_set_property (G_OBJECT (meta_get_backend ()), "unsafe-mode", value);
++      break;
++    default:
++      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
++    }
++}
++
++static void
++shim_meta_context_class_init (ShimMetaContextClass *klass)
++{
++  GObjectClass *object_class = G_OBJECT_CLASS (klass);
++
++  object_class->get_property = shim_meta_context_get_property;
++  object_class->set_property = shim_meta_context_set_property;
++
++  shim_obj_props[SHIM_PROP_UNSAFE_MODE] =
++    g_param_spec_boolean ("unsafe-mode",
++                          "unsafe mode",
++                          "Unsafe mode",
++                          FALSE,
++                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
++  g_object_class_install_properties (object_class, N_SHIM_PROPS, shim_obj_props);
++}
++
++static void
++shim_meta_context_init (ShimMetaContext *self)
++{
++}
+-- 
+2.35.1
+
+
+From 20fcc7bc78a3c227304e89deddc57266e560175c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 2 Sep 2021 17:15:36 +0200
+Subject: [PATCH 02/12] panel: Show warning indicator when unsafe-mode is on
+
+MetaContext added an unsafe-mode property, which we will use to restrict
+a number of privileged operations unless it is enabled. It is meant to
+only be enabled temporarily for development/debugging purposes, so add
+a scary icon to the top bar as a reminder to turn it off again.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/3943
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1970>
+---
+ js/ui/panel.js | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/js/ui/panel.js b/js/ui/panel.js
+index 380480744..c57c3ba8e 100644
+--- a/js/ui/panel.js
++++ b/js/ui/panel.js
+@@ -641,6 +641,20 @@ class PanelCorner extends St.DrawingArea {
+     }
+ });
+ 
++const UnsafeModeIndicator = GObject.registerClass(
++class UnsafeModeIndicator extends PanelMenu.SystemIndicator {
++    _init() {
++        super._init();
++
++        this._indicator = this._addIndicator();
++        this._indicator.icon_name = 'channel-insecure-symbolic';
++
++        global.context.bind_property('unsafe-mode',
++            this._indicator, 'visible',
++            GObject.BindingFlags.SYNC_CREATE);
++    }
++});
++
+ var AggregateLayout = GObject.registerClass(
+ class AggregateLayout extends Clutter.BoxLayout {
+     _init(params = {}) {
+@@ -702,6 +716,7 @@ class AggregateMenu extends PanelMenu.Button {
+         this._location = new imports.ui.status.location.Indicator();
+         this._nightLight = new imports.ui.status.nightLight.Indicator();
+         this._thunderbolt = new imports.ui.status.thunderbolt.Indicator();
++        this._unsafeMode = new UnsafeModeIndicator();
+ 
+         this._indicators.add_child(this._remoteAccess);
+         this._indicators.add_child(this._thunderbolt);
+@@ -713,6 +728,7 @@ class AggregateMenu extends PanelMenu.Button {
+             this._indicators.add_child(this._bluetooth);
+         this._indicators.add_child(this._rfkill);
+         this._indicators.add_child(this._volume);
++        this._indicators.add_child(this._unsafeMode);
+         this._indicators.add_child(this._power);
+         this._indicators.add_child(this._powerProfiles);
+ 
+-- 
+2.35.1
+
+
+From 158eeebc1d3a243e75de550cf5711e38a9f77f7f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 17 Jun 2021 01:50:50 +0200
+Subject: [PATCH 03/12] shellDBus: Use MetaContext:unsafe-mode to restrict
+ Eval()
+
+The Eval() method is unarguably the most sensitive D-Bus method
+we expose, since it allows running arbitrary code in the compositor.
+
+It is currently tied to the `development-tools` settings that is
+enabled by default. As users have become accustomed to the built-in
+commands that are enabled by the same setting (restart, lg, ...),
+that default cannot easily be changed.
+
+In order to restrict the method without affecting the rather harmless
+commands, guard it by the new MetaContext:unsafe-mode property instead
+of the setting.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/3943
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1970>
+---
+ js/ui/shellDBus.js | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/js/ui/shellDBus.js b/js/ui/shellDBus.js
+index 734ca4fc7..5a6edec74 100644
+--- a/js/ui/shellDBus.js
++++ b/js/ui/shellDBus.js
+@@ -54,7 +54,7 @@ var GnomeShell = class {
+      *
+      */
+     Eval(code) {
+-        if (!global.settings.get_boolean('development-tools'))
++        if (!global.context.unsafe_mode)
+             return [false, ''];
+ 
+         let returnValue;
+-- 
+2.35.1
+
+
+From 0882e04a11fe8db7abf05a5d7c786664dc54ad4f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 2 Sep 2021 16:23:38 +0200
+Subject: [PATCH 04/12] introspect: Make invocation check error-based
+
+If we throw an error when the invocation isn't allowed instead of
+returning false, we can simply return that error instead of duplicating
+the error handling.
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1970>
+---
+ js/misc/introspect.js | 26 ++++++++++++++------------
+ 1 file changed, 14 insertions(+), 12 deletions(-)
+
+diff --git a/js/misc/introspect.js b/js/misc/introspect.js
+index e46a7e8c5..318955be2 100644
+--- a/js/misc/introspect.js
++++ b/js/misc/introspect.js
+@@ -134,21 +134,23 @@ var IntrospectService = class {
+                 type == Meta.WindowType.UTILITY;
+     }
+ 
+-    _isInvocationAllowed(invocation) {
++    _checkInvocation(invocation) {
+         if (this._isIntrospectEnabled())
+-            return true;
++            return;
+ 
+         if (this._isSenderAllowed(invocation.get_sender()))
+-            return true;
++            return;
+ 
+-        return false;
++        throw new GLib.Error(Gio.DBusError,
++            Gio.DBusError.ACCESS_DENIED,
++            'App introspection not allowed');
+     }
+ 
+     GetRunningApplicationsAsync(params, invocation) {
+-        if (!this._isInvocationAllowed(invocation)) {
+-            invocation.return_error_literal(Gio.DBusError,
+-                                            Gio.DBusError.ACCESS_DENIED,
+-                                            'App introspection not allowed');
++        try {
++            this._checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
+             return;
+         }
+ 
+@@ -160,10 +162,10 @@ var IntrospectService = class {
+         let apps = this._appSystem.get_running();
+         let windowsList = {};
+ 
+-        if (!this._isInvocationAllowed(invocation)) {
+-            invocation.return_error_literal(Gio.DBusError,
+-                                            Gio.DBusError.ACCESS_DENIED,
+-                                            'App introspection not allowed');
++        try {
++            this._checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
+             return;
+         }
+ 
+-- 
+2.35.1
+
+
+From 33c3c3846f62cc4737f0029455f9dcd838876bca Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 1 Sep 2021 21:18:42 +0200
+Subject: [PATCH 05/12] introspect: Use MetaContext:unsafe-mode instead of
+ setting
+
+The property was added precisely for this purpose, except that its
+name isn't tied to the introspect API.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/3943
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1970>
+---
+ js/misc/introspect.js | 12 +-----------
+ 1 file changed, 1 insertion(+), 11 deletions(-)
+
+diff --git a/js/misc/introspect.js b/js/misc/introspect.js
+index 318955be2..967e7b830 100644
+--- a/js/misc/introspect.js
++++ b/js/misc/introspect.js
+@@ -1,8 +1,6 @@
+ /* exported IntrospectService */
+ const { Gio, GLib, Meta, Shell, St } = imports.gi;
+ 
+-const INTROSPECT_SCHEMA = 'org.gnome.shell';
+-const INTROSPECT_KEY = 'introspect';
+ const APP_ALLOWLIST = ['org.freedesktop.impl.portal.desktop.gtk'];
+ 
+ const INTROSPECT_DBUS_API_VERSION = 3;
+@@ -33,10 +31,6 @@ var IntrospectService = class {
+                                     this._syncRunningApplications();
+                                 });
+ 
+-        this._introspectSettings = new Gio.Settings({
+-            schema_id: INTROSPECT_SCHEMA,
+-        });
+-
+         let tracker = Shell.WindowTracker.get_default();
+         tracker.connect('notify::focus-app',
+                         () => {
+@@ -70,10 +64,6 @@ var IntrospectService = class {
+         return app.get_windows().some(w => w.transient_for == null);
+     }
+ 
+-    _isIntrospectEnabled() {
+-        return this._introspectSettings.get_boolean(INTROSPECT_KEY);
+-    }
+-
+     _isSenderAllowed(sender) {
+         return [...this._allowlistMap.values()].includes(sender);
+     }
+@@ -135,7 +125,7 @@ var IntrospectService = class {
+     }
+ 
+     _checkInvocation(invocation) {
+-        if (this._isIntrospectEnabled())
++        if (global.context.unsafe_mode)
+             return;
+ 
+         if (this._isSenderAllowed(invocation.get_sender()))
+-- 
+2.35.1
+
+
+From 4238128ba403da2cc788b0b249ee34acbea5d743 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 1 Sep 2021 21:25:26 +0200
+Subject: [PATCH 06/12] data: Remove now unused "introspect" setting
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/3943
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1970>
+---
+ data/org.gnome.shell.gschema.xml.in | 8 --------
+ 1 file changed, 8 deletions(-)
+
+diff --git a/data/org.gnome.shell.gschema.xml.in b/data/org.gnome.shell.gschema.xml.in
+index d5ea1e35f..6f1c424ba 100644
+--- a/data/org.gnome.shell.gschema.xml.in
++++ b/data/org.gnome.shell.gschema.xml.in
+@@ -104,14 +104,6 @@
+         number can be used to effectively disable the dialog.
+       </description>
+     </key>
+-    <key name="introspect" type="b">
+-      <default>false</default>
+-      <summary>Enable introspection API</summary>
+-      <description>
+-        Enables a D-Bus API that allows to introspect the application state of
+-        the shell.
+-      </description>
+-    </key>
+     <key name="app-picker-layout" type="aa{sv}">
+       <default><![CDATA[
+         [{
+-- 
+2.35.1
+
+
+From f6af47b55fa2a52c7cdfecf1bb7e83d7f435a6bd Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 16 Jun 2021 19:09:42 +0200
+Subject: [PATCH 07/12] introspect: Split out DBusSenderChecker
+
+Restricting callers to a list of allowed senders is useful for
+other D-Bus services as well, so split out the existing code
+into a reusable class.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/3943
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1970>
+---
+ js/misc/introspect.js | 30 ++++-------------------
+ js/misc/util.js       | 56 ++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 59 insertions(+), 27 deletions(-)
+
+diff --git a/js/misc/introspect.js b/js/misc/introspect.js
+index 967e7b830..e9d9260c0 100644
+--- a/js/misc/introspect.js
++++ b/js/misc/introspect.js
+@@ -6,6 +6,7 @@ const APP_ALLOWLIST = ['org.freedesktop.impl.portal.desktop.gtk'];
+ const INTROSPECT_DBUS_API_VERSION = 3;
+ 
+ const { loadInterfaceXML } = imports.misc.fileUtils;
++const { DBusSenderChecker } = imports.misc.util;
+ 
+ const IntrospectDBusIface = loadInterfaceXML('org.gnome.Shell.Introspect');
+ 
+@@ -40,14 +41,7 @@ var IntrospectService = class {
+ 
+         this._syncRunningApplications();
+ 
+-        this._allowlistMap = new Map();
+-        APP_ALLOWLIST.forEach(appName => {
+-            Gio.DBus.watch_name(Gio.BusType.SESSION,
+-                appName,
+-                Gio.BusNameWatcherFlags.NONE,
+-                (conn, name, owner) => this._allowlistMap.set(name, owner),
+-                (conn, name) => this._allowlistMap.delete(name));
+-        });
++        this._senderChecker = new DBusSenderChecker(APP_ALLOWLIST);
+ 
+         this._settings = St.Settings.get();
+         this._settings.connect('notify::enable-animations',
+@@ -64,10 +58,6 @@ var IntrospectService = class {
+         return app.get_windows().some(w => w.transient_for == null);
+     }
+ 
+-    _isSenderAllowed(sender) {
+-        return [...this._allowlistMap.values()].includes(sender);
+-    }
+-
+     _getSandboxedAppId(app) {
+         let ids = app.get_windows().map(w => w.get_sandboxed_app_id());
+         return ids.find(id => id != null);
+@@ -124,21 +114,9 @@ var IntrospectService = class {
+                 type == Meta.WindowType.UTILITY;
+     }
+ 
+-    _checkInvocation(invocation) {
+-        if (global.context.unsafe_mode)
+-            return;
+-
+-        if (this._isSenderAllowed(invocation.get_sender()))
+-            return;
+-
+-        throw new GLib.Error(Gio.DBusError,
+-            Gio.DBusError.ACCESS_DENIED,
+-            'App introspection not allowed');
+-    }
+-
+     GetRunningApplicationsAsync(params, invocation) {
+         try {
+-            this._checkInvocation(invocation);
++            this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -153,7 +131,7 @@ var IntrospectService = class {
+         let windowsList = {};
+ 
+         try {
+-            this._checkInvocation(invocation);
++            this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+diff --git a/js/misc/util.js b/js/misc/util.js
+index 802398d18..e6c183fbf 100644
+--- a/js/misc/util.js
++++ b/js/misc/util.js
+@@ -2,7 +2,7 @@
+ /* exported findUrls, spawn, spawnCommandLine, spawnApp, trySpawnCommandLine,
+             formatTime, formatTimeSpan, createTimeLabel, insertSorted,
+             ensureActorVisibleInScrollView, wiggle, lerp, GNOMEversionCompare,
+-            Highlighter */
++            DBusSenderChecker, Highlighter */
+ 
+ const { Clutter, Gio, GLib, Shell, St, GnomeDesktop } = imports.gi;
+ const Gettext = imports.gettext;
+@@ -479,6 +479,60 @@ function GNOMEversionCompare(version1, version2) {
+     return 0;
+ }
+ 
++var DBusSenderChecker = class {
++    /**
++     * @param {string[]} allowList - list of allowed well-known names
++     */
++    constructor(allowList) {
++        this._allowlistMap = new Map();
++
++        this._watchList = allowList.map(name => {
++            return Gio.DBus.watch_name(Gio.BusType.SESSION,
++                name,
++                Gio.BusNameWatcherFlags.NONE,
++                (conn_, name_, owner) => this._allowlistMap.set(name, owner),
++                () => this._allowlistMap.delete(name));
++        });
++    }
++
++    /**
++     * @param {string} sender - the bus name that invoked the checked method
++     * @returns {bool}
++     */
++    _isSenderAllowed(sender) {
++        return [...this._allowlistMap.values()].includes(sender);
++    }
++
++    /**
++     * Check whether the bus name that invoked @invocation maps
++     * to an entry in the allow list.
++     *
++     * @throws
++     * @param {Gio.DBusMethodInvocation} invocation - the invocation
++     * @returns {void}
++     */
++    checkInvocation(invocation) {
++        if (global.context.unsafe_mode)
++            return;
++
++        if (this._isSenderAllowed(invocation.get_sender()))
++            return;
++
++        throw new GLib.Error(Gio.DBusError,
++            Gio.DBusError.ACCESS_DENIED,
++            '%s is not allowed'.format(invocation.get_method_name()));
++    }
++
++    /**
++     * @returns {void}
++     */
++    destroy() {
++        for (const id in this._watchList)
++            Gio.DBus.unwatch_name(id);
++        this._watchList = [];
++    }
++};
++
+ /* @class Highlighter Highlight given terms in text using markup. */
+ var Highlighter = class {
+     /**
+-- 
+2.35.1
+
+
+From c6679a876a3c73c2c691333a5b987e27965231f3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 17 Jun 2021 15:29:42 +0200
+Subject: [PATCH 08/12] shellDBus: Implement all methods asynchronously
+
+In order to restrict callers, we will need access to the invocation,
+not just the unpacked method parameters.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/3943
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1970>
+---
+ js/ui/shellDBus.js | 31 ++++++++++++++++++++++++++++---
+ 1 file changed, 28 insertions(+), 3 deletions(-)
+
+diff --git a/js/ui/shellDBus.js b/js/ui/shellDBus.js
+index 5a6edec74..aa5b4dc3c 100644
+--- a/js/ui/shellDBus.js
++++ b/js/ui/shellDBus.js
+@@ -72,11 +72,26 @@ var GnomeShell = class {
+         return [success, returnValue];
+     }
+ 
+-    FocusSearch() {
++    /**
++     * Focus the overview's search entry
++     *
++     * @param {...any} params - method parameters
++     * @param {Gio.DBusMethodInvocation} invocation - the invocation
++     * @returns {void}
++     */
++    FocusSearchAsync(params, invocation) {
+         Main.overview.focusSearch();
++        invocation.return_value(null);
+     }
+ 
+-    ShowOSD(params) {
++    /**
++     * Show OSD with the specified parameters
++     *
++     * @param {...any} params - method parameters
++     * @param {Gio.DBusMethodInvocation} invocation - the invocation
++     * @returns {void}
++     */
++    ShowOSDAsync([params], invocation) {
+         for (let param in params)
+             params[param] = params[param].deep_unpack();
+ 
+@@ -97,6 +112,7 @@ var GnomeShell = class {
+             icon = Gio.Icon.new_for_string(serializedIcon);
+ 
+         Main.osdWindowManager.show(monitorIndex, icon, label, level, maxLevel);
++        invocation.return_value(null);
+     }
+ 
+     /**
+@@ -118,10 +134,19 @@ var GnomeShell = class {
+         }
+ 
+         Main.overview.selectApp(id);
++        invocation.return_value(null);
+     }
+ 
+-    ShowApplications() {
++    /**
++     * Show the overview's app grid
++     *
++     * @param {...any} params - method parameters
++     * @param {Gio.DBusMethodInvocation} invocation - the invocation
++     * @returns {void}
++     */
++    ShowApplicationsAsync(params, invocation) {
+         Main.overview.show(ControlsState.APP_GRID);
++        invocation.return_value(null);
+     }
+ 
+     GrabAcceleratorAsync(params, invocation) {
+-- 
+2.35.1
+
+
+From 3ad733997eecb069be543f1a4452d7a7916a0962 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 17 Jun 2021 15:29:42 +0200
+Subject: [PATCH 09/12] shellDBus: Restrict callers
+
+The org.gnome.Shell interface provides a private API to other core
+components to implement desktop functionalities like Settings or
+global keybindings. It is not meant as a public API, so limit it
+to a set of expected callers.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/3943
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1970>
+---
+ js/ui/shellDBus.js | 76 ++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 76 insertions(+)
+
+diff --git a/js/ui/shellDBus.js b/js/ui/shellDBus.js
+index aa5b4dc3c..c511314f9 100644
+--- a/js/ui/shellDBus.js
++++ b/js/ui/shellDBus.js
+@@ -10,6 +10,7 @@ const Main = imports.ui.main;
+ const Screenshot = imports.ui.screenshot;
+ 
+ const { loadInterfaceXML } = imports.misc.fileUtils;
++const { DBusSenderChecker } = imports.misc.util;
+ const { ControlsState } = imports.ui.overviewControls;
+ 
+ const GnomeShellIface = loadInterfaceXML('org.gnome.Shell');
+@@ -20,6 +21,11 @@ var GnomeShell = class {
+         this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(GnomeShellIface, this);
+         this._dbusImpl.export(Gio.DBus.session, '/org/gnome/Shell');
+ 
++        this._senderChecker = new DBusSenderChecker([
++            'org.gnome.ControlCenter',
++            'org.gnome.SettingsDaemon.MediaKeys',
++        ]);
++
+         this._extensionsService = new GnomeShellExtensions();
+         this._screenshotService = new Screenshot.ScreenshotService();
+ 
+@@ -80,6 +86,13 @@ var GnomeShell = class {
+      * @returns {void}
+      */
+     FocusSearchAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         Main.overview.focusSearch();
+         invocation.return_value(null);
+     }
+@@ -92,6 +105,13 @@ var GnomeShell = class {
+      * @returns {void}
+      */
+     ShowOSDAsync([params], invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         for (let param in params)
+             params[param] = params[param].deep_unpack();
+ 
+@@ -124,6 +144,13 @@ var GnomeShell = class {
+      * @returns {void}
+      */
+     FocusAppAsync([id], invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         const appSys = Shell.AppSystem.get_default();
+         if (appSys.lookup_app(id) === null) {
+             invocation.return_error_literal(
+@@ -145,11 +172,25 @@ var GnomeShell = class {
+      * @returns {void}
+      */
+     ShowApplicationsAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         Main.overview.show(ControlsState.APP_GRID);
+         invocation.return_value(null);
+     }
+ 
+     GrabAcceleratorAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         let [accel, modeFlags, grabFlags] = params;
+         let sender = invocation.get_sender();
+         let bindingAction = this._grabAcceleratorForSender(accel, modeFlags, grabFlags, sender);
+@@ -157,6 +198,13 @@ var GnomeShell = class {
+     }
+ 
+     GrabAcceleratorsAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         let [accels] = params;
+         let sender = invocation.get_sender();
+         let bindingActions = [];
+@@ -168,6 +216,13 @@ var GnomeShell = class {
+     }
+ 
+     UngrabAcceleratorAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         let [action] = params;
+         let sender = invocation.get_sender();
+         let ungrabSucceeded = this._ungrabAcceleratorForSender(action, sender);
+@@ -176,6 +231,13 @@ var GnomeShell = class {
+     }
+ 
+     UngrabAcceleratorsAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         let [actions] = params;
+         let sender = invocation.get_sender();
+         let ungrabSucceeded = true;
+@@ -256,6 +318,13 @@ var GnomeShell = class {
+     }
+ 
+     ShowMonitorLabelsAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         let sender = invocation.get_sender();
+         let [dict] = params;
+         Main.osdMonitorLabeler.show(sender, dict);
+@@ -263,6 +332,13 @@ var GnomeShell = class {
+     }
+ 
+     HideMonitorLabelsAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         let sender = invocation.get_sender();
+         Main.osdMonitorLabeler.hide(sender);
+         invocation.return_value(null);
+-- 
+2.35.1
+
+
+From 5b87782b4950742b6ae1b29777e7812c93892ad7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 16 Jun 2021 22:11:50 +0200
+Subject: [PATCH 10/12] screenshot: Restrict callers
+
+The shell D-Bus API was always meant as a private API for core
+components, so enforce that by limiting caller to a list of
+allowed well-known names.
+
+Applications that want to request a screenshot can use the corresponding
+desktop portal.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/3943
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1970>
+---
+ js/ui/screenshot.js | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/js/ui/screenshot.js b/js/ui/screenshot.js
+index 81ab516b1..bf537b7d6 100644
+--- a/js/ui/screenshot.js
++++ b/js/ui/screenshot.js
+@@ -15,6 +15,7 @@ Gio._promisify(Shell.Screenshot.prototype,
+     'screenshot_area', 'screenshot_area_finish');
+ 
+ const { loadInterfaceXML } = imports.misc.fileUtils;
++const { DBusSenderChecker } = imports.misc.util;
+ 
+ const ScreenshotIface = loadInterfaceXML('org.gnome.Shell.Screenshot');
+ 
+@@ -24,6 +25,12 @@ var ScreenshotService = class {
+         this._dbusImpl.export(Gio.DBus.session, '/org/gnome/Shell/Screenshot');
+ 
+         this._screenShooter = new Map();
++        this._senderChecker = new DBusSenderChecker([
++            'org.gnome.SettingsDaemon.MediaKeys',
++            'org.freedesktop.impl.portal.desktop.gtk',
++            'org.freedesktop.impl.portal.desktop.gnome',
++            'org.gnome.Screenshot',
++        ]);
+ 
+         this._lockdownSettings = new Gio.Settings({ schema_id: 'org.gnome.desktop.lockdown' });
+ 
+@@ -46,6 +53,13 @@ var ScreenshotService = class {
+                 Gio.IOErrorEnum, Gio.IOErrorEnum.PERMISSION_DENIED,
+                 'Saving to disk is disabled');
+             return null;
++        } else {
++            try {
++                this._senderChecker.checkInvocation(invocation);
++            } catch (e) {
++                invocation.return_gerror(e);
++                return null;
++            }
+         }
+ 
+         let shooter = new Shell.Screenshot();
+@@ -254,6 +268,13 @@ var ScreenshotService = class {
+     }
+ 
+     async SelectAreaAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         let selectArea = new SelectArea();
+         try {
+             let areaRectangle = await selectArea.selectAsync();
+@@ -269,6 +290,13 @@ var ScreenshotService = class {
+     }
+ 
+     FlashAreaAsync(params, invocation) {
++        try {
++            this._senderChecker.checkInvocation(invocation);
++        } catch (e) {
++            invocation.return_gerror(e);
++            return;
++        }
++
+         let [x, y, width, height] = params;
+         [x, y, width, height] = this._scaleArea(x, y, width, height);
+         if (!this._checkArea(x, y, width, height)) {
+-- 
+2.35.1
+
+
+From b02e721663ed1481ff7b4cf40cae3a34d059d90c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Sat, 25 Sep 2021 14:15:32 +0200
+Subject: [PATCH 11/12] screenshot: Unrestrict PickColor
+
+Commit dd2cd6286cd3 restricted callers of the screenshot methods to
+portal implementations, gnome-settings-daemon and gnome-screenshot.
+
+That restriction does make sense for the actual screenshot methods,
+but `PickColor` is actually used by GTK in its color picker (and
+therefore may be called from arbitrary applications).
+
+Fix this by unrestricting access to `PickColor` again. Considering that
+the method is always interactive, it's not very privacy/security-sensitive
+anyway.
+
+https://gitlab.gnome.org/GNOME/gtk/-/issues/4283
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1990>
+---
+ js/ui/screenshot.js | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/js/ui/screenshot.js b/js/ui/screenshot.js
+index bf537b7d6..ae1156f47 100644
+--- a/js/ui/screenshot.js
++++ b/js/ui/screenshot.js
+@@ -37,7 +37,7 @@ var ScreenshotService = class {
+         Gio.DBus.session.own_name('org.gnome.Shell.Screenshot', Gio.BusNameOwnerFlags.REPLACE, null, null);
+     }
+ 
+-    _createScreenshot(invocation, needsDisk = true) {
++    _createScreenshot(invocation, needsDisk = true, restrictCallers = true) {
+         let lockedDown = false;
+         if (needsDisk)
+             lockedDown = this._lockdownSettings.get_boolean('disable-save-to-disk');
+@@ -53,7 +53,7 @@ var ScreenshotService = class {
+                 Gio.IOErrorEnum, Gio.IOErrorEnum.PERMISSION_DENIED,
+                 'Saving to disk is disabled');
+             return null;
+-        } else {
++        } else if (restrictCallers) {
+             try {
+                 this._senderChecker.checkInvocation(invocation);
+             } catch (e) {
+@@ -311,7 +311,7 @@ var ScreenshotService = class {
+     }
+ 
+     async PickColorAsync(params, invocation) {
+-        const screenshot = this._createScreenshot(invocation, false);
++        const screenshot = this._createScreenshot(invocation, false, false);
+         if (!screenshot)
+             return;
+ 
+-- 
+2.35.1
+
+
+From 9e8073afbf30aaea87aefd8201fc5e04f94edaf8 Mon Sep 17 00:00:00 2001
+From: Sebastian Keller <skeller@gnome.org>
+Date: Tue, 23 Nov 2021 02:48:04 +0100
+Subject: [PATCH 12/12] util: Wait for initial name owners in DBusSenderCheck
+ before checking
+
+Otherwise an allowed caller might get rejected if the call is right
+after a gnome-shell restart and the watchers have not finished running
+their callbacks yet.
+
+Fixes: https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/4813
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/2048>
+(cherry picked from commit 85609a232d4088b058f23f4922b9a993dea95199)
+---
+ js/misc/introspect.js |  8 ++++----
+ js/misc/util.js       | 33 ++++++++++++++++++++++++++++-----
+ js/ui/screenshot.js   | 18 +++++++++---------
+ js/ui/shellDBus.js    | 43 +++++++++++++++++++++++--------------------
+ 4 files changed, 64 insertions(+), 38 deletions(-)
+
+diff --git a/js/misc/introspect.js b/js/misc/introspect.js
+index e9d9260c0..f3c938af9 100644
+--- a/js/misc/introspect.js
++++ b/js/misc/introspect.js
+@@ -114,9 +114,9 @@ var IntrospectService = class {
+                 type == Meta.WindowType.UTILITY;
+     }
+ 
+-    GetRunningApplicationsAsync(params, invocation) {
++    async GetRunningApplicationsAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -125,13 +125,13 @@ var IntrospectService = class {
+         invocation.return_value(new GLib.Variant('(a{sa{sv}})', [this._runningApplications]));
+     }
+ 
+-    GetWindowsAsync(params, invocation) {
++    async GetWindowsAsync(params, invocation) {
+         let focusWindow = global.display.get_focus_window();
+         let apps = this._appSystem.get_running();
+         let windowsList = {};
+ 
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+diff --git a/js/misc/util.js b/js/misc/util.js
+index e6c183fbf..6a0f6f641 100644
+--- a/js/misc/util.js
++++ b/js/misc/util.js
+@@ -486,20 +486,42 @@ var DBusSenderChecker = class {
+     constructor(allowList) {
+         this._allowlistMap = new Map();
+ 
++        this._uninitializedNames = new Set(allowList);
++        this._initializedPromise = new Promise(resolve => {
++            this._resolveInitialized = resolve;
++        });
++
+         this._watchList = allowList.map(name => {
+             return Gio.DBus.watch_name(Gio.BusType.SESSION,
+                 name,
+                 Gio.BusNameWatcherFlags.NONE,
+-                (conn_, name_, owner) => this._allowlistMap.set(name, owner),
+-                () => this._allowlistMap.delete(name));
++                (conn_, name_, owner) => {
++                    this._allowlistMap.set(name, owner);
++                    this._checkAndResolveInitialized(name);
++                },
++                () => {
++                    this._allowlistMap.delete(name);
++                    this._checkAndResolveInitialized(name);
++                });
+         });
+     }
+ 
+     /**
++     * @param {string} name - bus name for which the watcher got initialized
++     */
++    _checkAndResolveInitialized(name) {
++        if (this._uninitializedNames.delete(name) &&
++            this._uninitializedNames.size === 0)
++            this._resolveInitialized();
++    }
++
++    /**
++     * @async
+      * @param {string} sender - the bus name that invoked the checked method
+      * @returns {bool}
+      */
+-    _isSenderAllowed(sender) {
++    async _isSenderAllowed(sender) {
++        await this._initializedPromise;
+         return [...this._allowlistMap.values()].includes(sender);
+     }
+ 
+@@ -507,15 +529,16 @@ var DBusSenderChecker = class {
+      * Check whether the bus name that invoked @invocation maps
+      * to an entry in the allow list.
+      *
++     * @async
+      * @throws
+      * @param {Gio.DBusMethodInvocation} invocation - the invocation
+      * @returns {void}
+      */
+-    checkInvocation(invocation) {
++    async checkInvocation(invocation) {
+         if (global.context.unsafe_mode)
+             return;
+ 
+-        if (this._isSenderAllowed(invocation.get_sender()))
++        if (await this._isSenderAllowed(invocation.get_sender()))
+             return;
+ 
+         throw new GLib.Error(Gio.DBusError,
+diff --git a/js/ui/screenshot.js b/js/ui/screenshot.js
+index ae1156f47..97fcfacd0 100644
+--- a/js/ui/screenshot.js
++++ b/js/ui/screenshot.js
+@@ -37,7 +37,7 @@ var ScreenshotService = class {
+         Gio.DBus.session.own_name('org.gnome.Shell.Screenshot', Gio.BusNameOwnerFlags.REPLACE, null, null);
+     }
+ 
+-    _createScreenshot(invocation, needsDisk = true, restrictCallers = true) {
++    async _createScreenshot(invocation, needsDisk = true, restrictCallers = true) {
+         let lockedDown = false;
+         if (needsDisk)
+             lockedDown = this._lockdownSettings.get_boolean('disable-save-to-disk');
+@@ -55,7 +55,7 @@ var ScreenshotService = class {
+             return null;
+         } else if (restrictCallers) {
+             try {
+-                this._senderChecker.checkInvocation(invocation);
++                await this._senderChecker.checkInvocation(invocation);
+             } catch (e) {
+                 invocation.return_gerror(e);
+                 return null;
+@@ -200,7 +200,7 @@ var ScreenshotService = class {
+                                             "Invalid params");
+             return;
+         }
+-        let screenshot = this._createScreenshot(invocation);
++        let screenshot = await this._createScreenshot(invocation);
+         if (!screenshot)
+             return;
+ 
+@@ -223,7 +223,7 @@ var ScreenshotService = class {
+ 
+     async ScreenshotWindowAsync(params, invocation) {
+         let [includeFrame, includeCursor, flash, filename] = params;
+-        let screenshot = this._createScreenshot(invocation);
++        let screenshot = await this._createScreenshot(invocation);
+         if (!screenshot)
+             return;
+ 
+@@ -246,7 +246,7 @@ var ScreenshotService = class {
+ 
+     async ScreenshotAsync(params, invocation) {
+         let [includeCursor, flash, filename] = params;
+-        let screenshot = this._createScreenshot(invocation);
++        let screenshot = await this._createScreenshot(invocation);
+         if (!screenshot)
+             return;
+ 
+@@ -269,7 +269,7 @@ var ScreenshotService = class {
+ 
+     async SelectAreaAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -289,9 +289,9 @@ var ScreenshotService = class {
+         }
+     }
+ 
+-    FlashAreaAsync(params, invocation) {
++    async FlashAreaAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -311,7 +311,7 @@ var ScreenshotService = class {
+     }
+ 
+     async PickColorAsync(params, invocation) {
+-        const screenshot = this._createScreenshot(invocation, false, false);
++        const screenshot = await this._createScreenshot(invocation, false, false);
+         if (!screenshot)
+             return;
+ 
+diff --git a/js/ui/shellDBus.js b/js/ui/shellDBus.js
+index c511314f9..39bba7aa3 100644
+--- a/js/ui/shellDBus.js
++++ b/js/ui/shellDBus.js
+@@ -81,13 +81,14 @@ var GnomeShell = class {
+     /**
+      * Focus the overview's search entry
+      *
++     * @async
+      * @param {...any} params - method parameters
+      * @param {Gio.DBusMethodInvocation} invocation - the invocation
+      * @returns {void}
+      */
+-    FocusSearchAsync(params, invocation) {
++    async FocusSearchAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -100,13 +101,14 @@ var GnomeShell = class {
+     /**
+      * Show OSD with the specified parameters
+      *
++     * @async
+      * @param {...any} params - method parameters
+      * @param {Gio.DBusMethodInvocation} invocation - the invocation
+      * @returns {void}
+      */
+-    ShowOSDAsync([params], invocation) {
++    async ShowOSDAsync([params], invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -143,9 +145,9 @@ var GnomeShell = class {
+      * @param {Gio.DBusMethodInvocation} invocation - the invocation
+      * @returns {void}
+      */
+-    FocusAppAsync([id], invocation) {
++    async FocusAppAsync([id], invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -167,13 +169,14 @@ var GnomeShell = class {
+     /**
+      * Show the overview's app grid
+      *
++     * @async
+      * @param {...any} params - method parameters
+      * @param {Gio.DBusMethodInvocation} invocation - the invocation
+      * @returns {void}
+      */
+-    ShowApplicationsAsync(params, invocation) {
++    async ShowApplicationsAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -183,9 +186,9 @@ var GnomeShell = class {
+         invocation.return_value(null);
+     }
+ 
+-    GrabAcceleratorAsync(params, invocation) {
++    async GrabAcceleratorAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -197,9 +200,9 @@ var GnomeShell = class {
+         invocation.return_value(GLib.Variant.new('(u)', [bindingAction]));
+     }
+ 
+-    GrabAcceleratorsAsync(params, invocation) {
++    async GrabAcceleratorsAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -215,9 +218,9 @@ var GnomeShell = class {
+         invocation.return_value(GLib.Variant.new('(au)', [bindingActions]));
+     }
+ 
+-    UngrabAcceleratorAsync(params, invocation) {
++    async UngrabAcceleratorAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -230,9 +233,9 @@ var GnomeShell = class {
+         invocation.return_value(GLib.Variant.new('(b)', [ungrabSucceeded]));
+     }
+ 
+-    UngrabAcceleratorsAsync(params, invocation) {
++    async UngrabAcceleratorsAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -317,9 +320,9 @@ var GnomeShell = class {
+         this._grabbers.delete(name);
+     }
+ 
+-    ShowMonitorLabelsAsync(params, invocation) {
++    async ShowMonitorLabelsAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+@@ -331,9 +334,9 @@ var GnomeShell = class {
+         invocation.return_value(null);
+     }
+ 
+-    HideMonitorLabelsAsync(params, invocation) {
++    async HideMonitorLabelsAsync(params, invocation) {
+         try {
+-            this._senderChecker.checkInvocation(invocation);
++            await this._senderChecker.checkInvocation(invocation);
+         } catch (e) {
+             invocation.return_gerror(e);
+             return;
+-- 
+2.35.1
+

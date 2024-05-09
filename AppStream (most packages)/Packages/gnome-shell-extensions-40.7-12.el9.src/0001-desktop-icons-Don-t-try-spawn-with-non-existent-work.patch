@@ -1,0 +1,33 @@
+From b48dae39341a3ba24eb3d142f99eb37d6b14ab41 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 2 Nov 2023 20:51:45 +0100
+Subject: [PATCH] desktop-icons: Don't try spawn with non-existent workdir
+
+g_spawn_async() will fail if the specified workdir doesn't exist.
+That means that opening a terminal from the context menu will fail
+when the desktop directory doesn't exist.
+
+The extension doesn't really make sense in that case, but when we
+show an "Open in Terminal" menu item even then, users expect it
+to work.
+---
+ extensions/desktop-icons/desktopIconsUtil.js | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/extensions/desktop-icons/desktopIconsUtil.js b/extensions/desktop-icons/desktopIconsUtil.js
+index 57bedc13..c3fe5977 100644
+--- a/extensions/desktop-icons/desktopIconsUtil.js
++++ b/extensions/desktop-icons/desktopIconsUtil.js
+@@ -50,6 +50,9 @@ function launchTerminal(workdir) {
+      * https://gitlab.gnome.org/GNOME/gnome-shell/blob/gnome-3-30/js/misc/util.js
+      */
+ 
++    if (!GLib.file_test(workdir, GLib.FileTest.EXISTS))
++        workdir = null;
++
+     var success, pid;
+     try {
+         [success, pid] = GLib.spawn_async(workdir, argv, null,
+-- 
+2.41.0
+

@@ -1,0 +1,2564 @@
+From 9849810143193393bbf6fecfca2b415a4c58e147 Mon Sep 17 00:00:00 2001
+From: Kalev Lember <klember@redhat.com>
+Date: Fri, 28 Jun 2019 17:14:36 +0200
+Subject: [PATCH 1/2] info-overview: Add subscription manager integration
+
+---
+ panels/info-overview/cc-info-overview-panel.c | 190 ++++++
+ .../info-overview/cc-info-overview-panel.ui   |  10 +
+ panels/info-overview/cc-subscription-common.h |  34 +
+ .../cc-subscription-details-dialog.c          | 578 ++++++++++++++++
+ .../cc-subscription-details-dialog.h          |  33 +
+ .../cc-subscription-details-dialog.ui         | 425 ++++++++++++
+ .../cc-subscription-register-dialog.c         | 416 ++++++++++++
+ .../cc-subscription-register-dialog.h         |  33 +
+ .../cc-subscription-register-dialog.ui        | 623 ++++++++++++++++++
+ .../info-overview/info-overview.gresource.xml |   2 +
+ panels/info-overview/meson.build              |   6 +-
+ po/POTFILES.in                                |   4 +
+ 12 files changed, 2353 insertions(+), 1 deletion(-)
+ create mode 100644 panels/info-overview/cc-subscription-common.h
+ create mode 100644 panels/info-overview/cc-subscription-details-dialog.c
+ create mode 100644 panels/info-overview/cc-subscription-details-dialog.h
+ create mode 100644 panels/info-overview/cc-subscription-details-dialog.ui
+ create mode 100644 panels/info-overview/cc-subscription-register-dialog.c
+ create mode 100644 panels/info-overview/cc-subscription-register-dialog.h
+ create mode 100644 panels/info-overview/cc-subscription-register-dialog.ui
+
+diff --git a/panels/info-overview/cc-info-overview-panel.c b/panels/info-overview/cc-info-overview-panel.c
+index b20e5c1f7..99c8b20d7 100644
+--- a/panels/info-overview/cc-info-overview-panel.c
++++ b/panels/info-overview/cc-info-overview-panel.c
+@@ -26,6 +26,9 @@
+ #include "cc-os-release.h"
+ 
+ #include "cc-info-overview-resources.h"
++#include "cc-subscription-common.h"
++#include "cc-subscription-details-dialog.h"
++#include "cc-subscription-register-dialog.h"
+ #include "info-cleanup.h"
+ 
+ #include <glib.h>
+@@ -74,8 +77,13 @@ struct _CcInfoOverviewPanel
+   CcListRow       *os_type_row;
+   CcListRow       *processor_row;
+   CcListRow       *software_updates_row;
++  CcListRow       *subscription_row;
+   CcListRow       *virtualization_row;
+   CcListRow       *windowing_system_row;
++
++  /* Subscription */
++  GCancellable    *subscription_cancellable;
++  GDBusProxy      *subscription_proxy;
+ };
+ 
+ typedef struct
+@@ -770,6 +778,156 @@ info_overview_panel_setup_overview (CcInfoOverviewPanel *self)
+   cc_list_row_set_secondary_markup (self->graphics_row, graphics_hardware_string);
+ }
+ 
++static void
++reload_subscription_status (CcInfoOverviewPanel *self)
++{
++  GsdSubmanSubscriptionStatus status;
++  gboolean registered;
++  gboolean updates;
++
++  if (self->subscription_proxy == NULL)
++    {
++      gtk_widget_hide (GTK_WIDGET (self->subscription_row));
++      return;
++    }
++  if (!get_subscription_status (self->subscription_proxy, &status))
++    {
++      gtk_widget_hide (GTK_WIDGET (self->subscription_row));
++      return;
++    }
++  switch (status)
++    {
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_NOT_READ:
++      gtk_widget_hide (GTK_WIDGET (self->subscription_row));
++      gtk_widget_set_sensitive (GTK_WIDGET (self->software_updates_row), FALSE);
++      return;
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_UNKNOWN:
++      registered = FALSE;
++      updates = FALSE;
++      gtk_widget_set_sensitive (GTK_WIDGET (self->software_updates_row), FALSE);
++      break;
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_DISABLED:
++      registered = TRUE;
++      updates = TRUE;
++      gtk_widget_set_sensitive (GTK_WIDGET (self->software_updates_row), TRUE);
++      break;
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_VALID:
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_PARTIALLY_VALID:
++      registered = TRUE;
++      updates = TRUE;
++      gtk_widget_set_sensitive (GTK_WIDGET (self->software_updates_row), TRUE);
++      break;
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_INVALID:
++      registered = TRUE;
++      updates = FALSE;
++      gtk_widget_set_sensitive (GTK_WIDGET (self->software_updates_row), FALSE);
++      break;
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_NO_INSTALLED_PRODUCTS:
++      registered = FALSE;
++      updates = FALSE;
++      gtk_widget_set_sensitive (GTK_WIDGET (self->software_updates_row), FALSE);
++      break;
++    default:
++      g_assert_not_reached ();
++    }
++  if (registered)
++    {
++      if (updates)
++        cc_list_row_set_secondary_label (self->software_updates_row, _("System is registered and able to receive software updates."));
++      else
++        cc_list_row_set_secondary_label (self->software_updates_row, _("System is registered but is unable to receive all software updates."));
++
++      cc_list_row_set_secondary_label (self->subscription_row, _("Registered System"));
++      g_object_set_data (G_OBJECT (self->subscription_row), "is-registered", GINT_TO_POINTER (TRUE));
++    }
++  else
++    {
++      cc_list_row_set_secondary_label (self->software_updates_row, _("Register this system to receive software updates."));
++      cc_list_row_set_secondary_label (self->subscription_row, _("System Not Registered"));
++      g_object_set_data (G_OBJECT (self->subscription_row), "is-registered", GINT_TO_POINTER (FALSE));
++    }
++}
++
++static void
++open_subscription_details_dialog (CcInfoOverviewPanel *self)
++{
++  CcSubscriptionDetailsDialog *dialog;
++  GtkWindow *toplevel;
++  CcShell *shell;
++
++  g_assert (CC_IS_INFO_OVERVIEW_PANEL (self));
++
++  dialog = cc_subscription_details_dialog_new (self->subscription_proxy,
++                                               self->subscription_cancellable);
++
++  shell = cc_panel_get_shell (CC_PANEL (self));
++  toplevel = GTK_WINDOW (cc_shell_get_toplevel (shell));
++  gtk_window_set_transient_for (GTK_WINDOW (self->hostname_editor), toplevel);
++
++  gtk_dialog_run (GTK_DIALOG (dialog));
++  gtk_widget_destroy (GTK_WIDGET (dialog));
++}
++
++static void
++open_subscription_register_dialog (CcInfoOverviewPanel *self)
++{
++  CcSubscriptionRegisterDialog *dialog;
++  GtkWindow *toplevel;
++  CcShell *shell;
++
++  g_assert (CC_IS_INFO_OVERVIEW_PANEL (self));
++
++  dialog = cc_subscription_register_dialog_new (self->subscription_proxy,
++                                                self->subscription_cancellable);
++
++  shell = cc_panel_get_shell (CC_PANEL (self));
++  toplevel = GTK_WINDOW (cc_shell_get_toplevel (shell));
++  gtk_window_set_transient_for (GTK_WINDOW (self->hostname_editor), toplevel);
++
++  gtk_dialog_run (GTK_DIALOG (dialog));
++  gtk_widget_destroy (GTK_WIDGET (dialog));
++}
++
++static void
++on_subscription_status_changed (GDBusProxy *proxy,
++                                GVariant *changed_properties,
++                                GStrv invalidated_properties,
++                                CcInfoOverviewPanel *self)
++{
++  g_cancellable_cancel (self->subscription_cancellable);
++  g_object_unref (self->subscription_cancellable);
++
++  self->subscription_cancellable = g_cancellable_new ();
++
++  reload_subscription_status (self);
++}
++
++static void
++info_overview_panel_setup_subscriptions (CcInfoOverviewPanel *self)
++{
++  g_autoptr(GError) error = NULL;
++
++  self->subscription_proxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
++                                                            G_DBUS_PROXY_FLAGS_NONE,
++                                                            NULL,
++                                                            "org.gnome.SettingsDaemon.Subscription",
++                                                            "/org/gnome/SettingsDaemon/Subscription",
++                                                            "org.gnome.SettingsDaemon.Subscription",
++                                                            NULL, &error);
++  if (error != NULL)
++    {
++      g_debug ("Unable to create a proxy for org.gnome.SettingsDaemon.Subscription: %s",
++               error->message);
++      reload_subscription_status (self);
++      return;
++    }
++
++  g_signal_connect (self->subscription_proxy, "g-properties-changed",
++                    G_CALLBACK (on_subscription_status_changed), self);
++
++  reload_subscription_status (self);
++}
++
+ static gboolean
+ does_gnome_software_exist (void)
+ {
+@@ -860,6 +1018,15 @@ cc_info_panel_row_activated_cb (CcInfoOverviewPanel *self,
+     open_hostname_edit_dialog (self);
+   else if (row == self->software_updates_row)
+     open_software_update (self);
++  else if (row == self->subscription_row)
++    {
++      gboolean registered = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (row), "is-registered"));
++
++      if (registered)
++        open_subscription_details_dialog (self);
++      else
++        open_subscription_register_dialog (self);
++    }
+ }
+ 
+ #ifdef DARK_MODE_DISTRIBUTOR_LOGO
+@@ -908,11 +1075,30 @@ setup_os_logo (CcInfoOverviewPanel *panel)
+ #endif
+ }
+ 
++static void
++cc_info_overview_panel_finalize (GObject *object)
++{
++  CcInfoOverviewPanel *self = (CcInfoOverviewPanel *) object;
++
++  if (self->subscription_cancellable)
++    {
++      g_cancellable_cancel (self->subscription_cancellable);
++      g_clear_object (&self->subscription_cancellable);
++    }
++
++  g_clear_object (&self->subscription_proxy);
++
++  G_OBJECT_CLASS (cc_info_overview_panel_parent_class)->finalize (object);
++}
++
+ static void
+ cc_info_overview_panel_class_init (CcInfoOverviewPanelClass *klass)
+ {
++  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
+ 
++  object_class->finalize = cc_info_overview_panel_finalize;
++
+   gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/control-center/info-overview/cc-info-overview-panel.ui");
+ 
+   gtk_widget_class_bind_template_child (widget_class, CcInfoOverviewPanel, device_name_entry);
+@@ -932,6 +1118,7 @@ cc_info_overview_panel_class_init (CcInfoOverviewPanelClass *klass)
+   gtk_widget_class_bind_template_child (widget_class, CcInfoOverviewPanel, processor_row);
+   gtk_widget_class_bind_template_child (widget_class, CcInfoOverviewPanel, rename_button);
+   gtk_widget_class_bind_template_child (widget_class, CcInfoOverviewPanel, software_updates_row);
++  gtk_widget_class_bind_template_child (widget_class, CcInfoOverviewPanel, subscription_row);
+   gtk_widget_class_bind_template_child (widget_class, CcInfoOverviewPanel, virtualization_row);
+   gtk_widget_class_bind_template_child (widget_class, CcInfoOverviewPanel, windowing_system_row);
+ 
+@@ -951,11 +1138,14 @@ cc_info_overview_panel_init (CcInfoOverviewPanel *self)
+ 
+   g_resources_register (cc_info_overview_get_resource ());
+ 
++  self->subscription_cancellable = g_cancellable_new ();
++
+   if (!does_gnome_software_exist () && !does_gpk_update_viewer_exist ())
+     gtk_widget_hide (GTK_WIDGET (self->software_updates_row));
+ 
+   info_overview_panel_setup_overview (self);
+   info_overview_panel_setup_virt (self);
++  info_overview_panel_setup_subscriptions (self);
+ 
+   setup_os_logo (self);
+ }
+diff --git a/panels/info-overview/cc-info-overview-panel.ui b/panels/info-overview/cc-info-overview-panel.ui
+index 2f5d3cf8b..ddd2cf614 100644
+--- a/panels/info-overview/cc-info-overview-panel.ui
++++ b/panels/info-overview/cc-info-overview-panel.ui
+@@ -179,6 +179,16 @@
+                       </object>
+                     </child>
+ 
++                    <!-- Subscriptions -->
++                    <child>
++                      <object class="CcListRow" id="subscription_row">
++                        <property name="visible">True</property>
++                        <property name="title" translatable="yes">Subscription</property>
++                        <property name="secondary-label" translatable="yes">System Not Registered</property>
++                        <property name="icon-name">go-next-symbolic</property>
++                      </object>
++                    </child>
++
+                   </object>
+                 </child>
+ 
+diff --git a/panels/info-overview/cc-subscription-common.h b/panels/info-overview/cc-subscription-common.h
+new file mode 100644
+index 000000000..034d64181
+--- /dev/null
++++ b/panels/info-overview/cc-subscription-common.h
+@@ -0,0 +1,34 @@
++#ifndef CC_SUBSCRIPTION_COMMON_H
++#define CC_SUBSCRIPTION_COMMON_H
++
++typedef enum {
++  GSD_SUBMAN_SUBSCRIPTION_STATUS_NOT_READ = -1,
++  GSD_SUBMAN_SUBSCRIPTION_STATUS_UNKNOWN,
++  GSD_SUBMAN_SUBSCRIPTION_STATUS_VALID,
++  GSD_SUBMAN_SUBSCRIPTION_STATUS_INVALID,
++  GSD_SUBMAN_SUBSCRIPTION_STATUS_DISABLED,
++  GSD_SUBMAN_SUBSCRIPTION_STATUS_PARTIALLY_VALID,
++  GSD_SUBMAN_SUBSCRIPTION_STATUS_NO_INSTALLED_PRODUCTS,
++  GSD_SUBMAN_SUBSCRIPTION_STATUS_LAST
++} GsdSubmanSubscriptionStatus;
++
++static inline gboolean
++get_subscription_status (GDBusProxy *subscription_proxy,
++                         GsdSubmanSubscriptionStatus *status)
++{
++  g_autoptr(GVariant) status_variant = NULL;
++  guint32 u;
++
++  status_variant = g_dbus_proxy_get_cached_property (subscription_proxy, "SubscriptionStatus");
++  if (!status_variant)
++    {
++      g_debug ("Unable to get SubscriptionStatus property");
++      return FALSE;
++    }
++
++  g_variant_get (status_variant, "u", &u);
++  *status = u;
++
++  return TRUE;
++}
++#endif
+diff --git a/panels/info-overview/cc-subscription-details-dialog.c b/panels/info-overview/cc-subscription-details-dialog.c
+new file mode 100644
+index 000000000..15da1d911
+--- /dev/null
++++ b/panels/info-overview/cc-subscription-details-dialog.c
+@@ -0,0 +1,578 @@
++/* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 8 -*-
++ *
++ * Copyright 2019  Red Hat, Inc,
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, see <http://www.gnu.org/licenses/>.
++ *
++ * Written by: Kalev Lember <klember@redhat.com>
++ */
++
++#include "config.h"
++
++#include <glib.h>
++#include <glib/gi18n.h>
++#include <gtk/gtk.h>
++
++#include "cc-subscription-details-dialog.h"
++#include "cc-subscription-common.h"
++
++#define DBUS_TIMEOUT 300000 /* 5 minutes */
++
++typedef enum {
++  DIALOG_STATE_SHOW_DETAILS,
++  DIALOG_STATE_SUBSCRIBE,
++  DIALOG_STATE_SUBSCRIBING,
++  DIALOG_STATE_UNREGISTER,
++  DIALOG_STATE_UNREGISTERING
++} DialogState;
++
++struct _CcSubscriptionDetailsDialog
++{
++  GtkDialog     parent_instance;
++
++  DialogState   state;
++  GCancellable *cancellable;
++  GDBusProxy   *subscription_proxy;
++  GPtrArray    *products;
++
++  /* template widgets */
++  GtkButton    *back_button;
++  GtkSpinner   *spinner;
++  GtkStack     *header_stack;
++  GtkButton    *header_subscribe_button;
++  GtkButton    *header_unregister_button;
++  GtkRevealer  *notification_revealer;
++  GtkLabel     *error_label;
++  GtkStack     *stack;
++  GtkStack     *status_stack;
++  GtkBox       *products_box1;
++  GtkBox       *products_box2;
++  GtkBox       *products_box3;
++  GtkButton    *subscribe_button;
++  GtkSeparator *separator;
++  GtkButton    *unregister_button;
++};
++
++G_DEFINE_TYPE (CcSubscriptionDetailsDialog, cc_subscription_details_dialog, GTK_TYPE_DIALOG);
++
++static void reload_installed_products (CcSubscriptionDetailsDialog *self);
++
++typedef struct
++{
++  gchar *product_name;
++  gchar *product_id;
++  gchar *version;
++  gchar *arch;
++  gchar *status;
++  gchar *starts;
++  gchar *ends;
++} ProductData;
++
++static void
++product_data_free (ProductData *product)
++{
++  g_free (product->product_name);
++  g_free (product->product_id);
++  g_free (product->version);
++  g_free (product->arch);
++  g_free (product->status);
++  g_free (product->starts);
++  g_free (product->ends);
++  g_free (product);
++}
++
++G_DEFINE_AUTOPTR_CLEANUP_FUNC (ProductData, product_data_free);
++
++static void
++add_product_row (GtkGrid *product_grid, const gchar *name, const gchar *value, gint top_attach)
++{
++  GtkWidget *w;
++
++  w = gtk_label_new (name);
++  gtk_style_context_add_class (gtk_widget_get_style_context (w), "dim-label");
++  gtk_grid_attach (product_grid, w, 0, top_attach, 1, 1);
++  gtk_widget_set_halign (w, GTK_ALIGN_END);
++  gtk_widget_show (w);
++
++  if (value == NULL)
++    value = _("Unknown");
++
++  w = gtk_label_new (value);
++  gtk_grid_attach (product_grid, w, 1, top_attach, 1, 1);
++  gtk_widget_set_halign (w, GTK_ALIGN_START);
++  gtk_widget_set_hexpand (w, TRUE);
++  gtk_widget_show (w);
++}
++
++static GtkWidget *
++add_product (CcSubscriptionDetailsDialog *self, ProductData *product, GsdSubmanSubscriptionStatus status)
++{
++  GtkGrid *product_grid;
++  const gchar *status_text;
++
++  if (g_strcmp0 (product->status, "subscribed") == 0)
++    status_text = _("Subscribed");
++  else if (status == GSD_SUBMAN_SUBSCRIPTION_STATUS_DISABLED)
++    status_text = _("No Specific Subscription");
++  else
++    status_text = _("Not Subscribed");
++
++  product_grid = GTK_GRID (gtk_grid_new ());
++  gtk_grid_set_column_spacing (product_grid, 12);
++  gtk_grid_set_row_spacing (product_grid, 6);
++  gtk_widget_set_margin_top (GTK_WIDGET (product_grid), 18);
++  gtk_widget_set_margin_bottom (GTK_WIDGET (product_grid), 12);
++  gtk_widget_show (GTK_WIDGET (product_grid));
++
++  add_product_row (product_grid, _("Product Name"), product->product_name, 0);
++  add_product_row (product_grid, _("Product ID"), product->product_id, 1);
++  add_product_row (product_grid, _("Version"), product->version, 2);
++  add_product_row (product_grid, _("Arch"), product->arch, 3);
++  add_product_row (product_grid, _("Status"), status_text, 4);
++
++  if (product->starts[0] != '\0' && product->ends[0] != '\0')
++    {
++      add_product_row (product_grid, _("Starts"), product->starts, 5);
++      add_product_row (product_grid, _("Ends"), product->ends, 6);
++    }
++
++  return GTK_WIDGET (product_grid);
++}
++
++static void
++remove_all_children (GtkContainer *container)
++{
++  g_autoptr(GList) list = gtk_container_get_children (container);
++
++  for (GList *l = list; l != NULL; l = l->next)
++    gtk_container_remove (container, (GtkWidget *) l->data);
++}
++
++static void
++dialog_reload (CcSubscriptionDetailsDialog *self)
++{
++  GtkHeaderBar *header = GTK_HEADER_BAR (gtk_dialog_get_header_bar (GTK_DIALOG (self)));
++  GsdSubmanSubscriptionStatus status = GSD_SUBMAN_SUBSCRIPTION_STATUS_UNKNOWN;
++
++  reload_installed_products (self);
++
++  switch (self->state)
++    {
++    case DIALOG_STATE_SHOW_DETAILS:
++      gtk_header_bar_set_show_close_button (header, TRUE);
++
++      gtk_window_set_title (GTK_WINDOW (self), _("Registration Details"));
++      gtk_widget_set_sensitive (GTK_WIDGET (self->header_unregister_button), TRUE);
++      gtk_widget_set_sensitive (GTK_WIDGET (self->header_subscribe_button), TRUE);
++
++      gtk_widget_hide (GTK_WIDGET (self->back_button));
++      gtk_widget_hide (GTK_WIDGET (self->header_stack));
++
++      gtk_stack_set_visible_child_name (self->stack, "show-details");
++      break;
++
++    case DIALOG_STATE_SUBSCRIBE:
++      gtk_header_bar_set_show_close_button (header, FALSE);
++      gtk_stack_set_visible_child_name (self->header_stack, "subscribe");
++      gtk_window_set_title (GTK_WINDOW (self), _("Subscribe System"));
++      gtk_widget_set_sensitive (GTK_WIDGET (self->header_subscribe_button), TRUE);
++
++      gtk_widget_show (GTK_WIDGET (self->back_button));
++
++      gtk_stack_set_visible_child_name (self->header_stack, "subscribe");
++      gtk_widget_show (GTK_WIDGET (self->header_stack));
++
++      gtk_stack_set_visible_child_name (self->stack, "subscribe");
++      break;
++
++    case DIALOG_STATE_SUBSCRIBING:
++      gtk_header_bar_set_show_close_button (header, FALSE);
++      gtk_window_set_title (GTK_WINDOW (self), _("Looking For Available Subscriptions…"));
++      gtk_widget_set_sensitive (GTK_WIDGET (self->header_subscribe_button), FALSE);
++
++      gtk_widget_show (GTK_WIDGET (self->back_button));
++
++      gtk_stack_set_visible_child_name (self->header_stack, "subscribe");
++      gtk_widget_show (GTK_WIDGET (self->header_stack));
++
++      gtk_stack_set_visible_child_name (self->stack, "subscribe");
++      break;
++
++    case DIALOG_STATE_UNREGISTER:
++      gtk_header_bar_set_show_close_button (header, FALSE);
++
++      gtk_window_set_title (GTK_WINDOW (self), _("Unregister System"));
++      gtk_widget_set_sensitive (GTK_WIDGET (self->header_unregister_button), TRUE);
++
++      gtk_widget_show (GTK_WIDGET (self->back_button));
++
++      gtk_stack_set_visible_child_name (self->header_stack, "unregister");
++      gtk_widget_show (GTK_WIDGET (self->header_stack));
++
++      gtk_stack_set_visible_child_name (self->stack, "unregister");
++      break;
++
++    case DIALOG_STATE_UNREGISTERING:
++      gtk_header_bar_set_show_close_button (header, FALSE);
++
++      gtk_window_set_title (GTK_WINDOW (self), _("Unregistering System…"));
++      gtk_widget_set_sensitive (GTK_WIDGET (self->header_unregister_button), FALSE);
++
++      gtk_widget_show (GTK_WIDGET (self->back_button));
++
++      gtk_stack_set_visible_child_name (self->header_stack, "unregister");
++      gtk_widget_show (GTK_WIDGET (self->header_stack));
++
++      gtk_stack_set_visible_child_name (self->stack, "unregister");
++      break;
++
++    default:
++      g_assert_not_reached ();
++      break;
++    }
++
++  remove_all_children (GTK_CONTAINER (self->products_box1));
++  remove_all_children (GTK_CONTAINER (self->products_box2));
++  remove_all_children (GTK_CONTAINER (self->products_box3));
++
++  if (self->products == NULL || self->products->len == 0)
++    {
++      /* the widgets are duplicate to allow sliding between two stack pages */
++      GtkWidget *w1 = gtk_label_new (_("No installed products detected."));
++      GtkWidget *w2 = gtk_label_new (_("No installed products detected."));
++      GtkWidget *w3 = gtk_label_new (_("No installed products detected."));
++      gtk_widget_show (w1);
++      gtk_widget_show (w2);
++      gtk_widget_show (w3);
++      gtk_container_add (GTK_CONTAINER (self->products_box1), w1);
++      gtk_container_add (GTK_CONTAINER (self->products_box2), w2);
++      gtk_container_add (GTK_CONTAINER (self->products_box3), w3);
++      gtk_stack_set_visible_child_name (self->status_stack, "no-installed-products");
++
++      gtk_widget_hide (GTK_WIDGET (self->subscribe_button));
++      gtk_widget_hide (GTK_WIDGET (self->separator));
++      return;
++    }
++
++  get_subscription_status (self->subscription_proxy, &status);
++
++  for (guint i = 0; i < self->products->len; i++)
++    {
++      ProductData *product = g_ptr_array_index (self->products, i);
++      /* the widgets are duplicate to allow sliding between two stack pages */
++      GtkWidget *w1 = add_product (self, product, status);
++      GtkWidget *w2 = add_product (self, product, status);
++      GtkWidget *w3 = add_product (self, product, status);
++      gtk_container_add (GTK_CONTAINER (self->products_box1), w1);
++      gtk_container_add (GTK_CONTAINER (self->products_box2), w2);
++      gtk_container_add (GTK_CONTAINER (self->products_box3), w3);
++    }
++
++  switch (status)
++    {
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_VALID:
++      gtk_stack_set_visible_child_name (self->status_stack, "fully-subscribed");
++      gtk_widget_hide (GTK_WIDGET (self->subscribe_button));
++      break;
++
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_PARTIALLY_VALID:
++      gtk_stack_set_visible_child_name (self->status_stack, "partly-subscribed");
++      gtk_widget_show (GTK_WIDGET (self->subscribe_button));
++      break;
++
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_DISABLED:
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_NOT_READ:
++      gtk_stack_set_visible_child_name (self->status_stack, "subscription-not-needed");
++      gtk_widget_hide (GTK_WIDGET (self->subscribe_button));
++      break;
++
++    case GSD_SUBMAN_SUBSCRIPTION_STATUS_UNKNOWN:
++    default:
++      gtk_stack_set_visible_child_name (self->status_stack, "not-subscribed");
++      gtk_widget_show (GTK_WIDGET (self->subscribe_button));
++      break;
++    }
++
++  gtk_widget_set_visible (GTK_WIDGET (self->separator),
++                          gtk_widget_get_visible (GTK_WIDGET (self->subscribe_button)));
++}
++
++static ProductData *
++parse_product_variant (GVariant *product_variant)
++{
++  g_autoptr(ProductData) product = g_new0 (ProductData, 1);
++  g_auto(GVariantDict) dict;
++
++  g_variant_dict_init (&dict, product_variant);
++
++  g_variant_dict_lookup (&dict, "product-name", "s", &product->product_name);
++  g_variant_dict_lookup (&dict, "product-id", "s", &product->product_id);
++  g_variant_dict_lookup (&dict, "version", "s", &product->version);
++  g_variant_dict_lookup (&dict, "arch", "s", &product->arch);
++  g_variant_dict_lookup (&dict, "status", "s", &product->status);
++  g_variant_dict_lookup (&dict, "starts", "s", &product->starts);
++  g_variant_dict_lookup (&dict, "ends", "s", &product->ends);
++
++  return g_steal_pointer (&product);
++}
++
++static void
++reload_installed_products (CcSubscriptionDetailsDialog *self)
++{
++  GVariantIter iter_array;
++  GVariant *child;
++  g_autoptr(GError) error = NULL;
++  g_autoptr(GVariant) installed_products_variant = NULL;
++
++  installed_products_variant = g_dbus_proxy_get_cached_property (self->subscription_proxy, "InstalledProducts");
++  if (installed_products_variant == NULL)
++    {
++      g_debug ("Unable to get InstalledProducts dbus property");
++      return;
++    }
++
++  g_ptr_array_set_size (self->products, 0);
++
++  g_variant_iter_init (&iter_array, installed_products_variant);
++  while ((child = g_variant_iter_next_value (&iter_array)) != NULL)
++    {
++      g_autoptr(GVariant) product_variant = g_steal_pointer (&child);
++      g_ptr_array_add (self->products, parse_product_variant (product_variant));
++    }
++}
++
++static void
++subscription_done_cb (GObject      *source_object,
++                      GAsyncResult *res,
++                      gpointer      user_data)
++{
++  CcSubscriptionDetailsDialog *self = (CcSubscriptionDetailsDialog *) user_data;
++  g_autoptr(GVariant) results = NULL;
++  g_autoptr(GError) error = NULL;
++
++  results = g_dbus_proxy_call_finish (G_DBUS_PROXY (source_object),
++                                      res,
++                                      &error);
++  if (results == NULL)
++    {
++      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
++        return;
++
++      g_dbus_error_strip_remote_error (error);
++      gtk_label_set_text (self->error_label, error->message);
++      gtk_revealer_set_reveal_child (self->notification_revealer, TRUE);
++
++      gtk_spinner_stop (self->spinner);
++
++      self->state = DIALOG_STATE_SUBSCRIBE;
++      dialog_reload (self);
++      return;
++    }
++
++  gtk_spinner_stop (self->spinner);
++
++  self->state = DIALOG_STATE_SHOW_DETAILS;
++  dialog_reload (self);
++}
++
++static void
++header_subscribe_button_clicked_cb (CcSubscriptionDetailsDialog *self)
++{
++  gtk_spinner_start (self->spinner);
++
++  self->state = DIALOG_STATE_SUBSCRIBING;
++  dialog_reload (self);
++
++  g_dbus_proxy_call (self->subscription_proxy,
++                     "Attach",
++                     NULL,
++                     G_DBUS_CALL_FLAGS_NONE,
++                     DBUS_TIMEOUT,
++                     self->cancellable,
++                     subscription_done_cb,
++                     self);
++}
++
++static void
++unregistration_done_cb (GObject      *source_object,
++                        GAsyncResult *res,
++                        gpointer      user_data)
++{
++  CcSubscriptionDetailsDialog *self = (CcSubscriptionDetailsDialog *) user_data;
++  g_autoptr(GVariant) results = NULL;
++  g_autoptr(GError) error = NULL;
++
++  results = g_dbus_proxy_call_finish (G_DBUS_PROXY (source_object),
++                                      res,
++                                      &error);
++  if (results == NULL)
++    {
++      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
++        return;
++
++      g_dbus_error_strip_remote_error (error);
++      gtk_label_set_text (self->error_label, error->message);
++      gtk_revealer_set_reveal_child (self->notification_revealer, TRUE);
++
++      gtk_spinner_stop (self->spinner);
++
++      self->state = DIALOG_STATE_UNREGISTER;
++      dialog_reload (self);
++      return;
++    }
++
++  gtk_spinner_stop (self->spinner);
++
++  gtk_dialog_response (GTK_DIALOG (self), GTK_RESPONSE_ACCEPT);
++}
++
++static void
++header_unregister_button_clicked_cb (CcSubscriptionDetailsDialog *self)
++{
++  gtk_spinner_start (self->spinner);
++
++  self->state = DIALOG_STATE_UNREGISTERING;
++  dialog_reload (self);
++
++  g_dbus_proxy_call (self->subscription_proxy,
++                     "Unregister",
++                     NULL,
++                     G_DBUS_CALL_FLAGS_NONE,
++                     DBUS_TIMEOUT,
++                     self->cancellable,
++                     unregistration_done_cb,
++                     self);
++}
++
++static void
++back_button_clicked_cb (CcSubscriptionDetailsDialog *self)
++{
++  gtk_spinner_stop (self->spinner);
++
++  self->state = DIALOG_STATE_SHOW_DETAILS;
++  dialog_reload (self);
++}
++
++static void
++subscribe_button_clicked_cb (CcSubscriptionDetailsDialog *self)
++{
++  self->state = DIALOG_STATE_SUBSCRIBE;
++  dialog_reload (self);
++}
++
++static void
++unregister_button_clicked_cb (CcSubscriptionDetailsDialog *self)
++{
++  self->state = DIALOG_STATE_UNREGISTER;
++  dialog_reload (self);
++}
++
++static void
++dismiss_notification (CcSubscriptionDetailsDialog *self)
++{
++  gtk_revealer_set_reveal_child (self->notification_revealer, FALSE);
++}
++
++static void
++cc_subscription_details_dialog_init (CcSubscriptionDetailsDialog *self)
++{
++  gtk_widget_init_template (GTK_WIDGET (self));
++
++  self->products = g_ptr_array_new_with_free_func ((GDestroyNotify) product_data_free);
++  self->state = DIALOG_STATE_SHOW_DETAILS;
++}
++
++static void
++cc_subscription_details_dialog_dispose (GObject *obj)
++{
++  CcSubscriptionDetailsDialog *self = (CcSubscriptionDetailsDialog *) obj;
++
++  g_cancellable_cancel (self->cancellable);
++  g_clear_object (&self->cancellable);
++  g_clear_object (&self->subscription_proxy);
++
++  G_OBJECT_CLASS (cc_subscription_details_dialog_parent_class)->dispose (obj);
++}
++
++static void
++cc_subscription_details_dialog_finalize (GObject *obj)
++{
++  CcSubscriptionDetailsDialog *self = (CcSubscriptionDetailsDialog *) obj;
++
++  g_clear_pointer (&self->products, g_ptr_array_unref);
++
++  G_OBJECT_CLASS (cc_subscription_details_dialog_parent_class)->finalize (obj);
++}
++
++static void
++cc_subscription_details_dialog_class_init (CcSubscriptionDetailsDialogClass *klass)
++{
++  GObjectClass *object_class = G_OBJECT_CLASS (klass);
++  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
++
++  object_class->dispose = cc_subscription_details_dialog_dispose;
++  object_class->finalize = cc_subscription_details_dialog_finalize;
++
++  gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/control-center/info-overview/cc-subscription-details-dialog.ui");
++
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, back_button);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, spinner);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, header_stack);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, header_subscribe_button);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, header_unregister_button);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, notification_revealer);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, error_label);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, stack);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, status_stack);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, products_box1);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, products_box2);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, products_box3);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, subscribe_button);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, separator);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionDetailsDialog, unregister_button);
++
++  gtk_widget_class_bind_template_callback (widget_class, back_button_clicked_cb);
++  gtk_widget_class_bind_template_callback (widget_class, header_subscribe_button_clicked_cb);
++  gtk_widget_class_bind_template_callback (widget_class, header_unregister_button_clicked_cb);
++  gtk_widget_class_bind_template_callback (widget_class, subscribe_button_clicked_cb);
++  gtk_widget_class_bind_template_callback (widget_class, unregister_button_clicked_cb);
++  gtk_widget_class_bind_template_callback (widget_class, dismiss_notification);
++}
++
++static void
++on_dialog_cancelled (CcSubscriptionDetailsDialog *self)
++{
++  gtk_dialog_response (GTK_DIALOG (self), GTK_RESPONSE_CLOSE);
++}
++
++CcSubscriptionDetailsDialog *
++cc_subscription_details_dialog_new (GDBusProxy *subscription_proxy,
++                                    GCancellable *cancellable)
++{
++  CcSubscriptionDetailsDialog *self;
++
++  self = g_object_new (CC_TYPE_SUBSCRIPTION_DETAILS_DIALOG, "use-header-bar", TRUE, NULL);
++  self->subscription_proxy = g_object_ref (subscription_proxy);
++  self->cancellable = g_object_ref (cancellable);
++
++  g_signal_connect_object (G_OBJECT (self->cancellable),
++                           "cancelled",
++                           G_CALLBACK (on_dialog_cancelled),
++                           self,
++                           G_CONNECT_SWAPPED);
++
++  dialog_reload (self);
++
++  return self;
++}
+diff --git a/panels/info-overview/cc-subscription-details-dialog.h b/panels/info-overview/cc-subscription-details-dialog.h
+new file mode 100644
+index 000000000..f14dd157b
+--- /dev/null
++++ b/panels/info-overview/cc-subscription-details-dialog.h
+@@ -0,0 +1,33 @@
++/* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 8 -*-
++ *
++ * Copyright 2019  Red Hat, Inc,
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, see <http://www.gnu.org/licenses/>.
++ *
++ * Written by: Kalev Lember <klember@redhat.com>
++ */
++
++#pragma once
++
++#include <gtk/gtk.h>
++
++G_BEGIN_DECLS
++
++#define CC_TYPE_SUBSCRIPTION_DETAILS_DIALOG (cc_subscription_details_dialog_get_type ())
++G_DECLARE_FINAL_TYPE (CcSubscriptionDetailsDialog, cc_subscription_details_dialog, CC, SUBSCRIPTION_DETAILS_DIALOG, GtkDialog)
++
++CcSubscriptionDetailsDialog *cc_subscription_details_dialog_new (GDBusProxy   *subscription_proxy,
++                                                                 GCancellable *cancellable);
++
++G_END_DECLS
+diff --git a/panels/info-overview/cc-subscription-details-dialog.ui b/panels/info-overview/cc-subscription-details-dialog.ui
+new file mode 100644
+index 000000000..6cdfc1220
+--- /dev/null
++++ b/panels/info-overview/cc-subscription-details-dialog.ui
+@@ -0,0 +1,425 @@
++<?xml version="1.0"?>
++<interface>
++  <template class="CcSubscriptionDetailsDialog" parent="GtkDialog">
++    <property name="can_focus">False</property>
++    <property name="resizable">False</property>
++    <property name="modal">True</property>
++    <property name="destroy_with_parent">True</property>
++    <property name="type_hint">dialog</property>
++    <property name="title" translatable="yes">Registration Details</property>
++    <property name="use_header_bar">1</property>
++    <child internal-child="headerbar">
++      <object class="GtkHeaderBar">
++        <property name="visible">True</property>
++        <property name="can_focus">False</property>
++        <property name="show_close_button">False</property>
++        <child>
++          <object class="GtkButton" id="back_button">
++            <property name="visible">True</property>
++            <property name="can_focus">True</property>
++            <property name="receives_default">True</property>
++            <property name="valign">center</property>
++            <signal name="clicked" handler="back_button_clicked_cb" object="CcSubscriptionDetailsDialog" swapped="yes"/>
++            <child>
++              <object class="GtkImage">
++                <property name="visible">True</property>
++                <property name="can_focus">False</property>
++                <property name="icon_name">go-previous-symbolic</property>
++              </object>
++            </child>
++            <style>
++              <class name="image-button"/>
++            </style>
++          </object>
++        </child>
++        <child>
++          <object class="GtkStack" id="header_stack">
++            <property name="visible">True</property>
++            <property name="can_focus">False</property>
++            <property name="transition-type">slide-left-right</property>
++            <child>
++              <object class="GtkButton" id="header_unregister_button">
++                <property name="label" translatable="yes">_Unregister</property>
++                <property name="visible">True</property>
++                <property name="can_focus">True</property>
++                <property name="can_default">True</property>
++                <property name="has_default">True</property>
++                <property name="receives_default">True</property>
++                <property name="use_action_appearance">False</property>
++                <property name="use_underline">True</property>
++                <property name="valign">center</property>
++                <signal name="clicked" handler="header_unregister_button_clicked_cb" object="CcSubscriptionDetailsDialog" swapped="yes"/>
++                <style>
++                  <class name="text-button"/>
++                  <class name="destructive-action"/>
++                </style>
++              </object>
++              <packing>
++                <property name="name">unregister</property>
++              </packing>
++            </child>
++            <child>
++              <object class="GtkButton" id="header_subscribe_button">
++                <property name="label" translatable="yes">_Subscribe</property>
++                <property name="visible">True</property>
++                <property name="can_focus">True</property>
++                <property name="can_default">True</property>
++                <property name="has_default">True</property>
++                <property name="receives_default">True</property>
++                <property name="use_action_appearance">False</property>
++                <property name="use_underline">True</property>
++                <property name="valign">center</property>
++                <signal name="clicked" handler="header_subscribe_button_clicked_cb" object="CcSubscriptionDetailsDialog" swapped="yes"/>
++                <style>
++                  <class name="text-button"/>
++                  <class name="suggested-action"/>
++                </style>
++              </object>
++              <packing>
++                <property name="name">subscribe</property>
++              </packing>
++            </child>
++          </object>
++          <packing>
++            <property name="pack_type">end</property>
++          </packing>
++        </child>
++        <child>
++          <object class="GtkSpinner" id="spinner">
++            <property name="visible">True</property>
++            <property name="can_focus">False</property>
++            <property name="valign">center</property>
++            <property name="margin_start">6</property>
++            <property name="margin_end">6</property>
++          </object>
++          <packing>
++            <property name="pack_type">end</property>
++          </packing>
++        </child>
++      </object>
++    </child>
++    <child internal-child="vbox">
++      <object class="GtkBox">
++        <property name="visible">True</property>
++        <property name="can_focus">False</property>
++        <property name="orientation">vertical</property>
++        <property name="border_width">0</property>
++        <child>
++          <object class="GtkOverlay" id="overlay">
++            <property name="visible">True</property>
++            <child type="overlay">
++              <object class="GtkRevealer" id="notification_revealer">
++                <property name="visible">True</property>
++                <property name="halign">fill</property>
++                <property name="hexpand">True</property>
++                <property name="margin_start">20</property>
++                <property name="margin_end">20</property>
++                <property name="valign">start</property>
++                <child>
++                  <object class="GtkBox">
++                    <property name="visible">True</property>
++                    <property name="spacing">6</property>
++                    <style>
++                      <class name="app-notification"/>
++                    </style>
++                    <child>
++                      <object class="GtkBox">
++                        <property name="visible">True</property>
++                        <property name="orientation">vertical</property>
++                        <property name="margin_start">6</property>
++                        <property name="margin_end">6</property>
++                        <property name="hexpand">True</property>
++                        <property name="halign">start</property>
++                        <child>
++                          <object class="GtkLabel">
++                            <property name="visible">True</property>
++                            <property name="halign">start</property>
++                            <property name="wrap">True</property>
++                            <property name="label" translatable="yes">Failed to Unregister System</property>
++                            <attributes>
++                              <attribute name="weight" value="bold"/>
++                            </attributes>
++                          </object>
++                        </child>
++                        <child>
++                          <object class="GtkLabel" id="error_label">
++                            <property name="visible">True</property>
++                            <property name="xalign">0</property>
++                            <property name="halign">start</property>
++                            <property name="wrap">True</property>
++                            <property name="wrap_mode">word-char</property>
++                            <property name="label">Unable to reach developers.redhat.com. Please try again later.</property>
++                          </object>
++                        </child>
++                      </object>
++                    </child>
++                    <child>
++                      <object class="GtkButton" id="dismiss_button">
++                        <property name="visible">True</property>
++                        <property name="valign">start</property>
++                        <signal name="clicked" handler="dismiss_notification" object="CcSubscriptionDetailsDialog" swapped="yes"/>
++                        <style>
++                          <class name="flat"/>
++                        </style>
++                        <child>
++                          <object class="GtkImage">
++                            <property name="visible">True</property>
++                            <property name="icon_name">window-close-symbolic</property>
++                          </object>
++                        </child>
++                      </object>
++                    </child>
++                  </object>
++                </child>
++              </object>
++            </child>
++            <child>
++              <object class="GtkStack" id="stack">
++                <property name="visible">True</property>
++                <property name="can_focus">False</property>
++                <property name="transition-type">slide-left-right</property>
++                <child>
++                  <object class="GtkBox">
++                    <property name="visible">True</property>
++                    <property name="orientation">vertical</property>
++                    <property name="margin_top">24</property>
++                    <property name="margin_start">32</property>
++                    <property name="margin_end">12</property>
++                    <property name="margin_bottom">12</property>
++                    <child>
++                      <object class="GtkStack" id="status_stack">
++                         <property name="visible">True</property>
++                         <property name="can_focus">False</property>
++                         <child>
++                           <object class="GtkLabel">
++                             <property name="visible">True</property>
++                             <property name="can_focus">False</property>
++                             <property name="label" translatable="yes">This system is subscribed to receive software updates.</property>
++                             <property name="width_chars">45</property>
++                             <property name="max_width_chars">45</property>
++                             <property name="xalign">0</property>
++                             <property name="halign">start</property>
++                             <property name="wrap">True</property>
++                             <style>
++                               <class name="dim-label"/>
++                             </style>
++                           </object>
++                           <packing>
++                             <property name="name">fully-subscribed</property>
++                           </packing>
++                         </child>
++                         <child>
++                           <object class="GtkLabel">
++                             <property name="visible">True</property>
++                             <property name="can_focus">False</property>
++                             <property name="label" translatable="yes">This system lacks subscriptions to receive updates for some installed software.</property>
++                             <property name="width_chars">45</property>
++                             <property name="max_width_chars">45</property>
++                             <property name="xalign">0</property>
++                             <property name="halign">start</property>
++                             <property name="wrap">True</property>
++                             <style>
++                               <class name="dim-label"/>
++                             </style>
++                           </object>
++                           <packing>
++                             <property name="name">partly-subscribed</property>
++                           </packing>
++                         </child>
++                         <child>
++                           <object class="GtkLabel">
++                             <property name="visible">True</property>
++                             <property name="can_focus">False</property>
++                             <property name="label" translatable="yes">This system lacks subscriptions to receive software updates.</property>
++                             <property name="width_chars">45</property>
++                             <property name="max_width_chars">45</property>
++                             <property name="xalign">0</property>
++                             <property name="halign">start</property>
++                             <property name="wrap">True</property>
++                             <style>
++                               <class name="dim-label"/>
++                             </style>
++                           </object>
++                           <packing>
++                             <property name="name">not-subscribed</property>
++                           </packing>
++                         </child>
++                         <child>
++                           <object class="GtkLabel">
++                             <property name="visible">True</property>
++                             <property name="can_focus">False</property>
++                             <property name="label" translatable="yes">This system is registered to receive software updates.</property>
++                             <property name="width_chars">45</property>
++                             <property name="max_width_chars">45</property>
++                             <property name="xalign">0</property>
++                             <property name="halign">start</property>
++                             <property name="wrap">True</property>
++                             <style>
++                               <class name="dim-label"/>
++                             </style>
++                           </object>
++                           <packing>
++                             <property name="name">subscription-not-needed</property>
++                           </packing>
++                         </child>
++                         <child>
++                           <object class="GtkLabel">
++                             <property name="visible">True</property>
++                             <property name="can_focus">False</property>
++                             <property name="label" translatable="yes">This system has no supported software installed.</property>
++                             <property name="width_chars">45</property>
++                             <property name="max_width_chars">45</property>
++                             <property name="xalign">0</property>
++                             <property name="halign">start</property>
++                             <property name="wrap">True</property>
++                             <style>
++                               <class name="dim-label"/>
++                             </style>
++                           </object>
++                           <packing>
++                             <property name="name">no-installed-products</property>
++                           </packing>
++                         </child>
++                      </object>
++                    </child>
++                    <child>
++                      <object class="GtkBox" id="products_box1">
++                        <property name="visible">True</property>
++                        <property name="orientation">vertical</property>
++                        <property name="hexpand">True</property>
++                        <property name="margin_top">6</property>
++                        <property name="margin_bottom">6</property>
++                      </object>
++                    </child>
++                    <child>
++                      <object class="GtkBox">
++                        <property name="visible">True</property>
++                        <property name="can_focus">False</property>
++                        <property name="orientation">horizontal</property>
++                        <property name="spacing">12</property>
++                        <property name="halign">end</property>
++                        <child>
++                          <object class="GtkButton" id="unregister_button">
++                            <property name="label" translatable="yes">_Unregister…</property>
++                            <property name="can_focus">True</property>
++                            <property name="use_underline">True</property>
++                            <property name="receives_default">True</property>
++                            <property name="use_action_appearance">False</property>
++                            <property name="halign">end</property>
++                            <property name="visible">True</property>
++                            <signal name="clicked" handler="unregister_button_clicked_cb" object="CcSubscriptionDetailsDialog" swapped="yes"/>
++                            <style>
++                              <class name="text-button"/>
++                              <class name="destructive-action"/>
++                            </style>
++                          </object>
++                        </child>
++                        <child>
++                          <object class="GtkSeparator" id="separator">
++                            <property name="visible">True</property>
++                          </object>
++                        </child>
++                        <child>
++                          <object class="GtkButton" id="subscribe_button">
++                            <property name="label" translatable="yes">_Subscribe…</property>
++                            <property name="can_focus">True</property>
++                            <property name="use_underline">True</property>
++                            <property name="receives_default">True</property>
++                            <property name="use_action_appearance">False</property>
++                            <property name="halign">end</property>
++                            <property name="visible">True</property>
++                            <signal name="clicked" handler="subscribe_button_clicked_cb" object="CcSubscriptionDetailsDialog" swapped="yes"/>
++                            <style>
++                              <class name="text-button"/>
++                              <class name="suggested-action"/>
++                            </style>
++                          </object>
++                        </child>
++                      </object>
++                    </child>
++                  </object>
++                  <packing>
++                    <property name="name">show-details</property>
++                  </packing>
++                </child>
++                <child>
++                  <object class="GtkBox">
++                    <property name="visible">True</property>
++                    <property name="orientation">vertical</property>
++                    <property name="margin_top">24</property>
++                    <property name="margin_start">32</property>
++                    <property name="margin_end">32</property>
++                    <property name="margin_bottom">20</property>
++                    <child>
++                      <object class="GtkLabel">
++                        <property name="visible">True</property>
++                        <property name="can_focus">False</property>
++                        <property name="label" translatable="yes">Subscribing with Red Hat will allow this system to receive software updates.</property>
++                        <property name="width_chars">45</property>
++                        <property name="max_width_chars">45</property>
++                        <property name="xalign">0</property>
++                        <property name="halign">start</property>
++                        <property name="wrap">True</property>
++                      </object>
++                    </child>
++                    <child>
++                      <object class="GtkBox" id="products_box2">
++                        <property name="visible">True</property>
++                        <property name="orientation">vertical</property>
++                        <property name="margin_top">6</property>
++                        <property name="margin_bottom">6</property>
++                        <property name="hexpand">True</property>
++                      </object>
++                    </child>
++                  </object>
++                  <packing>
++                    <property name="name">subscribe</property>
++                  </packing>
++                </child>
++                <child>
++                  <object class="GtkBox">
++                    <property name="visible">True</property>
++                    <property name="orientation">vertical</property>
++                    <property name="margin_top">24</property>
++                    <property name="margin_start">32</property>
++                    <property name="margin_end">32</property>
++                    <property name="margin_bottom">20</property>
++                    <child>
++                      <object class="GtkLabel">
++                        <property name="visible">True</property>
++                        <property name="can_focus">False</property>
++                        <property name="label" translatable="yes">Warning: unregistering this system will result in it no longer receiving software updates.</property>
++                        <property name="width_chars">45</property>
++                        <property name="max_width_chars">45</property>
++                        <property name="xalign">0</property>
++                        <property name="halign">start</property>
++                        <property name="wrap">True</property>
++                      </object>
++                    </child>
++                    <child>
++                      <object class="GtkBox" id="products_box3">
++                        <property name="visible">True</property>
++                        <property name="orientation">vertical</property>
++                        <property name="margin_top">6</property>
++                        <property name="margin_bottom">6</property>
++                        <property name="hexpand">True</property>
++                      </object>
++                    </child>
++                  </object>
++                  <packing>
++                    <property name="name">unregister</property>
++                  </packing>
++                </child>
++              </object>
++            </child>
++          </object>
++          <packing>
++            <property name="expand">False</property>
++            <property name="fill">True</property>
++            <property name="position">0</property>
++          </packing>
++        </child>
++      </object>
++    </child>
++  </template>
++</interface>
+diff --git a/panels/info-overview/cc-subscription-register-dialog.c b/panels/info-overview/cc-subscription-register-dialog.c
+new file mode 100644
+index 000000000..6867a976b
+--- /dev/null
++++ b/panels/info-overview/cc-subscription-register-dialog.c
+@@ -0,0 +1,416 @@
++/* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 8 -*-
++ *
++ * Copyright 2019  Red Hat, Inc,
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, see <http://www.gnu.org/licenses/>.
++ *
++ * Written by: Kalev Lember <klember@redhat.com>
++ */
++
++#include "config.h"
++
++#include <glib.h>
++#include <glib/gi18n.h>
++#include <gtk/gtk.h>
++
++#include "cc-subscription-register-dialog.h"
++
++#define DBUS_TIMEOUT 300000 /* 5 minutes */
++#define SERVER_URL "subscription.rhsm.redhat.com"
++
++typedef enum {
++  DIALOG_STATE_REGISTER,
++  DIALOG_STATE_REGISTERING
++} DialogState;
++
++static void dialog_validate (CcSubscriptionRegisterDialog *self);
++
++struct _CcSubscriptionRegisterDialog
++{
++  GtkDialog       parent_instance;
++
++  DialogState     state;
++  GCancellable   *cancellable;
++  GDBusProxy     *subscription_proxy;
++  gboolean        valid;
++
++  /* template widgets */
++  GtkSpinner     *spinner;
++  GtkButton      *register_button;
++  GtkRevealer    *notification_revealer;
++  GtkLabel       *error_label;
++  GtkRadioButton *default_url_radio;
++  GtkRadioButton *custom_url_radio;
++  GtkRadioButton *register_radio;
++  GtkRadioButton *register_with_activation_keys_radio;
++  GtkStack       *stack;
++  GtkGrid        *register_grid;
++  GtkGrid        *register_with_activation_keys_grid;
++  GtkEntry       *url_label;
++  GtkEntry       *url_entry;
++  GtkEntry       *login_entry;
++  GtkEntry       *password_entry;
++  GtkEntry       *activation_keys_entry;
++  GtkLabel       *organization_label;
++  GtkEntry       *organization_entry;
++  GtkEntry       *organization_entry_with_activation_keys;
++};
++
++G_DEFINE_TYPE (CcSubscriptionRegisterDialog, cc_subscription_register_dialog, GTK_TYPE_DIALOG);
++
++static void
++dialog_reload (CcSubscriptionRegisterDialog *self)
++{
++  gboolean sensitive;
++  gboolean url_entry_enabled;
++
++  switch (self->state)
++    {
++    case DIALOG_STATE_REGISTER:
++      gtk_window_set_title (GTK_WINDOW (self), _("Register System"));
++      gtk_widget_set_sensitive (GTK_WIDGET (self->register_button), self->valid);
++
++      sensitive = TRUE;
++      break;
++
++    case DIALOG_STATE_REGISTERING:
++      gtk_window_set_title (GTK_WINDOW (self), _("Registering System…"));
++      gtk_widget_set_sensitive (GTK_WIDGET (self->register_button), FALSE);
++
++      sensitive = FALSE;
++      break;
++
++    default:
++      g_assert_not_reached ();
++      break;
++    }
++
++  url_entry_enabled = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->custom_url_radio));
++  gtk_widget_set_sensitive (GTK_WIDGET (self->url_entry), sensitive && url_entry_enabled);
++
++  gtk_widget_set_sensitive (GTK_WIDGET (self->default_url_radio), sensitive);
++  gtk_widget_set_sensitive (GTK_WIDGET (self->custom_url_radio), sensitive);
++  gtk_widget_set_sensitive (GTK_WIDGET (self->register_radio), sensitive);
++  gtk_widget_set_sensitive (GTK_WIDGET (self->register_with_activation_keys_radio), sensitive);
++  gtk_widget_set_sensitive (GTK_WIDGET (self->login_entry), sensitive);
++  gtk_widget_set_sensitive (GTK_WIDGET (self->password_entry), sensitive);
++  gtk_widget_set_sensitive (GTK_WIDGET (self->activation_keys_entry), sensitive);
++  gtk_widget_set_sensitive (GTK_WIDGET (self->password_entry), sensitive);
++  gtk_widget_set_sensitive (GTK_WIDGET (self->organization_entry), sensitive);
++  gtk_widget_set_sensitive (GTK_WIDGET (self->organization_entry_with_activation_keys), sensitive);
++}
++
++static void
++custom_url_radio_toggled_cb (CcSubscriptionRegisterDialog *self)
++{
++  gboolean active;
++
++  active = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->custom_url_radio));
++  if (active)
++    {
++      gtk_widget_set_sensitive (GTK_WIDGET (self->url_entry), TRUE);
++      gtk_widget_set_sensitive (GTK_WIDGET (self->url_label), TRUE);
++
++      gtk_entry_set_text (self->url_entry, "");
++      gtk_widget_grab_focus (GTK_WIDGET (self->url_entry));
++    }
++  else
++    {
++      gtk_widget_set_sensitive (GTK_WIDGET (self->url_entry), FALSE);
++      gtk_widget_set_sensitive (GTK_WIDGET (self->url_label), FALSE);
++
++      gtk_entry_set_text (self->url_entry, SERVER_URL);
++    }
++
++  dialog_validate (self);
++}
++
++static void
++register_with_activation_keys_radio_toggled_cb (CcSubscriptionRegisterDialog *self)
++{
++  gint active;
++
++  active = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->register_with_activation_keys_radio));
++  if (active)
++    {
++      gtk_stack_set_visible_child_name (self->stack, "register-with-activation-keys");
++      gtk_widget_grab_focus (GTK_WIDGET (self->activation_keys_entry));
++    }
++  else
++    {
++      gtk_stack_set_visible_child_name (self->stack, "register");
++      gtk_widget_grab_focus (GTK_WIDGET (self->login_entry));
++    }
++
++  dialog_validate (self);
++}
++
++static void
++dialog_validate (CcSubscriptionRegisterDialog *self)
++{
++  gboolean valid_url = TRUE;
++  gboolean valid_login = TRUE;
++  gboolean valid_password = TRUE;
++  gboolean valid_activation_keys = TRUE;
++  gboolean valid_organization = TRUE;
++
++  /* require url when custom url radio is selected */
++  if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->custom_url_radio)))
++    {
++      const gchar *url;
++
++      url = gtk_entry_get_text (self->url_entry);
++      valid_url = url != NULL && strlen (url) != 0;
++    }
++
++  /* activation keys radio selected */
++  if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->register_with_activation_keys_radio)))
++    {
++      const gchar *activation_keys;
++      const gchar *organization;
++
++      /* require activation keys */
++      activation_keys = gtk_entry_get_text (self->activation_keys_entry);
++      valid_activation_keys = activation_keys != NULL && strlen (activation_keys) != 0;
++
++      /* organization is required when using activation keys */
++      organization = gtk_entry_get_text (self->organization_entry_with_activation_keys);
++      valid_organization = organization != NULL && strlen (organization) != 0;
++
++      /* username/password radio selected */
++    }
++  else
++    {
++      const gchar *login;
++      const gchar *password;
++
++      /* require login */
++      login = gtk_entry_get_text (self->login_entry);
++      valid_login = login != NULL && strlen (login) != 0;
++
++      /* require password */
++      password = gtk_entry_get_text (self->password_entry);
++      valid_password = password != NULL && strlen (password) != 0;
++    }
++
++  self->valid = valid_url && valid_login && valid_password && valid_activation_keys && valid_organization;
++  gtk_widget_set_sensitive (GTK_WIDGET (self->register_button), self->valid);
++}
++
++static void
++registration_done_cb (GObject      *source_object,
++                      GAsyncResult *res,
++                      gpointer      user_data)
++{
++  CcSubscriptionRegisterDialog *self = (CcSubscriptionRegisterDialog *) user_data;
++  g_autoptr(GVariant) results = NULL;
++  g_autoptr(GError) error = NULL;
++
++  results = g_dbus_proxy_call_finish (G_DBUS_PROXY (source_object),
++                                      res,
++                                      &error);
++  if (results == NULL)
++    {
++      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
++        return;
++
++      g_dbus_error_strip_remote_error (error);
++      gtk_label_set_text (self->error_label, error->message);
++      gtk_revealer_set_reveal_child (self->notification_revealer, TRUE);
++
++      gtk_spinner_stop (self->spinner);
++
++      self->state = DIALOG_STATE_REGISTER;
++      dialog_reload (self);
++      return;
++    }
++
++  gtk_spinner_stop (self->spinner);
++  gtk_dialog_response (GTK_DIALOG (self), GTK_RESPONSE_ACCEPT);
++  return;
++}
++
++static void
++subscription_register_with_activation_keys (CcSubscriptionRegisterDialog *self)
++{
++  g_autoptr(GVariantBuilder) options_builder = NULL;
++  const gchar *hostname;
++  const gchar *organization;
++  const gchar *activation_keys;
++
++  hostname = gtk_entry_get_text (self->url_entry);
++  organization = gtk_entry_get_text (self->organization_entry_with_activation_keys);
++  activation_keys = gtk_entry_get_text (self->activation_keys_entry);
++
++  options_builder = g_variant_builder_new (G_VARIANT_TYPE ("a{sv}"));
++  g_variant_builder_add (options_builder, "{sv}", "kind", g_variant_new_string ("key"));
++  g_variant_builder_add (options_builder, "{sv}", "hostname", g_variant_new_string (hostname));
++  g_variant_builder_add (options_builder, "{sv}", "organisation", g_variant_new_string (organization));
++  g_variant_builder_add (options_builder, "{sv}", "activation-key", g_variant_new_string (activation_keys));
++
++  g_dbus_proxy_call (self->subscription_proxy,
++                     "Register",
++                     g_variant_new ("(a{sv})",
++                                    options_builder),
++                     G_DBUS_CALL_FLAGS_NONE,
++                     DBUS_TIMEOUT,
++                     self->cancellable,
++                     registration_done_cb,
++                     self);
++}
++
++static void
++subscription_register_with_username (CcSubscriptionRegisterDialog *self)
++{
++  g_autoptr(GVariantBuilder) options_builder = NULL;
++  const gchar *hostname;
++  const gchar *organization;
++  const gchar *username;
++  const gchar *password;
++
++  hostname = gtk_entry_get_text (self->url_entry);
++  organization = gtk_entry_get_text (self->organization_entry);
++  username = gtk_entry_get_text (self->login_entry);
++  password = gtk_entry_get_text (self->password_entry);
++
++  options_builder = g_variant_builder_new (G_VARIANT_TYPE ("a{sv}"));
++  g_variant_builder_add (options_builder, "{sv}", "kind", g_variant_new_string ("username"));
++  g_variant_builder_add (options_builder, "{sv}", "hostname", g_variant_new_string (hostname));
++  g_variant_builder_add (options_builder, "{sv}", "organisation", g_variant_new_string (organization));
++  g_variant_builder_add (options_builder, "{sv}", "username", g_variant_new_string (username));
++  g_variant_builder_add (options_builder, "{sv}", "password", g_variant_new_string (password));
++
++  g_dbus_proxy_call (self->subscription_proxy,
++                     "Register",
++                     g_variant_new ("(a{sv})", options_builder),
++                     G_DBUS_CALL_FLAGS_NONE,
++                     DBUS_TIMEOUT,
++                     self->cancellable,
++                     registration_done_cb,
++                     self);
++}
++
++static void
++register_button_clicked_cb (CcSubscriptionRegisterDialog *self)
++{
++  if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->register_with_activation_keys_radio)))
++    subscription_register_with_activation_keys (self);
++  else
++    subscription_register_with_username (self);
++
++  gtk_spinner_start (self->spinner);
++
++  self->state = DIALOG_STATE_REGISTERING;
++  dialog_reload (self);
++}
++
++static void
++dismiss_notification (CcSubscriptionRegisterDialog *self)
++{
++  gtk_revealer_set_reveal_child (self->notification_revealer, FALSE);
++}
++
++static void
++cc_subscription_register_dialog_init (CcSubscriptionRegisterDialog *self)
++{
++  gtk_widget_init_template (GTK_WIDGET (self));
++
++  self->state = DIALOG_STATE_REGISTER;
++
++  gtk_entry_set_text (self->url_entry, SERVER_URL);
++  gtk_widget_grab_focus (GTK_WIDGET (self->login_entry));
++  dialog_validate (self);
++  dialog_reload (self);
++}
++
++static void
++cc_subscription_register_dialog_dispose (GObject *obj)
++{
++  CcSubscriptionRegisterDialog *self = (CcSubscriptionRegisterDialog *) obj;
++
++  g_cancellable_cancel (self->cancellable);
++  g_clear_object (&self->cancellable);
++  g_clear_object (&self->subscription_proxy);
++
++  G_OBJECT_CLASS (cc_subscription_register_dialog_parent_class)->dispose (obj);
++}
++
++static void
++cc_subscription_register_dialog_finalize (GObject *obj)
++{
++  G_OBJECT_CLASS (cc_subscription_register_dialog_parent_class)->finalize (obj);
++}
++
++static void
++cc_subscription_register_dialog_class_init (CcSubscriptionRegisterDialogClass *klass)
++{
++  GObjectClass *object_class = G_OBJECT_CLASS (klass);
++  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
++
++  object_class->dispose = cc_subscription_register_dialog_dispose;
++  object_class->finalize = cc_subscription_register_dialog_finalize;
++
++  gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/control-center/info-overview/cc-subscription-register-dialog.ui");
++
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, spinner);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, register_button);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, notification_revealer);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, error_label);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, default_url_radio);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, custom_url_radio);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, register_radio);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, register_with_activation_keys_radio);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, stack);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, register_grid);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, register_with_activation_keys_grid);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, url_label);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, url_entry);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, login_entry);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, password_entry);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, activation_keys_entry);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, organization_label);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, organization_entry);
++  gtk_widget_class_bind_template_child (widget_class, CcSubscriptionRegisterDialog, organization_entry_with_activation_keys);
++
++  gtk_widget_class_bind_template_callback (widget_class, dialog_validate);
++  gtk_widget_class_bind_template_callback (widget_class, register_button_clicked_cb);
++  gtk_widget_class_bind_template_callback (widget_class, dismiss_notification);
++  gtk_widget_class_bind_template_callback (widget_class, custom_url_radio_toggled_cb);
++  gtk_widget_class_bind_template_callback (widget_class, register_with_activation_keys_radio_toggled_cb);
++}
++
++static void
++on_dialog_cancelled (CcSubscriptionRegisterDialog *self)
++{
++  gtk_dialog_response (GTK_DIALOG (self), GTK_RESPONSE_CLOSE);
++}
++
++CcSubscriptionRegisterDialog *
++cc_subscription_register_dialog_new (GDBusProxy *subscription_proxy,
++                                     GCancellable *cancellable)
++{
++  CcSubscriptionRegisterDialog *self;
++
++  self = g_object_new (CC_TYPE_SUBSCRIPTION_REGISTER_DIALOG, "use-header-bar", TRUE, NULL);
++  self->subscription_proxy = g_object_ref (subscription_proxy);
++  self->cancellable = g_object_ref (cancellable);
++
++  g_signal_connect_object (G_OBJECT (self->cancellable),
++                           "cancelled",
++                           G_CALLBACK (on_dialog_cancelled),
++                           self,
++                           G_CONNECT_SWAPPED);
++
++  return self;
++}
+diff --git a/panels/info-overview/cc-subscription-register-dialog.h b/panels/info-overview/cc-subscription-register-dialog.h
+new file mode 100644
+index 000000000..31c254084
+--- /dev/null
++++ b/panels/info-overview/cc-subscription-register-dialog.h
+@@ -0,0 +1,33 @@
++/* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 8 -*-
++ *
++ * Copyright 2019  Red Hat, Inc,
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, see <http://www.gnu.org/licenses/>.
++ *
++ * Written by: Kalev Lember <klember@redhat.com>
++ */
++
++#pragma once
++
++#include <gtk/gtk.h>
++
++G_BEGIN_DECLS
++
++#define CC_TYPE_SUBSCRIPTION_REGISTER_DIALOG (cc_subscription_register_dialog_get_type ())
++G_DECLARE_FINAL_TYPE (CcSubscriptionRegisterDialog, cc_subscription_register_dialog, CC, SUBSCRIPTION_REGISTER_DIALOG, GtkDialog)
++
++CcSubscriptionRegisterDialog *cc_subscription_register_dialog_new (GDBusProxy *subscription_proxy,
++                                                                   GCancellable *cancellable);
++
++G_END_DECLS
+diff --git a/panels/info-overview/cc-subscription-register-dialog.ui b/panels/info-overview/cc-subscription-register-dialog.ui
+new file mode 100644
+index 000000000..21e317b41
+--- /dev/null
++++ b/panels/info-overview/cc-subscription-register-dialog.ui
+@@ -0,0 +1,623 @@
++<?xml version="1.0"?>
++<interface>
++  <template class="CcSubscriptionRegisterDialog" parent="GtkDialog">
++    <property name="can_focus">False</property>
++    <property name="resizable">False</property>
++    <property name="modal">True</property>
++    <property name="destroy_with_parent">True</property>
++    <property name="type_hint">dialog</property>
++    <property name="title" translatable="yes">Register System</property>
++    <property name="use_header_bar">1</property>
++    <child internal-child="headerbar">
++      <object class="GtkHeaderBar">
++        <property name="visible">True</property>
++        <property name="can_focus">False</property>
++        <property name="show_close_button">False</property>
++        <child>
++          <object class="GtkButton" id="cancel_button">
++            <property name="label" translatable="yes">_Cancel</property>
++            <property name="visible">True</property>
++            <property name="visible">True</property>
++            <property name="can_focus">True</property>
++            <property name="can_default">True</property>
++            <property name="receives_default">True</property>
++            <property name="use_action_appearance">False</property>
++            <property name="use_underline">True</property>
++            <property name="valign">center</property>
++            <style>
++              <class name="text-button"/>
++            </style>
++          </object>
++          <packing>
++            <property name="pack_type">start</property>
++          </packing>
++        </child>
++        <child>
++          <object class="GtkButton" id="register_button">
++            <property name="label" translatable="yes">_Register</property>
++            <property name="visible">True</property>
++            <property name="can_focus">True</property>
++            <property name="can_default">True</property>
++            <property name="has_default">True</property>
++            <property name="receives_default">True</property>
++            <property name="use_action_appearance">False</property>
++            <property name="use_underline">True</property>
++            <property name="valign">center</property>
++            <signal name="clicked" handler="register_button_clicked_cb" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++            <style>
++              <class name="text-button"/>
++              <class name="suggested-action"/>
++            </style>
++          </object>
++          <packing>
++            <property name="pack_type">end</property>
++          </packing>
++        </child>
++        <child>
++          <object class="GtkSpinner" id="spinner">
++            <property name="visible">True</property>
++            <property name="can_focus">False</property>
++            <property name="valign">center</property>
++            <property name="margin_start">6</property>
++            <property name="margin_end">6</property>
++          </object>
++          <packing>
++            <property name="pack_type">end</property>
++          </packing>
++        </child>
++      </object>
++    </child>
++    <child internal-child="vbox">
++      <object class="GtkBox">
++        <property name="visible">True</property>
++        <property name="can_focus">False</property>
++        <property name="orientation">vertical</property>
++        <property name="border_width">0</property>
++        <child>
++          <object class="GtkOverlay" id="overlay">
++            <property name="visible">True</property>
++            <child type="overlay">
++              <object class="GtkRevealer" id="notification_revealer">
++                <property name="visible">True</property>
++                <property name="halign">fill</property>
++                <property name="hexpand">True</property>
++                <property name="margin_start">20</property>
++                <property name="margin_end">20</property>
++                <property name="valign">start</property>
++                <child>
++                  <object class="GtkBox">
++                    <property name="visible">True</property>
++                    <property name="spacing">6</property>
++                    <style>
++                      <class name="app-notification"/>
++                    </style>
++                    <child>
++                      <object class="GtkBox">
++                        <property name="visible">True</property>
++                        <property name="orientation">vertical</property>
++                        <property name="margin_start">6</property>
++                        <property name="margin_end">6</property>
++                        <property name="hexpand">True</property>
++                        <property name="halign">start</property>
++                        <child>
++                          <object class="GtkLabel">
++                            <property name="visible">True</property>
++                            <property name="halign">start</property>
++                            <property name="wrap">True</property>
++                            <property name="label" translatable="yes">Failed to Register System</property>
++                            <attributes>
++                              <attribute name="weight" value="bold"/>
++                            </attributes>
++                          </object>
++                        </child>
++                        <child>
++                          <object class="GtkLabel" id="error_label">
++                            <property name="visible">True</property>
++                            <property name="xalign">0</property>
++                            <property name="halign">start</property>
++                            <property name="wrap">True</property>
++                            <property name="wrap_mode">word-char</property>
++                            <property name="label">Unable to reach developers.redhat.com. Please try again later.</property>
++                          </object>
++                        </child>
++                      </object>
++                    </child>
++                    <child>
++                      <object class="GtkButton" id="dismiss_button">
++                        <property name="visible">True</property>
++                        <property name="valign">start</property>
++                        <signal name="clicked" handler="dismiss_notification" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                        <style>
++                          <class name="flat"/>
++                        </style>
++                        <child>
++                          <object class="GtkImage">
++                            <property name="visible">True</property>
++                            <property name="icon_name">window-close-symbolic</property>
++                          </object>
++                        </child>
++                      </object>
++                    </child>
++                  </object>
++                </child>
++              </object>
++            </child>
++            <child>
++              <object class="GtkGrid">
++                <property name="visible">True</property>
++                <property name="hexpand">True</property>
++                <property name="column_spacing">6</property>
++                <property name="row_spacing">6</property>
++                <property name="margin_top">24</property>
++                <property name="margin_start">32</property>
++                <property name="margin_end">32</property>
++                <property name="margin_bottom">20</property>
++                <child>
++                  <object class="GtkLabel">
++                    <property name="visible">True</property>
++                    <property name="can_focus">False</property>
++                    <property name="label" translatable="yes">Register this system with Red Hat to receive software updates.</property>
++                    <property name="width_chars">45</property>
++                    <property name="max_width_chars">45</property>
++                    <property name="xalign">0</property>
++                    <property name="halign">start</property>
++                    <property name="wrap">True</property>
++                    <style>
++                      <class name="dim-label"/>
++                    </style>
++                  </object>
++                  <packing>
++                    <property name="left_attach">0</property>
++                    <property name="top_attach">0</property>
++                    <property name="width">2</property>
++                  </packing>
++                </child>
++                <child>
++                  <object class="GtkLabel">
++                    <property name="visible">True</property>
++                    <property name="can_focus">False</property>
++                    <property name="label" translatable="yes">Registration Server</property>
++                    <property name="margin_top">12</property>
++                    <property name="halign">start</property>
++                    <attributes>
++                      <attribute name="weight" value="bold"/>
++                    </attributes>
++                  </object>
++                  <packing>
++                    <property name="left_attach">0</property>
++                    <property name="top_attach">1</property>
++                    <property name="width">2</property>
++                  </packing>
++                </child>
++                <child>
++                  <object class="GtkBox">
++                    <property name="visible">True</property>
++                    <property name="orientation">vertical</property>
++                    <property name="margin_bottom">3</property>
++                    <child>
++                      <object class="GtkRadioButton" id="default_url_radio">
++                        <property name="label" translatable="yes">Red Hat</property>
++                        <property name="visible">True</property>
++                        <property name="can_focus">True</property>
++                        <property name="receives_default">False</property>
++                        <property name="active">True</property>
++                        <property name="draw_indicator">True</property>
++                      </object>
++                      <packing>
++                        <property name="position">0</property>
++                      </packing>
++                    </child>
++                    <child>
++                      <object class="GtkRadioButton" id="custom_url_radio">
++                        <property name="label" translatable="yes">Custom Address</property>
++                        <property name="visible">True</property>
++                        <property name="can_focus">True</property>
++                        <property name="receives_default">False</property>
++                        <property name="active">True</property>
++                        <property name="draw_indicator">True</property>
++                        <property name="group">default_url_radio</property>
++                        <signal name="toggled" handler="custom_url_radio_toggled_cb" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                      </object>
++                      <packing>
++                        <property name="position">1</property>
++                      </packing>
++                    </child>
++                  </object>
++                  <packing>
++                    <property name="left_attach">0</property>
++                    <property name="top_attach">2</property>
++                    <property name="width">3</property>
++                  </packing>
++                </child>
++                <child>
++                  <object class="GtkLabel" id="url_label">
++                    <property name="visible">True</property>
++                    <property name="xalign">1</property>
++                    <property name="label" translatable="yes">_URL</property>
++                    <property name="sensitive">False</property>
++                    <property name="use_underline">True</property>
++                    <property name="mnemonic_widget">url_entry</property>
++                    <style>
++                      <class name="dim-label"/>
++                    </style>
++                  </object>
++                  <packing>
++                    <property name="left_attach">0</property>
++                    <property name="top_attach">3</property>
++                  </packing>
++                </child>
++                <child>
++                  <object class="GtkEntry" id="url_entry">
++                    <property name="visible">True</property>
++                    <property name="sensitive">False</property>
++                    <property name="max-length">255</property>
++                    <property name="can_focus">True</property>
++                    <property name="activates_default">True</property>
++                    <property name="hexpand">True</property>
++                    <property name="has_focus">True</property>
++                    <signal name="changed" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                    <signal name="activate" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                  </object>
++                  <packing>
++                    <property name="left_attach">1</property>
++                    <property name="top_attach">3</property>
++                  </packing>
++                </child>
++                <child>
++                  <object class="GtkLabel">
++                    <property name="visible">True</property>
++                    <property name="can_focus">False</property>
++                    <property name="label" translatable="yes">Registration Type</property>
++                    <property name="margin_top">12</property>
++                    <property name="halign">start</property>
++                    <attributes>
++                      <attribute name="weight" value="bold"/>
++                    </attributes>
++                  </object>
++                  <packing>
++                    <property name="left_attach">0</property>
++                    <property name="top_attach">4</property>
++                    <property name="width">2</property>
++                  </packing>
++                </child>
++                <child>
++                  <object class="GtkBox">
++                    <property name="visible">True</property>
++                    <property name="orientation">vertical</property>
++                    <child>
++                      <object class="GtkRadioButton" id="register_radio">
++                        <property name="label" translatable="yes">Red Hat Account</property>
++                        <property name="visible">True</property>
++                        <property name="can_focus">True</property>
++                        <property name="receives_default">False</property>
++                        <property name="active">True</property>
++                        <property name="draw_indicator">True</property>
++                      </object>
++                      <packing>
++                        <property name="position">0</property>
++                      </packing>
++                    </child>
++                    <child>
++                      <object class="GtkRadioButton" id="register_with_activation_keys_radio">
++                        <property name="label" translatable="yes">Activation Keys</property>
++                        <property name="visible">True</property>
++                        <property name="can_focus">True</property>
++                        <property name="receives_default">False</property>
++                        <property name="active">True</property>
++                        <property name="draw_indicator">True</property>
++                        <property name="group">register_radio</property>
++                        <signal name="toggled" handler="register_with_activation_keys_radio_toggled_cb" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                      </object>
++                      <packing>
++                        <property name="position">1</property>
++                      </packing>
++                    </child>
++                  </object>
++                  <packing>
++                    <property name="left_attach">0</property>
++                    <property name="top_attach">5</property>
++                    <property name="width">3</property>
++                  </packing>
++                </child>
++                <child>
++                  <object class="GtkStack" id="stack">
++                    <property name="visible">True</property>
++                    <property name="can_focus">False</property>
++                    <property name="transition-type">none</property>
++                    <child>
++                      <object class="GtkGrid" id="register_grid">
++                        <property name="visible">True</property>
++                        <property name="hexpand">True</property>
++                        <property name="column_spacing">6</property>
++                        <property name="row_spacing">6</property>
++                        <child>
++                          <object class="GtkLabel">
++                            <property name="visible">True</property>
++                            <property name="can_focus">False</property>
++                            <property name="label" translatable="yes">Registration Details</property>
++                            <property name="margin_top">12</property>
++                            <property name="margin_bottom">6</property>
++                            <property name="halign">start</property>
++                            <attributes>
++                              <attribute name="weight" value="bold"/>
++                            </attributes>
++                          </object>
++                          <packing>
++                            <property name="left_attach">0</property>
++                            <property name="top_attach">0</property>
++                            <property name="width">2</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkLabel" id="login_label">
++                            <property name="visible">True</property>
++                            <property name="xalign">1</property>
++                            <property name="label" translatable="yes">_Login</property>
++                            <property name="use_underline">True</property>
++                            <property name="mnemonic_widget">login_entry</property>
++                            <style>
++                              <class name="dim-label"/>
++                            </style>
++                          </object>
++                          <packing>
++                            <property name="left_attach">0</property>
++                            <property name="top_attach">2</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkEntry" id="login_entry">
++                            <property name="visible">True</property>
++                            <property name="max-length">255</property>
++                            <property name="can_focus">True</property>
++                            <property name="activates_default">True</property>
++                            <property name="hexpand">True</property>
++                            <property name="has_focus">True</property>
++                            <signal name="changed" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                            <signal name="activate" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                          </object>
++                          <packing>
++                            <property name="left_attach">1</property>
++                            <property name="top_attach">2</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkLabel" id="password_label">
++                            <property name="visible">True</property>
++                            <property name="can_focus">False</property>
++                            <property name="xalign">1</property>
++                            <property name="label" translatable="yes">_Password</property>
++                            <property name="use_underline">True</property>
++                            <property name="mnemonic_widget">password_entry</property>
++                            <style>
++                              <class name="dim-label"/>
++                            </style>
++                          </object>
++                          <packing>
++                            <property name="left_attach">0</property>
++                            <property name="top_attach">3</property>
++                            <property name="width">1</property>
++                            <property name="height">1</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkEntry" id="password_entry">
++                            <property name="visible">True</property>
++                            <property name="can_focus">True</property>
++                            <property name="has_tooltip">True</property>
++                            <property name="visibility">False</property>
++                            <property name="invisible_char">●</property>
++                            <property name="invisible_char_set">True</property>
++                            <property name="hexpand">True</property>
++                            <property name="activates_default">True</property>
++                            <property name="input_purpose">password</property>
++                            <signal name="notify::text" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                            <signal name="activate" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                          </object>
++                          <packing>
++                            <property name="left_attach">1</property>
++                            <property name="top_attach">3</property>
++                            <property name="width">1</property>
++                            <property name="height">1</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkLabel" id="organization_label">
++                            <property name="visible">True</property>
++                            <property name="xalign">1</property>
++                            <property name="label" translatable="yes">_Organization</property>
++                            <property name="use_underline">True</property>
++                            <property name="mnemonic_widget">organization_entry</property>
++                            <style>
++                              <class name="dim-label"/>
++                            </style>
++                          </object>
++                          <packing>
++                            <property name="left_attach">0</property>
++                            <property name="top_attach">4</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkEntry" id="organization_entry">
++                            <property name="visible">True</property>
++                            <property name="max-length">255</property>
++                            <property name="can_focus">True</property>
++                            <property name="activates_default">True</property>
++                            <property name="hexpand">True</property>
++                            <property name="has_focus">True</property>
++                            <signal name="changed" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                            <signal name="activate" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                          </object>
++                          <packing>
++                            <property name="left_attach">1</property>
++                            <property name="top_attach">4</property>
++                          </packing>
++                        </child>
++                      </object>
++                      <packing>
++                        <property name="name">register</property>
++                      </packing>
++                    </child>
++                    <child>
++                      <object class="GtkGrid" id="register_with_activation_keys_grid">
++                        <property name="visible">True</property>
++                        <property name="hexpand">True</property>
++                        <property name="column_spacing">6</property>
++                        <property name="row_spacing">6</property>
++                        <child>
++                          <object class="GtkLabel">
++                            <property name="visible">True</property>
++                            <property name="can_focus">False</property>
++                            <property name="label" translatable="yes">Registration Details</property>
++                            <property name="margin_top">12</property>
++                            <property name="halign">start</property>
++                            <attributes>
++                              <attribute name="weight" value="bold"/>
++                            </attributes>
++                          </object>
++                          <packing>
++                            <property name="left_attach">0</property>
++                            <property name="top_attach">0</property>
++                            <property name="width">2</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkLabel">
++                            <property name="visible">True</property>
++                            <property name="can_focus">False</property>
++                            <property name="label" translatable="yes">Enter comma separated activation key(s). If the activation keys have conflicting settings, the rightmost key takes precedence.</property>
++                            <property name="width_chars">45</property>
++                            <property name="max_width_chars">45</property>
++                            <property name="wrap">True</property>
++                            <property name="xalign">0</property>
++                            <property name="halign">start</property>
++                            <property name="margin_bottom">6</property>
++                            <style>
++                              <class name="dim-label"/>
++                            </style>
++                          </object>
++                          <packing>
++                            <property name="left_attach">0</property>
++                            <property name="top_attach">1</property>
++                            <property name="width">2</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkLabel" id="activation_keys_label">
++                            <property name="visible">True</property>
++                            <property name="xalign">1</property>
++                            <property name="label" translatable="yes">_Activation Keys</property>
++                            <property name="use_underline">True</property>
++                            <property name="mnemonic_widget">activation_keys_entry</property>
++                            <style>
++                              <class name="dim-label"/>
++                            </style>
++                          </object>
++                          <packing>
++                            <property name="left_attach">0</property>
++                            <property name="top_attach">2</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkEntry" id="activation_keys_entry">
++                            <property name="visible">True</property>
++                            <property name="max-length">255</property>
++                            <property name="can_focus">True</property>
++                            <property name="activates_default">True</property>
++                            <property name="hexpand">True</property>
++                            <property name="has_focus">True</property>
++                            <signal name="changed" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                            <signal name="activate" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                          </object>
++                          <packing>
++                            <property name="left_attach">1</property>
++                            <property name="top_attach">2</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkLabel" id="organization_label_with_activation_keys">
++                            <property name="visible">True</property>
++                            <property name="xalign">1</property>
++                            <property name="label" translatable="yes">_Organization</property>
++                            <property name="use_underline">True</property>
++                            <property name="mnemonic_widget">organization_entry_with_activation_keys</property>
++                            <style>
++                              <class name="dim-label"/>
++                            </style>
++                          </object>
++                          <packing>
++                            <property name="left_attach">0</property>
++                            <property name="top_attach">3</property>
++                          </packing>
++                        </child>
++                        <child>
++                          <object class="GtkEntry" id="organization_entry_with_activation_keys">
++                            <property name="visible">True</property>
++                            <property name="max-length">255</property>
++                            <property name="can_focus">True</property>
++                            <property name="activates_default">True</property>
++                            <property name="hexpand">True</property>
++                            <property name="has_focus">True</property>
++                            <signal name="changed" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                            <signal name="activate" handler="dialog_validate" object="CcSubscriptionRegisterDialog" swapped="yes"/>
++                          </object>
++                          <packing>
++                            <property name="left_attach">1</property>
++                            <property name="top_attach">3</property>
++                          </packing>
++                        </child>
++                      </object>
++                      <packing>
++                        <property name="name">register-with-activation-keys</property>
++                      </packing>
++                    </child>
++                  </object>
++                  <packing>
++                    <property name="left_attach">0</property>
++                    <property name="top_attach">8</property>
++                    <property name="width">2</property>
++                  </packing>
++                </child>
++              </object>
++            </child>
++          </object>
++          <packing>
++            <property name="expand">False</property>
++            <property name="fill">True</property>
++            <property name="position">0</property>
++          </packing>
++        </child>
++      </object>
++    </child>
++    <action-widgets>
++      <action-widget response="-6">cancel_button</action-widget>
++    </action-widgets>
++  </template>
++  <object class="GtkSizeGroup">
++    <widgets>
++      <widget name="url_label"/>
++      <widget name="login_label"/>
++      <widget name="password_label"/>
++      <widget name="activation_keys_label"/>
++      <widget name="organization_label"/>
++      <widget name="organization_label_with_activation_keys"/>
++    </widgets>
++  </object>
++  <object class="GtkSizeGroup">
++    <widgets>
++      <widget name="url_entry"/>
++      <widget name="login_entry"/>
++      <widget name="password_entry"/>
++      <widget name="activation_keys_entry"/>
++      <widget name="password_entry"/>
++      <widget name="organization_entry"/>
++      <widget name="organization_entry_with_activation_keys"/>
++    </widgets>
++  </object>
++  <object class="GtkSizeGroup">
++    <property name="mode">horizontal</property>
++    <widgets>
++      <widget name="register_button"/>
++      <widget name="cancel_button"/>
++    </widgets>
++  </object>
++</interface>
+diff --git a/panels/info-overview/info-overview.gresource.xml b/panels/info-overview/info-overview.gresource.xml
+index 83806e0ad..e68944931 100644
+--- a/panels/info-overview/info-overview.gresource.xml
++++ b/panels/info-overview/info-overview.gresource.xml
+@@ -2,6 +2,8 @@
+ <gresources>
+   <gresource prefix="/org/gnome/control-center/info-overview">
+     <file preprocess="xml-stripblanks">cc-info-overview-panel.ui</file>
++    <file preprocess="xml-stripblanks">cc-subscription-details-dialog.ui</file>
++    <file preprocess="xml-stripblanks">cc-subscription-register-dialog.ui</file>
+     <file>GnomeLogoVerticalMedium.svg</file>
+   </gresource>
+ </gresources>
+diff --git a/panels/info-overview/meson.build b/panels/info-overview/meson.build
+index 14663f24c..1c9adb35c 100644
+--- a/panels/info-overview/meson.build
++++ b/panels/info-overview/meson.build
+@@ -24,12 +24,16 @@ cflags += [
+ 
+ sources = files(
+   'cc-info-overview-panel.c',
++  'cc-subscription-details-dialog.c',
++  'cc-subscription-register-dialog.c',
+   'info-cleanup.c'
+ )
+ 
+ resource_data = files(
+   'GnomeLogoVerticalMedium.svg',
+-  'cc-info-overview-panel.ui'
++  'cc-info-overview-panel.ui',
++  'cc-subscription-details-dialog.ui',
++  'cc-subscription-register-dialog.ui'
+ )
+ 
+ sources += gnome.compile_resources(
+diff --git a/po/POTFILES.in b/po/POTFILES.in
+index 5f7e8d49a..6063b50dd 100644
+--- a/po/POTFILES.in
++++ b/po/POTFILES.in
+@@ -50,6 +50,10 @@ panels/display/cc-night-light-page.ui
+ panels/display/gnome-display-panel.desktop.in.in
+ panels/info-overview/cc-info-overview-panel.c
+ panels/info-overview/cc-info-overview-panel.ui
++panels/info-overview/cc-subscription-details-dialog.c
++panels/info-overview/cc-subscription-details-dialog.ui
++panels/info-overview/cc-subscription-register-dialog.c
++panels/info-overview/cc-subscription-register-dialog.ui
+ panels/info-overview/gnome-info-overview-panel.desktop.in.in
+ panels/keyboard/00-multimedia.xml.in
+ panels/keyboard/01-input-sources.xml.in
+-- 
+2.31.1
+
+
+From 785dae8f28a08f492da1053b55a601cdcec9233e Mon Sep 17 00:00:00 2001
+From: Kalev Lember <klember@redhat.com>
+Date: Tue, 7 Sep 2021 13:13:08 +0200
+Subject: [PATCH 2/2] info-overview: Add desktop file keywords for subscription
+ support
+
+---
+ panels/info-overview/gnome-info-overview-panel.desktop.in.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/panels/info-overview/gnome-info-overview-panel.desktop.in.in b/panels/info-overview/gnome-info-overview-panel.desktop.in.in
+index 06abbdc19..2bfff8483 100644
+--- a/panels/info-overview/gnome-info-overview-panel.desktop.in.in
++++ b/panels/info-overview/gnome-info-overview-panel.desktop.in.in
+@@ -19,4 +19,4 @@ X-GNOME-Bugzilla-Version=@VERSION@
+ # The list MUST also end with a semicolon!
+ # "Preferred Applications" is the old name for the preference, so make
+ # sure that you use the same "translation" for those keywords
+-Keywords=device;system;information;hostname;memory;processor;version;default;application;preferred;cd;dvd;usb;audio;video;disc;removable;media;autorun;
++Keywords=device;system;information;hostname;memory;processor;version;default;application;preferred;cd;dvd;usb;audio;video;disc;removable;media;autorun;register;registration;subscribe;subscription;
+-- 
+2.31.1
+

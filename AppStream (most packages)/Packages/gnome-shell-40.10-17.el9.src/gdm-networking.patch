@@ -1,0 +1,244 @@
+From 1eb9fef5e18d56bbe7a6422303ff8e31fe677759 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Mon, 7 Jun 2021 17:49:57 +0200
+Subject: [PATCH 1/5] status/network: Disable modem connection when windows
+ aren't allowed
+
+The item launches the corresponding Settings panel when activated, which
+doesn't work when windows are disabled by the session mode. Rather than
+failing silently, turn the item insensitive.
+---
+ js/ui/status/network.js | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/js/ui/status/network.js b/js/ui/status/network.js
+index 5487fde40..6e7878d20 100644
+--- a/js/ui/status/network.js
++++ b/js/ui/status/network.js
+@@ -563,6 +563,10 @@ var NMDeviceModem = class extends NMConnectionDevice {
+                 this._iconChanged();
+             });
+         }
++
++        this._sessionUpdatedId =
++            Main.sessionMode.connect('updated', this._sessionUpdated.bind(this));
++        this._sessionUpdated();
+     }
+ 
+     get category() {
+@@ -573,6 +577,10 @@ var NMDeviceModem = class extends NMConnectionDevice {
+         launchSettingsPanel('network', 'connect-3g', this._device.get_path());
+     }
+ 
++    _sessionUpdated() {
++        this._autoConnectItem.sensitive = Main.sessionMode.hasWindows;
++    }
++
+     destroy() {
+         if (this._operatorNameId) {
+             this._mobileDevice.disconnect(this._operatorNameId);
+@@ -582,6 +590,10 @@ var NMDeviceModem = class extends NMConnectionDevice {
+             this._mobileDevice.disconnect(this._signalQualityId);
+             this._signalQualityId = 0;
+         }
++        if (this._sessionUpdatedId) {
++            Main.sessionMode.disconnect(this._sessionUpdatedId);
++            this._sessionUpdatedId = 0;
++        }
+ 
+         super.destroy();
+     }
+-- 
+2.31.1
+
+
+From 0288558940c0090dca0873daeaa33e8d20cdbb0f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Mon, 7 Jun 2021 18:28:32 +0200
+Subject: [PATCH 2/5] status/network: Only list wifi networks that can be
+ activated
+
+Setting up a connection for an Enterprise WPA(2) encrypted wireless
+network requires Settings. That's not available when windows are
+disabled via the session mode, so filter out affected entries.
+---
+ js/ui/status/network.js | 30 +++++++++++++++++++++++++++++-
+ 1 file changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/js/ui/status/network.js b/js/ui/status/network.js
+index 6e7878d20..36915dbc1 100644
+--- a/js/ui/status/network.js
++++ b/js/ui/status/network.js
+@@ -1,6 +1,6 @@
+ // -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+ /* exported NMApplet */
+-const { Clutter, Gio, GLib, GObject, NM, St } = imports.gi;
++const { Clutter, Gio, GLib, GObject, Meta, NM, St } = imports.gi;
+ const Signals = imports.signals;
+ 
+ const Animation = imports.ui.animation;
+@@ -816,6 +816,11 @@ class NMWirelessDialog extends ModalDialog.ModalDialog {
+             GLib.source_remove(this._scanTimeoutId);
+             this._scanTimeoutId = 0;
+         }
++
++        if (this._syncVisibilityId) {
++            Meta.later_remove(this._syncVisibilityId);
++            this._syncVisibilityId = 0;
++        }
+     }
+ 
+     _onScanTimeout() {
+@@ -1149,9 +1154,32 @@ class NMWirelessDialog extends ModalDialog.ModalDialog {
+             this._itemBox.insert_child_at_index(network.item, newPos);
+         }
+ 
++        this._queueSyncItemVisibility();
+         this._syncView();
+     }
+ 
++    _queueSyncItemVisibility() {
++        if (this._syncVisibilityId)
++            return;
++
++        this._syncVisibilityId = Meta.later_add(
++            Meta.LaterType.BEFORE_REDRAW,
++            () => {
++                const { hasWindows } = Main.sessionMode;
++                const { WPA2_ENT, WPA_ENT } = NMAccessPointSecurity;
++
++                for (const network of this._networks) {
++                    const [firstAp] = network.accessPoints;
++                    network.item.visible =
++                        hasWindows ||
++                        network.connections.length > 0 ||
++                        (firstAp._secType !== WPA2_ENT && firstAp._secType !== WPA_ENT);
++                }
++                this._syncVisibilityId = 0;
++                return GLib.SOURCE_REMOVE;
++            });
++    }
++
+     _accessPointRemoved(device, accessPoint) {
+         let res = this._findExistingNetwork(accessPoint);
+ 
+-- 
+2.31.1
+
+
+From eb9620bc134ef8e7732f5e64b93ac9ea5bba2092 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Tue, 8 Jun 2021 00:17:48 +0200
+Subject: [PATCH 3/5] status/network: Consider network-control action
+
+NetworkManager installs a `network-control` polkit action that can
+be used to disallow network configuration, except that we happily
+ignore it. Add it to the conditions that turn a network section
+insensitive.
+---
+ js/ui/status/network.js | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/js/ui/status/network.js b/js/ui/status/network.js
+index 36915dbc1..e238fdfe7 100644
+--- a/js/ui/status/network.js
++++ b/js/ui/status/network.js
+@@ -1,6 +1,6 @@
+ // -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
+ /* exported NMApplet */
+-const { Clutter, Gio, GLib, GObject, Meta, NM, St } = imports.gi;
++const { Clutter, Gio, GLib, GObject, Meta, NM, Polkit, St } = imports.gi;
+ const Signals = imports.signals;
+ 
+ const Animation = imports.ui.animation;
+@@ -1750,11 +1750,21 @@ class Indicator extends PanelMenu.SystemIndicator {
+         this._client.connect('connection-removed', this._connectionRemoved.bind(this));
+ 
+         Main.sessionMode.connect('updated', this._sessionUpdated.bind(this));
++        try {
++            this._configPermission = await Polkit.Permission.new(
++                'org.freedesktop.NetworkManager.network-control', null, null);
++        } catch (e) {
++            log('No permission to control network connections: %s'.format(e.toString()));
++            this._configPermission = null;
++        }
+         this._sessionUpdated();
+     }
+ 
+     _sessionUpdated() {
+-        let sensitive = !Main.sessionMode.isLocked && !Main.sessionMode.isGreeter;
++        const sensitive =
++            !Main.sessionMode.isLocked &&
++            !Main.sessionMode.isGreeter &&
++            this._configPermission && this._configPermission.allowed;
+         this.menu.setSensitive(sensitive);
+     }
+ 
+-- 
+2.31.1
+
+
+From 2392810bb7e3d48fb33c4d6de39f5be2eca58988 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 10 Jun 2021 23:12:27 +0200
+Subject: [PATCH 4/5] sessionMode: Enable networkAgent on login screen
+
+We will soon enable the network sections in the status menu on the
+login screen, so enable the network agent to handle authentication
+requests (like wifi/VPN passwords).
+---
+ js/ui/sessionMode.js | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/js/ui/sessionMode.js b/js/ui/sessionMode.js
+index aa69fd115..4d4fb2444 100644
+--- a/js/ui/sessionMode.js
++++ b/js/ui/sessionMode.js
+@@ -47,7 +47,9 @@ const _modes = {
+         isGreeter: true,
+         isPrimary: true,
+         unlockDialog: imports.gdm.loginDialog.LoginDialog,
+-        components: ['polkitAgent'],
++        components: Config.HAVE_NETWORKMANAGER
++            ? ['networkAgent', 'polkitAgent']
++            : ['polkitAgent'],
+         panel: {
+             left: [],
+             center: ['dateMenu'],
+-- 
+2.31.1
+
+
+From b5fedfd846f271bf28be02ce5cd8517af7a3bc0a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Tue, 8 Jun 2021 00:19:26 +0200
+Subject: [PATCH 5/5] status/network: Do not disable on login screen
+
+We currently disable all network items on both the lock- and login
+screen. While it makes sense to be very restrictive on the lock screen,
+there are some (fringe) use cases for being more permissive on the
+login screen (like remote home directories only accessible via VPN).
+
+There's precedence with the power-off/restart actions to be less
+restrictive on the login screen, and since we started respecting
+the `network-control` polkit action, it's possible to restore the
+old behavior if desired.
+---
+ js/ui/status/network.js | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/js/ui/status/network.js b/js/ui/status/network.js
+index e238fdfe7..f510f90ae 100644
+--- a/js/ui/status/network.js
++++ b/js/ui/status/network.js
+@@ -1763,7 +1763,6 @@ class Indicator extends PanelMenu.SystemIndicator {
+     _sessionUpdated() {
+         const sensitive =
+             !Main.sessionMode.isLocked &&
+-            !Main.sessionMode.isGreeter &&
+             this._configPermission && this._configPermission.allowed;
+         this.menu.setSensitive(sensitive);
+     }
+-- 
+2.31.1
+

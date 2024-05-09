@@ -1,0 +1,30 @@
+From b212b973175be1cbefa1da2c5ed4f58fae032c73 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 11 May 2022 02:34:21 +0200
+Subject: [PATCH] status/volume: Hide sliders initially
+
+We update the visibility on state or stream changes, but those
+changes may never happen if pipewire-pulse/pulseaudio isn't
+available (for example when running as root).
+
+Hiding the sliders is preferable in that case to showing non-working
+controls.
+---
+ js/ui/status/volume.js | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/js/ui/status/volume.js b/js/ui/status/volume.js
+index 7164e1054..f623ee680 100644
+--- a/js/ui/status/volume.js
++++ b/js/ui/status/volume.js
+@@ -34,6 +34,7 @@ var StreamSlider = class {
+         this._control = control;
+ 
+         this.item = new PopupMenu.PopupBaseMenuItem({ activate: false });
++        this.item.hide();
+ 
+         this._inDrag = false;
+         this._notifyVolumeChangeId = 0;
+-- 
+2.35.1
+

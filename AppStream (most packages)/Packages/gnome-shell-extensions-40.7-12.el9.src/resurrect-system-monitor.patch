@@ -1,0 +1,1551 @@
+From c5e26a4c25754dc74e5f2aa9953bc2e30cfea94e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 17 May 2017 19:13:50 +0200
+Subject: [PATCH 1/6] extensions: Resurrect systemMonitor extension
+
+The extension was removed upstream because:
+ - it hooks into the message tray that was removed
+ - it was known to have performance issues
+ - there are plenty of alternatives
+
+Those aren't good enough reasons for dropping it downstream
+as well though, so we need to bring it back ...
+
+This reverts commit c9a6421f362cd156cf731289eadc11f44f6970ac.
+---
+ extensions/systemMonitor/extension.js     | 376 ++++++++++++++++++++++
+ extensions/systemMonitor/meson.build      |   5 +
+ extensions/systemMonitor/metadata.json.in |  11 +
+ extensions/systemMonitor/stylesheet.css   |  35 ++
+ meson.build                               |   1 +
+ 5 files changed, 428 insertions(+)
+ create mode 100644 extensions/systemMonitor/extension.js
+ create mode 100644 extensions/systemMonitor/meson.build
+ create mode 100644 extensions/systemMonitor/metadata.json.in
+ create mode 100644 extensions/systemMonitor/stylesheet.css
+
+diff --git a/extensions/systemMonitor/extension.js b/extensions/systemMonitor/extension.js
+new file mode 100644
+index 00000000..7b09df01
+--- /dev/null
++++ b/extensions/systemMonitor/extension.js
+@@ -0,0 +1,376 @@
++/* -*- mode: js2; js2-basic-offset: 4; indent-tabs-mode: nil -*- */
++
++const Clutter = imports.gi.Clutter;
++const GTop = imports.gi.GTop;
++const Lang = imports.lang;
++const Mainloop = imports.mainloop;
++const St = imports.gi.St;
++const Shell = imports.gi.Shell;
++
++const Main = imports.ui.main;
++const Tweener = imports.ui.tweener;
++
++const Gettext = imports.gettext.domain('gnome-shell-extensions');
++const _ = Gettext.gettext;
++
++const ExtensionUtils = imports.misc.extensionUtils;
++const Me = ExtensionUtils.getCurrentExtension();
++const Convenience = Me.imports.convenience;
++
++const INDICATOR_UPDATE_INTERVAL = 500;
++const INDICATOR_NUM_GRID_LINES = 3;
++
++const ITEM_LABEL_SHOW_TIME = 0.15;
++const ITEM_LABEL_HIDE_TIME = 0.1;
++const ITEM_HOVER_TIMEOUT = 300;
++
++const Indicator = new Lang.Class({
++    Name: 'SystemMonitor.Indicator',
++
++    _init: function() {
++        this._initValues();
++        this.drawing_area = new St.DrawingArea({ reactive: true });
++        this.drawing_area.connect('repaint', Lang.bind(this, this._draw));
++        this.drawing_area.connect('button-press-event', function() {
++            let app = Shell.AppSystem.get_default().lookup_app('gnome-system-monitor.desktop');
++            app.open_new_window(-1);
++            return true;
++        });
++
++        this.actor = new St.Bin({ style_class: "extension-systemMonitor-indicator-area",
++                                  reactive: true, track_hover: true,
++				  x_fill: true, y_fill: true });
++        this.actor.add_actor(this.drawing_area);
++
++        this._timeout = Mainloop.timeout_add(INDICATOR_UPDATE_INTERVAL, Lang.bind(this, function () {
++            this._updateValues();
++            this.drawing_area.queue_repaint();
++            return true;
++        }));
++    },
++
++    showLabel: function() {
++        if (this.label == null)
++            return;
++
++        this.label.opacity = 0;
++        this.label.show();
++
++        let [stageX, stageY] = this.actor.get_transformed_position();
++
++	let itemWidth = this.actor.allocation.x2 - this.actor.allocation.x1;
++        let itemHeight = this.actor.allocation.y2 - this.actor.allocation.y1;
++
++	let labelWidth = this.label.width;
++        let labelHeight = this.label.height;
++        let xOffset = Math.floor((itemWidth - labelWidth) / 2)
++
++        let x = stageX + xOffset;
++
++        let node = this.label.get_theme_node();
++        let yOffset = node.get_length('-y-offset');
++
++        let y = stageY - this.label.get_height() - yOffset;
++
++        this.label.set_position(x, y);
++        Tweener.addTween(this.label,
++                         { opacity: 255,
++                           time: ITEM_LABEL_SHOW_TIME,
++                           transition: 'easeOutQuad',
++                         });
++    },
++
++    setLabelText: function(text) {
++        if (this.label == null)
++            this.label = new St.Label({ style_class: 'extension-systemMonitor-indicator-label'});
++
++        this.label.set_text(text);
++        Main.layoutManager.addChrome(this.label);
++        this.label.hide();
++    },
++
++    hideLabel: function () {
++        Tweener.addTween(this.label,
++                         { opacity: 0,
++                           time: ITEM_LABEL_HIDE_TIME,
++                           transition: 'easeOutQuad',
++                           onComplete: Lang.bind(this, function() {
++                               this.label.hide();
++                           })
++                         });
++    },
++
++    destroy: function() {
++        Mainloop.source_remove(this._timeout);
++
++        this.actor.destroy();
++	if (this.label)
++	    this.label.destroy();
++    },
++
++    _initValues: function() {
++    },
++
++    _updateValues: function() {
++    },
++
++    _draw: function(area) {
++        let [width, height] = area.get_surface_size();
++        let themeNode = this.actor.get_theme_node();
++        let cr = area.get_context();
++
++        //draw the background grid
++        let color = themeNode.get_color(this.gridColor);
++        let gridOffset = Math.floor(height / (INDICATOR_NUM_GRID_LINES + 1));
++        for (let i = 1; i <= INDICATOR_NUM_GRID_LINES; ++i) {
++                cr.moveTo(0, i * gridOffset + .5);
++                cr.lineTo(width, i * gridOffset + .5);
++        }
++        Clutter.cairo_set_source_color(cr, color);
++        cr.setLineWidth(1);
++        cr.setDash([4,1], 0);
++        cr.stroke();
++
++        //draw the foreground
++
++        function makePath(values, reverse, nudge) {
++            if (nudge == null) {
++                nudge = 0;
++            }
++            //if we are going in reverse, we are completing the bottom of a chart, so use lineTo
++            if (reverse) {
++                cr.lineTo(values.length - 1, (1 - values[values.length - 1]) * height + nudge);
++                for (let k = values.length - 2; k >= 0; --k) {
++                    cr.lineTo(k, (1 - values[k]) * height + nudge);
++                }
++            } else {
++                cr.moveTo(0, (1 - values[0]) * height + nudge);
++                for (let k = 1; k < values.length; ++k) {
++                    cr.lineTo(k, (1 - values[k]) * height + nudge);
++                }
++
++            }
++        }
++
++        let renderStats = this.renderStats;
++
++        // Make sure we don't have more sample points than pixels
++        renderStats.map(Lang.bind(this, function(k){
++            let stat = this.stats[k];
++            if (stat.values.length > width) {
++                stat.values = stat.values.slice(stat.values.length - width, stat.values.length);
++            }
++        }));
++
++        for (let i = 0; i < renderStats.length; ++i) {
++            let stat = this.stats[renderStats[i]];
++            // We outline at full opacity and fill with 40% opacity
++            let outlineColor = themeNode.get_color(stat.color);
++            let color = new Clutter.Color(outlineColor);
++            color.alpha = color.alpha * .4;
++
++            // Render the background between us and the next level
++            makePath(stat.values, false);
++            // If there is a process below us, render the cpu between us and it, otherwise,
++            // render to the bottom of the chart
++            if (i == renderStats.length - 1) {
++                cr.lineTo(stat.values.length - 1, height);
++                cr.lineTo(0, height);
++                cr.closePath();
++            } else {
++                let nextStat = this.stats[renderStats[i+1]];
++                makePath(nextStat.values, true);
++            }
++            cr.closePath()
++            Clutter.cairo_set_source_color(cr, color);
++            cr.fill();
++
++            // Render the outline of this level
++            makePath(stat.values, false, .5);
++            Clutter.cairo_set_source_color(cr, outlineColor);
++            cr.setLineWidth(1.0);
++            cr.setDash([], 0);
++            cr.stroke();
++        }
++    }
++});
++
++const CpuIndicator = new Lang.Class({
++    Name: 'SystemMonitor.CpuIndicator',
++    Extends: Indicator,
++
++    _init: function() {
++        this.parent();
++
++        this.gridColor = '-grid-color';
++        this.renderStats = [ 'cpu-user', 'cpu-sys', 'cpu-iowait' ];
++
++        // Make sure renderStats is sorted as necessary for rendering
++        let renderStatOrder = {'cpu-total': 0, 'cpu-user': 1, 'cpu-sys': 2, 'cpu-iowait': 3};
++        this.renderStats = this.renderStats.sort(function(a,b) {
++            return renderStatOrder[a] - renderStatOrder[b];
++        });
++
++	this.setLabelText(_("CPU"));
++    },
++
++    _initValues: function() {
++        this._prev = new GTop.glibtop_cpu;
++        GTop.glibtop_get_cpu(this._prev);
++
++        this.stats = {
++                       'cpu-user': {color: '-cpu-user-color', values: []},
++                       'cpu-sys': {color: '-cpu-sys-color', values: []},
++                       'cpu-iowait': {color: '-cpu-iowait-color', values: []},
++                       'cpu-total': {color: '-cpu-total-color', values: []}
++                     };
++    },
++
++    _updateValues: function() {
++        let cpu = new GTop.glibtop_cpu;
++        let t = 0.0;
++        GTop.glibtop_get_cpu(cpu);
++        let total = cpu.total - this._prev.total;
++        let user = cpu.user - this._prev.user;
++        let sys = cpu.sys - this._prev.sys;
++        let iowait = cpu.iowait - this._prev.iowait;
++        let idle = cpu.idle - this._prev.idle;
++
++        t += iowait / total;
++        this.stats['cpu-iowait'].values.push(t);
++        t += sys / total;
++        this.stats['cpu-sys'].values.push(t);
++        t += user / total;
++        this.stats['cpu-user'].values.push(t);
++        this.stats['cpu-total'].values.push(1 - idle / total);
++
++        this._prev = cpu;
++    }
++});
++
++const MemoryIndicator = new Lang.Class({
++    Name: 'SystemMonitor.MemoryIndicator',
++    Extends: Indicator,
++
++    _init: function() {
++        this.parent();
++
++        this.gridColor = '-grid-color';
++        this.renderStats = [ 'mem-user', 'mem-other', 'mem-cached' ];
++
++        // Make sure renderStats is sorted as necessary for rendering
++        let renderStatOrder = { 'mem-cached': 0, 'mem-other': 1, 'mem-user': 2 };
++        this.renderStats = this.renderStats.sort(function(a,b) {
++            return renderStatOrder[a] - renderStatOrder[b];
++        });
++
++	this.setLabelText(_("Memory"));
++    },
++
++    _initValues: function() {
++        this.mem = new GTop.glibtop_mem;
++        this.stats = {
++                        'mem-user': { color: "-mem-user-color", values: [] },
++                        'mem-other': { color: "-mem-other-color", values: [] },
++                        'mem-cached': { color: "-mem-cached-color", values: [] }
++                     };
++    },
++
++    _updateValues: function() {
++        GTop.glibtop_get_mem(this.mem);
++
++        let t = this.mem.user / this.mem.total;
++        this.stats['mem-user'].values.push(t);
++        t += (this.mem.used - this.mem.user - this.mem.cached) / this.mem.total;
++        this.stats['mem-other'].values.push(t);
++        t += this.mem.cached / this.mem.total;
++        this.stats['mem-cached'].values.push(t);
++    }
++});
++
++const INDICATORS = [CpuIndicator, MemoryIndicator];
++
++const Extension = new Lang.Class({
++    Name: 'SystemMonitor.Extension',
++
++    _init: function() {
++	Convenience.initTranslations();
++
++	this._showLabelTimeoutId = 0;
++	this._resetHoverTimeoutId = 0;
++	this._labelShowing = false;
++    },
++
++    enable: function() {
++	this._box = new St.BoxLayout({ style_class: 'extension-systemMonitor-container',
++				       x_align: Clutter.ActorAlign.START,
++				       x_expand: true });
++	this._indicators = [ ];
++
++	for (let i = 0; i < INDICATORS.length; i++) {
++	    let indicator = new (INDICATORS[i])();
++
++            indicator.actor.connect('notify::hover', Lang.bind(this, function() {
++		this._onHover(indicator);
++	    }));
++	    this._box.add_actor(indicator.actor);
++	    this._indicators.push(indicator);
++	}
++
++	this._boxHolder = new St.BoxLayout({ x_expand: true,
++					     y_expand: true,
++					     x_align: Clutter.ActorAlign.START,
++					   });
++	let menuButton = Main.messageTray._messageTrayMenuButton.actor;
++	Main.messageTray.actor.remove_child(menuButton);
++	Main.messageTray.actor.add_child(this._boxHolder);
++
++	this._boxHolder.add_child(this._box);
++	this._boxHolder.add_child(menuButton);
++    },
++
++    disable: function() {
++	this._indicators.forEach(function(i) { i.destroy(); });
++
++	let menuButton = Main.messageTray._messageTrayMenuButton.actor;
++	this._boxHolder.remove_child(menuButton);
++	Main.messageTray.actor.add_child(menuButton);
++
++	this._box.destroy();
++	this._boxHolder.destroy();
++    },
++
++    _onHover: function (item) {
++        if (item.actor.get_hover()) {
++            if (this._showLabelTimeoutId == 0) {
++                let timeout = this._labelShowing ? 0 : ITEM_HOVER_TIMEOUT;
++                this._showLabelTimeoutId = Mainloop.timeout_add(timeout,
++                    Lang.bind(this, function() {
++                        this._labelShowing = true;
++                        item.showLabel();
++                        return false;
++                    }));
++                if (this._resetHoverTimeoutId > 0) {
++                    Mainloop.source_remove(this._resetHoverTimeoutId);
++                    this._resetHoverTimeoutId = 0;
++                }
++            }
++        } else {
++            if (this._showLabelTimeoutId > 0)
++                Mainloop.source_remove(this._showLabelTimeoutId);
++            this._showLabelTimeoutId = 0;
++            item.hideLabel();
++            if (this._labelShowing) {
++                this._resetHoverTimeoutId = Mainloop.timeout_add(ITEM_HOVER_TIMEOUT,
++                    Lang.bind(this, function() {
++                        this._labelShowing = false;
++                        return false;
++                    }));
++            }
++        }
++    },
++});
++
++function init() {
++    return new Extension();
++}
+diff --git a/extensions/systemMonitor/meson.build b/extensions/systemMonitor/meson.build
+new file mode 100644
+index 00000000..48504f63
+--- /dev/null
++++ b/extensions/systemMonitor/meson.build
+@@ -0,0 +1,5 @@
++extension_data += configure_file(
++  input: metadata_name + '.in',
++  output: metadata_name,
++  configuration: metadata_conf
++)
+diff --git a/extensions/systemMonitor/metadata.json.in b/extensions/systemMonitor/metadata.json.in
+new file mode 100644
+index 00000000..fa750074
+--- /dev/null
++++ b/extensions/systemMonitor/metadata.json.in
+@@ -0,0 +1,11 @@
++{
++    "shell-version": ["@shell_current@" ],
++    "uuid": "@uuid@",
++    "extension-id": "@extension_id@",
++    "settings-schema": "@gschemaname@",
++    "gettext-domain": "@gettext_domain@",
++    "original-author": "zaspire@rambler.ru",
++    "name": "SystemMonitor",
++    "description": "System monitor showing CPU and memory usage in the message tray.",
++    "url": "@url@"
++}
+diff --git a/extensions/systemMonitor/stylesheet.css b/extensions/systemMonitor/stylesheet.css
+new file mode 100644
+index 00000000..13f95ec7
+--- /dev/null
++++ b/extensions/systemMonitor/stylesheet.css
+@@ -0,0 +1,35 @@
++.extension-systemMonitor-container {
++    spacing: 5px;
++    padding-left: 5px;
++    padding-right: 5px;
++    padding-bottom: 10px;
++    padding-top: 10px;
++}
++
++.extension-systemMonitor-indicator-area {
++    border: 1px solid #8d8d8d;
++    border-radius: 3px;
++    width: 100px;
++    /* message tray is 72px, so 20px padding of the container,
++       2px of border, makes it 50px */
++    height: 50px;
++    -grid-color: #575757;
++    -cpu-total-color: rgb(0,154,62);
++    -cpu-user-color: rgb(69,154,0);
++    -cpu-sys-color: rgb(255,253,81);
++    -cpu-iowait-color: rgb(210,148,0);
++    -mem-user-color: rgb(210,148,0);
++    -mem-cached-color: rgb(90,90,90);
++    -mem-other-color: rgb(205,203,41);
++    background-color: #1e1e1e;
++}
++
++.extension-systemMonitor-indicator-label {
++    border-radius: 7px;
++    padding: 4px 12px;
++    background-color: rgba(0,0,0,0.9);
++    text-align: center;
++    -y-offset: 8px;
++    font-size: 9pt;
++    font-weight: bold;
++}
+diff --git a/meson.build b/meson.build
+index fa9e622a..70dbf007 100644
+--- a/meson.build
++++ b/meson.build
+@@ -51,6 +51,7 @@ all_extensions += [
+   'dash-to-panel',
+   'native-window-placement',
+   'panel-favorites',
++  'systemMonitor',
+   'top-icons',
+   'updates-dialog',
+   'user-theme'
+-- 
+2.41.0
+
+
+From efe89316c5ae1721306defcdbb80227fe61414c4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Fri, 17 May 2019 22:55:48 +0000
+Subject: [PATCH 2/6] systemMonitor: Modernise code
+
+ - port to ES6 classes
+ - replace Lang.bind()
+ - replace Tweener
+ - use standard align/expand properties
+ - destructure imports
+ - fix style issues (stray/missing spaces/semi-colons, indent, ...)
+---
+ extensions/systemMonitor/extension.js | 422 +++++++++++++-------------
+ 1 file changed, 212 insertions(+), 210 deletions(-)
+
+diff --git a/extensions/systemMonitor/extension.js b/extensions/systemMonitor/extension.js
+index 7b09df01..f7c6a4a9 100644
+--- a/extensions/systemMonitor/extension.js
++++ b/extensions/systemMonitor/extension.js
+@@ -1,56 +1,57 @@
+ /* -*- mode: js2; js2-basic-offset: 4; indent-tabs-mode: nil -*- */
+ 
+-const Clutter = imports.gi.Clutter;
+-const GTop = imports.gi.GTop;
+-const Lang = imports.lang;
+-const Mainloop = imports.mainloop;
+-const St = imports.gi.St;
+-const Shell = imports.gi.Shell;
++/* exported init */
+ 
++const { Clutter, GLib, GTop, Shell, St } = imports.gi;
++
++const ExtensionUtils = imports.misc.extensionUtils;
+ const Main = imports.ui.main;
+-const Tweener = imports.ui.tweener;
+ 
+ const Gettext = imports.gettext.domain('gnome-shell-extensions');
+ const _ = Gettext.gettext;
+ 
+-const ExtensionUtils = imports.misc.extensionUtils;
+-const Me = ExtensionUtils.getCurrentExtension();
+-const Convenience = Me.imports.convenience;
+-
+ const INDICATOR_UPDATE_INTERVAL = 500;
+ const INDICATOR_NUM_GRID_LINES = 3;
+ 
+-const ITEM_LABEL_SHOW_TIME = 0.15;
+-const ITEM_LABEL_HIDE_TIME = 0.1;
++const ITEM_LABEL_SHOW_TIME = 150;
++const ITEM_LABEL_HIDE_TIME = 100;
+ const ITEM_HOVER_TIMEOUT = 300;
+ 
+-const Indicator = new Lang.Class({
+-    Name: 'SystemMonitor.Indicator',
+-
+-    _init: function() {
++const Indicator = class {
++    constructor() {
+         this._initValues();
+-        this.drawing_area = new St.DrawingArea({ reactive: true });
+-        this.drawing_area.connect('repaint', Lang.bind(this, this._draw));
+-        this.drawing_area.connect('button-press-event', function() {
++        this._drawingArea = new St.DrawingArea({
++            reactive: true,
++            x_expand: true,
++            y_expand: true,
++        });
++        this._drawingArea.connect('repaint', this._draw.bind(this));
++        this._drawingArea.connect('button-press-event', () => {
+             let app = Shell.AppSystem.get_default().lookup_app('gnome-system-monitor.desktop');
+             app.open_new_window(-1);
+             return true;
+         });
+ 
+-        this.actor = new St.Bin({ style_class: "extension-systemMonitor-indicator-area",
+-                                  reactive: true, track_hover: true,
+-				  x_fill: true, y_fill: true });
+-        this.actor.add_actor(this.drawing_area);
++        this.actor = new St.Bin({
++            style_class: 'extension-systemMonitor-indicator-area',
++            reactive: true,
++            track_hover: true,
++        });
++        this.actor.add_actor(this._drawingArea);
++
++        this.actor.connect('destroy', this._onDestroy.bind(this));
+ 
+-        this._timeout = Mainloop.timeout_add(INDICATOR_UPDATE_INTERVAL, Lang.bind(this, function () {
+-            this._updateValues();
+-            this.drawing_area.queue_repaint();
+-            return true;
+-        }));
+-    },
++        this._timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
++            INDICATOR_UPDATE_INTERVAL,
++            () => {
++                this._updateValues();
++                this._drawingArea.queue_repaint();
++                return GLib.SOURCE_CONTINUE;
++            });
++    }
+ 
+-    showLabel: function() {
+-        if (this.label == null)
++    showLabel() {
++        if (this.label === null)
+             return;
+ 
+         this.label.opacity = 0;
+@@ -58,12 +59,10 @@ const Indicator = new Lang.Class({
+ 
+         let [stageX, stageY] = this.actor.get_transformed_position();
+ 
+-	let itemWidth = this.actor.allocation.x2 - this.actor.allocation.x1;
+-        let itemHeight = this.actor.allocation.y2 - this.actor.allocation.y1;
++        let itemWidth = this.actor.allocation.x2 - this.actor.allocation.x1;
+ 
+-	let labelWidth = this.label.width;
+-        let labelHeight = this.label.height;
+-        let xOffset = Math.floor((itemWidth - labelWidth) / 2)
++        let labelWidth = this.label.width;
++        let xOffset = Math.floor((itemWidth - labelWidth) / 2);
+ 
+         let x = stageX + xOffset;
+ 
+@@ -73,116 +72,113 @@ const Indicator = new Lang.Class({
+         let y = stageY - this.label.get_height() - yOffset;
+ 
+         this.label.set_position(x, y);
+-        Tweener.addTween(this.label,
+-                         { opacity: 255,
+-                           time: ITEM_LABEL_SHOW_TIME,
+-                           transition: 'easeOutQuad',
+-                         });
+-    },
++        this.label.ease({
++            opacity: 255,
++            duration: ITEM_LABEL_SHOW_TIME,
++            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
++        });
++    }
+ 
+-    setLabelText: function(text) {
+-        if (this.label == null)
+-            this.label = new St.Label({ style_class: 'extension-systemMonitor-indicator-label'});
++    setLabelText(text) {
++        if (this.label === null) {
++            this.label = new St.Label({
++                style_class: 'extension-systemMonitor-indicator-label',
++            });
++        }
+ 
+         this.label.set_text(text);
+         Main.layoutManager.addChrome(this.label);
+         this.label.hide();
+-    },
+-
+-    hideLabel: function () {
+-        Tweener.addTween(this.label,
+-                         { opacity: 0,
+-                           time: ITEM_LABEL_HIDE_TIME,
+-                           transition: 'easeOutQuad',
+-                           onComplete: Lang.bind(this, function() {
+-                               this.label.hide();
+-                           })
+-                         });
+-    },
+-
+-    destroy: function() {
+-        Mainloop.source_remove(this._timeout);
++    }
+ 
++    hideLabel() {
++        this.label.ease({
++            opacity: 0,
++            duration: ITEM_LABEL_HIDE_TIME,
++            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
++            onComplete: () => this.label.hide(),
++        });
++    }
++
++    destroy() {
+         this.actor.destroy();
+-	if (this.label)
+-	    this.label.destroy();
+-    },
++    }
+ 
+-    _initValues: function() {
+-    },
++    _onDestroy() {
++        GLib.source_remove(this._timeout);
+ 
+-    _updateValues: function() {
+-    },
++        if (this.label)
++            this.label.destroy();
++    }
++
++    _initValues() {
++    }
+ 
+-    _draw: function(area) {
++    _updateValues() {
++    }
++
++    _draw(area) {
+         let [width, height] = area.get_surface_size();
+         let themeNode = this.actor.get_theme_node();
+         let cr = area.get_context();
+ 
+-        //draw the background grid
++        // draw the background grid
+         let color = themeNode.get_color(this.gridColor);
+         let gridOffset = Math.floor(height / (INDICATOR_NUM_GRID_LINES + 1));
+         for (let i = 1; i <= INDICATOR_NUM_GRID_LINES; ++i) {
+-                cr.moveTo(0, i * gridOffset + .5);
+-                cr.lineTo(width, i * gridOffset + .5);
++            cr.moveTo(0, i * gridOffset + .5);
++            cr.lineTo(width, i * gridOffset + .5);
+         }
+         Clutter.cairo_set_source_color(cr, color);
+         cr.setLineWidth(1);
+-        cr.setDash([4,1], 0);
++        cr.setDash([4, 1], 0);
+         cr.stroke();
+ 
+-        //draw the foreground
++        // draw the foreground
+ 
+-        function makePath(values, reverse, nudge) {
+-            if (nudge == null) {
+-                nudge = 0;
+-            }
+-            //if we are going in reverse, we are completing the bottom of a chart, so use lineTo
++        function makePath(values, reverse, nudge = 0) {
++            // if we are going in reverse, we are completing the bottom of a chart, so use lineTo
+             if (reverse) {
+                 cr.lineTo(values.length - 1, (1 - values[values.length - 1]) * height + nudge);
+-                for (let k = values.length - 2; k >= 0; --k) {
++                for (let k = values.length - 2; k >= 0; --k)
+                     cr.lineTo(k, (1 - values[k]) * height + nudge);
+-                }
+             } else {
+                 cr.moveTo(0, (1 - values[0]) * height + nudge);
+-                for (let k = 1; k < values.length; ++k) {
++                for (let k = 1; k < values.length; ++k)
+                     cr.lineTo(k, (1 - values[k]) * height + nudge);
+-                }
+-
+             }
+         }
+ 
+         let renderStats = this.renderStats;
+ 
+         // Make sure we don't have more sample points than pixels
+-        renderStats.map(Lang.bind(this, function(k){
++        renderStats.forEach(k => {
+             let stat = this.stats[k];
+-            if (stat.values.length > width) {
++            if (stat.values.length > width)
+                 stat.values = stat.values.slice(stat.values.length - width, stat.values.length);
+-            }
+-        }));
++        });
+ 
+         for (let i = 0; i < renderStats.length; ++i) {
+             let stat = this.stats[renderStats[i]];
+             // We outline at full opacity and fill with 40% opacity
+             let outlineColor = themeNode.get_color(stat.color);
+-            let color = new Clutter.Color(outlineColor);
+-            color.alpha = color.alpha * .4;
++            let fillColor = new Clutter.Color(outlineColor);
++            fillColor.alpha *= .4;
+ 
+             // Render the background between us and the next level
+             makePath(stat.values, false);
+             // If there is a process below us, render the cpu between us and it, otherwise,
+             // render to the bottom of the chart
+-            if (i == renderStats.length - 1) {
++            if (i === renderStats.length - 1) {
+                 cr.lineTo(stat.values.length - 1, height);
+                 cr.lineTo(0, height);
+                 cr.closePath();
+             } else {
+-                let nextStat = this.stats[renderStats[i+1]];
++                let nextStat = this.stats[renderStats[i + 1]];
+                 makePath(nextStat.values, true);
+             }
+-            cr.closePath()
+-            Clutter.cairo_set_source_color(cr, color);
++            cr.closePath();
++            Clutter.cairo_set_source_color(cr, fillColor);
+             cr.fill();
+ 
+             // Render the outline of this level
+@@ -193,41 +189,43 @@ const Indicator = new Lang.Class({
+             cr.stroke();
+         }
+     }
+-});
++};
+ 
+-const CpuIndicator = new Lang.Class({
+-    Name: 'SystemMonitor.CpuIndicator',
+-    Extends: Indicator,
+-
+-    _init: function() {
+-        this.parent();
++const CpuIndicator = class extends Indicator {
++    constructor() {
++        super();
+ 
+         this.gridColor = '-grid-color';
+-        this.renderStats = [ 'cpu-user', 'cpu-sys', 'cpu-iowait' ];
++        this.renderStats = ['cpu-user', 'cpu-sys', 'cpu-iowait'];
+ 
+         // Make sure renderStats is sorted as necessary for rendering
+-        let renderStatOrder = {'cpu-total': 0, 'cpu-user': 1, 'cpu-sys': 2, 'cpu-iowait': 3};
+-        this.renderStats = this.renderStats.sort(function(a,b) {
++        let renderStatOrder = {
++            'cpu-total': 0,
++            'cpu-user': 1,
++            'cpu-sys': 2,
++            'cpu-iowait': 3,
++        };
++        this.renderStats = this.renderStats.sort((a, b) => {
+             return renderStatOrder[a] - renderStatOrder[b];
+         });
+ 
+-	this.setLabelText(_("CPU"));
+-    },
++        this.setLabelText(_('CPU'));
++    }
+ 
+-    _initValues: function() {
+-        this._prev = new GTop.glibtop_cpu;
++    _initValues() {
++        this._prev = new GTop.glibtop_cpu();
+         GTop.glibtop_get_cpu(this._prev);
+ 
+         this.stats = {
+-                       'cpu-user': {color: '-cpu-user-color', values: []},
+-                       'cpu-sys': {color: '-cpu-sys-color', values: []},
+-                       'cpu-iowait': {color: '-cpu-iowait-color', values: []},
+-                       'cpu-total': {color: '-cpu-total-color', values: []}
+-                     };
+-    },
+-
+-    _updateValues: function() {
+-        let cpu = new GTop.glibtop_cpu;
++            'cpu-user': { color: '-cpu-user-color', values: [] },
++            'cpu-sys': { color: '-cpu-sys-color', values: [] },
++            'cpu-iowait': { color: '-cpu-iowait-color', values: [] },
++            'cpu-total': { color: '-cpu-total-color', values: [] },
++        };
++    }
++
++    _updateValues() {
++        let cpu = new GTop.glibtop_cpu();
+         let t = 0.0;
+         GTop.glibtop_get_cpu(cpu);
+         let total = cpu.total - this._prev.total;
+@@ -246,37 +244,34 @@ const CpuIndicator = new Lang.Class({
+ 
+         this._prev = cpu;
+     }
+-});
++};
+ 
+-const MemoryIndicator = new Lang.Class({
+-    Name: 'SystemMonitor.MemoryIndicator',
+-    Extends: Indicator,
+-
+-    _init: function() {
+-        this.parent();
++const MemoryIndicator = class extends Indicator {
++    constructor() {
++        super();
+ 
+         this.gridColor = '-grid-color';
+-        this.renderStats = [ 'mem-user', 'mem-other', 'mem-cached' ];
++        this.renderStats = ['mem-user', 'mem-other', 'mem-cached'];
+ 
+         // Make sure renderStats is sorted as necessary for rendering
+         let renderStatOrder = { 'mem-cached': 0, 'mem-other': 1, 'mem-user': 2 };
+-        this.renderStats = this.renderStats.sort(function(a,b) {
++        this.renderStats = this.renderStats.sort((a, b) => {
+             return renderStatOrder[a] - renderStatOrder[b];
+         });
+ 
+-	this.setLabelText(_("Memory"));
+-    },
++        this.setLabelText(_('Memory'));
++    }
+ 
+-    _initValues: function() {
+-        this.mem = new GTop.glibtop_mem;
++    _initValues() {
++        this.mem = new GTop.glibtop_mem();
+         this.stats = {
+-                        'mem-user': { color: "-mem-user-color", values: [] },
+-                        'mem-other': { color: "-mem-other-color", values: [] },
+-                        'mem-cached': { color: "-mem-cached-color", values: [] }
+-                     };
+-    },
++            'mem-user': { color: '-mem-user-color', values: [] },
++            'mem-other': { color: '-mem-other-color', values: [] },
++            'mem-cached': { color: '-mem-cached-color', values: [] },
++        };
++    }
+ 
+-    _updateValues: function() {
++    _updateValues() {
+         GTop.glibtop_get_mem(this.mem);
+ 
+         let t = this.mem.user / this.mem.total;
+@@ -286,90 +281,97 @@ const MemoryIndicator = new Lang.Class({
+         t += this.mem.cached / this.mem.total;
+         this.stats['mem-cached'].values.push(t);
+     }
+-});
++};
+ 
+ const INDICATORS = [CpuIndicator, MemoryIndicator];
+ 
+-const Extension = new Lang.Class({
+-    Name: 'SystemMonitor.Extension',
+-
+-    _init: function() {
+-	Convenience.initTranslations();
+-
+-	this._showLabelTimeoutId = 0;
+-	this._resetHoverTimeoutId = 0;
+-	this._labelShowing = false;
+-    },
+-
+-    enable: function() {
+-	this._box = new St.BoxLayout({ style_class: 'extension-systemMonitor-container',
+-				       x_align: Clutter.ActorAlign.START,
+-				       x_expand: true });
+-	this._indicators = [ ];
+-
+-	for (let i = 0; i < INDICATORS.length; i++) {
+-	    let indicator = new (INDICATORS[i])();
+-
+-            indicator.actor.connect('notify::hover', Lang.bind(this, function() {
+-		this._onHover(indicator);
+-	    }));
+-	    this._box.add_actor(indicator.actor);
+-	    this._indicators.push(indicator);
+-	}
+-
+-	this._boxHolder = new St.BoxLayout({ x_expand: true,
+-					     y_expand: true,
+-					     x_align: Clutter.ActorAlign.START,
+-					   });
+-	let menuButton = Main.messageTray._messageTrayMenuButton.actor;
+-	Main.messageTray.actor.remove_child(menuButton);
+-	Main.messageTray.actor.add_child(this._boxHolder);
+-
+-	this._boxHolder.add_child(this._box);
+-	this._boxHolder.add_child(menuButton);
+-    },
+-
+-    disable: function() {
+-	this._indicators.forEach(function(i) { i.destroy(); });
+-
+-	let menuButton = Main.messageTray._messageTrayMenuButton.actor;
+-	this._boxHolder.remove_child(menuButton);
+-	Main.messageTray.actor.add_child(menuButton);
+-
+-	this._box.destroy();
+-	this._boxHolder.destroy();
+-    },
+-
+-    _onHover: function (item) {
++class Extension {
++    constructor() {
++        ExtensionUtils.initTranslations();
++
++        this._showLabelTimeoutId = 0;
++        this._resetHoverTimeoutId = 0;
++        this._labelShowing = false;
++    }
++
++    enable() {
++        this._box = new St.BoxLayout({
++            style_class: 'extension-systemMonitor-container',
++            x_align: Clutter.ActorAlign.START,
++            x_expand: true,
++        });
++        this._indicators = [];
++
++        for (let i = 0; i < INDICATORS.length; i++) {
++            let indicator = new INDICATORS[i]();
++
++            indicator.actor.connect('notify::hover', () => {
++                this._onHover(indicator);
++            });
++            this._box.add_actor(indicator.actor);
++            this._indicators.push(indicator);
++        }
++
++        this._boxHolder = new St.BoxLayout({
++            x_expand: true,
++            y_expand: true,
++            x_align: Clutter.ActorAlign.START,
++        });
++        let menuButton = Main.messageTray._messageTrayMenuButton.actor;
++        Main.messageTray.actor.remove_child(menuButton);
++        Main.messageTray.actor.add_child(this._boxHolder);
++
++        this._boxHolder.add_child(this._box);
++        this._boxHolder.add_child(menuButton);
++    }
++
++    disable() {
++        this._indicators.forEach(i => i.destroy());
++
++        let menuButton = Main.messageTray._messageTrayMenuButton.actor;
++        this._boxHolder.remove_child(menuButton);
++        Main.messageTray.actor.add_child(menuButton);
++
++        this._box.destroy();
++        this._boxHolder.destroy();
++    }
++
++    _onHover(item) {
+         if (item.actor.get_hover()) {
+-            if (this._showLabelTimeoutId == 0) {
+-                let timeout = this._labelShowing ? 0 : ITEM_HOVER_TIMEOUT;
+-                this._showLabelTimeoutId = Mainloop.timeout_add(timeout,
+-                    Lang.bind(this, function() {
+-                        this._labelShowing = true;
+-                        item.showLabel();
+-                        return false;
+-                    }));
+-                if (this._resetHoverTimeoutId > 0) {
+-                    Mainloop.source_remove(this._resetHoverTimeoutId);
+-                    this._resetHoverTimeoutId = 0;
+-                }
++            if (this._showLabelTimeoutId)
++                return;
++
++            let timeout = this._labelShowing ? 0 : ITEM_HOVER_TIMEOUT;
++            this._showLabelTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
++                timeout,
++                () => {
++                    this._labelShowing = true;
++                    item.showLabel();
++                    this._showLabelTimeoutId = 0;
++                    return GLib.SOURCE_REMOVE;
++                });
++
++            if (this._resetHoverTimeoutId > 0) {
++                GLib.source_remove(this._resetHoverTimeoutId);
++                this._resetHoverTimeoutId = 0;
+             }
+         } else {
+             if (this._showLabelTimeoutId > 0)
+-                Mainloop.source_remove(this._showLabelTimeoutId);
++                GLib.source_remove(this._showLabelTimeoutId);
+             this._showLabelTimeoutId = 0;
+             item.hideLabel();
+-            if (this._labelShowing) {
+-                this._resetHoverTimeoutId = Mainloop.timeout_add(ITEM_HOVER_TIMEOUT,
+-                    Lang.bind(this, function() {
+-                        this._labelShowing = false;
+-                        return false;
+-                    }));
+-            }
++            if (!this._labelShowing)
++                return;
++
++            this._resetHoverTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
++                ITEM_HOVER_TIMEOUT,
++                () => {
++                    this._labelShowing = false;
++                    return GLib.SOURCE_REMOVE;
++                });
+         }
+-    },
+-});
++    }
++}
+ 
+ function init() {
+     return new Extension();
+-- 
+2.41.0
+
+
+From fe1916c1b29ab64c73179ab4c86e106ff69f977d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 26 May 2021 19:50:37 +0200
+Subject: [PATCH 3/6] systemMonitor: Make label property private
+
+There is no good reason to use a public property, and the name will
+clash when we subclass St.Button.
+---
+ extensions/systemMonitor/extension.js | 35 ++++++++++++++-------------
+ 1 file changed, 18 insertions(+), 17 deletions(-)
+
+diff --git a/extensions/systemMonitor/extension.js b/extensions/systemMonitor/extension.js
+index f7c6a4a9..bde25a1d 100644
+--- a/extensions/systemMonitor/extension.js
++++ b/extensions/systemMonitor/extension.js
+@@ -19,6 +19,7 @@ const ITEM_HOVER_TIMEOUT = 300;
+ 
+ const Indicator = class {
+     constructor() {
++        this._label = null;
+         this._initValues();
+         this._drawingArea = new St.DrawingArea({
+             reactive: true,
+@@ -51,28 +52,28 @@ const Indicator = class {
+     }
+ 
+     showLabel() {
+-        if (this.label === null)
++        if (this._label === null)
+             return;
+ 
+-        this.label.opacity = 0;
+-        this.label.show();
++        this._label.opacity = 0;
++        this._label.show();
+ 
+         let [stageX, stageY] = this.actor.get_transformed_position();
+ 
+         let itemWidth = this.actor.allocation.x2 - this.actor.allocation.x1;
+ 
+-        let labelWidth = this.label.width;
++        let labelWidth = this._label.width;
+         let xOffset = Math.floor((itemWidth - labelWidth) / 2);
+ 
+         let x = stageX + xOffset;
+ 
+-        let node = this.label.get_theme_node();
++        let node = this._label.get_theme_node();
+         let yOffset = node.get_length('-y-offset');
+ 
+-        let y = stageY - this.label.get_height() - yOffset;
++        let y = stageY - this._label.get_height() - yOffset;
+ 
+-        this.label.set_position(x, y);
+-        this.label.ease({
++        this._label.set_position(x, y);
++        this._label.ease({
+             opacity: 255,
+             duration: ITEM_LABEL_SHOW_TIME,
+             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+@@ -80,23 +81,23 @@ const Indicator = class {
+     }
+ 
+     setLabelText(text) {
+-        if (this.label === null) {
+-            this.label = new St.Label({
++        if (this._label === null) {
++            this._label = new St.Label({
+                 style_class: 'extension-systemMonitor-indicator-label',
+             });
+         }
+ 
+-        this.label.set_text(text);
+-        Main.layoutManager.addChrome(this.label);
+-        this.label.hide();
++        this._label.set_text(text);
++        Main.layoutManager.addChrome(this._label);
++        this._label.hide();
+     }
+ 
+     hideLabel() {
+-        this.label.ease({
++        this._label.ease({
+             opacity: 0,
+             duration: ITEM_LABEL_HIDE_TIME,
+             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+-            onComplete: () => this.label.hide(),
++            onComplete: () => this._label.hide(),
+         });
+     }
+ 
+@@ -107,8 +108,8 @@ const Indicator = class {
+     _onDestroy() {
+         GLib.source_remove(this._timeout);
+ 
+-        if (this.label)
+-            this.label.destroy();
++        if (this._label)
++            this._label.destroy();
+     }
+ 
+     _initValues() {
+-- 
+2.41.0
+
+
+From b8457707c2b05b88d443587b729e1893cf8b8d3d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 17 May 2017 19:31:58 +0200
+Subject: [PATCH 4/6] systemMonitor: Move indicators to calendar
+
+The message tray joined the invisible choir, so we have to find
+a new home for the extension UI. The message list in the calendar
+drop-down looks like the best option, given that it replaced the
+old tray (and also took over the old keyboard shortcut to bring
+it up quickly).
+---
+ extensions/systemMonitor/extension.js   | 106 +++++++++++-------------
+ extensions/systemMonitor/stylesheet.css |  14 ----
+ 2 files changed, 50 insertions(+), 70 deletions(-)
+
+diff --git a/extensions/systemMonitor/extension.js b/extensions/systemMonitor/extension.js
+index bde25a1d..1fd01ab4 100644
+--- a/extensions/systemMonitor/extension.js
++++ b/extensions/systemMonitor/extension.js
+@@ -2,10 +2,11 @@
+ 
+ /* exported init */
+ 
+-const { Clutter, GLib, GTop, Shell, St } = imports.gi;
++const { Clutter, GLib, GObject, GTop, Shell, St } = imports.gi;
+ 
+ const ExtensionUtils = imports.misc.extensionUtils;
+ const Main = imports.ui.main;
++const MessageList = imports.ui.messageList;
+ 
+ const Gettext = imports.gettext.domain('gnome-shell-extensions');
+ const _ = Gettext.gettext;
+@@ -17,30 +18,38 @@ const ITEM_LABEL_SHOW_TIME = 150;
+ const ITEM_LABEL_HIDE_TIME = 100;
+ const ITEM_HOVER_TIMEOUT = 300;
+ 
+-const Indicator = class {
+-    constructor() {
++const Indicator = GObject.registerClass({
++    Signals: {
++        'close': {},
++        'expanded': {},
++        'unexpanded': {},
++    },
++}, class Indicator extends St.Button {
++    _init() {
+         this._label = null;
+         this._initValues();
+         this._drawingArea = new St.DrawingArea({
+-            reactive: true,
+             x_expand: true,
+             y_expand: true,
+         });
+         this._drawingArea.connect('repaint', this._draw.bind(this));
+-        this._drawingArea.connect('button-press-event', () => {
++
++        super._init({
++            style_class: 'message message-content extension-systemMonitor-indicator-area',
++            child: this._drawingArea,
++            x_expand: true,
++            can_focus: true,
++        });
++
++        this.connect('clicked', () => {
+             let app = Shell.AppSystem.get_default().lookup_app('gnome-system-monitor.desktop');
+             app.open_new_window(-1);
+-            return true;
+-        });
+ 
+-        this.actor = new St.Bin({
+-            style_class: 'extension-systemMonitor-indicator-area',
+-            reactive: true,
+-            track_hover: true,
++            Main.overview.hide();
++            Main.panel.closeCalendar();
+         });
+-        this.actor.add_actor(this._drawingArea);
+ 
+-        this.actor.connect('destroy', this._onDestroy.bind(this));
++        this.connect('destroy', this._onDestroy.bind(this));
+ 
+         this._timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
+             INDICATOR_UPDATE_INTERVAL,
+@@ -58,9 +67,9 @@ const Indicator = class {
+         this._label.opacity = 0;
+         this._label.show();
+ 
+-        let [stageX, stageY] = this.actor.get_transformed_position();
++        let [stageX, stageY] = this.get_transformed_position();
+ 
+-        let itemWidth = this.actor.allocation.x2 - this.actor.allocation.x1;
++        let itemWidth = this.allocation.x2 - this.allocation.x1;
+ 
+         let labelWidth = this._label.width;
+         let xOffset = Math.floor((itemWidth - labelWidth) / 2);
+@@ -73,6 +82,7 @@ const Indicator = class {
+         let y = stageY - this._label.get_height() - yOffset;
+ 
+         this._label.set_position(x, y);
++        this._label.get_parent().set_child_above_sibling(this._label, null);
+         this._label.ease({
+             opacity: 255,
+             duration: ITEM_LABEL_SHOW_TIME,
+@@ -101,8 +111,12 @@ const Indicator = class {
+         });
+     }
+ 
+-    destroy() {
+-        this.actor.destroy();
++    /* MessageList.Message boilerplate */
++    canClose() {
++        return false;
++    }
++
++    clear() {
+     }
+ 
+     _onDestroy() {
+@@ -120,7 +134,7 @@ const Indicator = class {
+ 
+     _draw(area) {
+         let [width, height] = area.get_surface_size();
+-        let themeNode = this.actor.get_theme_node();
++        let themeNode = this.get_theme_node();
+         let cr = area.get_context();
+ 
+         // draw the background grid
+@@ -190,11 +204,12 @@ const Indicator = class {
+             cr.stroke();
+         }
+     }
+-};
++});
+ 
+-const CpuIndicator = class extends Indicator {
+-    constructor() {
+-        super();
++const CpuIndicator = GObject.registerClass(
++class CpuIndicator extends Indicator {
++    _init() {
++        super._init();
+ 
+         this.gridColor = '-grid-color';
+         this.renderStats = ['cpu-user', 'cpu-sys', 'cpu-iowait'];
+@@ -245,11 +260,12 @@ const CpuIndicator = class extends Indicator {
+ 
+         this._prev = cpu;
+     }
+-};
++});
+ 
+-const MemoryIndicator = class extends Indicator {
+-    constructor() {
+-        super();
++const MemoryIndicator = GObject.registerClass(
++class MemoryIndicator extends Indicator {
++    _init() {
++        super._init();
+ 
+         this.gridColor = '-grid-color';
+         this.renderStats = ['mem-user', 'mem-other', 'mem-cached'];
+@@ -282,7 +298,7 @@ const MemoryIndicator = class extends Indicator {
+         t += this.mem.cached / this.mem.total;
+         this.stats['mem-cached'].values.push(t);
+     }
+-};
++});
+ 
+ const INDICATORS = [CpuIndicator, MemoryIndicator];
+ 
+@@ -296,49 +312,27 @@ class Extension {
+     }
+ 
+     enable() {
+-        this._box = new St.BoxLayout({
+-            style_class: 'extension-systemMonitor-container',
+-            x_align: Clutter.ActorAlign.START,
+-            x_expand: true,
+-        });
+-        this._indicators = [];
++        this._section = new MessageList.MessageListSection(_('System Monitor'));
+ 
+         for (let i = 0; i < INDICATORS.length; i++) {
+             let indicator = new INDICATORS[i]();
+ 
+-            indicator.actor.connect('notify::hover', () => {
++            indicator.connect('notify::hover', () => {
+                 this._onHover(indicator);
+             });
+-            this._box.add_actor(indicator.actor);
+-            this._indicators.push(indicator);
++            this._section.addMessage(indicator, false);
+         }
+ 
+-        this._boxHolder = new St.BoxLayout({
+-            x_expand: true,
+-            y_expand: true,
+-            x_align: Clutter.ActorAlign.START,
+-        });
+-        let menuButton = Main.messageTray._messageTrayMenuButton.actor;
+-        Main.messageTray.actor.remove_child(menuButton);
+-        Main.messageTray.actor.add_child(this._boxHolder);
+-
+-        this._boxHolder.add_child(this._box);
+-        this._boxHolder.add_child(menuButton);
++        Main.panel.statusArea.dateMenu._messageList._addSection(this._section);
++        this._section.get_parent().set_child_at_index(this._section, 0);
+     }
+ 
+     disable() {
+-        this._indicators.forEach(i => i.destroy());
+-
+-        let menuButton = Main.messageTray._messageTrayMenuButton.actor;
+-        this._boxHolder.remove_child(menuButton);
+-        Main.messageTray.actor.add_child(menuButton);
+-
+-        this._box.destroy();
+-        this._boxHolder.destroy();
++        this._section.destroy();
+     }
+ 
+     _onHover(item) {
+-        if (item.actor.get_hover()) {
++        if (item.get_hover()) {
+             if (this._showLabelTimeoutId)
+                 return;
+ 
+diff --git a/extensions/systemMonitor/stylesheet.css b/extensions/systemMonitor/stylesheet.css
+index 13f95ec7..978ac12a 100644
+--- a/extensions/systemMonitor/stylesheet.css
++++ b/extensions/systemMonitor/stylesheet.css
+@@ -1,17 +1,4 @@
+-.extension-systemMonitor-container {
+-    spacing: 5px;
+-    padding-left: 5px;
+-    padding-right: 5px;
+-    padding-bottom: 10px;
+-    padding-top: 10px;
+-}
+-
+ .extension-systemMonitor-indicator-area {
+-    border: 1px solid #8d8d8d;
+-    border-radius: 3px;
+-    width: 100px;
+-    /* message tray is 72px, so 20px padding of the container,
+-       2px of border, makes it 50px */
+     height: 50px;
+     -grid-color: #575757;
+     -cpu-total-color: rgb(0,154,62);
+@@ -21,7 +8,6 @@
+     -mem-user-color: rgb(210,148,0);
+     -mem-cached-color: rgb(90,90,90);
+     -mem-other-color: rgb(205,203,41);
+-    background-color: #1e1e1e;
+ }
+ 
+ .extension-systemMonitor-indicator-label {
+-- 
+2.41.0
+
+
+From bc05d47dbd45f761b14d90f60fd16259486bcb53 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 18 May 2017 16:20:07 +0200
+Subject: [PATCH 5/6] systemMonitor: Handle clicks on section title
+
+While on 3.24.x only the event section still has a clickable title,
+it's a generic message list feature in previous versions. It's easy
+enough to support with a small subclass, so use that instead of
+the generic baseclass.
+
+Fixes: https://gitlab.gnome.org/GNOME/gnome-shell-extensions3
+---
+ extensions/systemMonitor/extension.js | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/extensions/systemMonitor/extension.js b/extensions/systemMonitor/extension.js
+index 1fd01ab4..57bdb51f 100644
+--- a/extensions/systemMonitor/extension.js
++++ b/extensions/systemMonitor/extension.js
+@@ -300,6 +300,22 @@ class MemoryIndicator extends Indicator {
+     }
+ });
+ 
++const SystemMonitorSection = GObject.registerClass(
++class SystemMonitorSection extends MessageList.MessageListSection {
++    _init() {
++        super._init(_('System Monitor'));
++    }
++
++    _onTitleClicked() {
++        super._onTitleClicked();
++
++        let appSys = Shell.AppSystem.get_default();
++        let app = appSys.lookup_app('gnome-system-monitor.desktop');
++        if (app)
++            app.open_new_window(-1);
++    }
++});
++
+ const INDICATORS = [CpuIndicator, MemoryIndicator];
+ 
+ class Extension {
+@@ -312,7 +328,7 @@ class Extension {
+     }
+ 
+     enable() {
+-        this._section = new MessageList.MessageListSection(_('System Monitor'));
++        this._section = new SystemMonitorSection();
+ 
+         for (let i = 0; i < INDICATORS.length; i++) {
+             let indicator = new INDICATORS[i]();
+-- 
+2.41.0
+
+
+From 597086c27823a7eb0b2124bfbe2c0572bbd1783d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 18 May 2017 18:00:17 +0200
+Subject: [PATCH 6/6] systemMonitor: Provide classic styling
+
+The indicator tooltips currently don't work out in classic mode
+(dark text on dark background), so provide some mode-specific
+style.
+
+Fixes: #4
+---
+ extensions/systemMonitor/classic.css | 6 ++++++
+ extensions/systemMonitor/meson.build | 4 ++++
+ 2 files changed, 10 insertions(+)
+ create mode 100644 extensions/systemMonitor/classic.css
+
+diff --git a/extensions/systemMonitor/classic.css b/extensions/systemMonitor/classic.css
+new file mode 100644
+index 00000000..946863dc
+--- /dev/null
++++ b/extensions/systemMonitor/classic.css
+@@ -0,0 +1,6 @@
++@import url("stylesheet.css");
++
++.extension-systemMonitor-indicator-label {
++    background-color: rgba(237,237,237,0.9);
++    border: 1px solid #a1a1a1;
++}
+diff --git a/extensions/systemMonitor/meson.build b/extensions/systemMonitor/meson.build
+index 48504f63..b6548b14 100644
+--- a/extensions/systemMonitor/meson.build
++++ b/extensions/systemMonitor/meson.build
+@@ -3,3 +3,7 @@ extension_data += configure_file(
+   output: metadata_name,
+   configuration: metadata_conf
+ )
++
++if classic_mode_enabled
++  extension_data += files('classic.css')
++endif
+-- 
+2.41.0
+

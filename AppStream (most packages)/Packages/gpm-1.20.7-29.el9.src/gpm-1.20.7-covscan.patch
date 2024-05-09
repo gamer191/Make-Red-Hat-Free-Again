@@ -1,0 +1,115 @@
+diff --git a/src/daemon/check_uniqueness.c b/src/daemon/check_uniqueness.c
+index 4972413..d0eb4e4 100644
+--- a/src/daemon/check_uniqueness.c
++++ b/src/daemon/check_uniqueness.c
+@@ -36,6 +36,7 @@ void check_uniqueness(void)
+ 
+    if((fp = fopen(GPM_NODE_PID, "r")) != NULL) {
+       fscanf(fp, "%d", &old_pid);
++      fclose(fp);
+       if (kill(old_pid,0) == -1) {
+          gpm_report(GPM_PR_INFO,GPM_MESS_STALE_PID, GPM_NODE_PID);
+          unlink(GPM_NODE_PID);
+diff --git a/src/lib/liblow.c b/src/lib/liblow.c
+index 8b40b71..d197dae 100644
+--- a/src/lib/liblow.c
++++ b/src/lib/liblow.c
+@@ -250,9 +250,9 @@ int Gpm_Open(Gpm_Connect *conn, int flag)
+          memcpy(tty, consolename, strlen(consolename)-1);
+          sprintf(&tty[strlen(consolename) - 1], "%i", flag);
+       } else if (flag==0) { /* use your current vc */ 
+-         if (isatty(0)) tty = ttyname(0);             /* stdin */
+-         if (!tty && isatty(1)) tty = ttyname(1);     /* stdout */
+-         if (!tty && isatty(2)) tty = ttyname(2);     /* stderr */
++         if (isatty(0) && ttyname(0)) tty = strdup(ttyname(0));             /* stdin */
++         if (!tty && isatty(1) && ttyname(1)) tty = strdup(ttyname(1));     /* stdout */
++         if (!tty && isatty(2) && ttyname(2)) tty = strdup(ttyname(2));     /* stderr */
+          if (tty == NULL) {
+             gpm_report(GPM_PR_ERR,"checking tty name failed");
+             goto err;
+@@ -373,10 +373,12 @@ int Gpm_Open(Gpm_Connect *conn, int flag)
+ #endif
+ 
+    }
++   if (tty) free(tty);
+    return gpm_fd;
+ 
+   /*....................................... Error: free all memory */
+    err:
++   if (tty) free(tty);
+    if (gpm_is_disabled < 2) /* be quiet if no gpmctl socket found */
+       gpm_report(GPM_PR_ERR,"Oh, oh, it's an error! possibly I die! ");
+    while(gpm_stack) {
+diff --git a/src/lib/report-lib.c b/src/lib/report-lib.c
+index 03230b4..ff74b8c 100644
+--- a/src/lib/report-lib.c
++++ b/src/lib/report-lib.c
+@@ -63,5 +63,6 @@ void gpm_report(int line, const char *file, int stat, const char *text, ... )
+    fprintf(stderr,"\n");
+ #endif
+ 
++   va_end(ap);
+    if(stat == GPM_STAT_OOPS) exit(1);  /* may a lib function call exit ???? */
+ }
+diff --git a/src/mice.c b/src/mice.c
+index 6cbd491..090dfed 100644
+--- a/src/mice.c
++++ b/src/mice.c
+@@ -905,7 +905,7 @@ static int M_wacom(Gpm_Event *state, unsigned char *data)
+    } else {                                               /* Relative Mode */
+       /* Treshold; if greather then treat tool as first time in proximity */
+       if( abs(x-ox)>(wmaxx/wcmodell[WacomModell].treshold) 
+-       || abs(y-oy)>(wmaxy/wcmodell[WacomModell].treshold) ) ox=x; oy=y;
++       || abs(y-oy)>(wmaxy/wcmodell[WacomModell].treshold) ) { ox=x; oy=y; }
+ 
+       state->dx= (x-ox) / (wmaxx / win.ws_col / wcmodell[WacomModell].treshold);
+       state->dy= (y-oy) / (wmaxy / win.ws_row / wcmodell[WacomModell].treshold);
+diff --git a/src/prog/gpm-root.y b/src/prog/gpm-root.y
+index 76c896c..ded326a 100644
+--- a/src/prog/gpm-root.y
++++ b/src/prog/gpm-root.y
+@@ -555,12 +555,15 @@ int f_jptty(int mode, DrawItem *self, int uid)
+          } /*if*/
+          if (ioctl(fd, VT_ACTIVATE, i)<0) {
+             gpm_report(GPM_PR_ERR, "%s: %s", consolename,strerror(errno));
++            close(fd);
+             return 1;
+          } /*if*/
+          if (ioctl(fd, VT_WAITACTIVE, i)<0) {
+             gpm_report(GPM_PR_ERR, "%s: %s", consolename,strerror(errno));
++            close(fd);
+             return 1;
+          }
++         close(fd);
+       default: return 0;
+    }
+    return 0; /* silly gcc -Wall */
+@@ -586,14 +589,17 @@ int f_mktty(int mode, DrawItem *self, int uid)
+          } /*if*/
+          if (ioctl(fd, VT_OPENQRY, &vc)<0) {
+             gpm_report(GPM_PR_ERR, "%s: %s",consolename, strerror(errno));
++            close(fd);
+             return 1;
+          } /*if*/
+          switch(pid=fork()) {
+ 	         case -1:
+                gpm_report(GPM_PR_ERR, "fork(): %s", strerror(errno));
++               close(fd);
+                return 1;
+ 	         case 0: /* child: exec getty */
+ 	            sprintf(name,"tty%i",vc);
++                    close(fd);
+ 	            execl("/sbin/mingetty","mingetty",name,(char *)NULL);
+ 	            exit(1); /* shouldn't happen */
+             default: /* father: jump to the tty */
+@@ -601,8 +607,10 @@ int f_mktty(int mode, DrawItem *self, int uid)
+                                                                       ,pid,vc);
+ 	            consolepids[vc]=pid;
+ 	            sprintf(self->arg,"%i",vc);
++                    close(fd);
+ 	            return f_jptty(mode,self,uid);
+ 	      }
++         close(fd);
+       default: return 0;
+    }
+    return 0;

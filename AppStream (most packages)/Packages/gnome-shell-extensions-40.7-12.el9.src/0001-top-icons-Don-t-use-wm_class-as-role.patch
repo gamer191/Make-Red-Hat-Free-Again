@@ -1,0 +1,27 @@
+From f0e4618bf0752aaf094d78b4c810ebda817ccaad Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 2 Jun 2021 17:32:21 +0200
+Subject: [PATCH] top-icons: Don't use wm_class as role
+
+This prevents adding icons for multiple instances of the same app,
+which may be desirable in some circumstances.
+---
+ extensions/top-icons/extension.js | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/extensions/top-icons/extension.js b/extensions/top-icons/extension.js
+index 79e2f42..3dfba46 100644
+--- a/extensions/top-icons/extension.js
++++ b/extensions/top-icons/extension.js
+@@ -63,7 +63,7 @@ class SysTray {
+             button.destroy();
+         });
+ 
+-        let role = wmClass || `${icon}`;
++        const role = `${icon}`;
+         Main.panel.addToStatusArea(role, button);
+     }
+ 
+-- 
+2.32.0
+

@@ -1,0 +1,92 @@
+From ce8ac36613ef4fbb697fc9f6613844168c05a8d3 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Fri, 8 Oct 2021 11:08:17 -0400
+Subject: [PATCH 1/2] unlockDialog: Don't create AuthDialog just to finish it
+
+If the the unlock dialog gets finished before an auth dialog is
+created, the code currently creates one just to tell it to finish.
+
+This commit changes the code to skip creating the auth dialog in
+that case.
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1999>
+---
+ js/ui/unlockDialog.js | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/js/ui/unlockDialog.js b/js/ui/unlockDialog.js
+index c81c6184a9..d8c45f7510 100644
+--- a/js/ui/unlockDialog.js
++++ b/js/ui/unlockDialog.js
+@@ -884,7 +884,11 @@ var UnlockDialog = GObject.registerClass({
+     }
+ 
+     finish(onComplete) {
+-        this._ensureAuthPrompt();
++        if (!this._authPrompt) {
++            onComplete();
++            return;
++        }
++
+         this._authPrompt.finish(onComplete);
+     }
+ 
+-- 
+2.39.1
+
+
+From 2a513d44e7b887b355d6b71cf88c4114a8b685f8 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Tue, 5 Oct 2021 11:01:19 -0400
+Subject: [PATCH 2/2] unlockDialog: Properly reset auth prompt when showing it
+
+If a user hits escape twice really fast when coming back to
+their machine to unlock it, they made end up getting presented
+with a non-functional unlock screen that doesn't show their
+user icon and doesn't ask for a password.
+
+This is because showPrompt assumes that if an auth prompt already
+exists, it's ready to go. That may not be true, if it's in the
+process of getting torn down at the time because it's in the middle
+of a cancel animation.
+
+This commit solves the problem by ensuring the auth prompt is always
+in a fresh reset state before showing it.
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1999>
+---
+ js/ui/unlockDialog.js | 18 ++++++++----------
+ 1 file changed, 8 insertions(+), 10 deletions(-)
+
+diff --git a/js/ui/unlockDialog.js b/js/ui/unlockDialog.js
+index d8c45f7510..00e3eef971 100644
+--- a/js/ui/unlockDialog.js
++++ b/js/ui/unlockDialog.js
+@@ -689,16 +689,14 @@ var UnlockDialog = GObject.registerClass({
+     }
+ 
+     _ensureAuthPrompt() {
+-        if (this._authPrompt)
+-            return;
+-
+-        this._authPrompt = new AuthPrompt.AuthPrompt(this._gdmClient,
+-            AuthPrompt.AuthPromptMode.UNLOCK_ONLY);
+-        this._authPrompt.connect('failed', this._fail.bind(this));
+-        this._authPrompt.connect('cancelled', this._fail.bind(this));
+-        this._authPrompt.connect('reset', this._onReset.bind(this));
+-
+-        this._promptBox.add_child(this._authPrompt);
++        if (!this._authPrompt) {
++            this._authPrompt = new AuthPrompt.AuthPrompt(this._gdmClient,
++                AuthPrompt.AuthPromptMode.UNLOCK_ONLY);
++            this._authPrompt.connect('failed', this._fail.bind(this));
++            this._authPrompt.connect('cancelled', this._fail.bind(this));
++            this._authPrompt.connect('reset', this._onReset.bind(this));
++            this._promptBox.add_child(this._authPrompt);
++        }
+ 
+         this._authPrompt.reset();
+         this._authPrompt.updateSensitivity(true);
+-- 
+2.39.1
+

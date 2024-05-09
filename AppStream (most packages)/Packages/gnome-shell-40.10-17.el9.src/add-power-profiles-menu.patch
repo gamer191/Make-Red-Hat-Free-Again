@@ -1,0 +1,333 @@
+From 2103c5fcf994bb6aebd978553b338436e85fa7ed Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 7 Jul 2021 22:05:25 +0200
+Subject: [PATCH 1/2] status/powerProfiles: Add power mode selection
+
+Settings' power panel gained support for switchable power profiles
+in GNOME 40. It's useful to have that functionality more readily
+available, so expose it in the system status menu as well.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/3944
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1907>
+---
+ .../net.hadess.PowerProfiles.xml              |  76 ++++++++++++
+ .../gnome-shell-dbus-interfaces.gresource.xml |   1 +
+ js/js-resources.gresource.xml                 |   1 +
+ js/ui/panel.js                                |   4 +
+ js/ui/status/powerProfiles.js                 | 111 ++++++++++++++++++
+ po/POTFILES.in                                |   1 +
+ 6 files changed, 194 insertions(+)
+ create mode 100644 data/dbus-interfaces/net.hadess.PowerProfiles.xml
+ create mode 100644 js/ui/status/powerProfiles.js
+
+diff --git a/data/dbus-interfaces/net.hadess.PowerProfiles.xml b/data/dbus-interfaces/net.hadess.PowerProfiles.xml
+new file mode 100644
+index 000000000..fce04a86d
+--- /dev/null
++++ b/data/dbus-interfaces/net.hadess.PowerProfiles.xml
+@@ -0,0 +1,76 @@
++<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
++"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
++
++<node>
++
++  <!--
++      net.hadess.PowerProfiles:
++      @short_description: Power Profiles daemon
++
++      The power-profiles-daemon API is meant to be used by parts of the OS or
++      desktop environment to switch system power profiles based on user choice,
++      or user intent.
++
++      OS components would typically use the "Profiles" property to construct
++      their UI (2 or 3 profiles available), and monitor the "ActiveProfile"
++      and the "PerformanceInhibited" properties to update that UI. The UI
++      would try to set the "ActiveProfile" property if the user selected
++      a different one.
++
++      Note that the reason why the project exists and how it is different from
++      existing projects is explained <ulink href=" https://gitlab.freedesktop.org/hadess/power-profiles-daemon/-/blob/master/README.md">
++      in the project's README file</ulink>.
++
++      The object path will be "/net/hadess/PowerProfiles".
++  -->
++  <interface name="net.hadess.PowerProfiles">
++    <!--
++        ActiveProfile:
++
++        The type of the currently active profile. It might change automatically
++        if the "performance" profile was selected but it got inhibited, in which
++        case the "PerformanceInhibited" property will reflect the reason.
++    -->
++    <property name="ActiveProfile" type="s" access="readwrite"/>
++
++    <!--
++        PerformanceInhibited:
++
++        This will be set if the performance power profile is unavailable, with
++        the value being used to identify the reason for unavailability. As new
++        reasons can be added, it is recommended that front-ends show a generic
++        reason if they do not recognise the value. Possible values are:
++        - "lap-detected" (the computer is sitting on the user's lap)
++        - "high-operating-temperature" (the computer is close to overheating)
++        - "" (the empty string, if not inhibited)
++    -->
++    <property name="PerformanceInhibited" type="s" access="read"/>
++
++    <!--
++        Profiles:
++
++        An array of key-pair values representing each profile. The key named
++        "Driver" (s) identifies the power-profiles-daemon backend code used to
++        implement the profile.
++
++        The key named "Profile" (s) will be one of:
++        - "power-saver" (battery saving profile)
++        - "balanced" (the default  profile)
++        - "performance" (a profile that does not care about noise or battery consumption)
++
++        Only one of each type of profile will be listed, with the daemon choosing the
++        more appropriate "driver" for each profile type.
++    -->
++    <property name="Profiles" type="aa{sv}" access="read"/>
++
++    <!--
++        Actions:
++
++        An array of strings listing each one of the "actions" implemented in
++        the running daemon. This is used by API users to figure out whether
++        particular functionality is available in a version of the daemon.
++    -->
++    <property name="Actions" type="as" access="read"/>
++
++  </interface>
++</node>
+diff --git a/data/gnome-shell-dbus-interfaces.gresource.xml b/data/gnome-shell-dbus-interfaces.gresource.xml
+index e7972f6cb..6682c462d 100644
+--- a/data/gnome-shell-dbus-interfaces.gresource.xml
++++ b/data/gnome-shell-dbus-interfaces.gresource.xml
+@@ -1,6 +1,7 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <gresources>
+   <gresource prefix="/org/gnome/shell/dbus-interfaces">
++    <file preprocess="xml-stripblanks">net.hadess.PowerProfiles.xml</file>
+     <file preprocess="xml-stripblanks">net.hadess.SensorProxy.xml</file>
+     <file preprocess="xml-stripblanks">net.reactivated.Fprint.Device.xml</file>
+     <file preprocess="xml-stripblanks">net.reactivated.Fprint.Manager.xml</file>
+diff --git a/js/js-resources.gresource.xml b/js/js-resources.gresource.xml
+index b2c603a55..7a94e2ff1 100644
+--- a/js/js-resources.gresource.xml
++++ b/js/js-resources.gresource.xml
+@@ -134,6 +134,7 @@
+     <file>ui/status/nightLight.js</file>
+     <file>ui/status/network.js</file>
+     <file>ui/status/power.js</file>
++    <file>ui/status/powerProfiles.js</file>
+     <file>ui/status/rfkill.js</file>
+     <file>ui/status/volume.js</file>
+     <file>ui/status/bluetooth.js</file>
+diff --git a/js/ui/panel.js b/js/ui/panel.js
+index ad11f4ba2..84668e96e 100644
+--- a/js/ui/panel.js
++++ b/js/ui/panel.js
+@@ -693,6 +693,7 @@ class AggregateMenu extends PanelMenu.Button {
+ 
+         this._remoteAccess = new imports.ui.status.remoteAccess.RemoteAccessApplet();
+         this._power = new imports.ui.status.power.Indicator();
++        this._powerProfiles = new imports.ui.status.powerProfiles.Indicator();
+         this._rfkill = new imports.ui.status.rfkill.Indicator();
+         this._volume = new imports.ui.status.volume.Indicator();
+         this._brightness = new imports.ui.status.brightness.Indicator();
+@@ -712,6 +713,7 @@ class AggregateMenu extends PanelMenu.Button {
+         this._indicators.add_child(this._rfkill);
+         this._indicators.add_child(this._volume);
+         this._indicators.add_child(this._power);
++        this._indicators.add_child(this._powerProfiles);
+ 
+         this.menu.addMenuItem(this._volume.menu);
+         this.menu.addMenuItem(this._brightness.menu);
+@@ -726,6 +728,7 @@ class AggregateMenu extends PanelMenu.Button {
+         this.menu.addMenuItem(this._location.menu);
+         this.menu.addMenuItem(this._rfkill.menu);
+         this.menu.addMenuItem(this._power.menu);
++        this.menu.addMenuItem(this._powerProfiles.menu);
+         this.menu.addMenuItem(this._nightLight.menu);
+         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+         this.menu.addMenuItem(this._system.menu);
+@@ -733,6 +736,7 @@ class AggregateMenu extends PanelMenu.Button {
+         menuLayout.addSizeChild(this._location.menu.actor);
+         menuLayout.addSizeChild(this._rfkill.menu.actor);
+         menuLayout.addSizeChild(this._power.menu.actor);
++        menuLayout.addSizeChild(this._powerProfiles.menu.actor);
+         menuLayout.addSizeChild(this._system.menu.actor);
+     }
+ });
+diff --git a/js/ui/status/powerProfiles.js b/js/ui/status/powerProfiles.js
+new file mode 100644
+index 000000000..f6bc5835b
+--- /dev/null
++++ b/js/ui/status/powerProfiles.js
+@@ -0,0 +1,111 @@
++// -*- mode: js; js-indent-level: 4; indent-tabs-mode: nil -*-
++/* exported Indicator */
++
++const { Gio, GObject } = imports.gi;
++
++const Main = imports.ui.main;
++const PanelMenu = imports.ui.panelMenu;
++const PopupMenu = imports.ui.popupMenu;
++
++const { loadInterfaceXML } = imports.misc.fileUtils;
++
++const BUS_NAME = 'net.hadess.PowerProfiles';
++const OBJECT_PATH = '/net/hadess/PowerProfiles';
++
++const PowerProfilesIface = loadInterfaceXML('net.hadess.PowerProfiles');
++const PowerProfilesProxy = Gio.DBusProxy.makeProxyWrapper(PowerProfilesIface);
++
++const PROFILE_LABELS = {
++    'performance': _('Performance Mode'),
++    'balanced': _('Balanced Power'),
++    'power-saver': _('Power Saver'),
++};
++const PROFILE_ICONS = {
++    'performance': 'power-profile-performance-symbolic',
++    'balanced': 'power-profile-balanced-symbolic',
++    'power-saver': 'power-profile-power-saver-symbolic',
++};
++
++var Indicator = GObject.registerClass(
++class Indicator extends PanelMenu.SystemIndicator {
++    _init() {
++        super._init();
++
++        this._profileItems = new Map();
++        this._updateProfiles = true;
++
++        this._proxy = new PowerProfilesProxy(Gio.DBus.system, BUS_NAME, OBJECT_PATH,
++            (proxy, error) => {
++                if (error) {
++                    log(error.message);
++                } else {
++                    this._proxy.connect('g-properties-changed',
++                        (p, properties) => {
++                            const propertyNames = properties.deep_unpack();
++                            this._updateProfiles = 'Profiles' in propertyNames;
++                            this._sync();
++                        });
++                }
++                this._sync();
++            });
++
++        this._item = new PopupMenu.PopupSubMenuMenuItem('', true);
++
++        this._profileSection = new PopupMenu.PopupMenuSection();
++        this._item.menu.addMenuItem(this._profileSection);
++        this._item.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
++        this._item.menu.addSettingsAction(_('Power Settings'),
++            'gnome-power-panel.desktop');
++        this.menu.addMenuItem(this._item);
++
++        Main.sessionMode.connect('updated', this._sessionUpdated.bind(this));
++        this._sessionUpdated();
++        this._sync();
++    }
++
++    _sessionUpdated() {
++        const sensitive = !Main.sessionMode.isLocked && !Main.sessionMode.isGreeter;
++        this.menu.setSensitive(sensitive);
++    }
++
++    _sync() {
++        this._item.visible = this._proxy.g_name_owner !== null;
++
++        if (!this._item.visible)
++            return;
++
++        if (this._updateProfiles) {
++            this._profileSection.removeAll();
++            this._profileItems.clear();
++
++            const profiles = this._proxy.Profiles
++                .map(p => p.Profile.unpack())
++                .reverse();
++            for (const profile of profiles) {
++                const label = PROFILE_LABELS[profile];
++                if (!label)
++                    continue;
++
++                const item = new PopupMenu.PopupMenuItem(label);
++                item.connect('activate',
++                    () => (this._proxy.ActiveProfile = profile));
++                this._profileItems.set(profile, item);
++                this._profileSection.addMenuItem(item);
++            }
++            this._updateProfiles = false;
++        }
++
++        for (const [profile, item] of this._profileItems) {
++            item.setOrnament(profile === this._proxy.ActiveProfile
++                ? PopupMenu.Ornament.DOT
++                : PopupMenu.Ornament.NONE);
++        }
++
++        const perfItem = this._profileItems.get('performance');
++        if (perfItem)
++            perfItem.sensitive = this._proxy.PerformanceInhibited === '';
++
++        this._item.label.text = PROFILE_LABELS[this._proxy.ActiveProfile];
++        this._item.icon.icon_name = PROFILE_ICONS[this._proxy.ActiveProfile];
++    }
++});
+diff --git a/po/POTFILES.in b/po/POTFILES.in
+index cb279c1ee..727cb01a8 100644
+--- a/po/POTFILES.in
++++ b/po/POTFILES.in
+@@ -61,6 +61,7 @@ js/ui/status/location.js
+ js/ui/status/network.js
+ js/ui/status/nightLight.js
+ js/ui/status/power.js
++js/ui/status/powerProfiles.js
+ js/ui/status/remoteAccess.js
+ js/ui/status/rfkill.js
+ js/ui/status/system.js
+-- 
+2.31.1
+
+
+From 0f8a2e2c6c3119492670efce5aff1224f2c3c47f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Fri, 6 Aug 2021 21:04:24 +0200
+Subject: [PATCH 2/2] powerProfiles: Tweak profile names
+
+After some more discussion, we settled on slightly different
+profile names.
+
+https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/4530
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/1939>
+---
+ js/ui/status/powerProfiles.js | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/js/ui/status/powerProfiles.js b/js/ui/status/powerProfiles.js
+index f6bc5835b..61205bbc6 100644
+--- a/js/ui/status/powerProfiles.js
++++ b/js/ui/status/powerProfiles.js
+@@ -16,9 +16,9 @@ const PowerProfilesIface = loadInterfaceXML('net.hadess.PowerProfiles');
+ const PowerProfilesProxy = Gio.DBusProxy.makeProxyWrapper(PowerProfilesIface);
+ 
+ const PROFILE_LABELS = {
+-    'performance': _('Performance Mode'),
+-    'balanced': _('Balanced Power'),
+-    'power-saver': _('Power Saver'),
++    'performance': C_('Power profile', 'Performance'),
++    'balanced': C_('Power profile', 'Balanced'),
++    'power-saver': C_('Power profile', 'Power Saver'),
+ };
+ const PROFILE_ICONS = {
+     'performance': 'power-profile-performance-symbolic',
+-- 
+2.31.1
+

@@ -1,0 +1,84 @@
+From df0c7e7e2475c05acac5bb491788e72eb5b850cb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Sabri=20=C3=9Cnal?= <libreajans@gmail.com>
+Date: Fri, 3 Apr 2020 15:17:28 +0300
+Subject: [PATCH 2/2] help-overlay.ui: Add three shortcuts
+
+F1: Show help
+Ctrl+question: Keyboard shortcuts
+Ctrl+e: Export logs to a file
+---
+ data/help-overlay.ui | 23 ++++++++++++++++++++++-
+ 1 file changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/data/help-overlay.ui b/data/help-overlay.ui
+index 881503e..4427e7c 100644
+--- a/data/help-overlay.ui
++++ b/data/help-overlay.ui
+@@ -1,42 +1,63 @@
+ <interface domain="gnome-logs">
+     <object class="GtkShortcutsWindow" id="help_overlay">
+         <child>
+             <object class="GtkShortcutsSection">
+                 <property name="visible">True</property>
+                 <child>
+                     <object class="GtkShortcutsGroup">
+                         <property name="title" translatable="yes" context="shortcut window">General</property>
+                         <property name="visible">True</property>
+                         <child>
+                             <object class="GtkShortcutsShortcut">
+                                 <property name="accelerator">&lt;Primary&gt;n</property>
+                                 <property name="title" translatable="yes" context="shortcut window">Open a new window</property>
+                                 <property name="visible">True</property>
+                             </object>
+                         </child>
+                         <child>
+                             <object class="GtkShortcutsShortcut">
+                                 <property name="accelerator">&lt;Primary&gt;w</property>
+                                 <property name="title" translatable="yes" context="shortcut window">Close a window</property>
+                                 <property name="visible">True</property>
+                             </object>
+                         </child>
++                        <child>
++                            <object class="GtkShortcutsShortcut">
++                                <property name="accelerator">F1</property>
++                                <property name="title" translatable="yes" context="shortcut window">Show help</property>
++                                <property name="visible">True</property>
++                            </object>
++                        </child>
++                        <child>
++                            <object class="GtkShortcutsShortcut">
++                                <property name="accelerator">&lt;Primary&gt;question</property>
++                                <property name="title" translatable="yes" context="shortcut window">Keyboard shorcuts</property>
++                                <property name="visible">True</property>
++                            </object>
++                        </child>
+                     </object>
+                 </child>
+                 <child>
+                     <object class="GtkShortcutsGroup">
+-                        <property name="title" translatable="yes" context="shortcut window">Search</property>
++                        <property name="title" translatable="yes" context="shortcut window">Application</property>
+                         <property name="visible">True</property>
+                         <child>
+                             <object class="GtkShortcutsShortcut">
+                                 <property name="accelerator">&lt;Primary&gt;f</property>
+                                 <property name="title" translatable="yes" context="shortcut window">Find</property>
+                                 <property name="visible">True</property>
+                             </object>
+                         </child>
++                        <child>
++                            <object class="GtkShortcutsShortcut">
++                                <property name="accelerator">&lt;Primary&gt;e</property>
++                                <property name="title" translatable="yes" context="shortcut window">Export logs to a file</property>
++                                <property name="visible">True</property>
++                            </object>
++                        </child>
+                     </object>
+                 </child>
+             </object>
+         </child>
+     </object>
+ </interface>
+-- 
+2.35.1
+

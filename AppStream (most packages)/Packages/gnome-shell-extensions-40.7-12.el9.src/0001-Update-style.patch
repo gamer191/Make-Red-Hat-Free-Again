@@ -1,0 +1,43 @@
+From 9ca03a744552c43251523fd23292b243130e1f89 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Mon, 24 May 2021 15:36:04 +0200
+Subject: [PATCH] Update style
+
+---
+ data/gnome-shell-sass | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Submodule data/gnome-shell-sass 9d66f7d..60230f4:
+diff --git a/data/gnome-shell-sass/widgets/_panel.scss b/data/gnome-shell-sass/widgets/_panel.scss
+index 1f46507..ad638b2 100644
+--- a/data/gnome-shell-sass/widgets/_panel.scss
++++ b/data/gnome-shell-sass/widgets/_panel.scss
+@@ -67,6 +67,11 @@ $panel_transition_duration: 250ms; // same as the overview transition duration
+       }
+     }
+ 
++    .panel-logo-icon {
++      padding-right: .4em;
++      icon-size: 1em;
++    }
++
+     // status area icons
+     .system-status-icon {
+       icon-size: $base_icon_size;
+diff --git a/data/gnome-classic.css b/data/gnome-classic.css
+index 52e5367..3be81e9 100644
+--- a/data/gnome-classic.css
++++ b/data/gnome-classic.css
+@@ -1234,6 +1234,9 @@ StScrollBar {
+         box-shadow: none; }
+         #panel .panel-button.clock-display:hover .clock, #panel .panel-button.clock-display:active .clock, #panel .panel-button.clock-display:overview .clock, #panel .panel-button.clock-display:focus .clock, #panel .panel-button.clock-display:checked .clock {
+           box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.2); }
++    #panel .panel-button .panel-logo-icon {
++      padding-right: .4em;
++      icon-size: 1em; }
+     #panel .panel-button .system-status-icon {
+       icon-size: 1.09em;
+       padding: 5px;
+-- 
+2.28.0
+

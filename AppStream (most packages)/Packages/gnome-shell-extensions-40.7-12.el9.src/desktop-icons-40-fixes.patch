@@ -1,0 +1,231 @@
+From afa394114c57197e96f18e7942729634ece5d3c4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 19 May 2021 16:46:59 +0200
+Subject: [PATCH 1/2] desktop-icons: Revert "Use GTK-Theme CSS for selected
+ file-item and rubberband"
+
+GtkStyleContext requires a (X11) display connection, which may not
+be available with xwayland-on-demand. Better use some hardcoded
+colors than crashing the session.
+
+This reverts commit 8dc524aa4efd6a3fbad67480bd6c904b0c0c99d6.
+---
+ extensions/desktop-icons/desktopIconsUtil.js | 11 ----------
+ extensions/desktop-icons/desktopManager.js   | 12 -----------
+ extensions/desktop-icons/fileItem.js         | 22 ++++----------------
+ extensions/desktop-icons/stylesheet.css      |  9 ++++++++
+ 4 files changed, 13 insertions(+), 41 deletions(-)
+
+diff --git a/extensions/desktop-icons/desktopIconsUtil.js b/extensions/desktop-icons/desktopIconsUtil.js
+index 696c945..57bedc1 100644
+--- a/extensions/desktop-icons/desktopIconsUtil.js
++++ b/extensions/desktop-icons/desktopIconsUtil.js
+@@ -16,7 +16,6 @@
+  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  */
+ 
+-const Gtk = imports.gi.Gtk;
+ const Gio = imports.gi.Gio;
+ const GLib = imports.gi.GLib;
+ const ExtensionUtils = imports.misc.extensionUtils;
+@@ -114,16 +113,6 @@ function getFileExtensionOffset(filename, isDirectory) {
+     return offset;
+ }
+ 
+-function getGtkClassBackgroundColor(classname, state) {
+-    let widget = new Gtk.WidgetPath();
+-    widget.append_type(Gtk.Widget);
+-
+-    let context = new Gtk.StyleContext();
+-    context.set_path(widget);
+-    context.add_class(classname);
+-    return context.get_background_color(state);
+-}
+-
+ // Reference the extension org.gnome.shell.extensions.drive-menu
+ function eject(mount) {
+     let unmountArgs = [
+diff --git a/extensions/desktop-icons/desktopManager.js b/extensions/desktop-icons/desktopManager.js
+index 1aad8c6..10e3ce0 100644
+--- a/extensions/desktop-icons/desktopManager.js
++++ b/extensions/desktop-icons/desktopManager.js
+@@ -16,7 +16,6 @@
+  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  */
+ 
+-const Gtk = imports.gi.Gtk;
+ const Clutter = imports.gi.Clutter;
+ const GObject = imports.gi.GObject;
+ const Gio = imports.gi.Gio;
+@@ -132,7 +131,6 @@ var DesktopManager = GObject.registerClass({
+     startRubberBand(x, y) {
+         this._rubberBandInitialX = x;
+         this._rubberBandInitialY = y;
+-        this._initRubberBandColor();
+         this._updateRubberBand(x, y);
+         this._rubberBand.show();
+         this._grabHelper.grab({ actor: global.stage });
+@@ -235,16 +233,6 @@ var DesktopManager = GObject.registerClass({
+         this._desktopGrids = {};
+     }
+ 
+-    /**
+-     * Initialize rubberband color from the GTK rubberband class
+-     * */
+-    _initRubberBandColor() {
+-        let rgba = DesktopIconsUtil.getGtkClassBackgroundColor('rubberband', Gtk.StateFlags.NORMAL);
+-        let background_color =
+-            'rgba(' + rgba.red * 255 + ', ' + rgba.green * 255 + ', ' + rgba.blue * 255 + ', 0.4)';
+-        this._rubberBand.set_style('background-color: ' + background_color);
+-    }
+-
+     async _scanFiles() {
+         for (let [fileItem, fileItemHandler] of this._fileItemHandlers)
+             Object.values(fileItemHandler).forEach(id => fileItem.disconnect(id));
+diff --git a/extensions/desktop-icons/fileItem.js b/extensions/desktop-icons/fileItem.js
+index 9987e7f..1e8ea89 100644
+--- a/extensions/desktop-icons/fileItem.js
++++ b/extensions/desktop-icons/fileItem.js
+@@ -16,7 +16,6 @@
+  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  */
+ 
+-const Gtk = imports.gi.Gtk;
+ const Clutter = imports.gi.Clutter;
+ const Gio = imports.gi.Gio;
+ const GLib = imports.gi.GLib;
+@@ -649,17 +648,6 @@ var FileItem = GObject.registerClass({
+         DBusUtils.openFileWithOtherApplication(this.file.get_path());
+     }
+ 
+-    _getSelectionStyle() {
+-        let rgba = DesktopIconsUtil.getGtkClassBackgroundColor('view', Gtk.StateFlags.SELECTED);
+-        let background_color =
+-            'rgba(' + rgba.red * 255 + ', ' + rgba.green * 255 + ', ' + rgba.blue * 255 + ', 0.6)';
+-        let border_color =
+-            'rgba(' + rgba.red * 255 + ', ' + rgba.green * 255 + ', ' + rgba.blue * 255 + ', 0.8)';
+-
+-        return 'background-color: ' + background_color + ';' +
+-               'border-color: ' + border_color + ';';
+-    }
+-
+     get menu() {
+         return this._menu;
+     }
+@@ -901,12 +889,10 @@ var FileItem = GObject.registerClass({
+         if (isSelected == this._isSelected)
+             return;
+ 
+-        if (isSelected) {
+-            this._container.set_style(this._getSelectionStyle());
+-        } else {
+-            this._container.set_style('background-color: transparent');
+-            this._container.set_style('border-color: transparent');
+-        }
++        if (isSelected)
++            this._container.add_style_pseudo_class('selected');
++        else
++            this._container.remove_style_pseudo_class('selected');
+ 
+         this._isSelected = isSelected;
+     }
+diff --git a/extensions/desktop-icons/stylesheet.css b/extensions/desktop-icons/stylesheet.css
+index 61b4ce8..4fd31c3 100644
+--- a/extensions/desktop-icons/stylesheet.css
++++ b/extensions/desktop-icons/stylesheet.css
+@@ -8,6 +8,15 @@
+    background-color: rgba(238, 238, 238, 0.2);
+ }
+ 
++.file-item:selected {
++   background-color: rgba(74, 144, 217, 0.6);
++   border-color: rgba(74, 144, 217, 0.8);
++}
++
++.rubber-band {
++   background-color: rgba(74, 144, 238, 0.4);
++}
++
+ .name-label {
+     text-shadow: 1px 1px black;
+     color: white;
+-- 
+2.32.0
+
+
+From ca050d098240b3e757f172d2012f7d1b91db3ff6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Fri, 21 May 2021 00:50:52 +0200
+Subject: [PATCH 2/2] desktop-icons: Port prefs to GTK4
+
+... for compatibility with GNOME 40.
+---
+ extensions/desktop-icons/prefs.js | 32 ++++++++++++++++++-------------
+ 1 file changed, 19 insertions(+), 13 deletions(-)
+
+diff --git a/extensions/desktop-icons/prefs.js b/extensions/desktop-icons/prefs.js
+index 890bcdb..c390aa8 100644
+--- a/extensions/desktop-icons/prefs.js
++++ b/extensions/desktop-icons/prefs.js
+@@ -98,23 +98,29 @@ function get_schema(schema) {
+ 
+ function buildPrefsWidget() {
+     initTranslations();
+-    let frame = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, border_width: 10, spacing: 10 });
+-
+-    frame.add(buildSelector('icon-size', _("Size for the desktop icons"), { 'small': _("Small"), 'standard': _("Standard"), 'large': _("Large") }));
+-    frame.add(buildSwitcher('show-home', _("Show the personal folder in the desktop")));
+-    frame.add(buildSwitcher('show-trash', _("Show the trash icon in the desktop")));
+-    frame.add(buildSwitcher('show-mount', _("Show mounted drives in the desktop")));
+-    frame.show_all();
++    let frame = new Gtk.Box({
++        orientation: Gtk.Orientation.VERTICAL,
++        margin_top: 10,
++        margin_bottom: 10,
++        margin_start: 10,
++        margin_end: 10,
++        spacing: 10,
++    });
++
++    frame.append(buildSelector('icon-size', _("Size for the desktop icons"), { 'small': _("Small"), 'standard': _("Standard"), 'large': _("Large") }));
++    frame.append(buildSwitcher('show-home', _("Show the personal folder in the desktop")));
++    frame.append(buildSwitcher('show-trash', _("Show the trash icon in the desktop")));
++    frame.append(buildSwitcher('show-mount', _("Show mounted drives in the desktop")));
+     return frame;
+ }
+ 
+ function buildSwitcher(key, labelText) {
+     let hbox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 10 });
+-    let label = new Gtk.Label({ label: labelText, xalign: 0 });
++    let label = new Gtk.Label({ label: labelText, xalign: 0, hexpand: true });
+     let switcher = new Gtk.Switch({ active: settings.get_boolean(key) });
+     settings.bind(key, switcher, 'active', 3);
+-    hbox.pack_start(label, true, true, 0);
+-    hbox.add(switcher);
++    hbox.append(label);
++    hbox.append(switcher);
+     return hbox;
+ }
+ 
+@@ -131,15 +137,15 @@ function buildSelector(key, labelText, elements) {
+         listStore.set (iter, [0, 1], [visibleText, val]);
+     }
+     let hbox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 10 });
+-    let label = new Gtk.Label({ label: labelText, xalign: 0 });
++    let label = new Gtk.Label({ label: labelText, xalign: 0, hexpand: true });
+     let combo = new Gtk.ComboBox({model: listStore});
+     let rendererText = new Gtk.CellRendererText();
+     combo.pack_start (rendererText, false);
+     combo.add_attribute (rendererText, 'text', 0);
+     combo.set_id_column(1);
+     settings.bind(key, combo, 'active-id', 3);
+-    hbox.pack_start(label, true, true, 0);
+-    hbox.add(combo);
++    hbox.append(label);
++    hbox.append(combo);
+     return hbox;
+ }
+ 
+-- 
+2.32.0
+

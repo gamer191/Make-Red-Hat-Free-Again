@@ -1,0 +1,33 @@
+From 8bea7c892c24694efda753ad1d76ab470032c6fe Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 15 Dec 2022 17:09:45 +0100
+Subject: [PATCH] desktop-icons: Don't grab focus on click
+
+We will move keyboard focus away immediately, either when opening
+the context menu or when starting the rubberband.
+
+In theory the grab is still useful, because it will move keyboard
+focus to the grid when restoring focus after ending the rubberband
+or closing the menu, however as keyboard navigation support is
+lacking, all it does is preventing the focus to return to the
+focus window after the operation.
+---
+ extensions/desktop-icons/desktopGrid.js | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/extensions/desktop-icons/desktopGrid.js b/extensions/desktop-icons/desktopGrid.js
+index 002803c7..9a89d5a3 100644
+--- a/extensions/desktop-icons/desktopGrid.js
++++ b/extensions/desktop-icons/desktopGrid.js
+@@ -559,8 +559,6 @@ var DesktopGrid = GObject.registerClass({
+         let button = event.get_button();
+         let [x, y] = event.get_coords();
+ 
+-        this._grid.grab_key_focus();
+-
+         if (button == 1) {
+             let shiftPressed = !!(event.get_state() & Clutter.ModifierType.SHIFT_MASK);
+             let controlPressed = !!(event.get_state() & Clutter.ModifierType.CONTROL_MASK);
+-- 
+2.38.1
+

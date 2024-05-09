@@ -1,0 +1,38 @@
+From f54c3f9f66001c210e10fda6aa17b9218fb67dc1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 29 Oct 2020 18:21:06 +0100
+Subject: [PATCH] main: Dump stack on segfaults by default
+
+---
+ src/main.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/main.c b/src/main.c
+index 5d07a4301..ed0b78dcc 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -38,6 +38,7 @@ static int caught_signal = 0;
+ #define DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER 1
+ #define DBUS_REQUEST_NAME_REPLY_ALREADY_OWNER 4
+ 
++#define DEFAULT_SHELL_DEBUG SHELL_DEBUG_BACKTRACE_SEGFAULTS
+ enum {
+   SHELL_DEBUG_BACKTRACE_WARNINGS = 1,
+   SHELL_DEBUG_BACKTRACE_SEGFAULTS = 2,
+@@ -279,8 +280,11 @@ shell_init_debug (const char *debug_env)
+     { "backtrace-segfaults", SHELL_DEBUG_BACKTRACE_SEGFAULTS },
+   };
+ 
+-  _shell_debug = g_parse_debug_string (debug_env, keys,
+-                                       G_N_ELEMENTS (keys));
++  if (debug_env)
++    _shell_debug = g_parse_debug_string (debug_env, keys,
++                                         G_N_ELEMENTS (keys));
++  else
++    _shell_debug = DEFAULT_SHELL_DEBUG;
+ }
+ 
+ static void
+-- 
+2.31.1
+

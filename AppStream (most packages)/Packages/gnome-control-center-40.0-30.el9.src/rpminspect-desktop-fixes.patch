@@ -1,0 +1,64 @@
+diff -up gnome-control-center-40.0/panels/bluetooth/gnome-bluetooth-panel.desktop.in.in.rpminspect-desktop-fixes gnome-control-center-40.0/panels/bluetooth/gnome-bluetooth-panel.desktop.in.in
+--- gnome-control-center-40.0/panels/bluetooth/gnome-bluetooth-panel.desktop.in.in.rpminspect-desktop-fixes	2022-02-02 14:10:24.722557740 +0100
++++ gnome-control-center-40.0/panels/bluetooth/gnome-bluetooth-panel.desktop.in.in	2022-02-02 14:10:41.756366100 +0100
+@@ -2,7 +2,7 @@
+ Name=Bluetooth
+ Comment=Turn Bluetooth on and off and connect your devices
+ # Translators: Do NOT translate or transliterate this text (this is an icon file name)!
+-Icon=bluetooth
++Icon=bluetooth-symbolic
+ Exec=gnome-control-center bluetooth
+ Terminal=false
+ Type=Application
+diff -up gnome-control-center-40.0/panels/location/gnome-location-panel.desktop.in.in.rpminspect-desktop-fixes gnome-control-center-40.0/panels/location/gnome-location-panel.desktop.in.in
+--- gnome-control-center-40.0/panels/location/gnome-location-panel.desktop.in.in.rpminspect-desktop-fixes	2022-02-02 14:11:08.849061293 +0100
++++ gnome-control-center-40.0/panels/location/gnome-location-panel.desktop.in.in	2022-02-02 14:11:20.606929011 +0100
+@@ -4,7 +4,7 @@ Comment=Protect your location informatio
+ Exec=gnome-control-center location
+ # FIXME
+ # Translators: Do NOT translate or transliterate this text (this is an icon file name)!
+-Icon=location-services-active
++Icon=location-services-active-symbolic
+ Terminal=false
+ Type=Application
+ NoDisplay=true
+diff -up gnome-control-center-40.0/panels/microphone/gnome-microphone-panel.desktop.in.in.rpminspect-desktop-fixes gnome-control-center-40.0/panels/microphone/gnome-microphone-panel.desktop.in.in
+--- gnome-control-center-40.0/panels/microphone/gnome-microphone-panel.desktop.in.in.rpminspect-desktop-fixes	2022-02-02 14:12:15.652309721 +0100
++++ gnome-control-center-40.0/panels/microphone/gnome-microphone-panel.desktop.in.in	2022-02-02 14:12:28.849161249 +0100
+@@ -4,7 +4,7 @@ Comment=Protect your conversations
+ Exec=gnome-control-center microphone
+ # FIXME
+ # Translators: Do NOT translate or transliterate this text (this is an icon file name)!
+-Icon=audio-input-microphone
++Icon=audio-input-microphone-symbolic
+ Terminal=false
+ Type=Application
+ NoDisplay=true
+diff -up gnome-control-center-40.0/panels/thunderbolt/gnome-thunderbolt-panel.desktop.in.in.rpminspect-desktop-fixes gnome-control-center-40.0/panels/thunderbolt/gnome-thunderbolt-panel.desktop.in.in
+--- gnome-control-center-40.0/panels/thunderbolt/gnome-thunderbolt-panel.desktop.in.in.rpminspect-desktop-fixes	2022-02-02 14:12:50.891913256 +0100
++++ gnome-control-center-40.0/panels/thunderbolt/gnome-thunderbolt-panel.desktop.in.in	2022-02-02 14:12:59.811812903 +0100
+@@ -3,7 +3,7 @@ Name=Thunderbolt
+ Comment=Manage Thunderbolt devices
+ Exec=gnome-control-center thunderbolt
+ # Translators: Do NOT translate or transliterate this text (this is an icon file name)!
+-Icon=thunderbolt
++Icon=thunderbolt-symbolic
+ Terminal=false
+ Type=Application
+ NoDisplay=true
+diff -up gnome-control-center-40.0/panels/wwan/gnome-wwan-panel.desktop.in.in.rpminspect-desktop-fixes gnome-control-center-40.0/panels/wwan/gnome-wwan-panel.desktop.in.in
+--- gnome-control-center-40.0/panels/wwan/gnome-wwan-panel.desktop.in.in.rpminspect-desktop-fixes	2022-02-02 14:09:27.862197449 +0100
++++ gnome-control-center-40.0/panels/wwan/gnome-wwan-panel.desktop.in.in	2022-02-02 14:13:34.301424876 +0100
+@@ -4,11 +4,10 @@ Comment=Configure Telephony and mobile d
+ Exec=gnome-control-center wwan
+ # FIXME
+ # Translators: Do NOT translate or transliterate this text (this is an icon file name)!
+-Icon=network-cellular-signal-excellent
++Icon=network-cellular-signal-excellent-symbolic
+ Terminal=false
+ Type=Application
+ NoDisplay=true
+-StartupNotify=true
+ Categories=GNOME;GTK;Settings;X-GNOME-NetworkSettings;HardwareSettings;X-GNOME-Settings-Panel;X-GNOME-ConnectivitySettings;
+ OnlyShowIn=GNOME;Unity;
+ StartupNotify=true

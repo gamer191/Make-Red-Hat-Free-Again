@@ -1,0 +1,45 @@
+From 97316afbd1e9b0c25de5f87b52d47448ee667bdb Mon Sep 17 00:00:00 2001
+From: Sebastian Keller <skeller@gnome.org>
+Date: Fri, 12 Nov 2021 22:21:27 +0100
+Subject: [PATCH] application: Drop support for non-unique mode in headless
+ instance
+
+gnome-shell started allowing only applications that own certain names
+on the session bus to interact with the screenshot interface. While the
+name used by gnome-screenshot is on the allowed list, non-unique
+instances that are used for the headless mode do not own that name. Fix
+this by also making the headless instance unique so it will own the
+name. This however also means that there can only ever be a single
+instance of gnome-screenshot, regardless of headless or interactive.
+
+Fixes: https://gitlab.gnome.org/GNOME/gnome-screenshot/-/issues/179
+---
+ src/screenshot-application.c | 12 ------------
+ 1 file changed, 12 deletions(-)
+
+diff --git a/src/screenshot-application.c b/src/screenshot-application.c
+index cc663d4..7acdc0e 100644
+--- a/src/screenshot-application.c
++++ b/src/screenshot-application.c
+@@ -630,18 +630,6 @@ screenshot_application_handle_local_options (GApplication *app,
+       exit (EXIT_SUCCESS);
+     }
+ 
+-  /* Start headless instances in non-unique mode */
+-  if (!g_variant_dict_contains (options, "interactive"))
+-    {
+-      GApplicationFlags old_flags;
+-
+-      old_flags = g_application_get_flags (app);
+-      if ((old_flags & G_APPLICATION_IS_SERVICE) == 0)
+-        {
+-          g_application_set_flags (app, old_flags | G_APPLICATION_NON_UNIQUE);
+-        }
+-    }
+-
+   return -1;
+ }
+ 
+-- 
+GitLab
+

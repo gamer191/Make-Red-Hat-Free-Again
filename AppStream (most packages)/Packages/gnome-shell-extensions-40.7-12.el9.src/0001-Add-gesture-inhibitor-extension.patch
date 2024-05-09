@@ -1,0 +1,438 @@
+From cca3ca69a5b5a5551a9130ab4b9ea6909666108a Mon Sep 17 00:00:00 2001
+From: rpm-build <rpm-build>
+Date: Thu, 28 Jan 2021 00:06:12 +0100
+Subject: [PATCH 1/5] Add gesture-inhibitor extension
+
+This extension may disable default GNOME Shell gestures.
+---
+ extensions/gesture-inhibitor/extension.js     | 75 +++++++++++++++++++
+ extensions/gesture-inhibitor/meson.build      |  8 ++
+ extensions/gesture-inhibitor/metadata.json.in | 12 +++
+ ...l.extensions.gesture-inhibitor.gschema.xml | 25 +++++++
+ extensions/gesture-inhibitor/stylesheet.css   |  1 +
+ meson.build                                   |  1 +
+ 6 files changed, 122 insertions(+)
+ create mode 100644 extensions/gesture-inhibitor/extension.js
+ create mode 100644 extensions/gesture-inhibitor/meson.build
+ create mode 100644 extensions/gesture-inhibitor/metadata.json.in
+ create mode 100644 extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml
+ create mode 100644 extensions/gesture-inhibitor/stylesheet.css
+
+diff --git a/extensions/gesture-inhibitor/extension.js b/extensions/gesture-inhibitor/extension.js
+new file mode 100644
+index 00000000..e74ede2f
+--- /dev/null
++++ b/extensions/gesture-inhibitor/extension.js
+@@ -0,0 +1,75 @@
++/* extension.js
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++/* exported init */
++
++const Clutter = imports.gi.Clutter;
++const ExtensionUtils = imports.misc.extensionUtils;
++const Me = ExtensionUtils.getCurrentExtension();
++const ViewSelector = imports.ui.viewSelector;
++const EdgeDragAction = imports.ui.edgeDragAction;
++const WindowManager = imports.ui.windowManager;
++const St = imports.gi.St;
++const Gio = imports.gi.Gio;
++
++class Extension {
++    constructor() {
++	this._settings = ExtensionUtils.getSettings();
++	let actions = global.stage.get_actions();
++
++	actions.forEach(a => {
++	    if (a instanceof ViewSelector.ShowOverviewAction)
++		this._showOverview = a;
++	    else if (a instanceof WindowManager.AppSwitchAction)
++		this._appSwitch = a;
++	    else if (a instanceof EdgeDragAction.EdgeDragAction &&
++		     a._side == St.Side.BOTTOM)
++		this._showOsk = a;
++	    else if (a instanceof EdgeDragAction.EdgeDragAction &&
++		     a._side == St.Side.TOP)
++		this._unfullscreen = a;
++	    else if (a instanceof EdgeDragAction.EdgeDragAction)
++		this._showAppGrid = a;
++	});
++
++	this._map = [
++	    { setting: 'overview', action: this._showOverview },
++	    { setting: 'app-switch', action: this._appSwitch },
++	    { setting: 'show-osk', action: this._showOsk },
++	    { setting: 'unfullscreen', action: this._unfullscreen },
++	    { setting: 'show-app-grid', action: this._showAppGrid }
++	];
++    }
++
++    enable() {
++	this._map.forEach(m => {
++	    this._settings.bind(m.setting, m.action, 'enabled',
++				Gio.SettingsBindFlags.DEFAULT);
++	});
++    }
++
++    disable() {
++	this._map.forEach(m => {
++	    m.action.enabled = true;
++	});
++    }
++}
++
++function init() {
++    return new Extension();
++}
+diff --git a/extensions/gesture-inhibitor/meson.build b/extensions/gesture-inhibitor/meson.build
+new file mode 100644
+index 00000000..fdad5cc8
+--- /dev/null
++++ b/extensions/gesture-inhibitor/meson.build
+@@ -0,0 +1,8 @@
++extension_data += configure_file(
++  input: metadata_name + '.in',
++  output: metadata_name,
++  configuration: metadata_conf
++)
++
++# extension_sources += files('prefs.js')
++extension_schemas += files(metadata_conf.get('gschemaname') + '.gschema.xml')
+diff --git a/extensions/gesture-inhibitor/metadata.json.in b/extensions/gesture-inhibitor/metadata.json.in
+new file mode 100644
+index 00000000..37d6a117
+--- /dev/null
++++ b/extensions/gesture-inhibitor/metadata.json.in
+@@ -0,0 +1,12 @@
++{
++ "uuid": "@uuid@",
++ "extension-id": "@extension_id@",
++ "settings-schema": "@gschemaname@",
++ "gettext-domain": "@gettext_domain@",
++ "name": "Gesture Inhibitor",
++ "description": "Makes touchscreen gestures optional.",
++ "shell-version": [ "@shell_current@" ],
++ "original-authors": [ "cgarnach@redhat.com" ],
++ "url": "@url@"
++}
++
+diff --git a/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml b/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml
+new file mode 100644
+index 00000000..1d67dcc0
+--- /dev/null
++++ b/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml
+@@ -0,0 +1,25 @@
++<schemalist>
++  <schema id="org.gnome.shell.extensions.gesture-inhibitor" path="/org/gnome/shell/extensions/gesture-inhibitor/">
++    <key name="show-app-grid" type="b">
++      <default>true</default>
++      <summary>Show app grid gesture</summary>
++    </key>
++    <key name="show-osk" type="b">
++      <default>true</default>
++      <summary>Show OSK gesture</summary>
++    </key>
++    <key name="overview" type="b">
++      <default>true</default>
++      <summary>Show Overview gesture</summary>
++    </key>
++    <key name="app-switch" type="b">
++      <default>true</default>
++      <summary>Application switch gesture</summary>
++    </key>
++    <key name="unfullscreen" type="b">
++      <default>true</default>
++      <summary>Unfullscreen gesture</summary>
++    </key>
++  </schema>
++</schemalist>
++
+diff --git a/extensions/gesture-inhibitor/stylesheet.css b/extensions/gesture-inhibitor/stylesheet.css
+new file mode 100644
+index 00000000..37b93f21
+--- /dev/null
++++ b/extensions/gesture-inhibitor/stylesheet.css
+@@ -0,0 +1 @@
++/* Add your custom extension styling here */
+diff --git a/meson.build b/meson.build
+index ec600041..615dc5b0 100644
+--- a/meson.build
++++ b/meson.build
+@@ -50,6 +50,7 @@ all_extensions += [
+   'custom-menu',
+   'dash-to-dock',
+   'dash-to-panel',
++  'gesture-inhibitor',
+   'native-window-placement',
+   'panel-favorites',
+   'systemMonitor',
+-- 
+2.41.0
+
+
+From 45e88e7b5bb9537c44384a23af7d00f023d55793 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 20 Oct 2021 19:48:46 +0200
+Subject: [PATCH 2/5] gesture-inhibitor: Fix up indentation
+
+---
+ extensions/gesture-inhibitor/extension.js | 59 +++++++++++------------
+ 1 file changed, 29 insertions(+), 30 deletions(-)
+
+diff --git a/extensions/gesture-inhibitor/extension.js b/extensions/gesture-inhibitor/extension.js
+index e74ede2f..734d61cc 100644
+--- a/extensions/gesture-inhibitor/extension.js
++++ b/extensions/gesture-inhibitor/extension.js
+@@ -29,44 +29,43 @@ const Gio = imports.gi.Gio;
+ 
+ class Extension {
+     constructor() {
+-	this._settings = ExtensionUtils.getSettings();
+-	let actions = global.stage.get_actions();
++        this._settings = ExtensionUtils.getSettings();
++        let actions = global.stage.get_actions();
+ 
+-	actions.forEach(a => {
+-	    if (a instanceof ViewSelector.ShowOverviewAction)
+-		this._showOverview = a;
+-	    else if (a instanceof WindowManager.AppSwitchAction)
+-		this._appSwitch = a;
+-	    else if (a instanceof EdgeDragAction.EdgeDragAction &&
+-		     a._side == St.Side.BOTTOM)
+-		this._showOsk = a;
+-	    else if (a instanceof EdgeDragAction.EdgeDragAction &&
+-		     a._side == St.Side.TOP)
+-		this._unfullscreen = a;
+-	    else if (a instanceof EdgeDragAction.EdgeDragAction)
+-		this._showAppGrid = a;
+-	});
++        actions.forEach(a => {
++            if (a instanceof ViewSelector.ShowOverviewAction)
++                this._showOverview = a;
++            else if (a instanceof WindowManager.AppSwitchAction)
++                this._appSwitch = a;
++            else if (a instanceof EdgeDragAction.EdgeDragAction &&
++                 a._side == St.Side.BOTTOM)
++                this._showOsk = a;
++            else if (a instanceof EdgeDragAction.EdgeDragAction &&
++                 a._side == St.Side.TOP)
++                this._unfullscreen = a;
++            else if (a instanceof EdgeDragAction.EdgeDragAction)
++                this._showAppGrid = a;
++        });
+ 
+-	this._map = [
+-	    { setting: 'overview', action: this._showOverview },
+-	    { setting: 'app-switch', action: this._appSwitch },
+-	    { setting: 'show-osk', action: this._showOsk },
+-	    { setting: 'unfullscreen', action: this._unfullscreen },
+-	    { setting: 'show-app-grid', action: this._showAppGrid }
+-	];
++        this._map = [
++            { setting: 'overview', action: this._showOverview },
++            { setting: 'app-switch', action: this._appSwitch },
++            { setting: 'show-osk', action: this._showOsk },
++            { setting: 'unfullscreen', action: this._unfullscreen },
++            { setting: 'show-app-grid', action: this._showAppGrid }
++        ];
+     }
+ 
+     enable() {
+-	this._map.forEach(m => {
+-	    this._settings.bind(m.setting, m.action, 'enabled',
+-				Gio.SettingsBindFlags.DEFAULT);
+-	});
++        this._map.forEach(m => {
++            this._settings.bind(m.setting, m.action, 'enabled',
++                    Gio.SettingsBindFlags.DEFAULT);
++        });
+     }
+ 
+     disable() {
+-	this._map.forEach(m => {
+-	    m.action.enabled = true;
+-	});
++        this._map.forEach(
++            m => (m.action.enabled = true));
+     }
+ }
+ 
+-- 
+2.41.0
+
+
+From fe0dd05f0c8c5cfeb5edbc6b9bb73417d42f6ee8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Wed, 20 Oct 2021 19:47:05 +0200
+Subject: [PATCH 3/5] gesture-inhibitor: Adjust for GNOME 40 changes
+
+---
+ extensions/gesture-inhibitor/extension.js             | 11 +++--------
+ ...ome.shell.extensions.gesture-inhibitor.gschema.xml |  4 ----
+ 2 files changed, 3 insertions(+), 12 deletions(-)
+
+diff --git a/extensions/gesture-inhibitor/extension.js b/extensions/gesture-inhibitor/extension.js
+index 734d61cc..13586108 100644
+--- a/extensions/gesture-inhibitor/extension.js
++++ b/extensions/gesture-inhibitor/extension.js
+@@ -21,8 +21,8 @@
+ const Clutter = imports.gi.Clutter;
+ const ExtensionUtils = imports.misc.extensionUtils;
+ const Me = ExtensionUtils.getCurrentExtension();
+-const ViewSelector = imports.ui.viewSelector;
+ const EdgeDragAction = imports.ui.edgeDragAction;
++const Main = imports.ui.main;
+ const WindowManager = imports.ui.windowManager;
+ const St = imports.gi.St;
+ const Gio = imports.gi.Gio;
+@@ -33,9 +33,7 @@ class Extension {
+         let actions = global.stage.get_actions();
+ 
+         actions.forEach(a => {
+-            if (a instanceof ViewSelector.ShowOverviewAction)
+-                this._showOverview = a;
+-            else if (a instanceof WindowManager.AppSwitchAction)
++            if (a instanceof WindowManager.AppSwitchAction)
+                 this._appSwitch = a;
+             else if (a instanceof EdgeDragAction.EdgeDragAction &&
+                  a._side == St.Side.BOTTOM)
+@@ -43,16 +41,13 @@ class Extension {
+             else if (a instanceof EdgeDragAction.EdgeDragAction &&
+                  a._side == St.Side.TOP)
+                 this._unfullscreen = a;
+-            else if (a instanceof EdgeDragAction.EdgeDragAction)
+-                this._showAppGrid = a;
+         });
+ 
+         this._map = [
+-            { setting: 'overview', action: this._showOverview },
++            { setting: 'overview', action: Main.overview._swipeTracker },
+             { setting: 'app-switch', action: this._appSwitch },
+             { setting: 'show-osk', action: this._showOsk },
+             { setting: 'unfullscreen', action: this._unfullscreen },
+-            { setting: 'show-app-grid', action: this._showAppGrid }
+         ];
+     }
+ 
+diff --git a/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml b/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml
+index 1d67dcc0..4bdf9260 100644
+--- a/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml
++++ b/extensions/gesture-inhibitor/org.gnome.shell.extensions.gesture-inhibitor.gschema.xml
+@@ -1,9 +1,5 @@
+ <schemalist>
+   <schema id="org.gnome.shell.extensions.gesture-inhibitor" path="/org/gnome/shell/extensions/gesture-inhibitor/">
+-    <key name="show-app-grid" type="b">
+-      <default>true</default>
+-      <summary>Show app grid gesture</summary>
+-    </key>
+     <key name="show-osk" type="b">
+       <default>true</default>
+       <summary>Show OSK gesture</summary>
+-- 
+2.41.0
+
+
+From 952fa19311faecf50b02ab0f8807c2bc890848be Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 18 Nov 2021 15:54:23 +0100
+Subject: [PATCH 4/5] gesture-inhibitor: Unbind setting on disable
+
+---
+ extensions/gesture-inhibitor/extension.js | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/extensions/gesture-inhibitor/extension.js b/extensions/gesture-inhibitor/extension.js
+index 13586108..02b34ec4 100644
+--- a/extensions/gesture-inhibitor/extension.js
++++ b/extensions/gesture-inhibitor/extension.js
+@@ -59,8 +59,10 @@ class Extension {
+     }
+ 
+     disable() {
+-        this._map.forEach(
+-            m => (m.action.enabled = true));
++        this._map.forEach(m => {
++            Gio.Settings.unbind(m.action, 'enabled');
++            m.action.enabled = true;
++        });
+     }
+ }
+ 
+-- 
+2.41.0
+
+
+From ef7a6cb1eac7b3d6d4d047174502d88f4e78959e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Thu, 18 Nov 2021 16:06:09 +0100
+Subject: [PATCH 5/5] gesture-inhibitor: Override :enabled property
+
+Otherwise gnome-shell can re-enable an inhibited gesture behind our
+back.
+---
+ extensions/gesture-inhibitor/extension.js | 23 ++++++++++++++++++++++-
+ 1 file changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/extensions/gesture-inhibitor/extension.js b/extensions/gesture-inhibitor/extension.js
+index 02b34ec4..fb8a6dc0 100644
+--- a/extensions/gesture-inhibitor/extension.js
++++ b/extensions/gesture-inhibitor/extension.js
+@@ -49,18 +49,39 @@ class Extension {
+             { setting: 'show-osk', action: this._showOsk },
+             { setting: 'unfullscreen', action: this._unfullscreen },
+         ];
++
++        this._enabledDesc = Object.getOwnPropertyDescriptor(
++            Clutter.ActorMeta.prototype, 'enabled');
++    }
++
++    _overrideEnabledSetter(obj, set) {
++        if (!(obj instanceof Clutter.ActorMeta))
++            return;
++
++        const desc = set
++            ? { ...this._enabledDesc, set }
++            : { ...this._enabledDesc };
++        Object.defineProperty(obj, 'enabled', desc);
+     }
+ 
+     enable() {
++        const settings = this._settings;
++
+         this._map.forEach(m => {
+-            this._settings.bind(m.setting, m.action, 'enabled',
++            settings.bind(m.setting, m.action, 'enabled',
+                     Gio.SettingsBindFlags.DEFAULT);
++
++            this._overrideEnabledSetter(m.action, function (value) {
++                if (settings.get_boolean(m.setting))
++                    this.set_enabled(value);
++            });
+         });
+     }
+ 
+     disable() {
+         this._map.forEach(m => {
+             Gio.Settings.unbind(m.action, 'enabled');
++            this._overrideEnabledSetter(m.action);
+             m.action.enabled = true;
+         });
+     }
+-- 
+2.41.0
+

@@ -1,0 +1,458 @@
+From 8dd4c164f6ce166a5767588bd6fb8e4c3e8e1a09 Mon Sep 17 00:00:00 2001
+From: Bastien Nocera <hadess@hadess.net>
+Date: Fri, 16 Jul 2021 13:40:10 +0200
+Subject: [PATCH 1/4] power: Enable power-saver profile when low on battery
+
+When low on battery, and if the feature is enabled, hold the power
+profile to "power-saver" until the battery is sufficiently recharged.
+---
+ ...ttings-daemon.plugins.power.gschema.xml.in |   5 +
+ plugins/power/gsd-power-manager.c             | 128 ++++++++++++++++++
+ plugins/power/test.py                         |  32 +++++
+ 3 files changed, 165 insertions(+)
+
+diff --git a/data/org.gnome.settings-daemon.plugins.power.gschema.xml.in b/data/org.gnome.settings-daemon.plugins.power.gschema.xml.in
+index 93c704e9..04b287bd 100644
+--- a/data/org.gnome.settings-daemon.plugins.power.gschema.xml.in
++++ b/data/org.gnome.settings-daemon.plugins.power.gschema.xml.in
+@@ -41,5 +41,10 @@
+       <summary>Power button action</summary>
+       <description>The action to take when the system power button is pressed. This action is hard-coded (and the setting ignored) on virtual machines (power off) and tablets (suspend).</description>
+     </key>
++    <key name="power-saver-profile-on-low-battery" type="b">
++      <default>true</default>
++      <summary>Enable power-saver profile when battery is low</summary>
++      <description>Automatically enable the "power-saver" profile using power-profiles-daemon if the battery is low.</description>
++    </key>
+   </schema>
+ </schemalist>
+diff --git a/plugins/power/gsd-power-manager.c b/plugins/power/gsd-power-manager.c
+index 95cec9c3..1f125a6f 100644
+--- a/plugins/power/gsd-power-manager.c
++++ b/plugins/power/gsd-power-manager.c
+@@ -59,6 +59,10 @@
+ #define UPOWER_DBUS_INTERFACE                   "org.freedesktop.UPower"
+ #define UPOWER_DBUS_INTERFACE_KBDBACKLIGHT      "org.freedesktop.UPower.KbdBacklight"
+ 
++#define PPD_DBUS_NAME                           "net.hadess.PowerProfiles"
++#define PPD_DBUS_PATH                           "/net/hadess/PowerProfiles"
++#define PPD_DBUS_INTERFACE                      "net.hadess.PowerProfiles"
++
+ #define GSD_POWER_SETTINGS_SCHEMA               "org.gnome.settings-daemon.plugins.power"
+ 
+ #define GSD_POWER_DBUS_NAME                     GSD_DBUS_NAME ".Power"
+@@ -185,6 +189,10 @@ struct _GsdPowerManager
+         gdouble                  ambient_last_absolute;
+         gint64                   ambient_last_time;
+ 
++        /* Power Profiles */
++        GDBusProxy              *power_profiles_proxy;
++        guint32                  power_saver_cookie;
++
+         /* Sound */
+         guint32                  critical_alert_timeout_id;
+ 
+@@ -1927,6 +1935,67 @@ idle_configure (GsdPowerManager *manager)
+         }
+ }
+ 
++static void
++hold_profile_cb (GObject      *source_object,
++                 GAsyncResult *res,
++                 gpointer      user_data)
++{
++        GsdPowerManager *manager = user_data;
++        g_autoptr(GError) error = NULL;
++        g_autoptr(GVariant) result = NULL;
++
++        result = g_dbus_proxy_call_finish (G_DBUS_PROXY (source_object),
++                                           res,
++                                           &error);
++        if (result == NULL) {
++                g_warning ("Couldn't hold power-saver profile: %s", error->message);
++                return;
++        }
++
++        if (g_variant_is_of_type (result, G_VARIANT_TYPE ("(u)"))) {
++                g_variant_get (result, "(u)", &manager->power_saver_cookie);
++                g_debug ("Holding power-saver profile with cookie %u", manager->power_saver_cookie);
++        } else {
++                g_warning ("Calling HoldProfile() did not return a uint32");
++        }
++}
++
++static void
++enable_power_saver (GsdPowerManager *manager)
++{
++        if (!manager->power_profiles_proxy)
++                return;
++        if (!g_settings_get_boolean (manager->settings, "power-saver-profile-on-low-battery"))
++                return;
++
++        g_debug ("Starting hold of power-saver profile");
++
++        g_dbus_proxy_call (manager->power_profiles_proxy,
++                           "HoldProfile",
++                           g_variant_new("(sss)",
++                                         "power-saver",
++                                         "Power saver profile when low on battery",
++                                         GSD_POWER_DBUS_NAME),
++                           G_DBUS_CALL_FLAGS_NONE,
++                           -1, manager->cancellable, hold_profile_cb, manager);
++}
++
++static void
++disable_power_saver (GsdPowerManager *manager)
++{
++        if (!manager->power_profiles_proxy || manager->power_saver_cookie == 0)
++                return;
++
++        g_debug ("Releasing power-saver profile");
++
++        g_dbus_proxy_call (manager->power_profiles_proxy,
++                           "ReleaseProfile",
++                           g_variant_new ("(u)", manager->power_saver_cookie),
++                           G_DBUS_CALL_FLAGS_NONE,
++                           -1, NULL, dbus_call_log_error, "ReleaseProfile failed");
++        manager->power_saver_cookie = 0;
++}
++
+ static void
+ main_battery_or_ups_low_changed (GsdPowerManager *manager,
+                                  gboolean         is_low)
+@@ -1935,6 +2004,10 @@ main_battery_or_ups_low_changed (GsdPowerManager *manager,
+                 return;
+         manager->battery_is_low = is_low;
+         idle_configure (manager);
++        if (is_low)
++                enable_power_saver (manager);
++        else
++                disable_power_saver (manager);
+ }
+ 
+ static gboolean
+@@ -2078,6 +2151,39 @@ screensaver_signal_cb (GDBusProxy *proxy,
+                 handle_wake_up_screen (GSD_POWER_MANAGER (user_data));
+ }
+ 
++static void
++power_profiles_proxy_signal_cb (GDBusProxy  *proxy,
++                               const gchar *sender_name,
++                               const gchar *signal_name,
++                               GVariant    *parameters,
++                               gpointer     user_data)
++{
++        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
++
++        if (g_strcmp0 (signal_name, "ProfileReleased") != 0)
++                return;
++        manager->power_saver_cookie = 0;
++}
++
++static void
++power_profiles_proxy_ready_cb (GObject             *source_object,
++                              GAsyncResult        *res,
++                              gpointer             user_data)
++{
++        g_autoptr(GError) error = NULL;
++        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
++
++        manager->power_profiles_proxy = g_dbus_proxy_new_for_bus_finish (res, &error);
++        if (manager->power_profiles_proxy == NULL) {
++                g_debug ("Could not connect to power-profiles-daemon: %s", error->message);
++                return;
++        }
++
++        g_signal_connect (manager->power_profiles_proxy, "g-signal",
++                          G_CALLBACK (power_profiles_proxy_signal_cb),
++                          manager);
++}
++
+ static void
+ power_keyboard_proxy_ready_cb (GObject             *source_object,
+                                GAsyncResult        *res,
+@@ -2289,6 +2395,14 @@ engine_settings_key_changed_cb (GSettings *settings,
+                 idle_configure (manager);
+                 return;
+         }
++        if (g_str_equal (key, "power-saver-profile-on-low-battery")) {
++                if (manager->battery_is_low &&
++                    g_settings_get_boolean (settings, key))
++                        enable_power_saver (manager);
++                else
++                        disable_power_saver (manager);
++                return;
++        }
+ }
+ 
+ static void
+@@ -2599,6 +2713,17 @@ on_rr_screen_acquired (GObject      *object,
+         g_signal_connect (manager->up_client, "notify::on-battery",
+                           G_CALLBACK (up_client_on_battery_cb), manager);
+ 
++        /* connect to power-profiles-daemon */
++        g_dbus_proxy_new_for_bus (G_BUS_TYPE_SYSTEM,
++                                  G_DBUS_PROXY_FLAGS_NONE,
++                                  NULL,
++                                  PPD_DBUS_NAME,
++                                  PPD_DBUS_PATH,
++                                  PPD_DBUS_INTERFACE,
++                                  manager->cancellable,
++                                  power_profiles_proxy_ready_cb,
++                                  manager);
++
+         /* connect to UPower for keyboard backlight control */
+         manager->kbd_brightness_now = -1;
+         g_dbus_proxy_new_for_bus (G_BUS_TYPE_SYSTEM,
+@@ -2862,6 +2987,9 @@ gsd_power_manager_stop (GsdPowerManager *manager)
+ 
+         g_clear_object (&manager->screensaver_proxy);
+ 
++        disable_power_saver (manager);
++        g_clear_object (&manager->power_profiles_proxy);
++
+         play_loop_stop (&manager->critical_alert_timeout_id);
+ 
+         g_clear_object (&manager->idle_monitor);
+diff --git a/plugins/power/test.py b/plugins/power/test.py
+index bb5861a4..f554400e 100755
+--- a/plugins/power/test.py
++++ b/plugins/power/test.py
+@@ -76,6 +76,13 @@ class PowerPluginBase(gsdtestcase.GSDTestCase):
+             'gnome_screensaver', stdout=subprocess.PIPE)
+         gsdtestcase.set_nonblock(self.screensaver.stdout)
+ 
++        # start mock power-profiles-daemon
++        try:
++            (self.ppd, self.obj_ppd) = self.spawn_server_template('power_profiles_daemon')
++            self.addCleanup(self.stop_process, self.ppd)
++        except ModuleNotFoundError:
++            self.ppd = None
++
+         self.session_log = OutputChecker()
+         self.session = subprocess.Popen(['gnome-session', '-f',
+                                          '-a', os.path.join(self.workdir, 'autostart'),
+@@ -1302,5 +1309,30 @@ class PowerPluginTest8(PowerPluginBase):
+ 
+         self.assertEqual(exc.exception.get_dbus_message(), 'No usable backlight could be found!')
+ 
++    def test_power_saver_on_low_battery(self):
++        '''Check that the power-saver profile gets held when low on battery'''
++
++        if not self.ppd:
++            self.skipTest("power-profiles-daemon dbusmock support is not available")
++
++        obj_props = dbus.Interface(self.obj_ppd, dbus.PROPERTIES_IFACE)
++
++        self.set_composite_battery_discharging()
++        time.sleep(0.5)
++        holds = obj_props.Get('net.hadess.PowerProfiles', 'ActiveProfileHolds')
++        self.assertEqual(len(holds), 0)
++
++        self.set_composite_battery_critical()
++        time.sleep(0.5)
++        holds = obj_props.Get('net.hadess.PowerProfiles', 'ActiveProfileHolds')
++        self.assertEqual(len(holds), 1)
++        self.assertEqual(holds[0]['Profile'], 'power-saver')
++        self.assertEqual(holds[0]['ApplicationId'], 'org.gnome.SettingsDaemon.Power')
++
++        self.set_composite_battery_discharging()
++        time.sleep(0.5)
++        holds = obj_props.Get('net.hadess.PowerProfiles', 'ActiveProfileHolds')
++        self.assertEqual(len(holds), 0)
++
+ # avoid writing to stderr
+ unittest.main(testRunner=unittest.TextTestRunner(stream=sys.stdout, verbosity=2))
+-- 
+2.31.1
+
+
+From 74ed476d1a37a43eeba8c8bee8f5be5d499b0805 Mon Sep 17 00:00:00 2001
+From: Bastien Nocera <hadess@hadess.net>
+Date: Wed, 28 Jul 2021 16:40:24 +0200
+Subject: [PATCH 2/4] power: Dim screen faster if power saver mode is on
+
+As done on other platforms, aggressively dim the screen after a
+short period when the user has selected to enter power saver mode.
+
+The same aggressive screen dim will be used if the battery is low and
+power-profiles-daemon is not available. If it is available, then it
+fixes a screen dim happening when the battery was low which might
+have been unwanted.
+
+See https://gitlab.gnome.org/GNOME/gnome-control-center/-/issues/232
+
+Prior art:
+https://support.apple.com/en-us/HT205234
+---
+ plugins/power/gsd-power-manager.c | 46 +++++++++++++++++++++++++++++--
+ 1 file changed, 44 insertions(+), 2 deletions(-)
+
+diff --git a/plugins/power/gsd-power-manager.c b/plugins/power/gsd-power-manager.c
+index 1f125a6f..cfef9718 100644
+--- a/plugins/power/gsd-power-manager.c
++++ b/plugins/power/gsd-power-manager.c
+@@ -192,6 +192,7 @@ struct _GsdPowerManager
+         /* Power Profiles */
+         GDBusProxy              *power_profiles_proxy;
+         guint32                  power_saver_cookie;
++        gboolean                 power_saver_enabled;
+ 
+         /* Sound */
+         guint32                  critical_alert_timeout_id;
+@@ -1780,6 +1781,20 @@ clear_idle_watch (GnomeIdleMonitor *monitor,
+         *id = 0;
+ }
+ 
++static gboolean
++is_power_save_active (GsdPowerManager *manager)
++{
++        /*
++         * If we have power-profiles-daemon, then we follow its setting,
++         * otherwise we go into power-save mode when the battery is low.
++         */
++        if (manager->power_profiles_proxy &&
++            g_dbus_proxy_get_name_owner (manager->power_profiles_proxy))
++                return manager->power_saver_enabled;
++        else
++                return manager->battery_is_low;
++}
++
+ static void
+ idle_configure (GsdPowerManager *manager)
+ {
+@@ -1903,8 +1918,8 @@ idle_configure (GsdPowerManager *manager)
+                 /* Don't dim when the screen lock is active */
+         } else if (!on_battery) {
+                 /* Don't dim when charging */
+-        } else if (manager->battery_is_low) {
+-                /* Aggressively blank when battery is low */
++        } else if (is_power_save_active (manager)) {
++                /* Try to save power by dimming agressively */
+                 timeout_dim = SCREENSAVER_TIMEOUT_BLANK;
+         } else {
+                 if (g_settings_get_boolean (manager->settings, "idle-dim")) {
+@@ -2165,6 +2180,27 @@ power_profiles_proxy_signal_cb (GDBusProxy  *proxy,
+         manager->power_saver_cookie = 0;
+ }
+ 
++static void
++update_active_power_profile (GsdPowerManager *manager)
++{
++        g_autoptr(GVariant) v = NULL;
++        const char *active_profile;
++        gboolean power_saver_enabled;
++
++        v = g_dbus_proxy_get_cached_property (manager->power_profiles_proxy, "ActiveProfile");
++        if (v) {
++                active_profile = g_variant_get_string (v, NULL);
++                power_saver_enabled = g_strcmp0 (active_profile, "power-saver") == 0;
++                if (power_saver_enabled != manager->power_saver_enabled) {
++                        manager->power_saver_enabled = power_saver_enabled;
++                        idle_configure (manager);
++                }
++        } else {
++                /* p-p-d might have disappeared from the bus */
++                idle_configure (manager);
++        }
++}
++
+ static void
+ power_profiles_proxy_ready_cb (GObject             *source_object,
+                               GAsyncResult        *res,
+@@ -2179,9 +2215,15 @@ power_profiles_proxy_ready_cb (GObject             *source_object,
+                 return;
+         }
+ 
++        g_signal_connect_swapped (manager->power_profiles_proxy,
++                                  "g-properties-changed",
++                                  G_CALLBACK (update_active_power_profile),
++                                  manager);
+         g_signal_connect (manager->power_profiles_proxy, "g-signal",
+                           G_CALLBACK (power_profiles_proxy_signal_cb),
+                           manager);
++
++        update_active_power_profile (manager);
+ }
+ 
+ static void
+-- 
+2.31.1
+
+
+From 89e25ed7871258aa6df7f824e226a7b8a28f23f3 Mon Sep 17 00:00:00 2001
+From: Bastien Nocera <hadess@hadess.net>
+Date: Thu, 29 Jul 2021 12:05:40 +0200
+Subject: [PATCH 3/4] power: Respect dim screen settings when not on battery
+
+The dim screen settings in the UI was not well respected as it only
+worked on discharging laptops.
+
+Closes: https://gitlab.gnome.org/GNOME/gnome-control-center/-/issues/837
+---
+ plugins/power/gsd-power-manager.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/plugins/power/gsd-power-manager.c b/plugins/power/gsd-power-manager.c
+index cfef9718..e7b9752f 100644
+--- a/plugins/power/gsd-power-manager.c
++++ b/plugins/power/gsd-power-manager.c
+@@ -1916,8 +1916,6 @@ idle_configure (GsdPowerManager *manager)
+         timeout_dim = 0;
+         if (manager->screensaver_active) {
+                 /* Don't dim when the screen lock is active */
+-        } else if (!on_battery) {
+-                /* Don't dim when charging */
+         } else if (is_power_save_active (manager)) {
+                 /* Try to save power by dimming agressively */
+                 timeout_dim = SCREENSAVER_TIMEOUT_BLANK;
+-- 
+2.31.1
+
+
+From f91abc0033b9cf17fd0e171cb7d652f88edac294 Mon Sep 17 00:00:00 2001
+From: Bastien Nocera <hadess@hadess.net>
+Date: Mon, 9 Aug 2021 17:57:11 +0200
+Subject: [PATCH 4/4] power: When dimming the screen, dim it quicker by default
+
+Now that we respect the "dim when idle" setting[1], dim quicker to try
+and save more power. 4/5 of the timeout to the screensaver was always a
+bit too undecided as a fraction, even when using the dimming as a
+warning that the screen was going to go to the screensaver (see commit
+7bc750a5).
+
+[1]: Except in power-saver mode where we always dim aggressively
+---
+ plugins/power/gsd-power-constants.h | 2 +-
+ plugins/power/gsdpowerconstants.py  | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/plugins/power/gsd-power-constants.h b/plugins/power/gsd-power-constants.h
+index 91e2296a..8bf9c641 100644
+--- a/plugins/power/gsd-power-constants.h
++++ b/plugins/power/gsd-power-constants.h
+@@ -25,7 +25,7 @@
+ #define IDLE_DIM_BLANK_DISABLED_MIN                     60 /* seconds */
+ 
+ /* Which fraction of the idle-delay is the idle-dim delay */
+-#define IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER                4.0/5.0
++#define IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER                1.0/2.0
+ 
+ /* The dim delay under which we do not bother dimming */
+ #define MINIMUM_IDLE_DIM_DELAY                          10 /* seconds */
+diff --git a/plugins/power/gsdpowerconstants.py b/plugins/power/gsdpowerconstants.py
+index a07798ee..26fa5bfc 100644
+--- a/plugins/power/gsdpowerconstants.py
++++ b/plugins/power/gsdpowerconstants.py
+@@ -8,7 +8,7 @@
+ 
+ SCREENSAVER_TIMEOUT_BLANK = 15;
+ IDLE_DIM_BLANK_DISABLED_MIN = 60;
+-IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER = 4.0/5.0;
++IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER = 1.0/2.0;
+ MINIMUM_IDLE_DIM_DELAY = 10;
+ POWER_UP_TIME_ON_AC = 15;
+ GSD_MOCK_DEFAULT_BRIGHTNESS = 50;
+-- 
+2.31.1
+

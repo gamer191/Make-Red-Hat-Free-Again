@@ -1,0 +1,158 @@
+From 1692d4a91d95fecd5642b0c92bc2c5b0dbcb4184 Mon Sep 17 00:00:00 2001
+From: Neal Gompa <ngompa@fedoraproject.org>
+Date: Fri, 29 Oct 2021 09:37:33 -0400
+Subject: [PATCH] classic: Install the session for Wayland and ship override
+ sessions
+
+The regular GNOME session ships with three options:
+
+* GNOME
+* GNOME on Wayland (available when GDM starts in X11)
+* GNOME on Xorg (available when GDM starts in Wayland)
+
+The main GNOME session is set up so it works to match how GDM starts,
+so GNOME is on Wayland if GDM is (or GNOME is on X11 if GDM is).
+
+For GNOME Classic, we are missing this setup, so port this behavior
+over from the GNOME session setup.
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell-extensions/-/merge_requests/195>
+---
+ data/gnome-classic-wayland.desktop.in |  8 ++++++
+ data/gnome-classic-xorg.desktop.in    |  8 ++++++
+ data/meson.build                      | 40 +++++++++++++++++++++------
+ meson.build                           |  5 ++++
+ meson/session-post-install.py         | 20 ++++++++++++++
+ 5 files changed, 72 insertions(+), 9 deletions(-)
+ create mode 100644 data/gnome-classic-wayland.desktop.in
+ create mode 100644 data/gnome-classic-xorg.desktop.in
+ create mode 100755 meson/session-post-install.py
+
+diff --git a/data/gnome-classic-wayland.desktop.in b/data/gnome-classic-wayland.desktop.in
+new file mode 100644
+index 00000000..7287c689
+--- /dev/null
++++ b/data/gnome-classic-wayland.desktop.in
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Name=GNOME Classic on Wayland
++Comment=This session logs you into GNOME Classic
++Exec=env GNOME_SHELL_SESSION_MODE=classic gnome-session
++TryExec=gnome-session
++Type=Application
++DesktopNames=GNOME-Classic;GNOME;
++X-GDM-SessionRegisters=true
+diff --git a/data/gnome-classic-xorg.desktop.in b/data/gnome-classic-xorg.desktop.in
+new file mode 100644
+index 00000000..5fb338a1
+--- /dev/null
++++ b/data/gnome-classic-xorg.desktop.in
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Name=GNOME Classic on Xorg
++Comment=This session logs you into GNOME Classic
++Exec=env GNOME_SHELL_SESSION_MODE=classic gnome-session
++TryExec=gnome-session
++Type=Application
++DesktopNames=GNOME-Classic;GNOME;
++X-GDM-SessionRegisters=true
+diff --git a/data/meson.build b/data/meson.build
+index 27f42872..47fe798e 100644
+--- a/data/meson.build
++++ b/data/meson.build
+@@ -1,12 +1,34 @@
+-session_desktop = 'gnome-classic.desktop'
+-i18n.merge_file('',
+-  input:  session_desktop + '.in',
+-  output: session_desktop,
+-  po_dir: '../po',
+-  install: true,
+-  install_dir: xsessiondir,
+-  type: 'desktop'
+-)
++session_desktop_base = 'gnome-classic'
++
++session_desktops = [
++  session_desktop_base,
++  session_desktop_base + '-xorg',
++  session_desktop_base + '-wayland',
++]
++
++foreach name: session_desktops
++    session_desktop = name + '.desktop'
++    if name.endswith('-xorg')
++        session_instdir = xsessiondir
++    elif name.endswith('-wayland')
++        session_instdir = wlsessiondir
++    else
++        # FIXME: The same target can not be copied into two directories.
++        #        There is a workaround in meson/session-post-install.py until proper
++        #        solution arises:
++        #        https://github.com/mesonbuild/meson/issues/2416
++        session_instdir = xsessiondir
++        #session_instdir = [ xesssiondir, wlsessiondir ]
++    endif
++    i18n.merge_file('',
++      input:  session_desktop + '.in',
++      output: session_desktop,
++      po_dir: '../po',
++      install: true,
++      install_dir: session_instdir,
++      type: 'desktop'
++    )
++endforeach
+ 
+ classic_uuids = []
+ foreach e : classic_extensions
+diff --git a/meson.build b/meson.build
+index dda3ddac..ea8a859d 100644
+--- a/meson.build
++++ b/meson.build
+@@ -20,6 +20,7 @@ themedir = join_paths(shelldir, 'theme')
+ schemadir = join_paths(datadir, 'glib-2.0', 'schemas')
+ sessiondir = join_paths(datadir, 'gnome-session', 'sessions')
+ xsessiondir = join_paths(datadir, 'xsessions')
++wlsessiondir = join_paths(datadir, 'wayland-sessions')
+ 
+ ver_arr = meson.project_version().split('.')
+ shell_version = ver_arr[0]
+@@ -90,6 +91,10 @@ endforeach
+ 
+ if classic_mode_enabled
+   subdir('data')
++  meson.add_install_script(
++    'meson/session-post-install.py',
++    join_paths(get_option('prefix'), datadir)
++  )
+ endif
+ 
+ subdir('extensions')
+diff --git a/meson/session-post-install.py b/meson/session-post-install.py
+new file mode 100755
+index 00000000..36abe5e4
+--- /dev/null
++++ b/meson/session-post-install.py
+@@ -0,0 +1,20 @@
++#!/usr/bin/env python3
++
++import os
++import shutil
++import sys
++
++if os.environ.get('DESTDIR'):
++  install_root = os.environ.get('DESTDIR') + os.path.abspath(sys.argv[1])
++else:
++  install_root = sys.argv[1]
++
++# FIXME: Meson is unable to copy a generated target file:
++#        https://groups.google.com/forum/#!topic/mesonbuild/3iIoYPrN4P0
++dst_dir = os.path.join(install_root, 'wayland-sessions')
++if not os.path.exists(dst_dir):
++  os.makedirs(dst_dir)
++
++src = os.path.join(install_root, 'xsessions', 'gnome-classic.desktop')
++dst = os.path.join(dst_dir, 'gnome-classic.desktop')
++shutil.copyfile(src, dst)
+-- 
+2.33.1
+

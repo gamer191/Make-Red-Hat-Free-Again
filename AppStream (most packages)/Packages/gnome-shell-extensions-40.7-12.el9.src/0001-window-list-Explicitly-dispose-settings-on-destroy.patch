@@ -1,0 +1,46 @@
+From a31f4b6ca703faab25c306dc33056763642a83cb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Florian=20M=C3=BCllner?= <fmuellner@gnome.org>
+Date: Fri, 30 Sep 2022 18:16:16 +0200
+Subject: [PATCH] window-list: Explicitly dispose settings on destroy
+
+This will not only disconnect the signal handler, but also remove
+any bindings. This works around a crash that happens if a setting
+that triggers the binding changes at the same time as a setting
+that rebuilds the window list; in that case, the binding handler
+runs after gjs has dropped its wrapper object, but before the
+binding is removed automaticalled when the object is finalized.
+
+https://gitlab.gnome.org/GNOME/gnome-shell-extensions/-/issues/416
+
+Part-of: <https://gitlab.gnome.org/GNOME/gnome-shell-extensions/-/merge_requests/243>
+---
+ extensions/window-list/extension.js | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/extensions/window-list/extension.js b/extensions/window-list/extension.js
+index 89413818..91ee3e6b 100644
+--- a/extensions/window-list/extension.js
++++ b/extensions/window-list/extension.js
+@@ -842,8 +842,8 @@ class WindowList extends St.Widget {
+         this._dndWindow = null;
+ 
+         this._settings = ExtensionUtils.getSettings();
+-        this._groupingModeChangedId = this._settings.connect(
+-            'changed::grouping-mode', this._groupingModeChanged.bind(this));
++        this._settings.connect('changed::grouping-mode',
++            () => this._groupingModeChanged());
+         this._grouped = undefined;
+         this._groupingModeChanged();
+     }
+@@ -1112,7 +1112,7 @@ class WindowList extends St.Widget {
+         Main.xdndHandler.disconnect(this._dragBeginId);
+         Main.xdndHandler.disconnect(this._dragEndId);
+ 
+-        this._settings.disconnect(this._groupingModeChangedId);
++        this._settings.run_dispose();
+ 
+         let windows = global.get_window_actors();
+         for (let i = 0; i < windows.length; i++)
+-- 
+2.39.1
+

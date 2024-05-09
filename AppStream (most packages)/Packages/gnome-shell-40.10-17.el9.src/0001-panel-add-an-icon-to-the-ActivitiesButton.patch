@@ -1,0 +1,56 @@
+From b5db4d318546654f4e9c1e4999fa00456441f105 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Wed, 15 Jan 2014 16:45:34 -0500
+Subject: [PATCH] panel: add an icon to the ActivitiesButton
+
+Requested by brand
+---
+ data/theme/gnome-shell-sass/widgets/_panel.scss |  5 +++++
+ js/ui/panel.js                                  | 11 ++++++++++-
+ 2 files changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/data/theme/gnome-shell-sass/widgets/_panel.scss b/data/theme/gnome-shell-sass/widgets/_panel.scss
+index 1f4650773..5f323cbc8 100644
+--- a/data/theme/gnome-shell-sass/widgets/_panel.scss
++++ b/data/theme/gnome-shell-sass/widgets/_panel.scss
+@@ -85,6 +85,11 @@ $panel_transition_duration: 250ms; // same as the overview transition duration
+       // dimensions of the icon are hardcoded
+     }
+ 
++    .panel-logo-icon {
++      padding-right: .4em;
++      icon-size: 1em;
++    }
++
+     &#panelActivities {
+       -natural-hpadding: $base_padding * 3;
+     }
+diff --git a/js/ui/panel.js b/js/ui/panel.js
+index 1474886ef..ad11f4ba2 100644
+--- a/js/ui/panel.js
++++ b/js/ui/panel.js
+@@ -390,11 +390,20 @@ class ActivitiesButton extends PanelMenu.Button {
+ 
+         this.name = 'panelActivities';
+ 
++        const box = new St.BoxLayout();
++        this.add_child(box);
++        const iconFile = Gio.File.new_for_path('/usr/share/icons/hicolor/scalable/apps/start-here.svg');
++        this._icon = new St.Icon({
++            gicon: new Gio.FileIcon({ file: iconFile }),
++            style_class: 'panel-logo-icon',
++        });
++        box.add_child(this._icon);
++
+         /* Translators: If there is no suitable word for "Activities"
+            in your language, you can use the word for "Overview". */
+         this._label = new St.Label({ text: _("Activities"),
+                                      y_align: Clutter.ActorAlign.CENTER });
+-        this.add_actor(this._label);
++        box.add_child(this._label);
+ 
+         this.label_actor = this._label;
+ 
+-- 
+2.31.1
+
