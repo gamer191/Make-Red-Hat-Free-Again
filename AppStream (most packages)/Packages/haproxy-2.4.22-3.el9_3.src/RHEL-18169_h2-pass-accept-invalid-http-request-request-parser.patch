@@ -1,0 +1,76 @@
+From f86e994f5fb5851cd6e4f7f6b366e37765014b9f Mon Sep 17 00:00:00 2001
+From: Willy Tarreau <w@1wt.eu>
+Date: Tue, 8 Aug 2023 15:38:28 +0200
+Subject: [PATCH] MINOR: h2: pass accept-invalid-http-request down the request
+ parser
+
+We're adding a new argument "relaxed" to h2_make_htx_request() so that
+we can control its level of acceptance of certain invalid requests at
+the proxy level with "option accept-invalid-http-request". The goal
+will be to add deactivable checks that are still desirable to have by
+default. For now no test is subject to it.
+
+(cherry picked from commit d93a00861d714313faa0395ff9e2acb14b0a2fca)
+ [ad: backported for following fix : BUG/MINOR: h2: reject more chars
+  from the :path pseudo header]
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit b6be1a4f858eb6602490c192235114c1a163fef9)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit 26fa3a285df0748fc79e73e552161268b66fb527)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit 014945a1508f43e88ac4e89950fa9037e4fb0679)
+Signed-off-by: Willy Tarreau <w@1wt.eu>
+---
+ include/haproxy/h2.h | 2 +-
+ src/h2.c             | 6 +++++-
+ src/mux_h2.c         | 3 ++-
+ 3 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/include/haproxy/h2.h b/include/haproxy/h2.h
+index 8d2aa9511..4f872b99d 100644
+--- a/include/haproxy/h2.h
++++ b/include/haproxy/h2.h
+@@ -207,7 +207,7 @@ extern struct h2_frame_definition h2_frame_definition[H2_FT_ENTRIES];
+ /* various protocol processing functions */
+ 
+ int h2_parse_cont_len_header(unsigned int *msgf, struct ist *value, unsigned long long *body_len);
+-int h2_make_htx_request(struct http_hdr *list, struct htx *htx, unsigned int *msgf, unsigned long long *body_len);
++int h2_make_htx_request(struct http_hdr *list, struct htx *htx, unsigned int *msgf, unsigned long long *body_len, int relaxed);
+ int h2_make_htx_response(struct http_hdr *list, struct htx *htx, unsigned int *msgf, unsigned long long *body_len, char *upgrade_protocol);
+ int h2_make_htx_trailers(struct http_hdr *list, struct htx *htx);
+ 
+diff --git a/src/h2.c b/src/h2.c
+index e1554642e..94c384111 100644
+--- a/src/h2.c
++++ b/src/h2.c
+@@ -399,8 +399,12 @@ static struct htx_sl *h2_prepare_htx_reqline(uint32_t fields, struct ist *phdr,
+  *
+  * The Cookie header will be reassembled at the end, and for this, the <list>
+  * will be used to create a linked list, so its contents may be destroyed.
++ *
++ * When <relaxed> is non-nul, some non-dangerous checks will be ignored. This
++ * is in order to satisfy "option accept-invalid-http-request" for
++ * interoperability purposes.
+  */
+-int h2_make_htx_request(struct http_hdr *list, struct htx *htx, unsigned int *msgf, unsigned long long *body_len)
++int h2_make_htx_request(struct http_hdr *list, struct htx *htx, unsigned int *msgf, unsigned long long *body_len, int relaxed)
+ {
+ 	struct ist phdr_val[H2_PHDR_NUM_ENTRIES];
+ 	uint32_t fields; /* bit mask of H2_PHDR_FND_* */
+diff --git a/src/mux_h2.c b/src/mux_h2.c
+index 0ab86534c..61fd1a4d2 100644
+--- a/src/mux_h2.c
++++ b/src/mux_h2.c
+@@ -4917,7 +4917,8 @@ static int h2c_decode_headers(struct h2c *h2c, struct buffer *rxbuf, uint32_t *f
+ 	if (h2c->flags & H2_CF_IS_BACK)
+ 		outlen = h2_make_htx_response(list, htx, &msgf, body_len, upgrade_protocol);
+ 	else
+-		outlen = h2_make_htx_request(list, htx, &msgf, body_len);
++		outlen = h2_make_htx_request(list, htx, &msgf, body_len,
++					     !!(((const struct session *)h2c->conn->owner)->fe->options2 & PR_O2_REQBUG_OK));
+ 
+ 	if (outlen < 0 || htx_free_space(htx) < global.tune.maxrewrite) {
+ 		/* too large headers? this is a stream error only */
+-- 
+2.43.0
+

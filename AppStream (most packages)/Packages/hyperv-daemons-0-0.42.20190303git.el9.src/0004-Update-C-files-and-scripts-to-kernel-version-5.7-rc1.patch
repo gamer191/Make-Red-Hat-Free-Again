@@ -1,0 +1,345 @@
+From f20c2a3298ceae7536c06bd08a5c571ebfa8cce4 Mon Sep 17 00:00:00 2001
+From: Miroslav Rezanina <mrezanin@redhat.com>
+Date: Thu, 6 May 2021 12:50:43 +0200
+Subject: Update C files and scripts to kernel version 5.7-rc1
+
+(cherry-picked from RHEL 8.4.0 commit b0a20fac0e74b0b3eecc20ffe74006e7877da352)
+Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
+---
+ hv_fcopy_daemon.c   | 37 +++++++++++++++++++++++++++++++-----
+ hv_get_dhcp_info.sh |  2 +-
+ hv_kvp_daemon.c     | 35 ++++++++++++++++++++--------------
+ hv_set_ifconfig.sh  |  2 +-
+ hv_vss_daemon.c     | 46 ++++++++++++++++++++++++++++++++++-----------
+ 5 files changed, 90 insertions(+), 32 deletions(-)
+
+diff --git a/hv_fcopy_daemon.c b/hv_fcopy_daemon.c
+index aea2d91..16d629b 100644
+--- a/hv_fcopy_daemon.c
++++ b/hv_fcopy_daemon.c
+@@ -80,6 +80,8 @@ static int hv_start_fcopy(struct hv_start_fcopy *smsg)
+ 
+ 	error = 0;
+ done:
++	if (error)
++		target_fname[0] = '\0';
+ 	return error;
+ }
+ 
+@@ -108,15 +110,29 @@ static int hv_copy_data(struct hv_do_fcopy *cpmsg)
+ 	return ret;
+ }
+ 
++/*
++ * Reset target_fname to "" in the two below functions for hibernation: if
++ * the fcopy operation is aborted by hibernation, the daemon should remove the
++ * partially-copied file; to achieve this, the hv_utils driver always fakes a
++ * CANCEL_FCOPY message upon suspend, and later when the VM resumes back,
++ * the daemon calls hv_copy_cancel() to remove the file; if a file is copied
++ * successfully before suspend, hv_copy_finished() must reset target_fname to
++ * avoid that the file can be incorrectly removed upon resume, since the faked
++ * CANCEL_FCOPY message is spurious in this case.
++ */
+ static int hv_copy_finished(void)
+ {
+ 	close(target_fd);
++	target_fname[0] = '\0';
+ 	return 0;
+ }
+ static int hv_copy_cancel(void)
+ {
+ 	close(target_fd);
+-	unlink(target_fname);
++	if (strlen(target_fname) > 0) {
++		unlink(target_fname);
++		target_fname[0] = '\0';
++	}
+ 	return 0;
+ 
+ }
+@@ -131,7 +147,7 @@ void print_usage(char *argv[])
+ 
+ int main(int argc, char *argv[])
+ {
+-	int fcopy_fd;
++	int fcopy_fd = -1;
+ 	int error;
+ 	int daemonize = 1, long_index = 0, opt;
+ 	int version = FCOPY_CURRENT_VERSION;
+@@ -141,7 +157,7 @@ int main(int argc, char *argv[])
+ 		struct hv_do_fcopy copy;
+ 		__u32 kernel_modver;
+ 	} buffer = { };
+-	int in_handshake = 1;
++	int in_handshake;
+ 
+ 	static struct option long_options[] = {
+ 		{"help",	no_argument,	   0,  'h' },
+@@ -170,6 +186,12 @@ int main(int argc, char *argv[])
+ 	openlog("HV_FCOPY", 0, LOG_USER);
+ 	syslog(LOG_INFO, "starting; pid is:%d", getpid());
+ 
++reopen_fcopy_fd:
++	if (fcopy_fd != -1)
++		close(fcopy_fd);
++	/* Remove any possible partially-copied file on error */
++	hv_copy_cancel();
++	in_handshake = 1;
+ 	fcopy_fd = open("/dev/vmbus/hv_fcopy", O_RDWR);
+ 
+ 	if (fcopy_fd < 0) {
+@@ -196,7 +218,7 @@ int main(int argc, char *argv[])
+ 		len = pread(fcopy_fd, &buffer, sizeof(buffer), 0);
+ 		if (len < 0) {
+ 			syslog(LOG_ERR, "pread failed: %s", strerror(errno));
+-			exit(EXIT_FAILURE);
++			goto reopen_fcopy_fd;
+ 		}
+ 
+ 		if (in_handshake) {
+@@ -231,9 +253,14 @@ int main(int argc, char *argv[])
+ 
+ 		}
+ 
++		/*
++		 * pwrite() may return an error due to the faked CANCEL_FCOPY
++		 * message upon hibernation. Ignore the error by resetting the
++		 * dev file, i.e. closing and re-opening it.
++		 */
+ 		if (pwrite(fcopy_fd, &error, sizeof(int), 0) != sizeof(int)) {
+ 			syslog(LOG_ERR, "pwrite failed: %s", strerror(errno));
+-			exit(EXIT_FAILURE);
++			goto reopen_fcopy_fd;
+ 		}
+ 	}
+ }
+diff --git a/hv_get_dhcp_info.sh b/hv_get_dhcp_info.sh
+index c38686c..2f2a3c7 100644
+--- a/hv_get_dhcp_info.sh
++++ b/hv_get_dhcp_info.sh
+@@ -13,7 +13,7 @@
+ #	the script prints the string "Disabled" to stdout.
+ #
+ # Each Distro is expected to implement this script in a distro specific
+-# fashion. For instance on Distros that ship with Network Manager enabled,
++# fashion. For instance, on Distros that ship with Network Manager enabled,
+ # this script can be based on the Network Manager APIs for retrieving DHCP
+ # information.
+ 
+diff --git a/hv_kvp_daemon.c b/hv_kvp_daemon.c
+index e9ef4ca..0e5f14a 100644
+--- a/hv_kvp_daemon.c
++++ b/hv_kvp_daemon.c
+@@ -76,7 +76,7 @@ enum {
+ 	DNS
+ };
+ 
+-static int in_hand_shake = 1;
++static int in_hand_shake;
+ 
+ static char *os_name = "";
+ static char *os_major = "";
+@@ -1360,7 +1360,7 @@ void print_usage(char *argv[])
+ 
+ int main(int argc, char *argv[])
+ {
+-	int kvp_fd, len;
++	int kvp_fd = -1, len;
+ 	int error;
+ 	struct pollfd pfd;
+ 	char    *p;
+@@ -1400,14 +1400,6 @@ int main(int argc, char *argv[])
+ 	openlog("KVP", 0, LOG_USER);
+ 	syslog(LOG_INFO, "KVP starting; pid is:%d", getpid());
+ 
+-	kvp_fd = open("/dev/vmbus/hv_kvp", O_RDWR | O_CLOEXEC);
+-
+-	if (kvp_fd < 0) {
+-		syslog(LOG_ERR, "open /dev/vmbus/hv_kvp failed; error: %d %s",
+-			errno, strerror(errno));
+-		exit(EXIT_FAILURE);
+-	}
+-
+ 	/*
+ 	 * Retrieve OS release information.
+ 	 */
+@@ -1423,6 +1415,18 @@ int main(int argc, char *argv[])
+ 		exit(EXIT_FAILURE);
+ 	}
+ 
++reopen_kvp_fd:
++	if (kvp_fd != -1)
++		close(kvp_fd);
++	in_hand_shake = 1;
++	kvp_fd = open("/dev/vmbus/hv_kvp", O_RDWR | O_CLOEXEC);
++
++	if (kvp_fd < 0) {
++		syslog(LOG_ERR, "open /dev/vmbus/hv_kvp failed; error: %d %s",
++		       errno, strerror(errno));
++		exit(EXIT_FAILURE);
++	}
++
+ 	/*
+ 	 * Register ourselves with the kernel.
+ 	 */
+@@ -1457,8 +1461,7 @@ int main(int argc, char *argv[])
+ 			syslog(LOG_ERR, "read failed; error:%d %s",
+ 			       errno, strerror(errno));
+ 
+-			close(kvp_fd);
+-			return EXIT_FAILURE;
++			goto reopen_kvp_fd;
+ 		}
+ 
+ 		/*
+@@ -1617,13 +1620,17 @@ int main(int argc, char *argv[])
+ 			break;
+ 		}
+ 
+-		/* Send the value back to the kernel. */
++		/*
++		 * Send the value back to the kernel. Note: the write() may
++		 * return an error due to hibernation; we can ignore the error
++		 * by resetting the dev file, i.e. closing and re-opening it.
++		 */
+ kvp_done:
+ 		len = write(kvp_fd, hv_msg, sizeof(struct hv_kvp_msg));
+ 		if (len != sizeof(struct hv_kvp_msg)) {
+ 			syslog(LOG_ERR, "write failed; error: %d %s", errno,
+ 			       strerror(errno));
+-			exit(EXIT_FAILURE);
++			goto reopen_kvp_fd;
+ 		}
+ 	}
+ 
+diff --git a/hv_set_ifconfig.sh b/hv_set_ifconfig.sh
+index 18b27cc..3dd064c 100644
+--- a/hv_set_ifconfig.sh
++++ b/hv_set_ifconfig.sh
+@@ -12,7 +12,7 @@
+ # be used to configure the interface.
+ #
+ # Each Distro is expected to implement this script in a distro specific
+-# fashion. For instance on Distros that ship with Network Manager enabled,
++# fashion. For instance, on Distros that ship with Network Manager enabled,
+ # this script can be based on the Network Manager APIs for configuring the
+ # interface.
+ #
+diff --git a/hv_vss_daemon.c b/hv_vss_daemon.c
+index 92902a8..29a1e48 100644
+--- a/hv_vss_daemon.c
++++ b/hv_vss_daemon.c
+@@ -28,6 +28,8 @@
+ #include <stdbool.h>
+ #include <dirent.h>
+ 
++static bool fs_frozen;
++
+ /* Don't use syslog() in the function since that can cause write to disk */
+ static int vss_do_freeze(char *dir, unsigned int cmd)
+ {
+@@ -155,16 +157,22 @@ static int vss_operate(int operation)
+ 			continue;
+ 		}
+ 		error |= vss_do_freeze(ent->mnt_dir, cmd);
+-		if (error && operation == VSS_OP_FREEZE)
+-			goto err;
++		if (operation == VSS_OP_FREEZE) {
++			if (error)
++				goto err;
++			fs_frozen = true;
++		}
+ 	}
+ 
+ 	endmntent(mounts);
+ 
+ 	if (root_seen) {
+ 		error |= vss_do_freeze("/", cmd);
+-		if (error && operation == VSS_OP_FREEZE)
+-			goto err;
++		if (operation == VSS_OP_FREEZE) {
++			if (error)
++				goto err;
++			fs_frozen = true;
++		}
+ 	}
+ 
+ 	goto out;
+@@ -175,6 +183,7 @@ err:
+ 		endmntent(mounts);
+ 	}
+ 	vss_operate(VSS_OP_THAW);
++	fs_frozen = false;
+ 	/* Call syslog after we thaw all filesystems */
+ 	if (ent)
+ 		syslog(LOG_ERR, "FREEZE of %s failed; error:%d %s",
+@@ -196,13 +205,13 @@ void print_usage(char *argv[])
+ 
+ int main(int argc, char *argv[])
+ {
+-	int vss_fd, len;
++	int vss_fd = -1, len;
+ 	int error;
+ 	struct pollfd pfd;
+ 	int	op;
+ 	struct hv_vss_msg vss_msg[1];
+ 	int daemonize = 1, long_index = 0, opt;
+-	int in_handshake = 1;
++	int in_handshake;
+ 	__u32 kernel_modver;
+ 
+ 	static struct option long_options[] = {
+@@ -232,6 +241,18 @@ int main(int argc, char *argv[])
+ 	openlog("Hyper-V VSS", 0, LOG_USER);
+ 	syslog(LOG_INFO, "VSS starting; pid is:%d", getpid());
+ 
++reopen_vss_fd:
++	if (vss_fd != -1)
++		close(vss_fd);
++	if (fs_frozen) {
++		if (vss_operate(VSS_OP_THAW) || fs_frozen) {
++			syslog(LOG_ERR, "failed to thaw file system: err=%d",
++			       errno);
++			exit(EXIT_FAILURE);
++		}
++	}
++
++	in_handshake = 1;
+ 	vss_fd = open("/dev/vmbus/hv_vss", O_RDWR);
+ 	if (vss_fd < 0) {
+ 		syslog(LOG_ERR, "open /dev/vmbus/hv_vss failed; error: %d %s",
+@@ -247,8 +268,7 @@ int main(int argc, char *argv[])
+ 	if (len < 0) {
+ 		syslog(LOG_ERR, "registration to kernel failed; error: %d %s",
+ 		       errno, strerror(errno));
+-		close(vss_fd);
+-		exit(EXIT_FAILURE);
++		goto reopen_vss_fd;
+ 	}
+ 
+ 	pfd.fd = vss_fd;
+@@ -312,14 +332,18 @@ int main(int argc, char *argv[])
+ 		default:
+ 			syslog(LOG_ERR, "Illegal op:%d\n", op);
+ 		}
++
++		/*
++		 * The write() may return an error due to the faked VSS_OP_THAW
++		 * message upon hibernation. Ignore the error by resetting the
++		 * dev file, i.e. closing and re-opening it.
++		 */
+ 		vss_msg->error = error;
+ 		len = write(vss_fd, vss_msg, sizeof(struct hv_vss_msg));
+ 		if (len != sizeof(struct hv_vss_msg)) {
+ 			syslog(LOG_ERR, "write failed; error: %d %s", errno,
+ 			       strerror(errno));
+-
+-			if (op == VSS_OP_FREEZE)
+-				vss_operate(VSS_OP_THAW);
++			goto reopen_vss_fd;
+ 		}
+ 	}
+ 
+-- 
+2.27.0
+

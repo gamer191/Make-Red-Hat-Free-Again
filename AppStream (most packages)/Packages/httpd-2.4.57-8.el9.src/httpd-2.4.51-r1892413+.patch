@@ -1,0 +1,156 @@
+# ./pullrev.sh 1892413 1895552
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1938740
+
+http://svn.apache.org/viewvc?view=revision&revision=1892413
+http://svn.apache.org/viewvc?view=revision&revision=1895552
+
+- also mod_cgi/mod_cgid log_flags fix from r1881559
+
+--- httpd-2.4.51/modules/filters/mod_deflate.c.r1892413+
++++ httpd-2.4.51/modules/filters/mod_deflate.c
+@@ -1275,44 +1275,46 @@
+             if (APR_BUCKET_IS_FLUSH(bkt)) {
+                 apr_bucket *tmp_b;
+ 
+-                ctx->inflate_total += ctx->stream.avail_out;
+-                zRC = inflate(&(ctx->stream), Z_SYNC_FLUSH);
+-                ctx->inflate_total -= ctx->stream.avail_out;
+-                if (zRC != Z_OK) {
+-                    inflateEnd(&ctx->stream);
+-                    ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r, APLOGNO(01391)
+-                                  "Zlib error %d inflating data (%s)", zRC,
+-                                  ctx->stream.msg);
+-                    return APR_EGENERAL;
+-                }
++                if (!ctx->done) {
++                    ctx->inflate_total += ctx->stream.avail_out;
++                    zRC = inflate(&(ctx->stream), Z_SYNC_FLUSH);
++                    ctx->inflate_total -= ctx->stream.avail_out;
++                    if (zRC != Z_OK) {
++                        inflateEnd(&ctx->stream);
++                        ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r, APLOGNO(01391)
++                                      "Zlib error %d inflating data (%s)", zRC,
++                                      ctx->stream.msg);
++                        return APR_EGENERAL;
++                    }
+  
+-                if (inflate_limit && ctx->inflate_total > inflate_limit) { 
+-                    inflateEnd(&ctx->stream);
+-                    ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r, APLOGNO(02647)
+-                            "Inflated content length of %" APR_OFF_T_FMT
+-                            " is larger than the configured limit"
+-                            " of %" APR_OFF_T_FMT, 
+-                            ctx->inflate_total, inflate_limit);
+-                    return APR_ENOSPC;
+-                }
++                    if (inflate_limit && ctx->inflate_total > inflate_limit) { 
++                        inflateEnd(&ctx->stream);
++                        ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r, APLOGNO(02647)
++                                      "Inflated content length of %" APR_OFF_T_FMT
++                                      " is larger than the configured limit"
++                                      " of %" APR_OFF_T_FMT, 
++                                      ctx->inflate_total, inflate_limit);
++                        return APR_ENOSPC;
++                    }
+ 
+-                if (!check_ratio(r, ctx, dc)) {
+-                    inflateEnd(&ctx->stream);
+-                    ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r, APLOGNO(02805)
+-                            "Inflated content ratio is larger than the "
+-                            "configured limit %i by %i time(s)",
+-                            dc->ratio_limit, dc->ratio_burst);
+-                    return APR_EINVAL;
+-                }
++                    if (!check_ratio(r, ctx, dc)) {
++                        inflateEnd(&ctx->stream);
++                        ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r, APLOGNO(02805)
++                                      "Inflated content ratio is larger than the "
++                                      "configured limit %i by %i time(s)",
++                                      dc->ratio_limit, dc->ratio_burst);
++                        return APR_EINVAL;
++                    }
+ 
+-                len = c->bufferSize - ctx->stream.avail_out;
+-                ctx->crc = crc32(ctx->crc, (const Bytef *)ctx->buffer, len);
+-                tmp_b = apr_bucket_heap_create((char *)ctx->buffer, len,
+-                                                NULL, f->c->bucket_alloc);
+-                APR_BRIGADE_INSERT_TAIL(ctx->proc_bb, tmp_b);
++                    len = c->bufferSize - ctx->stream.avail_out;
++                    ctx->crc = crc32(ctx->crc, (const Bytef *)ctx->buffer, len);
++                    tmp_b = apr_bucket_heap_create((char *)ctx->buffer, len,
++                                                   NULL, f->c->bucket_alloc);
++                    APR_BRIGADE_INSERT_TAIL(ctx->proc_bb, tmp_b);
+ 
+-                ctx->stream.next_out = ctx->buffer;
+-                ctx->stream.avail_out = c->bufferSize;
++                    ctx->stream.next_out = ctx->buffer;
++                    ctx->stream.avail_out = c->bufferSize;
++                }
+ 
+                 /* Flush everything so far in the returning brigade, but continue
+                  * reading should EOS/more follow (don't lose them).
+--- httpd-2.4.51/modules/generators/mod_cgi.c.r1892413+
++++ httpd-2.4.51/modules/generators/mod_cgi.c
+@@ -191,11 +191,10 @@
+     apr_file_t *f = NULL;
+     apr_finfo_t finfo;
+     char time_str[APR_CTIME_LEN];
+-    int log_flags = rv ? APLOG_ERR : APLOG_ERR;
+ 
+     /* Intentional no APLOGNO */
+     /* Callee provides APLOGNO in error text */
+-    ap_log_rerror(APLOG_MARK, log_flags, rv, r,
++    ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
+                   "%s%s: %s", logno ? logno : "", error, r->filename);
+ 
+     /* XXX Very expensive mainline case! Open, then getfileinfo! */
+--- httpd-2.4.51/modules/generators/mod_cgid.c.r1892413+
++++ httpd-2.4.51/modules/generators/mod_cgid.c
+@@ -1190,11 +1190,10 @@
+     apr_file_t *f = NULL;
+     struct stat finfo;
+     char time_str[APR_CTIME_LEN];
+-    int log_flags = rv ? APLOG_ERR : APLOG_ERR;
+ 
+     /* Intentional no APLOGNO */
+     /* Callee provides APLOGNO in error text */
+-    ap_log_rerror(APLOG_MARK, log_flags, rv, r,
++    ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
+                 "%s: %s", error, r->filename);
+ 
+     /* XXX Very expensive mainline case! Open, then getfileinfo! */
+--- httpd-2.4.51/server/mpm_unix.c.r1892413+
++++ httpd-2.4.51/server/mpm_unix.c
+@@ -259,10 +259,12 @@
+         while (cur_extra) {
+             ap_generation_t old_gen;
+             extra_process_t *next = cur_extra->next;
++            pid_t pid = cur_extra->pid;
+ 
+-            if (reclaim_one_pid(cur_extra->pid, action_table[cur_action].action)) {
+-                if (ap_unregister_extra_mpm_process(cur_extra->pid, &old_gen) == 1) {
+-                    mpm_callback(-1, cur_extra->pid, old_gen);
++            if (reclaim_one_pid(pid, action_table[cur_action].action)) {
++                if (ap_unregister_extra_mpm_process(pid, &old_gen) == 1) {
++                    /* cur_extra dangling pointer from here. */
++                    mpm_callback(-1, pid, old_gen);
+                 }
+                 else {
+                     AP_DEBUG_ASSERT(1 == 0);
+@@ -307,10 +309,12 @@
+     while (cur_extra) {
+         ap_generation_t old_gen;
+         extra_process_t *next = cur_extra->next;
++        pid_t pid = cur_extra->pid;
+ 
+-        if (reclaim_one_pid(cur_extra->pid, DO_NOTHING)) {
+-            if (ap_unregister_extra_mpm_process(cur_extra->pid, &old_gen) == 1) {
+-                mpm_callback(-1, cur_extra->pid, old_gen);
++        if (reclaim_one_pid(pid, DO_NOTHING)) {
++            if (ap_unregister_extra_mpm_process(pid, &old_gen) == 1) {
++                /* cur_extra dangling pointer from here. */
++                mpm_callback(-1, pid, old_gen);
+             }
+             else {
+                 AP_DEBUG_ASSERT(1 == 0);

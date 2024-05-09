@@ -1,0 +1,24 @@
+From 88be69d62a01b9ac233de7f68118c948623c6f0a Mon Sep 17 00:00:00 2001
+From: Miroslav Rezanina <mrezanin@redhat.com>
+Date: Thu, 14 Nov 2019 09:45:44 +0100
+Subject: Do not set NM_CONTROLLED=no
+
+---
+ hv_set_ifconfig.sh | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/hv_set_ifconfig.sh b/hv_set_ifconfig.sh
+index 7ed9f85..18b27cc 100644
+--- a/hv_set_ifconfig.sh
++++ b/hv_set_ifconfig.sh
+@@ -51,7 +51,6 @@
+ 
+ 
+ echo "IPV6INIT=yes" >> $1
+-echo "NM_CONTROLLED=no" >> $1
+ echo "PEERDNS=yes" >> $1
+ echo "ONBOOT=yes" >> $1
+ 
+-- 
+2.27.0
+

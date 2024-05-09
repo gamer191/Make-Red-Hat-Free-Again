@@ -1,0 +1,71 @@
+From af232e47e6264122bed3681210b054ff38ec8de8 Mon Sep 17 00:00:00 2001
+From: Willy Tarreau <w@1wt.eu>
+Date: Tue, 8 Aug 2023 15:40:49 +0200
+Subject: [PATCH] BUG/MINOR: h2: reject more chars from the :path pseudo header
+
+This is the h2 version of this previous fix:
+
+    BUG/MINOR: h1: do not accept '#' as part of the URI component
+
+In addition to the current NUL/CR/LF, this will also reject all other
+control chars, the space and '#' from the :path pseudo-header, to avoid
+taking the '#' for a part of the path. It's still possible to fall back
+to the previous behavior using "option accept-invalid-http-request".
+
+This patch modifies the request parser to change the ":path" pseudo header
+validation function with a new one that rejects 0x00-0x1F (control chars),
+space and '#'. This way such chars will be dropped early in the chain, and
+the search for '#' doesn't incur a second pass over the header's value.
+
+This should be progressively backported to stable versions, along with the
+following commits it relies on:
+
+     REGTESTS: http-rules: add accept-invalid-http-request for normalize-uri tests
+     REORG: http: move has_forbidden_char() from h2.c to http.h
+     MINOR: ist: add new function ist_find_range() to find a character range
+     MINOR: http: add new function http_path_has_forbidden_char()
+     MINOR: h2: pass accept-invalid-http-request down the request parser
+
+(cherry picked from commit b3119d4fb4588087e2483a80b01d322683719e29)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit 462a8600ce9e478573a957e046b446a7dcffd286)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit 648e59e30723b8fd4e71aab02cb679f6ea7446e7)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit c8e07f2fd8b5462527f102f7145d6027c0d041da)
+[wt: minor ctx adjustments]
+Signed-off-by: Willy Tarreau <w@1wt.eu>
+---
+ src/h2.c | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/src/h2.c b/src/h2.c
+index 94c384111..e190c52b5 100644
+--- a/src/h2.c
++++ b/src/h2.c
+@@ -440,11 +440,18 @@ int h2_make_htx_request(struct http_hdr *list, struct htx *htx, unsigned int *ms
+ 		}
+ 
+ 		/* RFC7540#10.3: intermediaries forwarding to HTTP/1 must take care of
+-		 * rejecting NUL, CR and LF characters.
++		 * rejecting NUL, CR and LF characters. For :path we reject all CTL
++		 * chars, spaces, and '#'.
+ 		 */
+-		ctl = ist_find_ctl(list[idx].v);
+-		if (unlikely(ctl) && has_forbidden_char(list[idx].v, ctl))
+-			goto fail;
++		if (phdr == H2_PHDR_IDX_PATH && !relaxed) {
++			ctl = ist_find_range(list[idx].v, 0, '#');
++			if (unlikely(ctl) && http_path_has_forbidden_char(list[idx].v, ctl))
++				goto fail;
++		} else {
++			ctl = ist_find_ctl(list[idx].v);
++			if (unlikely(ctl) && has_forbidden_char(list[idx].v, ctl))
++				goto fail;
++		}
+ 
+ 		if (phdr > 0 && phdr < H2_PHDR_NUM_ENTRIES) {
+ 			/* insert a pseudo header by its index (in phdr) and value (in value) */
+-- 
+2.43.0
+

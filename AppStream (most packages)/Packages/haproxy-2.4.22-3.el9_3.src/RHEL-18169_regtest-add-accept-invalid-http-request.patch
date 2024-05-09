@@ -1,0 +1,46 @@
+From c7492154ef07d6c08aa1eb52502697bbc3f42a69 Mon Sep 17 00:00:00 2001
+From: Willy Tarreau <w@1wt.eu>
+Date: Tue, 8 Aug 2023 19:52:45 +0200
+Subject: [PATCH] REGTESTS: http-rules: add accept-invalid-http-request for
+ normalize-uri tests
+
+We'll soon block the '#' by default so let's prepare the test to continue
+to work.
+
+(cherry picked from commit 069d0e221e58a46119d7c049bb07fa4bcb8d0075)
+ [ad: backported for following fix : BUG/MINOR: h2: reject more chars
+  from the :path pseudo header]
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit 1660481fab69856a39ac44cf88b76cdbcc0ea954)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit 90d0300cea6cda18a4e20369f4dc0b4c4783d6c9)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit 65849396fd6f192d9f14e81702c6c3851e580345)
+Signed-off-by: Willy Tarreau <w@1wt.eu>
+---
+ reg-tests/http-rules/normalize_uri.vtc | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/reg-tests/http-rules/normalize_uri.vtc b/reg-tests/http-rules/normalize_uri.vtc
+index 6a1dc31dc..56acf2cef 100644
+--- a/reg-tests/http-rules/normalize_uri.vtc
++++ b/reg-tests/http-rules/normalize_uri.vtc
+@@ -127,6 +127,7 @@ haproxy h1 -conf {
+ 
+     frontend fe_fragment_strip
+         bind "fd@${fe_fragment_strip}"
++        option accept-invalid-http-request
+ 
+         http-request set-var(txn.before) url
+         http-request normalize-uri fragment-strip
+@@ -139,6 +140,7 @@ haproxy h1 -conf {
+ 
+     frontend fe_fragment_encode
+         bind "fd@${fe_fragment_encode}"
++        option accept-invalid-http-request
+ 
+         http-request set-var(txn.before) url
+         http-request normalize-uri fragment-encode
+-- 
+2.43.0
+

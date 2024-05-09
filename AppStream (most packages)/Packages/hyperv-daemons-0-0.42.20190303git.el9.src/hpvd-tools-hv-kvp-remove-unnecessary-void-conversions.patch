@@ -1,0 +1,53 @@
+From 07081e4a9622c042dec1e3c7ffd47722a6dc0337 Mon Sep 17 00:00:00 2001
+From: Mohammed Gamal <mgamal@redhat.com>
+Date: Thu, 17 Nov 2022 18:58:31 +0100
+Subject: [PATCH 3/3] tools: hv: kvp: remove unnecessary (void*) conversions
+
+RH-Author: Mohamed Gamal Morsy <mmorsy@redhat.com>
+RH-MergeRequest: 5: Update hyperv-daemons for RHEL-9.2
+RH-Bugzilla: 2139457
+RH-Acked-by: Emanuele Giuseppe Esposito <eesposit@redhat.com>
+RH-Acked-by: Miroslav Rezanina <mrezanin@redhat.com>
+RH-Commit: [2/2] d3fe2884e899eab164e8b42398db72618b05ec71
+
+Bugzilla: https://bugzilla.redhat.com/show_bug.cgi?id=2139457
+
+commit 2258954234db7530e9d86bb32cd6ad54485ff926
+Author: Zhou jie <zhoujie@nfschina.com>
+Date:   Tue Aug 23 11:45:52 2022 +0800
+
+    tools: hv: kvp: remove unnecessary (void*) conversions
+
+    Remove unnecessary void* type casting.
+
+    Signed-off-by: Zhou jie <zhoujie@nfschina.com>
+    Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+    Link: https://lore.kernel.org/r/20220823034552.8596-1-zhoujie@nfschina.com
+    Signed-off-by: Wei Liu <wei.liu@kernel.org>
+
+Signed-off-by: Mohammed Gamal <mgamal@redhat.com>
+---
+ hv_kvp_daemon.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hv_kvp_daemon.c b/hv_kvp_daemon.c
+index 5f98bee..2ad9af3 100644
+--- a/hv_kvp_daemon.c
++++ b/hv_kvp_daemon.c
+@@ -772,11 +772,11 @@ static int kvp_process_ip_address(void *addrp,
+ 	const char *str;
+ 
+ 	if (family == AF_INET) {
+-		addr = (struct sockaddr_in *)addrp;
++		addr = addrp;
+ 		str = inet_ntop(family, &addr->sin_addr, tmp, 50);
+ 		addr_length = INET_ADDRSTRLEN;
+ 	} else {
+-		addr6 = (struct sockaddr_in6 *)addrp;
++		addr6 = addrp;
+ 		str = inet_ntop(family, &addr6->sin6_addr.s6_addr, tmp, 50);
+ 		addr_length = INET6_ADDRSTRLEN;
+ 	}
+-- 
+2.31.1
+

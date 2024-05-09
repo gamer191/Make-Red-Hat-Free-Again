@@ -1,0 +1,86 @@
+From edcff741698c9519dc44f3aa13de421baad7ff43 Mon Sep 17 00:00:00 2001
+From: Willy Tarreau <w@1wt.eu>
+Date: Tue, 8 Aug 2023 15:23:19 +0200
+Subject: [PATCH] MINOR: ist: add new function ist_find_range() to find a
+ character range
+
+This looks up the character range <min>..<max> in the input string and
+returns a pointer to the first one found. It's essentially the equivalent
+of ist_find_ctl() in that it searches by 32 or 64 bits at once, but deals
+with a range.
+
+(cherry picked from commit 197668de975e495f0c0f0e4ff51b96203fa9842d)
+ [ad: backported for following fix : BUG/MINOR: h2: reject more chars
+ from the :path pseudo header]
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit 451ac6628acc4b9eed3260501a49c60d4e4d4e55)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit 3468f7f8e04c9c5ca5c985c7511e05e78fe1eded)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit b375df60341c7f7a4904c2d8041a09c66115c754)
+Signed-off-by: Willy Tarreau <w@1wt.eu>
+---
+ include/import/ist.h | 47 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 47 insertions(+)
+
+diff --git a/include/import/ist.h b/include/import/ist.h
+index 539a27d26..31566b105 100644
+--- a/include/import/ist.h
++++ b/include/import/ist.h
+@@ -746,6 +746,53 @@ static inline const char *ist_find_ctl(const struct ist ist)
+ 	return NULL;
+ }
+ 
++/* Returns a pointer to the first character found <ist> that belongs to the
++ * range [min:max] inclusive, or NULL if none is present. The function is
++ * optimized for strings having no such chars by processing up to sizeof(long)
++ * bytes at once on architectures supporting efficient unaligned accesses.
++ * Despite this it is not very fast (~0.43 byte/cycle) and should mostly be
++ * used on low match probability when it can save a call to a much slower
++ * function. Will not work for characters 0x80 and above. It's optimized for
++ * min and max to be known at build time.
++ */
++static inline const char *ist_find_range(const struct ist ist, unsigned char min, unsigned char max)
++{
++	const union { unsigned long v; } __attribute__((packed)) *u;
++	const char *curr = (void *)ist.ptr - sizeof(long);
++	const char *last = curr + ist.len;
++	unsigned long l1, l2;
++
++	/* easier with an exclusive boundary */
++	max++;
++
++	do {
++		curr += sizeof(long);
++		if (curr > last)
++			break;
++		u = (void *)curr;
++		/* add 0x<min><min><min><min>..<min> then subtract
++		 * 0x<max><max><max><max>..<max> to the value to generate a
++		 * carry in the lower byte if the byte contains a lower value.
++		 * If we generate a bit 7 that was not there, it means the byte
++		 * was min..max.
++		 */
++		l2  = u->v;
++		l1  = ~l2 & ((~0UL / 255) * 0x80); /* 0x808080...80 */
++		l2 += (~0UL / 255) * min;          /* 0x<min><min>..<min> */
++		l2 -= (~0UL / 255) * max;          /* 0x<max><max>..<max> */
++	} while ((l1 & l2) == 0);
++
++	last += sizeof(long);
++	if (__builtin_expect(curr < last, 0)) {
++		do {
++			if ((unsigned char)(*curr - min) < (unsigned char)(max - min))
++				return curr;
++			curr++;
++		} while (curr < last);
++	}
++	return NULL;
++}
++
+ /* looks for first occurrence of character <chr> in string <ist> and returns
+  * the tail of the string starting with this character, or (ist.end,0) if not
+  * found.
+-- 
+2.43.0
+

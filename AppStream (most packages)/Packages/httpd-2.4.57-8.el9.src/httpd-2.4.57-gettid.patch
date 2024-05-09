@@ -1,0 +1,81 @@
+diff --git a/configure.in b/configure.in
+index a3c994b..9a4351a 100644
+--- a/configure.in
++++ b/configure.in
+@@ -524,7 +524,8 @@ prctl \
+ timegm \
+ getpgid \
+ fopen64 \
+-getloadavg
++getloadavg \
++gettid
+ )
+ 
+ dnl confirm that a void pointer is large enough to store a long integer
+@@ -535,16 +536,19 @@ AC_CHECK_LIB(selinux, is_selinux_enabled, [
+    APR_ADDTO(HTTPD_LIBS, [-lselinux])
+ ])
+ 
+-AC_CACHE_CHECK([for gettid()], ac_cv_gettid,
++if test $ac_cv_func_gettid = no; then
++  # On Linux before glibc 2.30, gettid() is only usable via syscall()
++  AC_CACHE_CHECK([for gettid() via syscall], ap_cv_gettid,
+ [AC_TRY_RUN(#define _GNU_SOURCE
+ #include <unistd.h>
+ #include <sys/syscall.h>
+ #include <sys/types.h>
+ int main(int argc, char **argv) {
+ pid_t t = syscall(SYS_gettid); return t == -1 ? 1 : 0; },
+-[ac_cv_gettid=yes], [ac_cv_gettid=no], [ac_cv_gettid=no])])
+-if test "$ac_cv_gettid" = "yes"; then
+-    AC_DEFINE(HAVE_GETTID, 1, [Define if you have gettid()])
++  [ap_cv_gettid=yes], [ap_cv_gettid=no], [ap_cv_gettid=no])])
++  if test "$ap_cv_gettid" = "yes"; then
++      AC_DEFINE(HAVE_SYS_GETTID, 1, [Define if you have gettid() via syscall()])
++  fi
+ fi
+ 
+ dnl ## Check for the tm_gmtoff field in struct tm to get the timezone diffs
+diff --git a/server/log.c b/server/log.c
+index cc04c38..ed3b920 100644
+--- a/server/log.c
++++ b/server/log.c
+@@ -55,7 +55,7 @@
+ #include "ap_mpm.h"
+ #include "ap_listen.h"
+ 
+-#if HAVE_GETTID
++#if HAVE_SYS_GETTID
+ #include <sys/syscall.h>
+ #include <sys/types.h>
+ #endif
+@@ -627,14 +627,18 @@ static int log_tid(const ap_errorlog_info *info, const char *arg,
+ #if APR_HAS_THREADS
+     int result;
+ #endif
+-#if HAVE_GETTID
++#if defined(HAVE_GETTID) || defined(HAVE_SYS_GETTID)
+     if (arg && *arg == 'g') {
++#ifdef HAVE_GETTID
++        pid_t tid = gettid();
++#else
+         pid_t tid = syscall(SYS_gettid);
++#endif
+         if (tid == -1)
+             return 0;
+         return apr_snprintf(buf, buflen, "%"APR_PID_T_FMT, tid);
+     }
+-#endif
++#endif /* HAVE_GETTID || HAVE_SYS_GETTID */
+ #if APR_HAS_THREADS
+     if (ap_mpm_query(AP_MPMQ_IS_THREADED, &result) == APR_SUCCESS
+         && result != AP_MPMQ_NOT_SUPPORTED)
+@@ -968,7 +972,7 @@ static int do_errorlog_default(const ap_errorlog_info *info, char *buf,
+ #if APR_HAS_THREADS
+         field_start = len;
+         len += cpystrn(buf + len, ":tid ", buflen - len);
+-        item_len = log_tid(info, NULL, buf + len, buflen - len);
++        item_len = log_tid(info, "g", buf + len, buflen - len);
+         if (!item_len)
+             len = field_start;
+         else

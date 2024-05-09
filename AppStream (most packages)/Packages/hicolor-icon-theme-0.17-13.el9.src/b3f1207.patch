@@ -1,0 +1,28 @@
+From b3f1207ccff5ce0ab45ead38031f98fc1abe9731 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Robert-Andr=C3=A9=20Mauchin?= <zebob.m@gmail.com>
+Date: Fri, 7 Jan 2022 10:23:20 +0100
+Subject: [PATCH] Create HiDPI directories
+
+Support has been added since version 0.16 but we were still not generating them,
+simply add them in Makefile.
+---
+ Makefile.am | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index c370b81..591d5f3 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1,5 +1,8 @@
+ ICON_SIZES = 16x16 22x22 24x24 32x32 36x36 48x48 64x64 72x72 96x96 \
+-  128x128 192x192 256x256 512x512 scalable
++  128x128 192x192 256x256 512x512 16x16@2 22x22@2 24x24@2 32x32@2 \
++  36x36@2 48x48@2 64x64@2 72x72@2 96x96@2 128x128@2 192x192@2 256x256@2 \
++  512x512@2 scalable
++
+ ICON_CONTEXTS = actions animations apps categories devices emblems emotes \
+   filesystems intl mimetypes places status stock
+ STOCK_SUBS = chart code data form image io media navigation net object table text
+-- 
+GitLab
+

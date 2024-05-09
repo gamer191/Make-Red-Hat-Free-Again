@@ -1,0 +1,31 @@
+From 3d234bcdb4d40b42923688514a2fb5d1cb8b3314 Mon Sep 17 00:00:00 2001
+From: Till Maas <timaas@redhat.com>
+Date: Tue, 14 Dec 2021 08:07:40 +0000
+Subject: [PATCH 2/2] Use filename for connection profile
+
+RH-Author: Till Maas <None>
+RH-MergeRequest: 2: hv_set_ifconfig.sh: Use nmcli commands
+RH-Commit: [2/2] 6b6f37ba159b0614b75fcfc02f0513af116711c2 (timaas/hyperv-daemons)
+RH-Bugzilla: 2026371
+RH-Acked-by: Miroslav Rezanina <mrezanin@redhat.com>
+RH-Acked-by: Vitaly Kuznetsov <vkuznets@redhat.com>
+---
+ hv_set_ifconfig.sh | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/hv_set_ifconfig.sh b/hv_set_ifconfig.sh
+index 5a64efe..146829b 100644
+--- a/hv_set_ifconfig.sh
++++ b/hv_set_ifconfig.sh
+@@ -57,5 +57,6 @@ echo "ONBOOT=yes" >> $1
+ 
+ cp $1 /etc/sysconfig/network-scripts/
+ 
+-nmcli connection load "/etc/sysconfig/network-scripts/$1"
+-nmcli connection up filename "/etc/sysconfig/network-scripts/$1"
++filename="${1##*/}"
++nmcli connection load "/etc/sysconfig/network-scripts/${filename}"
++nmcli connection up filename "/etc/sysconfig/network-scripts/${filename}"
+-- 
+2.27.0
+

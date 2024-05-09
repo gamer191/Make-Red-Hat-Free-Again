@@ -1,0 +1,70 @@
+From 754ea50b570f72609b1931883bf9908d70ead089 Mon Sep 17 00:00:00 2001
+From: Robbie Harwood <rharwood@redhat.com>
+Date: Mon, 19 Apr 2021 11:35:26 -0400
+Subject: [PATCH 3/3] Port to libidn2
+
+Signed-off-by: Robbie Harwood <rharwood@redhat.com>
+---
+ configure.ac     | 20 ++++++++++----------
+ src/lib/hesiod.c |  7 +++----
+ 2 files changed, 13 insertions(+), 14 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 9098afa..792345a 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -29,16 +29,16 @@ AC_PROG_LIBTOOL
+ # Checks for libraries.
+ hesiod_save_LIBS="$LIBS"
+ LIBS=
+-AC_ARG_WITH([libidn],
+-  [AS_HELP_STRING([--with-libidn], [Support IDN (needs GNU libidn) @<:@check@:>@])],
+-  [with_libidn="$withval"],
+-  [with_libidn="check"])
+-AS_IF([test x"$with_libidn" != xno],
+-  [AC_SEARCH_LIBS([stringprep_check_version], [idn],
+-    [AC_DEFINE([HAVE_LIBIDN], [1], [Define if libidn is available.])],
+-    [AS_IF([test x"$with_idn" = xcheck],
+-      [AC_MSG_WARN([Unable to find libidn.])],
+-      [AC_MSG_ERROR([--with-libidn was given but libidn was not found.])])])])
++AC_ARG_WITH([libidn2],
++  [AS_HELP_STRING([--with-libidn2], [Support IDN2 (needs libidn2) @<:@check@:>@])],
++  [with_libidn2="$withval"],
++  [with_libidn2="check"])
++AS_IF([test x"$with_libidn2" != xno],
++  [AC_SEARCH_LIBS([idn2_to_ascii_8z], [idn2],
++    [AC_DEFINE([HAVE_LIBIDN2], [1], [Define if libidn2 is available.])],
++    [AS_IF([test x"$with_idn2" = xcheck],
++      [AC_MSG_WARN([Unable to find libidn2.])],
++      [AC_MSG_ERROR([--with-libidn2 was given but libidn2 was not found.])])])])
+ 
+ AC_CHECK_LIB([resolv], [res_mkquery], [], [
+     AC_MSG_CHECKING([if res_mkquery is provided by libresolv with mangled symbols])
+diff --git a/src/lib/hesiod.c b/src/lib/hesiod.c
+index e69a8ca..3745d69 100644
+--- a/src/lib/hesiod.c
++++ b/src/lib/hesiod.c
+@@ -70,9 +70,8 @@ static const char rcsid[] = "$Id: hesiod.c,v 1.30 2002-04-03 21:40:55 ghudson Ex
+ #include <string.h>
+ #include <unistd.h>
+ #include <ctype.h>
+-#ifdef HAVE_LIBIDN
+-#include <idna.h>
+-#include <idn-free.h>
++#ifdef HAVE_LIBIDN2
++#include <idn2.h>
+ #endif
+ #include "hesiod.h"
+ 
+@@ -233,7 +232,7 @@ char *hesiod_to_bind(void *context, const char *name, const char *type)
+     hesiod_free_list(context, rhs_list);
+ 
+   /* Make a copy of the result and return it to the caller. */
+-#ifdef HAVE_LIBIDN
++#ifdef HAVE_LIBIDN2
+   rc = idna_to_ascii_lz(bindname, &idn_ret, 0);
+   if (rc != IDNA_SUCCESS)
+     {
+-- 
+2.31.0
+

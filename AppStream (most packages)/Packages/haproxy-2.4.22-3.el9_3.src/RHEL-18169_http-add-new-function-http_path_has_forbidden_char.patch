@@ -1,0 +1,59 @@
+From 0f57ac20b046b70275192651d7b6c978032e6a36 Mon Sep 17 00:00:00 2001
+From: Willy Tarreau <w@1wt.eu>
+Date: Tue, 8 Aug 2023 15:24:54 +0200
+Subject: [PATCH] MINOR: http: add new function http_path_has_forbidden_char()
+
+As its name implies, this function checks if a path component has any
+forbidden headers starting at the designated location. The goal is to
+seek from the result of a successful ist_find_range() for more precise
+chars. Here we're focusing on 0x00-0x1F, 0x20 and 0x23 to make sure
+we're not too strict at this point.
+
+(cherry picked from commit 30f58f4217d585efeac3d85cb1b695ba53b7760b)
+ [ad: backported for following fix : BUG/MINOR: h2: reject more chars
+  from the :path pseudo header]
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit b491940181a88bb6c69ab2afc24b93a50adfa67c)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit f7666e5e43ce63e804ebffdf224d92cfd3367282)
+Signed-off-by: Amaury Denoyelle <adenoyelle@haproxy.com>
+(cherry picked from commit c699bb17b7e334c9d56e829422e29e5a204615ec)
+[wt: adj minor ctx in http.h]
+Signed-off-by: Willy Tarreau <w@1wt.eu>
+---
+ include/haproxy/http.h | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/include/haproxy/http.h b/include/haproxy/http.h
+index 8a86cb6e9..e8c5b850f 100644
+--- a/include/haproxy/http.h
++++ b/include/haproxy/http.h
+@@ -134,6 +134,25 @@ static inline enum http_etag_type http_get_etag_type(const struct ist etag)
+ 	return ETAG_INVALID;
+ }
+ 
++/* Looks into <ist> for forbidden characters for :path values (0x00..0x1F,
++ * 0x20, 0x23), starting at pointer <start> which must be within <ist>.
++ * Returns non-zero if such a character is found, 0 otherwise. When run on
++ * unlikely header match, it's recommended to first check for the presence
++ * of control chars using ist_find_ctl().
++ */
++static inline int http_path_has_forbidden_char(const struct ist ist, const char *start)
++{
++	do {
++		if ((uint8_t)*start <= 0x23) {
++			if ((uint8_t)*start < 0x20)
++				return 1;
++			if ((1U << ((uint8_t)*start & 0x1F)) & ((1<<3) | (1<<0)))
++				return 1;
++		}
++		start++;
++	} while (start < istend(ist));
++	return 0;
++}
+ 
+ #endif /* _HAPROXY_HTTP_H */
+ 
+-- 
+2.43.0
+
