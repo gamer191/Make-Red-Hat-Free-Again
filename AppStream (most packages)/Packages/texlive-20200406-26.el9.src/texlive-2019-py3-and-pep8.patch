@@ -1,0 +1,39 @@
+diff -up ./doc/generic/enctex/unimap.py.py3 ./doc/generic/enctex/unimap.py
+--- ./doc/generic/enctex/unimap.py.py3	2019-08-18 08:52:49.201015107 -0400
++++ ./doc/generic/enctex/unimap.py	2019-08-18 08:54:08.301110903 -0400
+@@ -91,12 +91,12 @@ def linetype(line):
+         return LineType.Character, (int(line[:m.end()], 16),
+                                     line[m.end():].strip().lower())
+     if not line.startswith('\t'):
+-        raise ValueError, 'Queer line doesn\'t start with @ or Tab'
++        raise ValueError('Queer line doesn\'t start with @ or Tab')
+     line = line.strip()
+     if not line:
+         return LineType.Empty, None
+     if not LineType.map.has_key(line[0]):
+-        raise ValueError, 'Queer character info line (marker %s)' % line[0]
++        raise ValueError('Queer character info line (marker %s)' % line[0])
+     return line[0], line[1:].strip()
+ 
+ def utf8chars(u):
+@@ -132,7 +132,7 @@ while typ:
+         char = val
+     elif typ == LineType.TeX:
+         if not val.startswith('\\'):
+-            raise ValueError, '%s is not a control seq (U%X)' % (val, char[0])
++            raise ValueError('%s is not a control seq (U%X)' % (val, char[0]))
+         if sect:
+             fw.write('\n%% %s\n' % sect)
+             sect = None
+diff -up ./doc/generic/enctex/unimap.py.py3 ./doc/generic/enctex/unimap.py
+--- ./doc/generic/enctex/unimap.py.py3	2019-08-18 09:40:33.996050750 -0400
++++ ./doc/generic/enctex/unimap.py	2019-08-18 09:41:02.573362799 -0400
+@@ -48,8 +48,6 @@ database = 'unimap.txt'    # Input file
+ output = 'utf8raw.tex'   # Output file
+ 
+ # Compatibility with Pyhton-2.1
+-if not __builtins__.__dict__.has_key('True'):
+-    True = 1; False = 0
+ if not __builtins__.__dict__.has_key('file'):
+     file = open
+ if not __builtins__.__dict__.has_key('dict'):
