@@ -2,13 +2,12 @@
 AppStream (most packages)/Packages/a*
 AppStream (most packages)/Packages/c*
 AppStream (most packages)/Packages/d*
-AppStream (most packages)/Packages/ed*
 AppStream (most packages)/Packages/f*
 AppStream (most packages)/Packages/gd*
 AppStream (most packages)/Packages/ge*
 AppStream (most packages)/Packages/gh*
 AppStream (most packages)/Packages/go*
-AppStream (most packages)/Packages/gt*
+AppStream (most packages)/Packages/gtk*
 AppStream (most packages)/Packages/j*
 AppStream (most packages)/Packages/k*
 AppStream (most packages)/Packages/l*
@@ -24,9 +23,9 @@ BaseOS
 AppStream (most packages)/Packages/ceph-16.2.4-5.el9.src/ceph-16.2.4.tar
 
 
-# needs to be extracted
-AppStream (most packages)/Packages/mysql*
-AppStream (most packages)/Packages/osbuild-composer*
+# needs to be extracted (over 100mb)
+AppStream (most packages)/Packages/mysql-8.0.36-1.el9_3.src/mysql-boost-8.0.36.tar.gz
+AppStream (most packages)/Packages/osbuild-composer-101-1.el9.src/osbuild-composer-101.tar.gz
 AppStream (most packages)/Packages/qemu-kvm*
 AppStream (most packages)/Packages/rust*
 AppStream (most packages)/Packages/tesseract-tessdata*
