@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2016 Luya Tshimbalanga <luya@fedoraproject.org> -->
+<component type="font">
+  <id>julietaula-montserrat</id>
+  <metadata_license> CC0-1.0</metadata_license>
+  <name>Montserrat</name>
+  <summary>A sans-serif typeface loved by web and UI designers</summary>
+  <description>
+    <p>The old posters and signs in the traditional neighborhood of Buenos Aires called Montserrat inspired me to design a typeface that rescues the beauty of urban typography from the first half of the twentieth century. The goal is to rescue what is in Montserrat and set it free, under a free, libre and open source license, the SIL Open Font License.</p>
+<p>As urban development changes this place, it will never return to its original form and loses forever the designs that are so special and unique. Each selected example produces its own variants in length, width and height proportions, each adding to the Montserrat family. The old typographies and canopies are irretrievable when they are replaced.</p>
+<p>The letters that inspired this project have work, dedication, care, color, contrast, light and life, day and night! These are the types that make the city look so beautiful.</p>
+  </description>
+  <provides>
+	<font file="Montserrat-Black.otf">Montserrat Black</font>
+	<font file="Montserrat-Bold.otf">Montserrat Bold</font>
+	<font file="Montserrat-ExtraBold.otf">Montserrat Extra Bold</font>
+	<font file="Montserrat-Light.otf">Montserrat Light</font>
+	<font file="Montserrat-Medium.otf">Montserrat Medium</font>
+	<font file="Montserrat-Regular.otf">Montserrat Regular</font>
+	<font file="Montserrat-SemiBold.otf">Montserrat Semi Bold</font>
+	<font file="Montserrat-Thin.otf">Montserrat Thin</font>
+	<font file="Montserrat-UltraLight.otf">Montserrat Ultra Light</font>
+  </provides>
+  <url type="homepage">https://github.com/JulietaUla/Montserrat/</url>
+  <updatecontact>luya@fedoraproject.org</updatecontact>
+</component>

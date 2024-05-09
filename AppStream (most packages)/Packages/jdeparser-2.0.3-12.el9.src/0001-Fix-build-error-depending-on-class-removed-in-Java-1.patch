@@ -1,0 +1,33 @@
+From d839be75837da2bc51712af5ae123657c67de30d Mon Sep 17 00:00:00 2001
+From: Chris Kelley <ckelley@redhat.com>
+Date: Mon, 16 Aug 2021 21:22:27 +0100
+Subject: [PATCH] Fix build error depending on class removed in Java 11
+
+---
+ src/main/java/org/jboss/jdeparser/Assertions.java | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/main/java/org/jboss/jdeparser/Assertions.java b/src/main/java/org/jboss/jdeparser/Assertions.java
+index 017c645..a931b88 100644
+--- a/src/main/java/org/jboss/jdeparser/Assertions.java
++++ b/src/main/java/org/jboss/jdeparser/Assertions.java
+@@ -18,15 +18,13 @@
+ 
+ package org.jboss.jdeparser;
+ 
+-import sun.reflect.Reflection;
+-
+ /**
+  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
+  */
+ class Assertions {
+     static boolean callerIs(Class<?> clazz) {
+         try {
+-            return Reflection.getCallerClass(3) == clazz;
++            return StackWalker.getInstance().getCallerClass() == clazz;
+         } catch (Throwable ignored) {}
+         // dunno
+         return true;
+-- 
+2.31.1
+
