@@ -1,0 +1,12 @@
+diff --git a/agent/snmpd.c b/agent/snmpd.c
+index ae73eda..f01b890 100644
+--- a/agent/snmpd.c
++++ b/agent/snmpd.c
+@@ -289,6 +289,7 @@ usage(char *prog)
+            "  -S d|i|0-7\t\tuse -Ls <facility> instead\n"
+            "\n"
+            );
++           exit(1);
+ }
+ 
+ static void

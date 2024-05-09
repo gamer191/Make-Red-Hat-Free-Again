@@ -1,0 +1,400 @@
+diff -ruN nautilus-40.2/po/bg.po nautilus-40.2.translations/po/bg.po
+--- nautilus-40.2/po/bg.po	2022-09-22 15:52:30.138654010 +0200
++++ nautilus-40.2.translations/po/bg.po	2022-09-22 15:52:33.477666280 +0200
+@@ -5483,3 +5483,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:226
+ msgid "Enter a password here."
+ msgstr "Въведете парола."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Копиране на местоположение"
+diff -ruN nautilus-40.2/po/ca.po nautilus-40.2.translations/po/ca.po
+--- nautilus-40.2/po/ca.po	2022-09-22 15:52:30.138654010 +0200
++++ nautilus-40.2.translations/po/ca.po	2022-09-22 15:52:33.505666383 +0200
+@@ -5907,3 +5907,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Introduïu una contrasenya aquí."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Copia la ubicació"
+diff -ruN nautilus-40.2/po/cs.po nautilus-40.2.translations/po/cs.po
+--- nautilus-40.2/po/cs.po	2022-09-22 15:52:30.139654013 +0200
++++ nautilus-40.2.translations/po/cs.po	2022-09-22 15:52:33.524666453 +0200
+@@ -5767,3 +5767,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "zde zadejte heslo"
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "Z_kopírovat umístění"
+diff -ruN nautilus-40.2/po/da.po nautilus-40.2.translations/po/da.po
+--- nautilus-40.2/po/da.po	2022-09-22 15:52:30.139654013 +0200
++++ nautilus-40.2.translations/po/da.po	2022-09-22 15:52:33.537666500 +0200
+@@ -7522,3 +7522,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Indtast en adgangskode her."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Kopiér placering"
+diff -ruN nautilus-40.2/po/de.po nautilus-40.2.translations/po/de.po
+--- nautilus-40.2/po/de.po	2022-09-22 15:52:30.140654017 +0200
++++ nautilus-40.2.translations/po/de.po	2022-09-22 15:52:33.546666534 +0200
+@@ -6034,3 +6034,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Geben Sie hier ein Passwort ein."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "Ort _kopieren"
+diff -ruN nautilus-40.2/po/el.po nautilus-40.2.translations/po/el.po
+--- nautilus-40.2/po/el.po	2022-09-22 15:52:30.140654017 +0200
++++ nautilus-40.2.translations/po/el.po	2022-09-22 15:52:33.559666581 +0200
+@@ -6135,3 +6135,8 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Εισαγωγή συνθηματικού εδώ."
++
++#
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Αντιγραφή τοποθεσίας"
+diff -ruN nautilus-40.2/po/en_GB.po nautilus-40.2.translations/po/en_GB.po
+--- nautilus-40.2/po/en_GB.po	2022-09-22 15:52:30.141654021 +0200
++++ nautilus-40.2.translations/po/en_GB.po	2022-09-22 15:52:33.571666625 +0200
+@@ -10323,3 +10323,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Enter a password here."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Copy Location"
+diff -ruN nautilus-40.2/po/es.po nautilus-40.2.translations/po/es.po
+--- nautilus-40.2/po/es.po	2022-09-22 15:52:30.142654024 +0200
++++ nautilus-40.2.translations/po/es.po	2022-09-22 15:52:33.589666692 +0200
+@@ -11269,3 +11269,8 @@
+ #| msgid "Enter password…"
+ msgid "Enter a password here."
+ msgstr "Introduzca una contraseña aquí."
++
++# src/nautilus-location-bar.c:401
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "Copiar _ubicación"
+diff -ruN nautilus-40.2/po/eu.po nautilus-40.2.translations/po/eu.po
+--- nautilus-40.2/po/eu.po	2022-09-22 15:52:30.142654024 +0200
++++ nautilus-40.2.translations/po/eu.po	2022-09-22 15:52:33.600666732 +0200
+@@ -5688,3 +5688,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Idatzi pasahitza hemen."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Kopiatu kokalekua"
+diff -ruN nautilus-40.2/po/fa.po nautilus-40.2.translations/po/fa.po
+--- nautilus-40.2/po/fa.po	2022-09-22 15:52:30.143654028 +0200
++++ nautilus-40.2.translations/po/fa.po	2022-09-22 15:52:33.612666776 +0200
+@@ -10626,3 +10626,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "این‌جا گذرواژه‌ای وارد کنید."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_رونوشت از مکان"
+diff -ruN nautilus-40.2/po/fi.po nautilus-40.2.translations/po/fi.po
+--- nautilus-40.2/po/fi.po	2022-09-22 15:52:30.144654032 +0200
++++ nautilus-40.2.translations/po/fi.po	2022-09-22 15:52:33.621666809 +0200
+@@ -7375,3 +7375,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Kirjoita salasana tähän."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "Kopioi si_jainti"
+diff -ruN nautilus-40.2/po/fr.po nautilus-40.2.translations/po/fr.po
+--- nautilus-40.2/po/fr.po	2022-09-22 15:52:30.144654032 +0200
++++ nautilus-40.2.translations/po/fr.po	2022-09-22 15:52:33.629666839 +0200
+@@ -6019,3 +6019,7 @@
+ #| msgid "Enter password…"
+ msgid "Enter a password here."
+ msgstr "Saisissez un mot de passe ici."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "Co_pier l’emplacement"
+diff -ruN nautilus-40.2/po/fur.po nautilus-40.2.translations/po/fur.po
+--- nautilus-40.2/po/fur.po	2022-09-22 15:52:30.145654035 +0200
++++ nautilus-40.2.translations/po/fur.po	2022-09-22 15:52:33.638666872 +0200
+@@ -8140,3 +8140,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:209
+ msgid "Enter a password here."
+ msgstr "Inserìs achì une password."
++
++#: src/resources/ui/nautilus-files-view-context-menus.ui:34
++msgid "_Copy Location"
++msgstr "_Copie posizion"
+diff -ruN nautilus-40.2/po/gl.po nautilus-40.2.translations/po/gl.po
+--- nautilus-40.2/po/gl.po	2022-09-22 15:52:30.145654035 +0200
++++ nautilus-40.2.translations/po/gl.po	2022-09-22 15:52:33.658666945 +0200
+@@ -5897,3 +5897,7 @@
+ #| msgid "Enter password…"
+ msgid "Enter a password here."
+ msgstr "Escriba un contrasinal aquí…"
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Copiar localización"
+diff -ruN nautilus-40.2/po/he.po nautilus-40.2.translations/po/he.po
+--- nautilus-40.2/po/he.po	2022-09-22 15:52:30.146654039 +0200
++++ nautilus-40.2.translations/po/he.po	2022-09-22 15:52:33.679667022 +0200
+@@ -11143,3 +11143,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "נא למלא כאן ססמה."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "ה_עתקת מיקום"
+diff -ruN nautilus-40.2/po/hr.po nautilus-40.2.translations/po/hr.po
+--- nautilus-40.2/po/hr.po	2022-09-22 15:52:30.147654043 +0200
++++ nautilus-40.2.translations/po/hr.po	2022-09-22 15:52:33.692667070 +0200
+@@ -6489,3 +6489,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Upišite lozinku ovdje."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Kopiraj lokaciju"
+diff -ruN nautilus-40.2/po/hu.po nautilus-40.2.translations/po/hu.po
+--- nautilus-40.2/po/hu.po	2022-09-22 15:52:30.147654043 +0200
++++ nautilus-40.2.translations/po/hu.po	2022-09-22 15:52:33.700667099 +0200
+@@ -5868,3 +5868,8 @@
+ #| msgid "Enter password…"
+ msgid "Enter a password here."
+ msgstr "Adjon meg egy jelszót itt."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++#| msgid "Location"
++msgid "_Copy Location"
++msgstr "Hely má_solása"
+diff -ruN nautilus-40.2/po/id.po nautilus-40.2.translations/po/id.po
+--- nautilus-40.2/po/id.po	2022-09-22 15:52:30.148654046 +0200
++++ nautilus-40.2.translations/po/id.po	2022-09-22 15:52:33.713667147 +0200
+@@ -6368,3 +6368,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Masukkan kata sandi di sini."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Salin Lokasi"
+diff -ruN nautilus-40.2/po/ka.po nautilus-40.2.translations/po/ka.po
+--- nautilus-40.2/po/ka.po	2021-06-04 13:59:15.686239200 +0200
++++ nautilus-40.2.translations/po/ka.po	2022-09-22 15:52:33.742667254 +0200
+@@ -6877,3 +6877,7 @@
+ 
+ #~ msgid "Video CD"
+ #~ msgstr "ვიდეო CD ფორმატში"
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_მდებარეობის კოპირება"
+diff -ruN nautilus-40.2/po/kk.po nautilus-40.2.translations/po/kk.po
+--- nautilus-40.2/po/kk.po	2022-09-22 15:52:30.151654057 +0200
++++ nautilus-40.2.translations/po/kk.po	2022-09-22 15:52:33.752667291 +0200
+@@ -7856,3 +7856,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Парольді осында енгізіңіз."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "Орналасуын _көшіріп алу"
+diff -ruN nautilus-40.2/po/ko.po nautilus-40.2.translations/po/ko.po
+--- nautilus-40.2/po/ko.po	2022-09-22 15:52:30.151654057 +0200
++++ nautilus-40.2.translations/po/ko.po	2022-09-22 15:52:33.768667349 +0200
+@@ -5745,3 +5745,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "여기 암호를 입력하십시오."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "위치 복사(_C)"
+diff -ruN nautilus-40.2/po/lt.po nautilus-40.2.translations/po/lt.po
+--- nautilus-40.2/po/lt.po	2022-09-22 15:52:30.152654061 +0200
++++ nautilus-40.2.translations/po/lt.po	2022-09-22 15:52:33.790667430 +0200
+@@ -7516,3 +7516,7 @@
+ #| msgid "Enter password…"
+ msgid "Enter a password here."
+ msgstr "Įveskite slaptažodį čia."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Kopijuoti vietą"
+diff -ruN nautilus-40.2/po/lv.po nautilus-40.2.translations/po/lv.po
+--- nautilus-40.2/po/lv.po	2022-09-22 15:52:30.152654061 +0200
++++ nautilus-40.2.translations/po/lv.po	2022-09-22 15:52:33.799667463 +0200
+@@ -6095,3 +6095,8 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Ievadiet paroli šeit."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++#| msgid "Location"
++msgid "_Copy Location"
++msgstr "_Kopēt atrašanās vietu"
+diff -ruN nautilus-40.2/po/nl.po nautilus-40.2.translations/po/nl.po
+--- nautilus-40.2/po/nl.po	2022-09-22 15:52:30.153654065 +0200
++++ nautilus-40.2.translations/po/nl.po	2022-09-22 15:52:33.854667665 +0200
+@@ -6851,3 +6851,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Voer hier een wachtwoord in."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "Locatie _kopiëren"
+diff -ruN nautilus-40.2/po/oc.po nautilus-40.2.translations/po/oc.po
+--- nautilus-40.2/po/oc.po	2022-09-22 15:52:30.154654068 +0200
++++ nautilus-40.2.translations/po/oc.po	2022-09-22 15:52:33.870667724 +0200
+@@ -7540,3 +7540,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Picatz un senhal aquí."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Copiar l'emplaçament"
+diff -ruN nautilus-40.2/po/pl.po nautilus-40.2.translations/po/pl.po
+--- nautilus-40.2/po/pl.po	2022-09-22 15:52:30.154654068 +0200
++++ nautilus-40.2.translations/po/pl.po	2022-09-22 15:52:33.886667783 +0200
+@@ -5790,3 +5790,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Hasło…"
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "S_kopiuj położenie"
+diff -ruN nautilus-40.2/po/pt_BR.po nautilus-40.2.translations/po/pt_BR.po
+--- nautilus-40.2/po/pt_BR.po	2022-09-22 15:52:30.155654072 +0200
++++ nautilus-40.2.translations/po/pt_BR.po	2022-09-22 15:52:33.898667827 +0200
+@@ -7577,3 +7577,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Insira uma senha aqui."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Copiar local"
+diff -ruN nautilus-40.2/po/pt.po nautilus-40.2.translations/po/pt.po
+--- nautilus-40.2/po/pt.po	2022-09-22 15:52:30.155654072 +0200
++++ nautilus-40.2.translations/po/pt.po	2022-09-22 15:52:33.906667857 +0200
+@@ -6495,3 +6495,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Introduza aqui uma palavra-passe."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Copiar localização"
+diff -ruN nautilus-40.2/po/ru.po nautilus-40.2.translations/po/ru.po
+--- nautilus-40.2/po/ru.po	2022-09-22 15:52:30.157654079 +0200
++++ nautilus-40.2.translations/po/ru.po	2022-09-22 15:52:33.919667904 +0200
+@@ -6587,3 +6587,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Введите пароль здесь."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Копировать адрес"
+diff -ruN nautilus-40.2/po/sl.po nautilus-40.2.translations/po/sl.po
+--- nautilus-40.2/po/sl.po	2022-09-22 15:52:30.158654083 +0200
++++ nautilus-40.2.translations/po/sl.po	2022-09-22 15:52:33.938667974 +0200
+@@ -7757,3 +7757,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Vnos gesla"
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "Kopiraj _mesto"
+diff -ruN nautilus-40.2/po/sr.po nautilus-40.2.translations/po/sr.po
+--- nautilus-40.2/po/sr.po	2022-09-22 15:52:30.159654087 +0200
++++ nautilus-40.2.translations/po/sr.po	2022-09-22 15:52:33.959668051 +0200
+@@ -7564,3 +7564,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Унесите лозинку овде."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Копирај путању"
+diff -ruN nautilus-40.2/po/sv.po nautilus-40.2.translations/po/sv.po
+--- nautilus-40.2/po/sv.po	2022-09-22 15:52:30.159654087 +0200
++++ nautilus-40.2.translations/po/sv.po	2022-09-22 15:52:33.968668084 +0200
+@@ -6722,3 +6722,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Ange ett lösenord här."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Kopiera plats"
+diff -ruN nautilus-40.2/po/tr.po nautilus-40.2.translations/po/tr.po
+--- nautilus-40.2/po/tr.po	2022-09-22 15:52:30.160654090 +0200
++++ nautilus-40.2.translations/po/tr.po	2022-09-22 15:52:33.996668187 +0200
+@@ -6606,3 +6606,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Buraya parola gir…"
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "Konumu _Kopyala"
+diff -ruN nautilus-40.2/po/uk.po nautilus-40.2.translations/po/uk.po
+--- nautilus-40.2/po/uk.po	2022-09-22 15:52:30.160654090 +0200
++++ nautilus-40.2.translations/po/uk.po	2022-09-22 15:52:34.009668235 +0200
+@@ -6030,3 +6030,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "Тут слід ввести пароль."
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "_Копіювати адресу"
+diff -ruN nautilus-40.2/po/zh_CN.po nautilus-40.2.translations/po/zh_CN.po
+--- nautilus-40.2/po/zh_CN.po	2022-09-22 15:52:30.161654094 +0200
++++ nautilus-40.2.translations/po/zh_CN.po	2022-09-22 15:52:34.043668360 +0200
+@@ -6197,3 +6197,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "在此处输入密码。"
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "复制位置(_C)"
+diff -ruN nautilus-40.2/po/zh_TW.po nautilus-40.2.translations/po/zh_TW.po
+--- nautilus-40.2/po/zh_TW.po	2022-09-22 15:52:30.162654098 +0200
++++ nautilus-40.2.translations/po/zh_TW.po	2022-09-22 15:52:34.055668404 +0200
+@@ -7679,3 +7679,7 @@
+ #: src/resources/ui/nautilus-compress-dialog.ui:225
+ msgid "Enter a password here."
+ msgstr "請在此輸入密碼。"
++
++#: src/resources/ui/nautilus-pathbar-context-menu.ui:53
++msgid "_Copy Location"
++msgstr "複製位置(_C)"

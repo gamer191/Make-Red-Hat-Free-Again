@@ -1,0 +1,305 @@
+From 1fa3039c67671fe53416b2575f3c305029ef4854 Mon Sep 17 00:00:00 2001
+From: Ondrej Holy <oholy@redhat.com>
+Date: Wed, 11 Jan 2023 09:55:41 +0100
+Subject: [PATCH] application: Export FileManager1 iface from dbus_register
+ vfunc
+
+The `org/freedesktop/FileManager1` interface is not currently exported
+from the `dbus_register` vfunc. This causes issues for projects (e.g.
+desktop-icons extension) that want to use all the Nautilus intefaces
+over the `org.gnome.Nautilus` connection. Let's use the already established
+connection and export the `FileManager1` interface from the `dbus_register`
+vfunc.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=2150894
+---
+ src/nautilus-application.c      |  17 ++--
+ src/nautilus-freedesktop-dbus.c | 153 +++++++++++++++++++++++++-------
+ src/nautilus-freedesktop-dbus.h |   6 +-
+ 3 files changed, 138 insertions(+), 38 deletions(-)
+
+diff --git a/src/nautilus-application.c b/src/nautilus-application.c
+index 9cc435ec3..16725932d 100644
+--- a/src/nautilus-application.c
++++ b/src/nautilus-application.c
+@@ -578,8 +578,6 @@ nautilus_application_finalize (GObject *object)
+     g_clear_object (&priv->progress_handler);
+     g_clear_object (&priv->bookmark_list);
+ 
+-    g_clear_object (&priv->fdb_manager);
+-
+     g_list_free (priv->windows);
+ 
+     g_hash_table_destroy (priv->notifications);
+@@ -1320,9 +1318,6 @@ nautilus_application_startup (GApplication *app)
+ 
+     setup_theme_extensions ();
+ 
+-    /* create DBus manager */
+-    priv->fdb_manager = nautilus_freedesktop_dbus_new ();
+-
+     /* initialize preferences and create the global GSettings objects */
+     nautilus_global_preferences_init ();
+ 
+@@ -1372,6 +1367,12 @@ nautilus_application_dbus_register (GApplication     *app,
+         return FALSE;
+     }
+ 
++    priv->fdb_manager = nautilus_freedesktop_dbus_new (connection);
++    if (!nautilus_freedesktop_dbus_register (priv->fdb_manager, error))
++    {
++        return FALSE;
++    }
++
+     priv->search_provider = nautilus_shell_search_provider_new ();
+     if (!nautilus_shell_search_provider_register (priv->search_provider, connection, error))
+     {
+@@ -1398,6 +1399,12 @@ nautilus_application_dbus_unregister (GApplication    *app,
+         g_clear_object (&priv->dbus_manager);
+     }
+ 
++    if (priv->fdb_manager)
++    {
++        nautilus_freedesktop_dbus_unregister (priv->fdb_manager);
++        g_clear_object (&priv->fdb_manager);
++    }
++
+     if (priv->search_provider)
+     {
+         nautilus_shell_search_provider_unregister (priv->search_provider);
+diff --git a/src/nautilus-freedesktop-dbus.c b/src/nautilus-freedesktop-dbus.c
+index c75678399..c253cfaba 100644
+--- a/src/nautilus-freedesktop-dbus.c
++++ b/src/nautilus-freedesktop-dbus.c
+@@ -40,6 +40,14 @@ struct _NautilusFreedesktopDBus
+ 
+     /* Our DBus implementation skeleton */
+     NautilusFreedesktopFileManager1 *skeleton;
++
++    GDBusConnection *connection;
++};
++
++enum
++{
++    PROP_0,
++    PROP_CONNECTION,
+ };
+ 
+ G_DEFINE_TYPE (NautilusFreedesktopDBus, nautilus_freedesktop_dbus, G_TYPE_OBJECT);
+@@ -138,27 +146,6 @@ skeleton_handle_show_item_properties_cb (NautilusFreedesktopFileManager1 *object
+     return TRUE;
+ }
+ 
+-static void
+-bus_acquired_cb (GDBusConnection *conn,
+-                 const gchar     *name,
+-                 gpointer         user_data)
+-{
+-    NautilusFreedesktopDBus *fdb = user_data;
+-
+-    DEBUG ("Bus acquired at %s", name);
+-
+-    fdb->skeleton = nautilus_freedesktop_file_manager1_skeleton_new ();
+-
+-    g_signal_connect (fdb->skeleton, "handle-show-items",
+-                      G_CALLBACK (skeleton_handle_show_items_cb), fdb);
+-    g_signal_connect (fdb->skeleton, "handle-show-folders",
+-                      G_CALLBACK (skeleton_handle_show_folders_cb), fdb);
+-    g_signal_connect (fdb->skeleton, "handle-show-item-properties",
+-                      G_CALLBACK (skeleton_handle_show_item_properties_cb), fdb);
+-
+-    g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (fdb->skeleton), conn, NAUTILUS_FDO_DBUS_PATH, NULL);
+-}
+-
+ static void
+ name_acquired_cb (GDBusConnection *connection,
+                   const gchar     *name,
+@@ -175,6 +162,20 @@ name_lost_cb (GDBusConnection *connection,
+     DEBUG ("Lost (or failed to acquire) the name %s on the session message bus\n", name);
+ }
+ 
++static void
++nautilus_freedesktop_dbus_constructed (GObject *object)
++{
++    NautilusFreedesktopDBus *fdb = NAUTILUS_FREEDESKTOP_DBUS (object);
++
++    fdb->owner_id = g_bus_own_name_on_connection (fdb->connection,
++                                                  NAUTILUS_FDO_DBUS_NAME,
++                                                  G_BUS_NAME_OWNER_FLAGS_NONE,
++                                                  name_acquired_cb,
++                                                  name_lost_cb,
++                                                  fdb,
++                                                  NULL);
++}
++
+ static void
+ nautilus_freedesktop_dbus_dispose (GObject *object)
+ {
+@@ -188,33 +189,87 @@ nautilus_freedesktop_dbus_dispose (GObject *object)
+ 
+     if (fdb->skeleton != NULL)
+     {
+-        g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (fdb->skeleton));
+         g_object_unref (fdb->skeleton);
+         fdb->skeleton = NULL;
+     }
+ 
++    g_clear_object (&fdb->connection);
++
+     G_OBJECT_CLASS (nautilus_freedesktop_dbus_parent_class)->dispose (object);
+ }
+ 
++static void
++nautilus_freedesktop_dbus_set_property (GObject      *object,
++                                        guint         prop_id,
++                                        const GValue *value,
++                                        GParamSpec   *pspec)
++{
++    NautilusFreedesktopDBus *fdb = NAUTILUS_FREEDESKTOP_DBUS (object);
++
++    switch (prop_id)
++    {
++        case PROP_CONNECTION:
++        {
++            g_set_object (&fdb->connection, g_value_get_object (value));
++        }
++        break;
++
++        default:
++        {
++            G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
++        }
++        break;
++    }
++}
++
++static void
++nautilus_freedesktop_dbus_get_property (GObject    *object,
++                                        guint       prop_id,
++                                        GValue     *value,
++                                        GParamSpec *pspec)
++{
++    NautilusFreedesktopDBus *fdb = NAUTILUS_FREEDESKTOP_DBUS (object);
++
++    switch (prop_id)
++    {
++        case PROP_CONNECTION:
++        {
++            g_value_set_object (value, fdb->connection);
++        }
++        break;
++
++        default:
++        {
++            G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
++        }
++        break;
++    }
++}
++
+ static void
+ nautilus_freedesktop_dbus_class_init (NautilusFreedesktopDBusClass *klass)
+ {
+     GObjectClass *object_class = G_OBJECT_CLASS (klass);
+ 
+     object_class->dispose = nautilus_freedesktop_dbus_dispose;
++    object_class->constructed = nautilus_freedesktop_dbus_constructed;
++    object_class->get_property = nautilus_freedesktop_dbus_get_property;
++    object_class->set_property = nautilus_freedesktop_dbus_set_property;
++
++    g_object_class_install_property (object_class,
++                                     PROP_CONNECTION,
++                                     g_param_spec_object ("connection",
++                                                          "Connection",
++                                                          "GDBus connection property",
++                                                          G_TYPE_DBUS_CONNECTION,
++                                                          G_PARAM_CONSTRUCT_ONLY |
++                                                          G_PARAM_READWRITE));
+ }
+ 
+ static void
+ nautilus_freedesktop_dbus_init (NautilusFreedesktopDBus *fdb)
+ {
+-    fdb->owner_id = g_bus_own_name (G_BUS_TYPE_SESSION,
+-                                    NAUTILUS_FDO_DBUS_NAME,
+-                                    G_BUS_NAME_OWNER_FLAGS_NONE,
+-                                    bus_acquired_cb,
+-                                    name_acquired_cb,
+-                                    name_lost_cb,
+-                                    fdb,
+-                                    NULL);
++    fdb->skeleton = nautilus_freedesktop_file_manager1_skeleton_new ();
+ }
+ 
+ void
+@@ -248,7 +303,41 @@ nautilus_freedesktop_dbus_set_open_windows_with_locations (NautilusFreedesktopDB
+ 
+ /* Tries to own the org.freedesktop.FileManager1 service name */
+ NautilusFreedesktopDBus *
+-nautilus_freedesktop_dbus_new (void)
++nautilus_freedesktop_dbus_new (GDBusConnection *connection)
++{
++    return g_object_new (NAUTILUS_TYPE_FREEDESKTOP_DBUS,
++                         "connection", connection,
++                         NULL);
++}
++
++gboolean
++nautilus_freedesktop_dbus_register (NautilusFreedesktopDBus  *fdb,
++                                    GError                  **error)
++{
++    gboolean success;
++
++    success = g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (fdb->skeleton),
++                                                fdb->connection,
++                                                NAUTILUS_FDO_DBUS_PATH,
++                                                error);
++
++    if (success)
++    {
++        g_signal_connect (fdb->skeleton, "handle-show-items",
++                          G_CALLBACK (skeleton_handle_show_items_cb), fdb);
++        g_signal_connect (fdb->skeleton, "handle-show-folders",
++                          G_CALLBACK (skeleton_handle_show_folders_cb), fdb);
++        g_signal_connect (fdb->skeleton, "handle-show-item-properties",
++                          G_CALLBACK (skeleton_handle_show_item_properties_cb), fdb);
++    }
++
++    return success;
++}
++
++void
++nautilus_freedesktop_dbus_unregister (NautilusFreedesktopDBus *fdb)
+ {
+-    return g_object_new (NAUTILUS_TYPE_FREEDESKTOP_DBUS, NULL);
++    g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (fdb->skeleton));
++
++    g_signal_handlers_disconnect_by_data (fdb->skeleton, fdb);
+ }
+diff --git a/src/nautilus-freedesktop-dbus.h b/src/nautilus-freedesktop-dbus.h
+index 416900eb9..8fb09e498 100644
+--- a/src/nautilus-freedesktop-dbus.h
++++ b/src/nautilus-freedesktop-dbus.h
+@@ -21,6 +21,7 @@
+ #pragma once
+ 
+ #include <glib-object.h>
++#include <gio/gio.h>
+ 
+ #define NAUTILUS_FDO_DBUS_IFACE "org.freedesktop.FileManager1"
+ #define NAUTILUS_FDO_DBUS_NAME  "org.freedesktop.FileManager1"
+@@ -30,7 +31,10 @@
+ 
+ G_DECLARE_FINAL_TYPE (NautilusFreedesktopDBus, nautilus_freedesktop_dbus, NAUTILUS, FREEDESKTOP_DBUS, GObject);
+ 
+-NautilusFreedesktopDBus * nautilus_freedesktop_dbus_new (void);
++NautilusFreedesktopDBus * nautilus_freedesktop_dbus_new (GDBusConnection *connection);
++
++gboolean nautilus_freedesktop_dbus_register (NautilusFreedesktopDBus *fdb, GError **error);
++void nautilus_freedesktop_dbus_unregister (NautilusFreedesktopDBus *fdb);
+ 
+ void nautilus_freedesktop_dbus_set_open_locations (NautilusFreedesktopDBus *fdb, const gchar **locations);
+ 
+-- 
+2.38.1
+

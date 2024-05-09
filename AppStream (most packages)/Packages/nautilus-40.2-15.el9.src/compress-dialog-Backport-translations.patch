@@ -1,0 +1,932 @@
+diff --git a/po/be.po b/po/be.po
+index 624542b36..b3630d863 100644
+--- a/po/be.po
++++ b/po/be.po
+@@ -7204,3 +7204,17 @@ msgstr "Увядзіце адрас сервера…"
+ 
+ #~ msgid "_Up"
+ #~ msgstr "_Уверх"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Абаронены паролем .zip, але на Windows і Mac патрабуецца ўсталяванне "
++"праграмы."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Пароль"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Увядзіце пароль сюды."
+diff --git a/po/bg.po b/po/bg.po
+index 47958cc88..ae7876ec7 100644
+--- a/po/bg.po
++++ b/po/bg.po
+@@ -5471,3 +5471,15 @@ msgstr "Демонтиране"
+ 
+ #~ msgid "Enter server address…"
+ #~ msgstr "Въведете адреса на сървъра…"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:37
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ".zip, защитен с парола, но ще трябва да се инсталира на Windows и Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:214
++msgid "Password"
++msgstr "Парола"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:226
++msgid "Enter a password here."
++msgstr "Въведете парола."
+diff --git a/po/ca.po b/po/ca.po
+index aeae0331c..bbab22965 100644
+--- a/po/ca.po
++++ b/po/ca.po
+@@ -5895,3 +5895,15 @@ msgstr "Introduïu l'adreça del servidor..."
+ 
+ #~ msgid "Only create windows for explicitly specified URIs."
+ #~ msgstr "Només crea finestres per als URI indicats explícitament."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Fitxer .zip protegit amb contrasenya, s'ha d'instal·lar a Windows i Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Contrasenya"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Introduïu una contrasenya aquí."
+diff --git a/po/cs.po b/po/cs.po
+index 36a8d4ebb..5bca98e82 100644
+--- a/po/cs.po
++++ b/po/cs.po
+@@ -5755,3 +5755,15 @@ msgstr "Připojit se k _serveru"
+ msgid "Enter server address…"
+ msgstr "zadejte adresu serveru…"
+ 
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Heslem chráněný .zip, do Windows a na Mac je nutné doinstalovat."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Heslo"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "zde zadejte heslo"
+diff --git a/po/da.po b/po/da.po
+index d6901920f..7c2b9a1ce 100644
+--- a/po/da.po
++++ b/po/da.po
+@@ -7510,3 +7510,15 @@ msgstr "Indtast serveradresse …"
+ 
+ #~ msgid "link"
+ #~ msgstr "henvisning"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Adgangskodebeskyttet .zip — skal installeres på Windows og Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Adgangskode"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Indtast en adgangskode her."
+diff --git a/po/de.po b/po/de.po
+index 4e4bc33d6..dd9128f32 100644
+--- a/po/de.po
++++ b/po/de.po
+@@ -6020,3 +6020,17 @@ msgstr "Serveradresse eingeben …"
+ 
+ #~ msgid "Prefere_nces"
+ #~ msgstr "_Einstellungen"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Passwortgeschütztes .zip-Archiv. Hierfür muss unter Windows und Mac Software "
++"installiert werden."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Passwort"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Geben Sie hier ein Passwort ein."
+diff --git a/po/el.po b/po/el.po
+index 65029aec6..5e89b8a33 100644
+--- a/po/el.po
++++ b/po/el.po
+@@ -6121,3 +6121,17 @@ msgstr "Εισαγωγή διεύθυνσης διακομιστή…"
+ 
+ #~ msgid "smb://"
+ #~ msgstr "smb://"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Αρχεία .zip προστατευμένα με συνθηματικό, πρέπει να εγκατασταθούν σε Windows "
++"και Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Συνθηματικό"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Εισαγωγή συνθηματικού εδώ."
+diff --git a/po/en_GB.po b/po/en_GB.po
+index 1adc903d8..254d6022e 100644
+--- a/po/en_GB.po
++++ b/po/en_GB.po
+@@ -10311,3 +10311,15 @@ msgstr "Enter server address…"
+ 
+ #~ msgid "Question"
+ #~ msgstr "Question"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Password protected .zip, must be installed on Windows and Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Password"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Enter a password here."
+diff --git a/po/es.po b/po/es.po
+index f168c54d6..de8e7e7fa 100644
+--- a/po/es.po
++++ b/po/es.po
+@@ -11253,3 +11253,19 @@ msgstr "Introduzca la dirección del servidor…"
+ #~ msgstr ""
+ #~ "Nautilus es un shell gráfico para GNOME que facilita la administración de "
+ #~ "sus archivos y el resto de su sistema."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++#| msgid "Smaller archives but must be installed on Windows and Mac."
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ".zip protegido por contraseña, se debe instalar en Windows o Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++#| msgid "Pass_word:"
++msgid "Password"
++msgstr "Contraseña"
++
++# src/nautilus-location-bar.c:401
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++#| msgid "Enter password…"
++msgid "Enter a password here."
++msgstr "Introduzca una contraseña aquí."
+diff --git a/po/eu.po b/po/eu.po
+index 5f48c29c8..f886de542 100644
+--- a/po/eu.po
++++ b/po/eu.po
+@@ -5676,3 +5676,15 @@ msgstr "Sartu zerbitzariaren helbidea…"
+ 
+ #~ msgid "Only create windows for explicitly specified URIs."
+ #~ msgstr "Zehaztutako URIentzat bakarrik sortu leihoak."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Pasahitzez babestutako .zip fitxategia, Windows eta Mac-en instalatu behar da."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Pasahitza"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Idatzi pasahitza hemen."
+diff --git a/po/fa.po b/po/fa.po
+index 52b1d9f2a..d1aa5131b 100644
+--- a/po/fa.po
++++ b/po/fa.po
+@@ -10614,3 +10614,15 @@ msgstr "نشانی کارساز را وارد کنید…"
+ 
+ #~ msgid "C_ancel Remove"
+ #~ msgstr "ان_صراف از حذف"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "پروندهٔ ⁦.zip⁩ محافظت‌شده با گذرواژه، باید روی ویندوز و مک نصب باشد."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "گذرواژه"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "این‌جا گذرواژه‌ای وارد کنید."
+diff --git a/po/fi.po b/po/fi.po
+index 7fc36774d..235453bb3 100644
+--- a/po/fi.po
++++ b/po/fi.po
+@@ -7363,3 +7363,15 @@ msgstr "Anna palvelimen osoite…"
+ 
+ #~ msgid "_Up"
+ #~ msgstr "_Ylös"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Salasanalla suojattu .zip, tulee asentaa Windowsille ja Macille."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Salasana"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Kirjoita salasana tähän."
+diff --git a/po/fr.po b/po/fr.po
+index c01c70e4a..8cb792c9d 100644
+--- a/po/fr.po
++++ b/po/fr.po
+@@ -6002,3 +6002,20 @@ msgstr "Saisir l’adresse du serveur…"
+ 
+ #~ msgid "smb://"
+ #~ msgstr "smb://"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++#| msgid "Smaller archives but must be installed on Windows and Mac."
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++".zip protégé par mot de passe, mais nécessite une installation sur Windows "
++"et Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++#| msgid "Password Required"
++msgid "Password"
++msgstr "Mot de passe"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++#| msgid "Enter password…"
++msgid "Enter a password here."
++msgstr "Saisissez un mot de passe ici."
+diff --git a/po/fur.po b/po/fur.po
+index b9d163768..365c294af 100644
+--- a/po/fur.po
++++ b/po/fur.po
+@@ -8128,3 +8128,15 @@ msgstr "Scrîf direzion servidôr…"
+ 
+ #~ msgid "Set the zoom level of the current view"
+ #~ msgstr "Imposte il nivel di zoom de viodude atuâl"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:35
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "File .zip protet di password, ma tu âs di instalâlu su Windows o Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:199
++msgid "Password"
++msgstr "Password"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:209
++msgid "Enter a password here."
++msgstr "Inserìs achì une password."
+diff --git a/po/gl.po b/po/gl.po
+index 0e695ca91..98d5b8487 100644
+--- a/po/gl.po
++++ b/po/gl.po
+@@ -5881,3 +5881,19 @@ msgstr "Escriba o enderezo do servidor…"
+ 
+ #~ msgid "New _Folder…"
+ #~ msgstr "Novo _cartafol…"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++#| msgid "Smaller archives but must be installed on Windows and Mac."
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++".zip protexido con contrasinal, deben estar instalados en Windows e Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++#| msgid "Password Required"
++msgid "Password"
++msgstr "Contrasinal"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++#| msgid "Enter password…"
++msgid "Enter a password here."
++msgstr "Escriba un contrasinal aquí…"
+diff --git a/po/he.po b/po/he.po
+index 3706273a9..86bbf14e9 100644
+--- a/po/he.po
++++ b/po/he.po
+@@ -11131,3 +11131,15 @@ msgstr "יש לההזין כתובת שרת…"
+ 
+ #~ msgid "Question"
+ #~ msgstr "שאלה"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "קובץ ‎.zip מוגן בססמה, חייב להיות מותקן ב־Windows וב־Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "ססמה"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "נא למלא כאן ססמה."
+diff --git a/po/hr.po b/po/hr.po
+index 1a864ce9d..45625fd20 100644
+--- a/po/hr.po
++++ b/po/hr.po
+@@ -6477,3 +6477,15 @@ msgstr "Upiši adresu poslužitelja…"
+ 
+ #~ msgid "Re_verse Order"
+ #~ msgstr "Ob_rni poredak"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Lozinkom zaštićeni .zip, mora biti instaliran na Windows i Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Lozinka"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Upišite lozinku ovdje."
+diff --git a/po/hu.po b/po/hu.po
+index b547cd30d..1fa73c01e 100644
+--- a/po/hu.po
++++ b/po/hu.po
+@@ -5853,3 +5853,18 @@ msgstr "Adja meg a kiszolgáló címét…"
+ 
+ #~ msgid "New _Folder…"
+ #~ msgstr "Új _mappa…"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++#| msgid "Smaller archives but must be installed on Windows and Mac."
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Jelszóval védett .zip, Windowsra és Macre telepíteni kell."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++#| msgid "Password Required"
++msgid "Password"
++msgstr "Jelszó"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++#| msgid "Enter password…"
++msgid "Enter a password here."
++msgstr "Adjon meg egy jelszót itt."
+diff --git a/po/id.po b/po/id.po
+index 7bfd400b2..352cf746e 100644
+--- a/po/id.po
++++ b/po/id.po
+@@ -6355,3 +6355,16 @@ msgstr "Masukkan alamat peladen…"
+ 
+ #~ msgid "Mark as _Trusted"
+ #~ msgstr "_Tandai Dipercaya"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Berkas .zip yang dilindungi kata sandi, harus dipasang pada Windows dan Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Kata Sandi"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Masukkan kata sandi di sini."
+diff --git a/po/is.po b/po/is.po
+index c43e96a64..aab9c0ed4 100644
+--- a/po/is.po
++++ b/po/is.po
+@@ -7173,3 +7173,16 @@ msgstr "Settu inn vistfang þjóns..."
+ 
+ #~ msgid "_Up"
+ #~ msgstr "_Upp"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:37
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Zip-safnskrá varin með lykilorði, verður að setja upp á Windows og Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:214
++msgid "Password"
++msgstr "Lykilorð"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:226
++msgid "Enter a password here."
++msgstr "Settu inn lykilorð hér."
+diff --git a/po/it.po b/po/it.po
+index a3f16bbc8..c41493dfd 100644
+--- a/po/it.po
++++ b/po/it.po
+@@ -5762,3 +5762,17 @@ msgstr "Connetti al _server"
+ #: src/gtk/nautilusgtkplacesview.ui:340
+ msgid "Enter server address…"
+ msgstr "Inserire indirizzo server…"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:37
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"File .zip protetto da password, deve essere installato su Windows e Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:214
++#| msgid "Password Required"
++msgid "Password"
++msgstr "Password"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:226
++msgid "Enter a password here."
++msgstr "Inserire una password."
+diff --git a/po/ja.po b/po/ja.po
+index 6b63a9a7a..9ae419c23 100644
+--- a/po/ja.po
++++ b/po/ja.po
+@@ -5898,3 +5898,17 @@ msgstr "サーバーアドレスを入力…"
+ 
+ #~ msgid "_Ask each time"
+ #~ msgstr "毎回確認する(_A)"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:37
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"パスワードで保護された .zip です。Windows と Mac では別途アーカイバーのインス"
++"トールが必要です。"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:214
++msgid "Password"
++msgstr "パスワード"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:226
++msgid "Enter a password here."
++msgstr "ここにパスワードを入力してください。"
+diff --git a/po/kab.po b/po/kab.po
+index 380d7c4ee..2ae9aedbe 100644
+--- a/po/kab.po
++++ b/po/kab.po
+@@ -5605,3 +5605,15 @@ msgstr ""
+ 
+ #~ msgid "Change"
+ #~ msgstr "Changer"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Awal n uɛeddi"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr ""
+diff --git a/po/kk.po b/po/kk.po
+index 6b1ed27b9..921c46940 100644
+--- a/po/kk.po
++++ b/po/kk.po
+@@ -7842,3 +7842,17 @@ msgstr "Сервер адресін енгізіңіз…"
+ #~ msgstr ""
+ #~ "Қоқыс шелегін тазартуды таңдасаңыз, құрамасы жойылады. Оларды жеке-жеке "
+ #~ "өшіруге болатынын есте сақтаңыз."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Парольмен қорғалған .zip архивтері, Windows және Mac-та орнатылған болуы "
++"тиіс."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Пароль"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Парольді осында енгізіңіз."
+diff --git a/po/ko.po b/po/ko.po
+index 43533fe3b..56077c21f 100644
+--- a/po/ko.po
++++ b/po/ko.po
+@@ -5733,3 +5733,15 @@ msgstr "서버 주소 입력…"
+ 
+ #~ msgid "smb://"
+ #~ msgstr "smb://"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "암호로 보호된 .zip 파일, 윈도우와 맥에서 설치해야 함."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "암호"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "여기 암호를 입력하십시오."
+diff --git a/po/lt.po b/po/lt.po
+index 7a257c609..4fc020a94 100644
+--- a/po/lt.po
++++ b/po/lt.po
+@@ -7500,3 +7500,19 @@ msgstr "Įveskite _serverio adresą…"
+ 
+ #~ msgid "_Up"
+ #~ msgstr "_Aukštyn"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++#| msgid "Smaller archives but must be installed on Windows and Mac."
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Slaptažodžiu apsaugotas .zip, turi būti įdiegti Windows ir Mac sistemose."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++#| msgid "Password Required"
++msgid "Password"
++msgstr "Slaptažodis"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++#| msgid "Enter password…"
++msgid "Enter a password here."
++msgstr "Įveskite slaptažodį čia."
+diff --git a/po/lv.po b/po/lv.po
+index b322bb8c5..d229e2be9 100644
+--- a/po/lv.po
++++ b/po/lv.po
+@@ -6082,3 +6082,16 @@ msgstr "Ievadiet servera adresi…"
+ 
+ #~ msgid "org.gnome.Nautilus"
+ #~ msgstr "org.gnome.Nautilus"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++#| msgid "Smaller archives but must be installed on Windows and Mac."
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Ar paroli aizsargāts .zip arhīvs, jābūt instalētai uz Windows un Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Parole"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Ievadiet paroli šeit."
+diff --git a/po/nb.po b/po/nb.po
+index 8a4d7d628..9f742c215 100644
+--- a/po/nb.po
++++ b/po/nb.po
+@@ -5594,3 +5594,15 @@ msgstr "Koble til _tjener"
+ #: src/gtk/nautilusgtkplacesview.ui:340
+ msgid "Enter server address…"
+ msgstr "Skriv inn tjeneradresse …"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:37
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Passordbeskyttet .zip må installeres på Windows og Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:214
++msgid "Password"
++msgstr "Passord"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:226
++msgid "Enter a password here."
++msgstr "Skriv inn et passord her"
+diff --git a/po/nl.po b/po/nl.po
+index 77eab583b..393749329 100644
+--- a/po/nl.po
++++ b/po/nl.po
+@@ -6837,3 +6837,17 @@ msgstr "Voer serveradres in…"
+ 
+ #~ msgid "Move Dow_n"
+ #~ msgstr "Naar b_eneden"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Zipbestand beschermd met wachtwoord, moet op Windows en Mac geïnstalleerd "
++"worden."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Wachtwoord"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Voer hier een wachtwoord in."
+diff --git a/po/oc.po b/po/oc.po
+index e4d1cabbc..f0c23bfda 100644
+--- a/po/oc.po
++++ b/po/oc.po
+@@ -7520,3 +7520,16 @@ msgstr "Entrar l'adreça del _servidor…"
+ 
+ #~ msgid "Copying “%B” to “%B”"
+ #~ msgstr "Còpia de « %B » cap a « %B »"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Fichièr zip protegit per senhal, requerís una installacion sus Windows e Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Senhal"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Picatz un senhal aquí."
+diff --git a/po/pl.po b/po/pl.po
+index 499b5b1ea..ce1c46677 100644
+--- a/po/pl.po
++++ b/po/pl.po
+@@ -5776,3 +5776,17 @@ msgstr "Połącz z _serwerem"
+ #: src/gtk/nautilusgtkplacesview.ui:340
+ msgid "Enter server address…"
+ msgstr "Adres serwera…"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Archiwum .zip chronione hasłem, wymaga dodatkowego oprogramowania "
++"w systemach Windows i Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Hasło"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Hasło…"
+diff --git a/po/pt.po b/po/pt.po
+index 2c071f039..ffacf5123 100644
+--- a/po/pt.po
++++ b/po/pt.po
+@@ -6482,3 +6482,16 @@ msgstr "Insira o endereço do servidor…"
+ 
+ #~ msgid "Whether the row represents a network location"
+ #~ msgstr "Se a linha representa uma localização de rede"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"O .zip protegido por palavra-passe deve ser instalado no Windows e Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Palavra-passe"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Introduza aqui uma palavra-passe."
+diff --git a/po/pt_BR.po b/po/pt_BR.po
+index 2bb4e4ca6..42c5f4a81 100644
+--- a/po/pt_BR.po
++++ b/po/pt_BR.po
+@@ -7565,3 +7565,15 @@ msgstr "Insira endereço do servidor…"
+ 
+ #~ msgid "_Bookmarks..."
+ #~ msgstr "_Marcadores..."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Arquivo .zip protegido por senha, pode ser instalado no Windows e Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Senha"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Insira uma senha aqui."
+diff --git a/po/ro.po b/po/ro.po
+index cc2a2cb6d..b96dffd27 100644
+--- a/po/ro.po
++++ b/po/ro.po
+@@ -9645,3 +9645,16 @@ msgstr "Introduceți adresa serverului…"
+ #~ msgstr ""
+ #~ "Afișează modele, culori și embleme ce pot fi folosite pentru a "
+ #~ "personaliza aspectul"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Arhive zip protejate de parolă, dar trebuiesc instalate pe Windows și Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Parolă"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Introduceți parola."
+diff --git a/po/ru.po b/po/ru.po
+index b0d6868fa..be97cf11d 100644
+--- a/po/ru.po
++++ b/po/ru.po
+@@ -6573,3 +6573,17 @@ msgstr "Ввести адрес сервера…"
+ #~ msgctxt "Bookmark"
+ #~ msgid "_Name"
+ #~ msgstr "_Имя"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Защищённый паролем архив, требует установки приложения для открытия в "
++"Windows и Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Пароль"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Введите пароль здесь."
+diff --git a/po/sk.po b/po/sk.po
+index d44e7fbe7..00edea5f8 100644
+--- a/po/sk.po
++++ b/po/sk.po
+@@ -7706,3 +7706,16 @@ msgstr "Zadajte adresu servera…"
+ 
+ #~ msgid "Places"
+ #~ msgstr "Miesta"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Heslom chránený súbor .zip, musí byť nainštalovaný v systéme Windows a Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Heslo"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Sem zadajte heslo."
+diff --git a/po/sl.po b/po/sl.po
+index 988752a10..7d1d001d6 100644
+--- a/po/sl.po
++++ b/po/sl.po
+@@ -7743,3 +7743,17 @@ msgstr "Vpis naslova strežnika …"
+ #~ "Skupaj s programom bi morali prejeti kopijo GNU Splošne javne licence. V "
+ #~ "primeru, da je niste, pišite na Free Software Foundation, Inc., 51 "
+ #~ "Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"Z geslom zaščinen arhiv .zip, ki mora biti nameščen na sistemih Windows in "
++"Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Geslo"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Vnos gesla"
+diff --git a/po/sr.po b/po/sr.po
+index 8f493a557..e1728d681 100644
+--- a/po/sr.po
++++ b/po/sr.po
+@@ -7550,3 +7550,17 @@ msgstr "Адреса сервера…"
+ #~ "ако нисте, пишите Задужбини слободног софтвера на следећу адресу: „Free "
+ #~ "Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA "
+ #~ "02110-1301 USA“"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ""
++"ЗИП архива заштићена лозинком, потребни инсталирани алати за отварање на "
++"Виндоус и Мек системима."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Лозинка"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Унесите лозинку овде."
+diff --git a/po/sv.po b/po/sv.po
+index 734631dde..2b9c3ecc9 100644
+--- a/po/sv.po
++++ b/po/sv.po
+@@ -6710,3 +6710,15 @@ msgstr "Ange serveradress…"
+ 
+ #~ msgid "%a, %b %e %Y %T"
+ #~ msgstr "%a %-e %b %Y %T"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Lösenordsskyddad .zip, måste vara installerat på Windows och Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Lösenord"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Ange ett lösenord här."
+diff --git a/po/tr.po b/po/tr.po
+index 025d23e72..b0b8b0004 100644
+--- a/po/tr.po
++++ b/po/tr.po
+@@ -6594,3 +6594,15 @@ msgstr "Sunucu adresini gir…"
+ 
+ #~ msgid "D_efault zoom level:"
+ #~ msgstr "Ön_tanımlı yaklaştırma seviyesi:"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Parola korumalı .zip, Windows ve Mac üzerinde kurulmalıdır."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Parola"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Buraya parola gir…"
+diff --git a/po/uk.po b/po/uk.po
+index 8a4eb3001..71ad8edbf 100644
+--- a/po/uk.po
++++ b/po/uk.po
+@@ -6018,3 +6018,15 @@ msgstr "Уведіть адресу сервера…"
+ #~| msgid "New _Folder"
+ #~ msgid "New _Folder…"
+ #~ msgstr "Створити _теку…"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "Захищений паролем .zip, має бути встановлено у Windows і Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "Пароль"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "Тут слід ввести пароль."
+diff --git a/po/vi.po b/po/vi.po
+index af90d5a84..6be867604 100644
+--- a/po/vi.po
++++ b/po/vi.po
+@@ -7325,3 +7325,15 @@ msgstr "Hãy nhập địa chỉ của máy phục vụ…"
+ 
+ #~ msgid "_Organize by Name"
+ #~ msgstr "_Tổ chức theo tên"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:37
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr ".zip được bảo vệ bằng mật khẩu, phải được cài đặt trên Windows và Mac."
++
++#: src/resources/ui/nautilus-compress-dialog.ui:214
++msgid "Password"
++msgstr "Mật khẩu"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:226
++msgid "Enter a password here."
++msgstr "Nhập mật khẩu vào đây."
+diff --git a/po/zh_CN.po b/po/zh_CN.po
+index e98220b83..896d7415f 100644
+--- a/po/zh_CN.po
++++ b/po/zh_CN.po
+@@ -6185,3 +6185,15 @@ msgstr "输入服务器地址…"
+ 
+ #~ msgid "Zoom In"
+ #~ msgstr "放大"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "有密码保护的 .zip 文件，必须在 Windows 和 Mac 上安装额外程序才能打开。"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "密码"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "在此处输入密码。"
+diff --git a/po/zh_TW.po b/po/zh_TW.po
+index 8ee51f7d6..9549a5787 100644
+--- a/po/zh_TW.po
++++ b/po/zh_TW.po
+@@ -7667,3 +7667,15 @@ msgstr "輸入伺服器位址…"
+ #~ "您應該已經和程式一起收到一份 GNU 通用公共許可證的副本。如果還沒有，寫信"
+ #~ "給：  the Free Software Foundation, Inc., 51 Franklin Street, Fifth "
+ #~ "Floor, Boston, MA 02110-1301 USA"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:36
++msgid "Password protected .zip, must be installed on Windows and Mac."
++msgstr "壓縮檔受密碼保護，必須安裝在 Windows 和 Mac 上。"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:213
++msgid "Password"
++msgstr "密碼"
++
++#: src/resources/ui/nautilus-compress-dialog.ui:225
++msgid "Enter a password here."
++msgstr "請在此輸入密碼。"
+-- 
+2.35.1
+

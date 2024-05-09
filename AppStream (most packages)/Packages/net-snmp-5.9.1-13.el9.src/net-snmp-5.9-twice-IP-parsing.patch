@@ -1,0 +1,16 @@
+diff --git a/snmplib/transports/snmpUDPIPv6Domain.c b/snmplib/transports/snmpUDPIPv6Domain.c
+index e6f5b20..41a5e01 100644
+--- a/snmplib/transports/snmpUDPIPv6Domain.c
++++ b/snmplib/transports/snmpUDPIPv6Domain.c
+@@ -34,6 +34,11 @@
+ #if HAVE_SYS_SOCKET_H
+ #include <sys/socket.h>
+ #endif
++
++#if defined(HAVE_WINSOCK_H) && !defined(mingw32)
++static const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
++#endif
++
+ #if HAVE_NETINET_IN_H
+ #include <netinet/in.h>
+ #endif

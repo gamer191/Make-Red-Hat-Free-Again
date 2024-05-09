@@ -1,0 +1,37 @@
+From 87d2f2cfd61baf813aee204be570172b78159281 Mon Sep 17 00:00:00 2001
+From: Ondrej Holy <oholy@redhat.com>
+Date: Wed, 14 Jun 2023 12:52:02 +0200
+Subject: [PATCH] window-slot: Fix conditions to restore selection when
+ reloading
+
+Currently, the `nautilus_window_slot_force_reload` function doesn't
+preserve selection or position. However, there is a code that should do
+it. The code is executed only when `new_content_view != NULL`, but it
+is based on the `content_view` property. This seems to be a regression
+caused by the commit 9806d70e. Let's fix that condition in order to
+ensure that the selection and position are restored.
+---
+ src/nautilus-window-slot.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/nautilus-window-slot.c b/src/nautilus-window-slot.c
+index 2bfb3f3ce..8ceac9562 100644
+--- a/src/nautilus-window-slot.c
++++ b/src/nautilus-window-slot.c
+@@ -2376,11 +2376,11 @@ nautilus_window_slot_force_reload (NautilusWindowSlot *self)
+     g_object_ref (location);
+     current_pos = NULL;
+ 
+-    if (priv->new_content_view)
++    if (priv->content_view)
+     {
+         selection = nautilus_view_get_selection (priv->content_view);
+ 
+-        if (NAUTILUS_IS_FILES_VIEW (priv->new_content_view))
++        if (NAUTILUS_IS_FILES_VIEW (priv->content_view))
+         {
+             current_pos = nautilus_files_view_get_first_visible_file (NAUTILUS_FILES_VIEW (priv->content_view));
+         }
+-- 
+2.40.0
+

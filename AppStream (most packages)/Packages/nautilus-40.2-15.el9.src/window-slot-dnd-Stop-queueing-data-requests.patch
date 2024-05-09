@@ -1,0 +1,76 @@
+From 095d88295e6a7a5fefdcb58e1483ae3926b8cb1c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ant=C3=B3nio=20Fernandes?= <antoniof@gnome.org>
+Date: Fri, 16 Jul 2021 22:32:41 +0100
+Subject: [PATCH] window-slot-dnd: Stop queueing data requests
+
+Each time ::drag-motion is emitted, we call gtk_drag_get_data() if we
+don't have data yet.
+
+If the drag source doesn't provide the data right away, we can end up
+calling gtk_drag_get_data() multiple times. Later, when the data is
+retrieved, we get multiple ::drag-data-received emissions.
+
+Not only is this wasteful, it also breaks an assertion, causing crashes.
+
+Instead, make sure gtk_drag_get_data() is called only once.
+
+Fixes https://gitlab.gnome.org/GNOME/nautilus/-/issues/1535
+---
+ src/nautilus-window-slot-dnd.c | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/src/nautilus-window-slot-dnd.c b/src/nautilus-window-slot-dnd.c
+index 96c5d9cc8..9509d2c97 100644
+--- a/src/nautilus-window-slot-dnd.c
++++ b/src/nautilus-window-slot-dnd.c
+@@ -32,6 +32,7 @@
+ 
+ typedef struct
+ {
++    gboolean waiting_for_data;
+     gboolean have_data;
+     gboolean have_valid_data;
+ 
+@@ -181,7 +182,7 @@ slot_proxy_drag_motion (GtkWidget      *widget,
+     window = gtk_widget_get_toplevel (widget);
+     g_assert (NAUTILUS_IS_WINDOW (window));
+ 
+-    if (!drag_info->have_data)
++    if (!drag_info->have_data && !drag_info->waiting_for_data)
+     {
+         target = gtk_drag_dest_find_target (widget, context, NULL);
+ 
+@@ -190,6 +191,7 @@ slot_proxy_drag_motion (GtkWidget      *widget,
+             goto out;
+         }
+ 
++        drag_info->waiting_for_data = TRUE;
+         gtk_drag_get_data (widget, context, target, time);
+     }
+ 
+@@ -353,8 +355,12 @@ slot_proxy_drag_drop (GtkWidget      *widget,
+ 
+     drag_info->drop_occurred = TRUE;
+ 
+-    target = gtk_drag_dest_find_target (widget, context, NULL);
+-    gtk_drag_get_data (widget, context, target, time);
++    if (!drag_info->waiting_for_data)
++    {
++        target = gtk_drag_dest_find_target (widget, context, NULL);
++        drag_info->waiting_for_data = TRUE;
++        gtk_drag_get_data (widget, context, target, time);
++    }
+ 
+     return TRUE;
+ }
+@@ -469,6 +475,7 @@ slot_proxy_drag_data_received (GtkWidget        *widget,
+ 
+     drag_info->have_data = TRUE;
+     drag_info->info = info;
++    drag_info->waiting_for_data = FALSE;
+ 
+     if (gtk_selection_data_get_length (data) < 0)
+     {
+-- 
+2.41.0
+

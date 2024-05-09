@@ -1,0 +1,76 @@
+From 755cfdce38312dfc6572839a6fdbb1b39e1b4fe6 Mon Sep 17 00:00:00 2001
+From: Ondrej Holy <oholy@redhat.com>
+Date: Wed, 7 Dec 2022 08:51:51 +0100
+Subject: [PATCH] file: Generate thumbnails when the preview icon is available
+
+Currently, thumbnails are not shown for MTP/GPhoto2 locations. The
+backends return `G_FILESYSTEM_PREVIEW_TYPE_NEVER` in order to prevent
+thumbnailers to make them unresponsive. However, the backends provide
+preview icons for some file types and the `GnomeDesktopThumbnailFactory`
+is smart enough not to invoke thumbnailers if the icon is available
+(see https://bugzilla.gnome.org/show_bug.cgi?id=738503). Let's allow
+the thumbnail generation from the preview icons if they are available.
+This should not affect backend responsiveness much.
+
+Fixes: https://gitlab.gnome.org/GNOME/nautilus/-/issues/1921
+---
+ src/nautilus-file-private.h |  3 ++-
+ src/nautilus-file.c         | 14 ++++++++++++++
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/src/nautilus-file-private.h b/src/nautilus-file-private.h
+index d5d26c8b3..e9d49530c 100644
+--- a/src/nautilus-file-private.h
++++ b/src/nautilus-file-private.h
+@@ -27,7 +27,7 @@
+ #include <eel/eel-glib-extensions.h>
+ 
+ #define NAUTILUS_FILE_DEFAULT_ATTRIBUTES				\
+-	"standard::*,access::*,mountable::*,time::*,unix::*,owner::*,selinux::*,thumbnail::*,id::filesystem,trash::orig-path,trash::deletion-date,metadata::*,recent::*"
++	"standard::*,access::*,mountable::*,time::*,unix::*,owner::*,selinux::*,thumbnail::*,id::filesystem,trash::orig-path,trash::deletion-date,metadata::*,recent::*,preview::icon"
+ 
+ /* These are in the typical sort order. Known things come first, then
+  * things where we can't know, finally things where we don't yet know.
+@@ -185,6 +185,7 @@ struct NautilusFileDetails
+ 	eel_boolean_bit start_stop_type               : 3; /* GDriveStartStopType */
+ 	eel_boolean_bit can_poll_for_media            : 1;
+ 	eel_boolean_bit is_media_check_automatic      : 1;
++	eel_boolean_bit has_preview_icon              : 1;
+ 
+ 	eel_boolean_bit filesystem_readonly           : 1;
+ 	eel_boolean_bit filesystem_use_preview        : 2; /* GFilesystemPreviewType */
+diff --git a/src/nautilus-file.c b/src/nautilus-file.c
+index 2999f2fa5..d9d988ccd 100644
+--- a/src/nautilus-file.c
++++ b/src/nautilus-file.c
+@@ -2914,6 +2914,11 @@ update_info_internal (NautilusFile *file,
+         file->details->trash_orig_path = g_strdup (trash_orig_path);
+     }
+ 
++    if (g_file_info_has_attribute (info, G_FILE_ATTRIBUTE_PREVIEW_ICON))
++    {
++        file->details->has_preview_icon = TRUE;
++    }
++
+     changed |=
+         nautilus_file_update_metadata_from_info (file, info);
+ 
+@@ -4836,6 +4841,15 @@ nautilus_file_should_show_thumbnail (NautilusFile *file)
+         return FALSE;
+     }
+ 
++    if (show_file_thumbs != NAUTILUS_SPEED_TRADEOFF_NEVER &&
++        file->details->has_preview_icon)
++    {
++        /* The thumbnail should be generated if the preview icon is available
++         * regardless of the filesystem type (i.e. for MTP/GPhoto2 backends).
++         */
++        return TRUE;
++    }
++
+     return get_speed_tradeoff_preference_for_file (file, show_file_thumbs);
+ }
+ 
+-- 
+2.39.2
+

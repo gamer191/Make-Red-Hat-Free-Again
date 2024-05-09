@@ -1,0 +1,96 @@
+From ba878013689114bf199ba2260f9282ae82b352c4 Mon Sep 17 00:00:00 2001
+From: Ondrej Holy <oholy@redhat.com>
+Date: Wed, 22 Feb 2023 16:22:43 +0100
+Subject: [PATCH] freedesktop-dbus: Try to own the name until after exporting
+ skeleton
+
+Currently, the `g_bus_own_name_on_connection` function is called for the
+`org.freedesktop.FileManager1` name before exporting the
+`/org/freedesktop/FileManager1` skeleton. This seemingly works fine in most
+cases, but occasionally the name is acquired too early and D-Bus clients
+can get `No such interface` error. This is regression caused by the commit
+2293e813d3cd1cc47b2b8750f7140647aa066fc8. Let's try to own the nam until
+after exporting the skeleton to avoid this error.
+---
+ src/nautilus-freedesktop-dbus.c | 31 +++++++++++++++----------------
+ 1 file changed, 15 insertions(+), 16 deletions(-)
+
+diff --git a/src/nautilus-freedesktop-dbus.c b/src/nautilus-freedesktop-dbus.c
+index c253cfaba..c20166abb 100644
+--- a/src/nautilus-freedesktop-dbus.c
++++ b/src/nautilus-freedesktop-dbus.c
+@@ -162,20 +162,6 @@ name_lost_cb (GDBusConnection *connection,
+     DEBUG ("Lost (or failed to acquire) the name %s on the session message bus\n", name);
+ }
+ 
+-static void
+-nautilus_freedesktop_dbus_constructed (GObject *object)
+-{
+-    NautilusFreedesktopDBus *fdb = NAUTILUS_FREEDESKTOP_DBUS (object);
+-
+-    fdb->owner_id = g_bus_own_name_on_connection (fdb->connection,
+-                                                  NAUTILUS_FDO_DBUS_NAME,
+-                                                  G_BUS_NAME_OWNER_FLAGS_NONE,
+-                                                  name_acquired_cb,
+-                                                  name_lost_cb,
+-                                                  fdb,
+-                                                  NULL);
+-}
+-
+ static void
+ nautilus_freedesktop_dbus_dispose (GObject *object)
+ {
+@@ -252,7 +238,6 @@ nautilus_freedesktop_dbus_class_init (NautilusFreedesktopDBusClass *klass)
+     GObjectClass *object_class = G_OBJECT_CLASS (klass);
+ 
+     object_class->dispose = nautilus_freedesktop_dbus_dispose;
+-    object_class->constructed = nautilus_freedesktop_dbus_constructed;
+     object_class->get_property = nautilus_freedesktop_dbus_get_property;
+     object_class->set_property = nautilus_freedesktop_dbus_set_property;
+ 
+@@ -301,7 +286,6 @@ nautilus_freedesktop_dbus_set_open_windows_with_locations (NautilusFreedesktopDB
+                                                                         locations);
+ }
+ 
+-/* Tries to own the org.freedesktop.FileManager1 service name */
+ NautilusFreedesktopDBus *
+ nautilus_freedesktop_dbus_new (GDBusConnection *connection)
+ {
+@@ -310,6 +294,7 @@ nautilus_freedesktop_dbus_new (GDBusConnection *connection)
+                          NULL);
+ }
+ 
++/* Tries to own the org.freedesktop.FileManager1 service name */
+ gboolean
+ nautilus_freedesktop_dbus_register (NautilusFreedesktopDBus  *fdb,
+                                     GError                  **error)
+@@ -331,12 +316,26 @@ nautilus_freedesktop_dbus_register (NautilusFreedesktopDBus  *fdb,
+                           G_CALLBACK (skeleton_handle_show_item_properties_cb), fdb);
+     }
+ 
++    fdb->owner_id = g_bus_own_name_on_connection (fdb->connection,
++                                                  NAUTILUS_FDO_DBUS_NAME,
++                                                  G_BUS_NAME_OWNER_FLAGS_NONE,
++                                                  name_acquired_cb,
++                                                  name_lost_cb,
++                                                  fdb,
++                                                  NULL);
++
+     return success;
+ }
+ 
+ void
+ nautilus_freedesktop_dbus_unregister (NautilusFreedesktopDBus *fdb)
+ {
++    if (fdb->owner_id != 0)
++    {
++        g_bus_unown_name (fdb->owner_id);
++        fdb->owner_id = 0;
++    }
++
+     g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (fdb->skeleton));
+ 
+     g_signal_handlers_disconnect_by_data (fdb->skeleton, fdb);
+-- 
+2.39.1
+

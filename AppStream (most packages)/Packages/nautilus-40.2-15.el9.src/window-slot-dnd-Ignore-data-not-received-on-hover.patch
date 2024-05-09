@@ -1,0 +1,65 @@
+From 9f36eaa6f4e7757b7cdf41a54cfc9f03eaa0ce89 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ant=C3=B3nio=20Fernandes?= <antoniof@gnome.org>
+Date: Fri, 16 Jul 2021 23:25:22 +0100
+Subject: [PATCH] window-slot-dnd: Ignore data not received on hover
+
+Sometimes, after having called gtk_drag_get_data() on ::drag-motion, we
+only get the data after ::drag-leave.
+
+This is fine if the ::drag-leave is followed by ::drag-drop. Otherwise,
+as ::drag-leave is responsible for cleanup, data arriving afterwards is
+leaking into the next time content is dragged hover the widget, even if
+the dragged content is no longer the same.
+
+Instead, keep track of the hover status and don't save data that's no
+longer relevant.
+---
+ src/nautilus-window-slot-dnd.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/nautilus-window-slot-dnd.c b/src/nautilus-window-slot-dnd.c
+index ec0134e46..772a8bb88 100644
+--- a/src/nautilus-window-slot-dnd.c
++++ b/src/nautilus-window-slot-dnd.c
+@@ -36,6 +36,7 @@ typedef struct
+     gboolean have_data;
+     gboolean have_valid_data;
+ 
++    gboolean is_hover;
+     gboolean drop_occurred;
+ 
+     unsigned int info;
+@@ -170,6 +171,8 @@ slot_proxy_drag_motion (GtkWidget      *widget,
+ 
+     drag_info = user_data;
+ 
++    drag_info->is_hover = TRUE;
++
+     action = 0;
+     valid_text_drag = FALSE;
+     valid_xds_drag = FALSE;
+@@ -335,6 +338,7 @@ slot_proxy_drag_leave (GtkWidget      *widget,
+ 
+     drag_info = user_data;
+ 
++    drag_info->is_hover = FALSE;
+     gtk_drag_unhighlight (widget);
+     drag_info_clear (drag_info);
+ }
+@@ -474,6 +478,13 @@ slot_proxy_drag_data_received (GtkWidget        *widget,
+     g_assert (!drag_info->have_data);
+     drag_info->waiting_for_data = FALSE;
+ 
++    if (!drag_info->is_hover && !drag_info->drop_occurred)
++    {
++        /* Ignore data arriving after ::drag-leave, except if followed by
++         * ::drag-drop. */
++        return;
++    }
++
+     if (gtk_selection_data_get_length (data) < 0)
+     {
+         /* Data retrieval failed. */
+-- 
+2.41.0
+

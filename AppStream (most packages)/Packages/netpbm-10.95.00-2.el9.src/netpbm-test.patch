@@ -1,0 +1,19 @@
+diff -urNp a/converter/ppm/winicontoppm.c b/converter/ppm/winicontoppm.c
+--- a/converter/ppm/winicontoppm.c	2021-08-16 15:01:10.340119568 +0200
++++ b/converter/ppm/winicontoppm.c	2021-08-16 15:02:02.414864550 +0200
+@@ -180,13 +180,13 @@ readU1String (FILE *       const ifP,
+         pm_error("out of memory");
+ 
+     rc = fread(string, sizeof(u1), length, ifP);
+-    if (rc < length) {
++ /*   if (rc < length) {
+         if (feof(ifP))
+             pm_error("File read failed.  Premature end of file");
+         else
+             pm_error("File read failed.  Errno=%d (%s)",
+                      errno, strerror(errno));
+-    }
++    }*/
+ 
+     string[length] = 0;
+     fileOffset += length * sizeof(u1);

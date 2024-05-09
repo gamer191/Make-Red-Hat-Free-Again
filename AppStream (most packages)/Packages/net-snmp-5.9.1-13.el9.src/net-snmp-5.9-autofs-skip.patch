@@ -1,0 +1,46 @@
+diff --git a/agent/mibgroup/host/hr_filesys.c b/agent/mibgroup/host/hr_filesys.c
+index 4f78df3..fd25b3f 100644
+--- a/agent/mibgroup/host/hr_filesys.c
++++ b/agent/mibgroup/host/hr_filesys.c
+@@ -704,6 +704,7 @@ static const char *HRFS_ignores[] = {
+     "shm",
+     "sockfs",
+     "sysfs",
++    "tmpfs",
+     "usbdevfs",
+     "usbfs",
+ #endif
+diff --git a/agent/mibgroup/host/hr_storage.c b/agent/mibgroup/host/hr_storage.c
+index 6b459ec..f7a376b 100644
+--- a/agent/mibgroup/host/hr_storage.c
++++ b/agent/mibgroup/host/hr_storage.c
+@@ -540,9 +540,10 @@ really_try_next:
+ 
+         store_idx = name[ HRSTORE_ENTRY_NAME_LENGTH ];
+         if (store_idx > NETSNMP_MEM_TYPE_MAX ) {
+-            if ( netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
++            if ( (netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
+                                         NETSNMP_DS_AGENT_SKIPNFSINHOSTRESOURCES) &&
+-                 Check_HR_FileSys_NFS())
++                 Check_HR_FileSys_NFS()) ||
++                 Check_HR_FileSys_AutoFs())
+                 return NULL;  /* or goto try_next; */
+             if (Check_HR_FileSys_AutoFs())
+                 return NULL;
+diff --git a/agent/mibgroup/host/hrh_storage.c b/agent/mibgroup/host/hrh_storage.c
+index 8967d35..9bf2659 100644
+--- a/agent/mibgroup/host/hrh_storage.c
++++ b/agent/mibgroup/host/hrh_storage.c
+@@ -366,9 +366,10 @@ really_try_next:
+         store_idx = name[ HRSTORE_ENTRY_NAME_LENGTH ];
+         if (HRFS_entry &&
+ 	    store_idx > NETSNMP_MEM_TYPE_MAX &&
+-            netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
++            ((netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
+                                    NETSNMP_DS_AGENT_SKIPNFSINHOSTRESOURCES) &&
+-            Check_HR_FileSys_NFS())
++            Check_HR_FileSys_NFS()) ||
++            Check_HR_FileSys_AutoFs()))
+             return NULL;
+         if (HRFS_entry && Check_HR_FileSys_AutoFs())
+             return NULL;

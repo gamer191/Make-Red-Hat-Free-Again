@@ -1,0 +1,43 @@
+From f68481d2d8393f1ba1a9b0a86a1b28b6ac303a63 Mon Sep 17 00:00:00 2001
+From: Ondrej Holy <oholy@redhat.com>
+Date: Wed, 24 May 2023 13:09:35 +0200
+Subject: [PATCH] window-slot: Force reload current location when it reappears
+
+When the currently opened location disappears, nautilus tries to
+reopen it thanks to the commit b0e28bc1. However, the
+`nautilus_window_slot_open_location_full` function doesn't begin the
+location change when the old location is the same as the new one. This
+is a problem because the old `NautilusFile` object is marked as gone
+and thus monitoring and perhaps some other stuff won't work. Let's use
+the `nautilus_window_slot_force_reload` function instead, in this case,
+to ensure that the underlying `NautilusFile` is updated.
+---
+ src/nautilus-window-slot.c | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/src/nautilus-window-slot.c b/src/nautilus-window-slot.c
+index 811152a21..561b34f12 100644
+--- a/src/nautilus-window-slot.c
++++ b/src/nautilus-window-slot.c
+@@ -1458,7 +1458,17 @@ viewed_file_changed_callback (NautilusFile       *file,
+                 go_to_file = g_file_new_for_path (g_get_home_dir ());
+             }
+ 
+-            nautilus_window_slot_open_location_full (self, go_to_file, 0, NULL);
++            if (g_file_equal (location, go_to_file))
++            {
++                /* Path gone by time out may have been remounted by
++                 * `nautilus_find_existing_uri_in_hierarchy()`.
++                 */
++                nautilus_window_slot_force_reload (self);
++            }
++            else
++            {
++                nautilus_window_slot_open_location_full (self, go_to_file, 0, NULL);
++            }
+ 
+             g_object_unref (go_to_file);
+             g_object_unref (location);
+-- 
+2.40.0
+

@@ -1,0 +1,24 @@
+diff --git a/net-snmp-create-v3-user.in b/net-snmp-create-v3-user.in
+index b0c71d9..ac3c60f 100644
+--- a/net-snmp-create-v3-user.in
++++ b/net-snmp-create-v3-user.in
+@@ -14,6 +14,10 @@ Xalgorithm="DES"
+ token=rwuser
+ 
+ while test "x$done" = "x" -a "x$1" != "x" -a "x$usage" != "xyes"; do
++case "$1" in
++    -*=*) optarg=`echo "$1" | sed 's/[-_a-zA-Z0-9]*=//'` ;;
++    *) optarg= ;;
++esac
+ 
+ unset shifted
+ case $1 in
+@@ -136,7 +140,7 @@ fi
+ echo "$line" >> "$outfile"
+ # Avoid that configure complains that this script ignores @datarootdir@
+ echo "@datarootdir@" >/dev/null
+-outfile="@datadir@/snmp/snmpd.conf"
++outfile="/etc/snmp/snmpd.conf"
+ line="$token $user"
+ echo "adding the following line to $outfile:"
+ echo "   $line"

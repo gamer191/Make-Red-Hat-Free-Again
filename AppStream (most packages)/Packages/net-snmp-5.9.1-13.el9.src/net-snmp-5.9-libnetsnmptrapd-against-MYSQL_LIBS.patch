@@ -1,0 +1,13 @@
+diff --git a/apps/Makefile.in b/apps/Makefile.in
+index d4529d3..175242b 100644
+--- a/apps/Makefile.in
++++ b/apps/Makefile.in
+@@ -237,7 +237,7 @@ snmppcap$(EXEEXT):    snmppcap.$(OSUFFIX) $(USELIBS)
+ 	$(LINK) ${CFLAGS} -o $@ snmppcap.$(OSUFFIX) ${LDFLAGS} ${LIBS} -lpcap
+ 
+ libnetsnmptrapd.$(LIB_EXTENSION)$(LIB_VERSION): $(LLIBTRAPD_OBJS)
+-	$(LIB_LD_CMD) $@ ${LLIBTRAPD_OBJS} $(MIBLIB) $(USELIBS) $(PERLLDOPTS_FOR_LIBS) $(LDFLAGS)
++	$(LIB_LD_CMD) $@ ${LLIBTRAPD_OBJS} $(MIBLIB) $(USELIBS) $(PERLLDOPTS_FOR_LIBS) $(LIB_LD_LIBS) $(MYSQL_LIBS)
+ 	$(RANLIB) $@
+ 
+ snmpinforminstall:

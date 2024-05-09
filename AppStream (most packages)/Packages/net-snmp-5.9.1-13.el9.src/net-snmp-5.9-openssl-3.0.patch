@@ -1,0 +1,84 @@
+diff -urNp a/include/net-snmp/library/snmp_openssl.h b/include/net-snmp/library/snmp_openssl.h
+--- a/include/net-snmp/library/snmp_openssl.h	2021-09-15 07:55:39.829901038 +0200
++++ b/include/net-snmp/library/snmp_openssl.h	2021-09-15 07:56:18.656412998 +0200
+@@ -44,7 +44,6 @@ extern          "C" {
+     /*
+      * misc
+      */
+-    void netsnmp_openssl_err_log(const char *prefix);
+     void netsnmp_openssl_null_checks(SSL *ssl, int *nullAuth, int *nullCipher);
+ 
+     /*
+diff -urNp a/snmplib/snmp_openssl.c b/snmplib/snmp_openssl.c
+--- a/snmplib/snmp_openssl.c	2021-09-15 07:55:39.785900458 +0200
++++ b/snmplib/snmp_openssl.c	2021-09-15 07:57:30.914417600 +0200
+@@ -937,20 +937,6 @@ netsnmp_openssl_cert_issued_by(X509 *iss
+     return (X509_check_issued(issuer, cert) == X509_V_OK);
+ }
+ 
+-
+-#ifndef NETSNMP_FEATURE_REMOVE_OPENSSL_ERR_LOG
+-void
+-netsnmp_openssl_err_log(const char *prefix)
+-{
+-    unsigned long err;
+-    for (err = ERR_get_error(); err; err = ERR_get_error()) {
+-        snmp_log(LOG_ERR,"%s: %ld\n", prefix ? prefix: "openssl error", err);
+-        snmp_log(LOG_ERR, "library=%d, function=%d, reason=%d\n",
+-                 ERR_GET_LIB(err), ERR_GET_FUNC(err), ERR_GET_REASON(err));
+-    }
+-}
+-#endif /* NETSNMP_FEATURE_REMOVE_OPENSSL_ERR_LOG */
+-
+ void
+ netsnmp_openssl_null_checks(SSL *ssl, int *null_auth, int *null_cipher)
+ {
+diff -urNp a/snmplib/transports/snmpTLSBaseDomain.c b/snmplib/transports/snmpTLSBaseDomain.c
+--- a/snmplib/transports/snmpTLSBaseDomain.c	2021-05-18 11:15:09.247472175 +0200
++++ b/snmplib/transports/snmpTLSBaseDomain.c	2021-05-24 09:39:29.297494727 +0200
+@@ -54,17 +54,6 @@ netsnmp_feature_require(cert_util);
+ 
+ int openssl_local_index;
+ 
+-#ifndef HAVE_ERR_GET_ERROR_ALL
+-/* A backport of the OpenSSL 1.1.1e ERR_get_error_all() function. */
+-static unsigned long ERR_get_error_all(const char **file, int *line,
+-                                       const char **func,
+-                                       const char **data, int *flags)
+-{
+-    *func = NULL;
+-    return ERR_get_error_line_data(file, line, data, flags);
+-}
+-#endif
+-
+ /* this is called during negotiation */
+ int verify_callback(int ok, X509_STORE_CTX *ctx) {
+     int err, depth;
+@@ -1187,27 +1176,6 @@ void _openssl_log_error(int rc, SSL *con
+                  ERR_reason_error_string(ERR_get_error()));
+ 
+     }
+-
+-    /* other errors */
+-    while ((numerical_reason =
+-            ERR_get_error_all(&file, &line, &func, &data, &flags)) != 0) {
+-        snmp_log(LOG_ERR, "%s (file %s, func %s, line %d)\n",
+-                 ERR_error_string(numerical_reason, NULL), file, func, line);
+-
+-        /* if we have a text translation: */
+-        if (data && (flags & ERR_TXT_STRING)) {
+-            snmp_log(LOG_ERR, "  Textual Error: %s\n", data);
+-            /*
+-             * per openssl man page: If it has been allocated by
+-             * OPENSSL_malloc(), *flags&ERR_TXT_MALLOCED is true.
+-             *
+-             * arggh... stupid openssl prototype for ERR_get_error_line_data
+-             * wants a const char **, but returns something that we might
+-             * need to free??
+-             */
+-            if (flags & ERR_TXT_MALLOCED)
+-                OPENSSL_free(NETSNMP_REMOVE_CONST(void *, data));        }
+-    }
+     
+     snmp_log(LOG_ERR, "---- End of OpenSSL Errors ----\n");
+ }

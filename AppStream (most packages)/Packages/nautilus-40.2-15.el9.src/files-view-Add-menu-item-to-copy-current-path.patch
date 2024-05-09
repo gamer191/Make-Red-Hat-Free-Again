@@ -1,0 +1,89 @@
+From 18fd27b5789758a7cbf97c8ab59b57d890923779 Mon Sep 17 00:00:00 2001
+From: utkarshvg2401 <utkarshvg2401@gmail.com>
+Date: Fri, 1 Apr 2022 10:48:08 +0530
+Subject: [PATCH] files-view: Add menu item to copy current path
+
+Currently, there is no option to directly copy the path of the current open directory.
+
+This can be useful when users want to use the path of the directory in the terminal or some code.
+
+Close https://gitlab.gnome.org/GNOME/nautilus/-/issues/1966
+---
+ src/nautilus-files-view.c                     | 29 +++++++++++++++++++
+ .../ui/nautilus-files-view-context-menus.ui   |  6 ++++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/src/nautilus-files-view.c b/src/nautilus-files-view.c
+index 378e6bdba..1e1025eed 100644
+--- a/src/nautilus-files-view.c
++++ b/src/nautilus-files-view.c
+@@ -6123,6 +6123,30 @@ action_cut (GSimpleAction *action,
+     nautilus_file_list_free (selection);
+ }
+ 
++static void
++action_copy_current_location (GSimpleAction *action,
++                              GVariant      *state,
++                              gpointer       user_data)
++{
++    NautilusFilesView *view;
++    GtkClipboard *clipboard;
++    GList *files;
++    NautilusFilesViewPrivate *priv;
++
++    view = NAUTILUS_FILES_VIEW (user_data);
++    priv = nautilus_files_view_get_instance_private (view);
++
++    if (priv->directory_as_file != NULL)
++    {
++        files = g_list_append (NULL, nautilus_file_ref (priv->directory_as_file));
++
++        clipboard = nautilus_clipboard_get (GTK_WIDGET (view));
++        nautilus_clipboard_prepare_for_files (clipboard, files, FALSE);
++
++        nautilus_file_list_free (files);
++    }
++}
++
+ static void
+ action_create_links_in_place (GSimpleAction *action,
+                               GVariant      *state,
+@@ -7154,6 +7178,7 @@ const GActionEntry view_entries[] =
+     { "select-all", action_select_all },
+     { "paste", action_paste_files },
+     { "paste_accel", action_paste_files_accel },
++    { "copy-current-location", action_copy_current_location },
+     { "create-link", action_create_links },
+     { "new-document" },
+     /* Selection menu */
+@@ -7789,6 +7814,10 @@ real_update_actions_state (NautilusFilesView *view)
+     g_simple_action_set_enabled (G_SIMPLE_ACTION (action),
+                                  can_move_files && !selection_contains_recent &&
+                                  !selection_contains_starred);
++    action = g_action_map_lookup_action (G_ACTION_MAP (view_action_group),
++                                         "copy-current-location");
++    g_simple_action_set_enabled (G_SIMPLE_ACTION (action),
++                                 !selection_contains_search);
+ 
+     /* Drive menu */
+     show_mount = (selection != NULL);
+diff --git a/src/resources/ui/nautilus-files-view-context-menus.ui b/src/resources/ui/nautilus-files-view-context-menus.ui
+index 27764c9a7..22a1cb231 100644
+--- a/src/resources/ui/nautilus-files-view-context-menus.ui
++++ b/src/resources/ui/nautilus-files-view-context-menus.ui
+@@ -14,6 +14,12 @@
+       <attribute name="label" translatable="yes">Add to _Bookmarks</attribute>
+       <attribute name="action">win.bookmark-current-location</attribute>
+     </item>
++    <section>
++      <item>
++        <attribute name="label" translatable="yes">_Copy Location</attribute>
++        <attribute name="action">view.copy-current-location</attribute>
++      </item>
++    </section>
+     <section>
+       <item>
+         <attribute name="label" translatable="yes">Create _Link</attribute>
+-- 
+2.36.1
+

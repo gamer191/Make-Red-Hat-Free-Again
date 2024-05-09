@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="font">
+  <id>navilu</id>
+  <metadata_license>CC-BY-3.0</metadata_license>
+  <name>Navilu</name>
+  <summary>Free Kannada opentype sans-serif font</summary>
+  <description>
+    <p>
+      This package provides a free Kannada sans-serif opentype font.
+    </p>
+  </description>
+  <updatecontact>psatpute_at_redhat_dot_com</updatecontact>
+  <url type="homepage">https://github.com/aravindavk/Navilu</url>
+</component>

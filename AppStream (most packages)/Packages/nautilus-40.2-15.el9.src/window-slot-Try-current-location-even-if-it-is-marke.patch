@@ -1,0 +1,72 @@
+From b0e28bc19c065b4bc1d6fdea922ae2c09115b0e6 Mon Sep 17 00:00:00 2001
+From: Ondrej Holy <oholy@redhat.com>
+Date: Tue, 24 Jan 2023 12:13:15 +0100
+Subject: [PATCH] window-slot: Try current location even if it is marked as
+ gone
+
+When the current location is marked as gone, Nautilus jumps to the
+first existing parent currently (except for non-native locations and
+mount roots). This is fine in most cases, but not for autofs locations
+as Nautilus jumps to parent everytime autofs mount timeouted. It would
+be better to stay in the same folder in this case. Let's try the current
+location first even if it is marked as gone to ensure that. It would be
+perhaps even better to prevent autofs locations somehow from timeouting
+at all, or avoid immediate remounting at least, but those solutions
+don't look easy to implement.
+
+Fixes: https://gitlab.gnome.org/GNOME/nautilus/-/issues/1514
+---
+ src/nautilus-window-slot.c | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/nautilus-window-slot.c b/src/nautilus-window-slot.c
+index c06dc3432..a1af61887 100644
+--- a/src/nautilus-window-slot.c
++++ b/src/nautilus-window-slot.c
+@@ -1442,11 +1442,10 @@ viewed_file_changed_callback (NautilusFile       *file,
+         if (priv->viewed_file_seen)
+         {
+             GFile *go_to_file;
+-            GFile *parent;
+             GFile *location;
+             GMount *mount;
++            gboolean find_existing = FALSE;
+ 
+-            parent = NULL;
+             location = nautilus_file_get_location (file);
+ 
+             if (g_file_is_native (location))
+@@ -1455,16 +1454,18 @@ viewed_file_changed_callback (NautilusFile       *file,
+ 
+                 if (mount == NULL)
+                 {
+-                    parent = g_file_get_parent (location);
++                    find_existing = TRUE;
+                 }
+ 
+                 g_clear_object (&mount);
+             }
+ 
+-            if (parent != NULL)
++            if (find_existing)
+             {
+-                /* auto-show existing parent */
+-                go_to_file = nautilus_find_existing_uri_in_hierarchy (parent);
++                /* Verify also the current location to prevent jumps to parent
++                 * in case of autofs.
++                 */
++                go_to_file = nautilus_find_existing_uri_in_hierarchy (location);
+             }
+             else
+             {
+@@ -1473,7 +1474,6 @@ viewed_file_changed_callback (NautilusFile       *file,
+ 
+             nautilus_window_slot_open_location_full (self, go_to_file, 0, NULL);
+ 
+-            g_clear_object (&parent);
+             g_object_unref (go_to_file);
+             g_object_unref (location);
+         }
+-- 
+2.39.2
+

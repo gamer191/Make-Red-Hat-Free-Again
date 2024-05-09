@@ -1,0 +1,31 @@
+From 298c8103db80b292791616af4fd497342a71867f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Josef=20=C5=98=C3=ADdk=C3=BD?= <jridky@redhat.com>
+Date: Wed, 24 May 2023 10:49:41 +0200
+Subject: [PATCH] libsnmp, UDP transport: Fix sendmsg() error code handling
+
+This change has been made because of Linux kernel commit "ipv4: Return
+-ENETUNREACH if we can't create route but saddr is valid"
+(https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=595e0651d029)
+
+Fixes: https://github.com/net-snmp/net-snmp/issues/564
+Fixes: https://github.com/net-snmp/net-snmp/pull/576
+
+[ bvanassche: edited commit message ]
+---
+ snmplib/transports/snmpUDPBaseDomain.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/snmplib/transports/snmpUDPBaseDomain.c b/snmplib/transports/snmpUDPBaseDomain.c
+index ca8f9a5554..cd6b15e2ad 100644
+--- a/snmplib/transports/snmpUDPBaseDomain.c
++++ b/snmplib/transports/snmpUDPBaseDomain.c
+@@ -315,7 +315,7 @@ int netsnmp_udpbase_sendto_unix(int fd, const struct in_addr *srcip,
+                         sizeof(struct sockaddr));
+         else
+             rc = sendmsg(fd, &m, MSG_DONTWAIT);
+-        if (rc >= 0 || errno != EINVAL)
++        if (rc >= 0 || (errno != EINVAL && errno != ENETUNREACH))
+             return rc;
+ 
+         /*
+

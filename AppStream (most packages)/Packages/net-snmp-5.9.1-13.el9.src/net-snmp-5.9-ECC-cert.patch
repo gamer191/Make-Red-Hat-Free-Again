@@ -1,0 +1,98 @@
+From a1968db524e087a36a19a351b89bf6f1633819aa Mon Sep 17 00:00:00 2001
+From: minfrin <minfrin@users.noreply.github.com>
+Date: Tue, 5 Jan 2021 23:17:14 +0000
+Subject: [PATCH] Add support for digests detected from ECC certificates
+
+Previously, the digest could be detected on RSA certificates only. This
+patch adds detection for ECC certificates.
+
+[ bvanassche: changed _htmap2 into a two-dimensional array and renamed _htmap2
+  back to _htmap ]
+---
+ snmplib/snmp_openssl.c | 60 +++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 50 insertions(+), 10 deletions(-)
+
+diff --git a/snmplib/snmp_openssl.c b/snmplib/snmp_openssl.c
+index c092a007a..432cb5c27 100644
+--- a/snmplib/snmp_openssl.c
++++ b/snmplib/snmp_openssl.c
+@@ -521,18 +521,54 @@ netsnmp_openssl_cert_dump_extensions(X509 *ocert)
+     }
+ }
+ 
+-static int _htmap[NS_HASH_MAX + 1] = {
+-    0, NID_md5WithRSAEncryption, NID_sha1WithRSAEncryption,
+-    NID_sha224WithRSAEncryption, NID_sha256WithRSAEncryption,
+-    NID_sha384WithRSAEncryption, NID_sha512WithRSAEncryption };
++static const struct {
++    uint16_t nid;
++    uint16_t ht;
++} _htmap[] = {
++    { 0, NS_HASH_NONE },
++#ifdef NID_md5WithRSAEncryption
++    { NID_md5WithRSAEncryption, NS_HASH_MD5 },
++#endif
++#ifdef NID_sha1WithRSAEncryption
++    { NID_sha1WithRSAEncryption, NS_HASH_SHA1 },
++#endif
++#ifdef NID_ecdsa_with_SHA1
++    { NID_ecdsa_with_SHA1, NS_HASH_SHA1 },
++#endif
++#ifdef NID_sha224WithRSAEncryption
++    { NID_sha224WithRSAEncryption, NS_HASH_SHA224 },
++#endif
++#ifdef NID_ecdsa_with_SHA224
++    { NID_ecdsa_with_SHA224, NS_HASH_SHA224 },
++#endif
++#ifdef NID_sha256WithRSAEncryption
++    { NID_sha256WithRSAEncryption, NS_HASH_SHA256 },
++#endif
++#ifdef NID_ecdsa_with_SHA256
++    { NID_ecdsa_with_SHA256, NS_HASH_SHA256 },
++#endif
++#ifdef NID_sha384WithRSAEncryption
++    { NID_sha384WithRSAEncryption, NS_HASH_SHA384 },
++#endif
++#ifdef NID_ecdsa_with_SHA384
++    { NID_ecdsa_with_SHA384, NS_HASH_SHA384 },
++#endif
++#ifdef NID_sha512WithRSAEncryption
++    { NID_sha512WithRSAEncryption, NS_HASH_SHA512 },
++#endif
++#ifdef NID_ecdsa_with_SHA512
++    { NID_ecdsa_with_SHA512, NS_HASH_SHA512 },
++#endif
++};
+ 
+ int
+ _nid2ht(int nid)
+ {
+     int i;
+-    for (i=1; i<= NS_HASH_MAX; ++i) {
+-        if (nid == _htmap[i])
+-            return i;
++
++    for (i = 0; i < sizeof(_htmap) / sizeof(_htmap[0]); i++) {
++        if (_htmap[i].nid == nid)
++            return _htmap[i].ht;
+     }
+     return 0;
+ }
+@@ -541,9 +577,13 @@ _nid2ht(int nid)
+ int
+ _ht2nid(int ht)
+ {
+-    if ((ht < 0) || (ht > NS_HASH_MAX))
+-        return 0;
+-    return _htmap[ht];
++    int i;
++
++    for (i = 0; i < sizeof(_htmap) / sizeof(_htmap[0]); i++) {
++        if (_htmap[i].ht == ht)
++            return _htmap[i].nid;
++    }
++    return 0;
+ }
+ #endif /* NETSNMP_FEATURE_REMOVE_OPENSSL_HT2NID */
+ 
+
