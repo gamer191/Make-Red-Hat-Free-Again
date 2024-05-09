@@ -1,0 +1,136 @@
+From 81be3c529ec1165f3135b4f14fbec2a19403cfbe Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Fri, 27 Aug 2021 08:53:36 +0200
+Subject: [PATCH 1/2] fence_zvmip: add ssl/tls support
+
+---
+ agents/zvm/fence_zvmip.py           | 20 ++++++++++++++++----
+ tests/data/metadata/fence_zvmip.xml | 19 +++++++++++++++++++
+ 2 files changed, 35 insertions(+), 4 deletions(-)
+
+diff --git a/agents/zvm/fence_zvmip.py b/agents/zvm/fence_zvmip.py
+index 001106a44..874eb699f 100644
+--- a/agents/zvm/fence_zvmip.py
++++ b/agents/zvm/fence_zvmip.py
+@@ -26,12 +26,22 @@ def open_socket(options):
+ 	except socket.gaierror:
+ 		fail(EC_LOGIN_DENIED)
+ 
+-	conn = socket.socket()
++	if "--ssl" in options:
++		import ssl
++		sock = socket.socket()
++		sslcx = ssl.create_default_context()
++		if "--ssl-insecure" in options:
++			sslcx.check_hostname = False
++			sslcx.verify_mode = ssl.CERT_NONE
++		conn = sslcx.wrap_socket(sock, server_hostname=options["--ip"])
++	else:
++		conn = socket.socket()
+ 	conn.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+ 	conn.settimeout(float(options["--shell-timeout"]) or None)
+ 	try:
+ 		conn.connect(addr)
+-	except socket.error:
++	except socket.error as e:
++		logging.debug(e)
+ 		fail(EC_LOGIN_DENIED)
+ 
+ 	return conn
+@@ -122,11 +132,12 @@ def get_list_of_images(options, command, data_as_plug):
+ 	images = set()
+ 
+ 	if output_len > 3*INT4:
++		recvflag = socket.MSG_WAITALL if "--ssl" not in options else 0
+ 		array_len = struct.unpack("!i", conn.recv(INT4))[0]
+ 		data = ""
+ 
+ 		while True:
+-			read_data = conn.recv(1024, socket.MSG_WAITALL).decode("UTF-8")
++			read_data = conn.recv(1024, recvflag).decode("UTF-8")
+ 			data += read_data
+ 			if array_len == len(data):
+ 				break
+@@ -146,7 +157,8 @@ def get_list_of_images(options, command, data_as_plug):
+ 	return (return_code, reason_code, images)
+ 
+ def main():
+-	device_opt = ["ipaddr", "login", "passwd", "port", "method", "missing_as_off", "inet4_only", "inet6_only"]
++	device_opt = ["ipaddr", "login", "passwd", "port", "method", "missing_as_off",
++		      "inet4_only", "inet6_only", "ssl"]
+ 
+ 	atexit.register(atexit_handler)
+ 
+diff --git a/tests/data/metadata/fence_zvmip.xml b/tests/data/metadata/fence_zvmip.xml
+index f84115c08..d91192946 100644
+--- a/tests/data/metadata/fence_zvmip.xml
++++ b/tests/data/metadata/fence_zvmip.xml
+@@ -91,6 +91,21 @@ to access the system's directory manager.
+ 		<content type="string"  />
+ 		<shortdesc lang="en">Physical plug number on device, UUID or identification of machine</shortdesc>
+ 	</parameter>
++	<parameter name="ssl" unique="0" required="0">
++		<getopt mixed="-z, --ssl" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Use SSL connection with verifying certificate</shortdesc>
++	</parameter>
++	<parameter name="ssl_insecure" unique="0" required="0">
++		<getopt mixed="--ssl-insecure" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Use SSL connection without verifying certificate</shortdesc>
++	</parameter>
++	<parameter name="ssl_secure" unique="0" required="0">
++		<getopt mixed="--ssl-secure" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Use SSL connection with verifying certificate</shortdesc>
++	</parameter>
+ 	<parameter name="username" unique="0" required="1" obsoletes="login">
+ 		<getopt mixed="-l, --username=[name]" />
+ 		<content type="string"  />
+@@ -181,6 +196,10 @@ to access the system's directory manager.
+ 		<content type="integer" default="1"  />
+ 		<shortdesc lang="en">Count of attempts to retry power on</shortdesc>
+ 	</parameter>
++	<parameter name="gnutlscli_path" unique="0" required="0">
++		<getopt mixed="--gnutlscli-path=[path]" />
++		<shortdesc lang="en">Path to gnutls-cli binary</shortdesc>
++	</parameter>
+ </parameters>
+ <actions>
+ 	<action name="on" automatic="0"/>
+
+From 8021e698095c5bd0ef33ee5f56fc448e946cb92c Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Wed, 10 Nov 2021 16:31:24 +0100
+Subject: [PATCH 2/2] fence_zvmip: use ssl by default
+
+---
+ agents/zvm/fence_zvmip.py           | 1 +
+ tests/data/metadata/fence_zvmip.xml | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/agents/zvm/fence_zvmip.py b/agents/zvm/fence_zvmip.py
+index 874eb699f..96021b13e 100644
+--- a/agents/zvm/fence_zvmip.py
++++ b/agents/zvm/fence_zvmip.py
+@@ -165,6 +165,7 @@ def main():
+ 	all_opt["ipport"]["default"] = "44444"
+ 	all_opt["shell_timeout"]["default"] = "5"
+ 	all_opt["missing_as_off"]["default"] = "1"
++	all_opt["ssl"]["default"] = "1"
+ 	options = check_input(device_opt, process_input(device_opt), other_conditions=True)
+ 
+ 	if len(options.get("--plug", "")) > 8:
+diff --git a/tests/data/metadata/fence_zvmip.xml b/tests/data/metadata/fence_zvmip.xml
+index d91192946..f32fc159d 100644
+--- a/tests/data/metadata/fence_zvmip.xml
++++ b/tests/data/metadata/fence_zvmip.xml
+@@ -93,7 +93,7 @@ to access the system's directory manager.
+ 	</parameter>
+ 	<parameter name="ssl" unique="0" required="0">
+ 		<getopt mixed="-z, --ssl" />
+-		<content type="boolean"  />
++		<content type="boolean" default="1"  />
+ 		<shortdesc lang="en">Use SSL connection with verifying certificate</shortdesc>
+ 	</parameter>
+ 	<parameter name="ssl_insecure" unique="0" required="0">

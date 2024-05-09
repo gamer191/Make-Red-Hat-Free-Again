@@ -1,0 +1,30 @@
+From 6430104318b4bf349425b08636183bf839812e04 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Tue, 31 May 2022 08:55:25 +0200
+Subject: [PATCH] fence_zvmip: show unable to connect error instead of full
+ stacktrace, e.g. when not using --ssl for SSL devices
+
+---
+ agents/zvm/fence_zvmip.py | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/agents/zvm/fence_zvmip.py b/agents/zvm/fence_zvmip.py
+index 90ca95d45..4f538e10d 100644
+--- a/agents/zvm/fence_zvmip.py
++++ b/agents/zvm/fence_zvmip.py
+@@ -127,8 +127,13 @@ def get_list_of_images(options, command, data_as_plug):
+ 
+ 	conn.send(packet)
+ 
+-	request_id = struct.unpack("!i", conn.recv(INT4))[0]
+-	(output_len, request_id, return_code, reason_code) = struct.unpack("!iiii", conn.recv(INT4 * 4))
++	try:
++		request_id = struct.unpack("!i", conn.recv(INT4))[0]
++		(output_len, request_id, return_code, reason_code) = struct.unpack("!iiii", conn.recv(INT4 * 4))
++	except struct.error:
++		logging.debug(sys.exc_info())
++		fail_usage("Failed: Unable to connect to {} port: {} SSL: {} \n".format(options["--ip"], options["--ipport"], bool("--ssl" in options)))
++
+ 	images = set()
+ 
+ 	if output_len > 3*INT4:

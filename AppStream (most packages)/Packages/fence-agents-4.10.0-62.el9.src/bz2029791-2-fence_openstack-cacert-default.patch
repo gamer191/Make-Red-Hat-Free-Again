@@ -1,0 +1,59 @@
+From b7032d16a07997ecab3b2c11a6436b3fa21f9043 Mon Sep 17 00:00:00 2001
+From: "Fabio M. Di Nitto" <fdinitto@redhat.com>
+Date: Thu, 6 Jan 2022 12:53:28 +0100
+Subject: [PATCH] fence_openstack: relax ssl cacert default
+
+allow the agent to use Base OS defaults vs forcing a specific file
+to increase portability.
+
+Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
+---
+ agents/openstack/fence_openstack.py     | 12 +++++++++---
+ tests/data/metadata/fence_openstack.xml |  2 +-
+ 2 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/agents/openstack/fence_openstack.py b/agents/openstack/fence_openstack.py
+index c2d9df160..36b353b52 100755
+--- a/agents/openstack/fence_openstack.py
++++ b/agents/openstack/fence_openstack.py
+@@ -127,7 +127,13 @@ def nova_login(username, password, projectname, auth_url, user_domain_name,
+             cacert=cacert,
+         )
+ 
+-    session = ksc_session.Session(auth=auth, verify=False if ssl_insecure else cacert, timeout=apitimeout)
++    caverify=True
++    if ssl_insecure:
++        caverify=False
++    elif cacert:
++        caverify=cacert
++
++    session = ksc_session.Session(auth=auth, verify=caverify, timeout=apitimeout)
+     nova = client.Client("2", session=session, timeout=apitimeout)
+     apiversion = None
+     try:
+@@ -189,10 +195,10 @@ def define_new_opts():
+     all_opt["cacert"] = {
+         "getopt": ":",
+         "longopt": "cacert",
+-        "help": "--cacert=[cacert]              Path to the PEM file with trusted authority certificates",
++        "help": "--cacert=[cacert]              Path to the PEM file with trusted authority certificates (override global CA trust)",
+         "required": "0",
+         "shortdesc": "SSL X.509 certificates file",
+-        "default": "/etc/pki/tls/certs/ca-bundle.crt",
++        "default": "",
+         "order": 7,
+     }
+     all_opt["apitimeout"] = {
+diff --git a/tests/data/metadata/fence_openstack.xml b/tests/data/metadata/fence_openstack.xml
+index 926d18c3d..c8dc2e60f 100644
+--- a/tests/data/metadata/fence_openstack.xml
++++ b/tests/data/metadata/fence_openstack.xml
+@@ -100,7 +100,7 @@
+ 	</parameter>
+ 	<parameter name="cacert" unique="0" required="0">
+ 		<getopt mixed="--cacert=[cacert]" />
+-		<content type="string" default="/etc/pki/tls/certs/ca-bundle.crt"  />
++		<content type="string" default=""  />
+ 		<shortdesc lang="en">SSL X.509 certificates file</shortdesc>
+ 	</parameter>
+ 	<parameter name="apitimeout" unique="0" required="0">

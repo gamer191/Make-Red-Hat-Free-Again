@@ -1,0 +1,34 @@
+From 6ea2c6b5d1cc51e93fa7084d76d9272512461e58 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Mon, 16 May 2022 11:01:21 +0200
+Subject: [PATCH] fence_apc/fence_ilo_moonshot: add missing "import logging"
+
+---
+ agents/apc/fence_apc.py                   | 1 +
+ agents/ilo_moonshot/fence_ilo_moonshot.py | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/agents/apc/fence_apc.py b/agents/apc/fence_apc.py
+index 901aad25e..3ea0f37d6 100644
+--- a/agents/apc/fence_apc.py
++++ b/agents/apc/fence_apc.py
+@@ -15,6 +15,7 @@
+ #####
+ 
+ import sys, re, time
++import logging
+ import atexit
+ sys.path.append("@FENCEAGENTSLIBDIR@")
+ from fencing import *
+diff --git a/agents/ilo_moonshot/fence_ilo_moonshot.py b/agents/ilo_moonshot/fence_ilo_moonshot.py
+index 6f5cca320..1923eeb1c 100644
+--- a/agents/ilo_moonshot/fence_ilo_moonshot.py
++++ b/agents/ilo_moonshot/fence_ilo_moonshot.py
+@@ -1,6 +1,7 @@
+ #!@PYTHON@ -tt
+ 
+ import sys
++import logging
+ import atexit
+ sys.path.append("@FENCEAGENTSLIBDIR@")
+ from fencing import *

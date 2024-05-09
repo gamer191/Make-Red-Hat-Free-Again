@@ -1,0 +1,159 @@
+From dcb8ddd13c3dfad02e00c07f283251e0c2a60c46 Mon Sep 17 00:00:00 2001
+From: Reid Wahl <nrwahl@protonmail.com>
+Date: Mon, 16 Aug 2021 17:44:13 -0700
+Subject: [PATCH] fence_zvmip: Update longdesc to document all required
+ functions
+
+In RHBZ#1935641, IBM explained that the requesting user needs
+authorization for more functions than what is currently documented.
+
+They said:
+"""
+What we found is that you need rights from three different NICKS:
+SERVER_MANAGEMENT, IMAGE_CHARACTERISTICS and IMAGE_OPERATIONS.
+You won't be able to give a user all three NICKS.
+Therefore, you have to create a new NICK with all capabilities from all
+three NICKS together and then assign the new NICK to the USER
+"ZCLUSTER".
+Even better is to just use the needed Subset with a new NICK.
+We found five commands which are used in the fencing code and on the
+z/VM Log which should be enough for fencing to work.
+
+We suggest creating following files:
+
+File VSMWORK1 NAMELIST:
+```
+:nick.ZVM_FENCE
+:list.
+IMAGE_ACTIVATE
+IMAGE_DEACTIVATE
+IMAGE_STATUS_QUERY
+CHECK_AUTHENTICATION
+IMAGE_NAME_QUERY_DM
+```
+
+File VSMWORK1 AUTHLIST:
+```
+ZCLUSTER                            ALL                              ZVM_FENCE
+```
+
+For details, we suggest adding a link to the current z/VM docu:
+ - NAMELIST: https://www.ibm.com/support/knowledgecenter/de/SSB27U_7.2.0/com.ibm.zvm.v720.dmse6/namelst.htm
+ - AUTHLIST: https://www.ibm.com/support/knowledgecenter/de/SSB27U_7.2.0/com.ibm.zvm.v720.dmse6/auf.htm
+"""
+
+Resolves: RHBZ1935641
+
+Signed-off-by: Reid Wahl <nrwahl@protonmail.com>
+---
+ agents/zvm/fence_zvmip.py           | 37 ++++++++++++++++++++++-------
+ tests/data/metadata/fence_zvmip.xml | 37 ++++++++++++++++++++++-------
+ 2 files changed, 56 insertions(+), 18 deletions(-)
+
+diff --git a/agents/zvm/fence_zvmip.py b/agents/zvm/fence_zvmip.py
+index 4f538e10d..c37950a20 100644
+--- a/agents/zvm/fence_zvmip.py
++++ b/agents/zvm/fence_zvmip.py
+@@ -199,21 +199,40 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for use with z/VM Virtual Machines"
+-	docs["longdesc"] = """The fence_zvm agent is intended to be used with with z/VM SMAPI service via TCP/IP
++	docs["longdesc"] = """The fence_zvmip agent is intended to be used with the
++z/VM SMAPI service via TCP/IP.
+ 
+-To  use this agent the z/VM SMAPI service needs to be configured to allow the virtual machine running this agent to connect to it and issue
+-the image_recycle operation.  This involves updating the VSMWORK1 AUTHLIST VMSYS:VSMWORK1. file. The entry should look something similar to
+-this:
++The z/VM SMAPI service must be configured so that the virtual machine running
++the agent can connect to the service, access the system's directory manager,
++and shortly thereafter run image_deactivate and image_activate. This involves
++updating the VSMWORK1 NAMELIST and VSMWORK1 AUTHLIST VMSYS:VSMWORK1 files.
++
++The NAMELIST entry assigns all the required functions to one nick and should
++look similar to this:
++
++:nick.ZVM_FENCE
++:list.
++IMAGE_ACTIVATE
++IMAGE_DEACTIVATE
++IMAGE_STATUS_QUERY
++CHECK_AUTHENTICATION
++IMAGE_NAME_QUERY_DM
++
++
++The AUTHLIST entry authorizes the user to perform all the functions associated
++with the nick, and should look similar to this:
+ 
+ Column 1                   Column 66                Column 131
+ 
+-   |                          |                        |
+-   V                          V                        V
++|                          |                        |
++V                          V                        V
++
++XXXXXXXX                   ALL                      ZVM_FENCE
+ 
+-XXXXXXXX                      ALL                      IMAGE_CHARACTERISTICS
++where XXXXXXXX is the name of the user in the authuser field of the request.
+ 
+-Where XXXXXXX is the name of the virtual machine used in the authuser field of the request. This virtual machine also has to be authorized
+-to access the system's directory manager.
++Refer to the official z/VM documentation for complete instructions and
++reference materials.
+ """
+ 	docs["vendorurl"] = "http://www.ibm.com"
+ 	show_docs(options, docs)
+diff --git a/tests/data/metadata/fence_zvmip.xml b/tests/data/metadata/fence_zvmip.xml
+index 6996ab736..96393bdfa 100644
+--- a/tests/data/metadata/fence_zvmip.xml
++++ b/tests/data/metadata/fence_zvmip.xml
+@@ -1,20 +1,39 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_zvmip" shortdesc="Fence agent for use with z/VM Virtual Machines" >
+-<longdesc>The fence_zvm agent is intended to be used with with z/VM SMAPI service via TCP/IP
++<longdesc>The fence_zvmip agent is intended to be used with the
++z/VM SMAPI service via TCP/IP.
+ 
+-To  use this agent the z/VM SMAPI service needs to be configured to allow the virtual machine running this agent to connect to it and issue
+-the image_recycle operation.  This involves updating the VSMWORK1 AUTHLIST VMSYS:VSMWORK1. file. The entry should look something similar to
+-this:
++The z/VM SMAPI service must be configured so that the virtual machine running
++the agent can connect to the service, access the system's directory manager,
++and shortly thereafter run image_deactivate and image_activate. This involves
++updating the VSMWORK1 NAMELIST and VSMWORK1 AUTHLIST VMSYS:VSMWORK1 files.
++
++The NAMELIST entry assigns all the required functions to one nick and should
++look similar to this:
++
++:nick.ZVM_FENCE
++:list.
++IMAGE_ACTIVATE
++IMAGE_DEACTIVATE
++IMAGE_STATUS_QUERY
++CHECK_AUTHENTICATION
++IMAGE_NAME_QUERY_DM
++
++
++The AUTHLIST entry authorizes the user to perform all the functions associated
++with the nick, and should look similar to this:
+ 
+ Column 1                   Column 66                Column 131
+ 
+-   |                          |                        |
+-   V                          V                        V
++|                          |                        |
++V                          V                        V
++
++XXXXXXXX                   ALL                      ZVM_FENCE
+ 
+-XXXXXXXX                      ALL                      IMAGE_CHARACTERISTICS
++where XXXXXXXX is the name of the user in the authuser field of the request.
+ 
+-Where XXXXXXX is the name of the virtual machine used in the authuser field of the request. This virtual machine also has to be authorized
+-to access the system's directory manager.
++Refer to the official z/VM documentation for complete instructions and
++reference materials.
+ </longdesc>
+ <vendor-url>http://www.ibm.com</vendor-url>
+ <parameters>

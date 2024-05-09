@@ -1,0 +1,1916 @@
+From aed06661b0b6fd4e69d44672f59bb8d3eecccc67 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Wed, 18 Oct 2023 10:53:14 +0200
+Subject: [PATCH] all agents: update metadata from I/O to e.g. Power, Network,
+ etc for non-I/O agents
+
+---
+ agents/aliyun/fence_aliyun.py                 |  2 +-
+ agents/alom/fence_alom.py                     |  4 ++--
+ agents/amt/fence_amt.py                       |  2 +-
+ agents/amt_ws/fence_amt_ws.py                 |  2 +-
+ agents/apc/fence_apc.py                       |  2 +-
+ agents/apc_snmp/fence_apc_snmp.py             |  6 +++---
+ agents/aws/fence_aws.py                       |  2 +-
+ agents/azure_arm/fence_azure_arm.py           |  2 +-
+ agents/bladecenter/fence_bladecenter.py       |  2 +-
+ agents/cdu/fence_cdu.py                       |  2 +-
+ agents/cisco_mds/fence_cisco_mds.py           |  2 +-
+ agents/cisco_ucs/fence_cisco_ucs.py           |  2 +-
+ agents/cyberpower_ssh/fence_cyberpower_ssh.py |  2 +-
+ agents/docker/fence_docker.py                 |  2 +-
+ agents/drac/fence_drac.py                     |  4 ++--
+ agents/drac5/fence_drac5.py                   |  2 +-
+ agents/eaton_snmp/fence_eaton_snmp.py         |  2 +-
+ agents/eaton_ssh/fence_eaton_ssh.py           |  2 +-
+ agents/ecloud/fence_ecloud.py                 |  2 +-
+ agents/emerson/fence_emerson.py               |  4 ++--
+ agents/eps/fence_eps.py                       |  2 +-
+ agents/gce/fence_gce.py                       |  2 +-
+ agents/hds_cb/fence_hds_cb.py                 |  2 +-
+ agents/hpblade/fence_hpblade.py               |  2 +-
+ agents/ibm_powervs/fence_ibm_powervs.py       |  2 +-
+ agents/ibm_vpc/fence_ibm_vpc.py               |  2 +-
+ agents/ibmblade/fence_ibmblade.py             |  2 +-
+ agents/ibmz/fence_ibmz.py                     |  2 +-
+ agents/ilo/fence_ilo.py                       |  6 +++---
+ agents/ilo_moonshot/fence_ilo_moonshot.py     |  2 ++
+ agents/ilo_mp/fence_ilo_mp.py                 |  3 ++-
+ agents/ilo_ssh/fence_ilo_ssh.py               |  6 +++---
+ agents/intelmodular/fence_intelmodular.py     |  2 +-
+ agents/ipdu/fence_ipdu.py                     |  2 +-
+ agents/ipmilan/fence_ipmilan.py               |  4 ++--
+ agents/ironic/fence_ironic.py                 |  2 +-
+ agents/kubevirt/fence_kubevirt.py             |  2 +-
+ agents/ldom/fence_ldom.py                     |  2 +-
+ agents/lindy_pdu/fence_lindypdu.py            |  2 +-
+ agents/lpar/fence_lpar.py                     |  2 +-
+ agents/mpath/fence_mpath.py                   |  2 +-
+ agents/netio/fence_netio.py                   |  4 ++--
+ agents/openstack/fence_openstack.py           |  2 +-
+ agents/ovh/fence_ovh.py                       |  2 +-
+ agents/powerman/fence_powerman.py             |  2 +-
+ agents/pve/fence_pve.py                       |  4 ++--
+ agents/raritan/fence_raritan.py               |  4 ++--
+ agents/raritan_px3/fence_raritan_px3.py       |  4 ++--
+ agents/rcd_serial/fence_rcd_serial.py         | 11 ++++++-----
+ agents/redfish/fence_redfish.py               |  4 ++--
+ agents/rhevm/fence_rhevm.py                   |  2 +-
+ agents/rsa/fence_rsa.py                       |  2 +-
+ agents/rsb/fence_rsb.py                       |  4 ++--
+ agents/sbd/fence_sbd.py                       |  2 +-
+ agents/scsi/fence_scsi.py                     |  2 +-
+ agents/skalar/fence_skalar.py                 |  2 +-
+ agents/vbox/fence_vbox.py                     |  2 +-
+ agents/virsh/fence_virsh.py                   |  2 +-
+ agents/virt/client/options.c                  |  2 +-
+ agents/vmware/fence_vmware.py                 |  2 +-
+ agents/vmware_rest/fence_vmware_rest.py       |  2 +-
+ agents/vmware_soap/fence_vmware_soap.py       |  2 +-
+ agents/vmware_vcloud/fence_vmware_vcloud.py   |  3 ++-
+ agents/wti/fence_wti.py                       |  2 +-
+ agents/xenapi/fence_xenapi.py                 |  2 +-
+ agents/zvm/fence_zvmip.py                     |  4 ++--
+ tests/data/metadata/fence_aliyun.xml          |  2 +-
+ tests/data/metadata/fence_alom.xml            |  2 +-
+ tests/data/metadata/fence_amt.xml             |  2 +-
+ tests/data/metadata/fence_amt_ws.xml          |  2 +-
+ tests/data/metadata/fence_apc.xml             |  2 +-
+ tests/data/metadata/fence_apc_snmp.xml        |  2 +-
+ tests/data/metadata/fence_aws.xml             |  2 +-
+ tests/data/metadata/fence_azure_arm.xml       |  2 +-
+ tests/data/metadata/fence_bladecenter.xml     |  2 +-
+ tests/data/metadata/fence_cdu.xml             |  2 +-
+ tests/data/metadata/fence_cisco_mds.xml       |  2 +-
+ tests/data/metadata/fence_cisco_ucs.xml       |  2 +-
+ tests/data/metadata/fence_cyberpower_ssh.xml  |  2 +-
+ tests/data/metadata/fence_docker.xml          |  2 +-
+ tests/data/metadata/fence_drac.xml            |  4 ++--
+ tests/data/metadata/fence_drac5.xml           |  2 +-
+ tests/data/metadata/fence_eaton_snmp.xml      |  2 +-
+ tests/data/metadata/fence_eaton_ssh.xml       |  2 +-
+ tests/data/metadata/fence_ecloud.xml          |  2 +-
+ tests/data/metadata/fence_emerson.xml         |  2 +-
+ tests/data/metadata/fence_eps.xml             |  2 +-
+ tests/data/metadata/fence_gce.xml             |  2 +-
+ tests/data/metadata/fence_hds_cb.xml          |  2 +-
+ tests/data/metadata/fence_hpblade.xml         |  2 +-
+ tests/data/metadata/fence_ibm_powervs.xml     |  2 +-
+ tests/data/metadata/fence_ibm_vpc.xml         |  2 +-
+ tests/data/metadata/fence_ibmblade.xml        |  2 +-
+ tests/data/metadata/fence_ibmz.xml            |  2 +-
+ tests/data/metadata/fence_idrac.xml           |  2 +-
+ tests/data/metadata/fence_ilo.xml             |  2 +-
+ tests/data/metadata/fence_ilo2.xml            |  2 +-
+ tests/data/metadata/fence_ilo3.xml            |  2 +-
+ tests/data/metadata/fence_ilo3_ssh.xml        |  2 +-
+ tests/data/metadata/fence_ilo4.xml            |  2 +-
+ tests/data/metadata/fence_ilo4_ssh.xml        |  2 +-
+ tests/data/metadata/fence_ilo5.xml            |  2 +-
+ tests/data/metadata/fence_ilo5_ssh.xml        |  2 +-
+ tests/data/metadata/fence_ilo_mp.xml          |  2 +-
+ tests/data/metadata/fence_ilo_ssh.xml         |  2 +-
+ tests/data/metadata/fence_imm.xml             |  2 +-
+ tests/data/metadata/fence_intelmodular.xml    |  2 +-
+ tests/data/metadata/fence_ipdu.xml            |  2 +-
+ tests/data/metadata/fence_ipmilan.xml         |  2 +-
+ tests/data/metadata/fence_ipmilanplus.xml     |  2 +-
+ tests/data/metadata/fence_ironic.xml          |  2 +-
+ tests/data/metadata/fence_kubevirt.xml        |  2 +-
+ tests/data/metadata/fence_ldom.xml            |  2 +-
+ tests/data/metadata/fence_lindypdu.xml        |  2 +-
+ tests/data/metadata/fence_lpar.xml            |  2 +-
+ tests/data/metadata/fence_mpath.xml           |  2 +-
+ tests/data/metadata/fence_netio.xml           |  4 ++--
+ tests/data/metadata/fence_openstack.xml       |  2 +-
+ tests/data/metadata/fence_ovh.xml             |  2 +-
+ tests/data/metadata/fence_powerman.xml        |  2 +-
+ tests/data/metadata/fence_pve.xml             |  2 +-
+ tests/data/metadata/fence_raritan.xml         |  4 ++--
+ tests/data/metadata/fence_raritan_px3.xml     |  4 ++--
+ tests/data/metadata/fence_rcd_serial.xml      |  2 +-
+ tests/data/metadata/fence_redfish.xml         |  4 ++--
+ tests/data/metadata/fence_rhevm.xml           |  2 +-
+ tests/data/metadata/fence_rsa.xml             |  2 +-
+ tests/data/metadata/fence_rsb.xml             |  4 ++--
+ tests/data/metadata/fence_sbd.xml             |  2 +-
+ tests/data/metadata/fence_scsi.xml            |  2 +-
+ tests/data/metadata/fence_skalar.xml          |  2 +-
+ tests/data/metadata/fence_tripplite_snmp.xml  |  2 +-
+ tests/data/metadata/fence_vbox.xml            |  2 +-
+ tests/data/metadata/fence_virsh.xml           |  2 +-
+ tests/data/metadata/fence_virt.xml            |  2 +-
+ tests/data/metadata/fence_vmware.xml          |  2 +-
+ tests/data/metadata/fence_vmware_rest.xml     |  2 +-
+ tests/data/metadata/fence_vmware_soap.xml     |  2 +-
+ tests/data/metadata/fence_vmware_vcloud.xml   |  2 +-
+ tests/data/metadata/fence_wti.xml             |  2 +-
+ tests/data/metadata/fence_xenapi.xml          |  2 +-
+ tests/data/metadata/fence_zvmip.xml           |  3 +--
+ 142 files changed, 173 insertions(+), 169 deletions(-)
+
+diff --git a/agents/aliyun/fence_aliyun.py b/agents/aliyun/fence_aliyun.py
+index c7785a2b2..134cc5ab6 100644
+--- a/agents/aliyun/fence_aliyun.py
++++ b/agents/aliyun/fence_aliyun.py
+@@ -175,7 +175,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Aliyun (Aliyun Web Services)"
+-	docs["longdesc"] = "fence_aliyun is an I/O Fencing agent for Aliyun"
++	docs["longdesc"] = "fence_aliyun is a Power Fencing agent for Aliyun."
+ 	docs["vendorurl"] = "http://www.aliyun.com"
+ 	show_docs(options, docs)
+ 
+diff --git a/agents/alom/fence_alom.py b/agents/alom/fence_alom.py
+index 7b03dc2a6..a8e216f3f 100644
+--- a/agents/alom/fence_alom.py
++++ b/agents/alom/fence_alom.py
+@@ -38,8 +38,8 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Sun ALOM"
+-	docs["longdesc"] = "fence_alom is an I/O Fencing \
+-agent which can be used with ALOM connected machines."
++	docs["longdesc"] = "fence_alom is a Power Fencing agent \
++which can be used with ALOM connected machines."
+ 	docs["vendorurl"] = "http://www.sun.com"
+ 	show_docs(options, docs)
+ 
+diff --git a/agents/amt/fence_amt.py b/agents/amt/fence_amt.py
+index 80d3f74c1..183bbc713 100644
+--- a/agents/amt/fence_amt.py
++++ b/agents/amt/fence_amt.py
+@@ -113,7 +113,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for AMT"
+-	docs["longdesc"] = "fence_amt is an I/O Fencing agent \
++	docs["longdesc"] = "fence_amt is a Power Fencing agent \
+ which can be used with Intel AMT. This agent calls support software amttool\
+ (http://www.kraxel.org/cgit/amtterm/)."
+ 	docs["vendorurl"] = "http://www.intel.com/"
+diff --git a/agents/amt_ws/fence_amt_ws.py b/agents/amt_ws/fence_amt_ws.py
+index 5e7452a97..89500d4bf 100755
+--- a/agents/amt_ws/fence_amt_ws.py
++++ b/agents/amt_ws/fence_amt_ws.py
+@@ -222,7 +222,7 @@ def main():
+ 
+     docs = {}
+     docs["shortdesc"] = "Fence agent for AMT (WS)"
+-    docs["longdesc"] = "fence_amt_ws is an I/O Fencing agent \
++    docs["longdesc"] = "fence_amt_ws is a Power Fencing agent \
+ which can be used with Intel AMT (WS). This agent requires \
+ the pywsman Python library which is included in OpenWSMAN. \
+ (http://openwsman.github.io/)."
+diff --git a/agents/apc/fence_apc.py b/agents/apc/fence_apc.py
+index 3ea0f37d6..bc52aa244 100644
+--- a/agents/apc/fence_apc.py
++++ b/agents/apc/fence_apc.py
+@@ -227,7 +227,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for APC over telnet/ssh"
+-	docs["longdesc"] = "fence_apc is an I/O Fencing agent \
++	docs["longdesc"] = "fence_apc is a Power Fencing agent \
+ which can be used with the APC network power switch. It logs into device \
+ via telnet/ssh  and reboots a specified outlet. Lengthy telnet/ssh connections \
+ should be avoided while a GFS cluster  is  running  because  the  connection \
+diff --git a/agents/apc_snmp/fence_apc_snmp.py b/agents/apc_snmp/fence_apc_snmp.py
+index cd601662c..1091f0da9 100644
+--- a/agents/apc_snmp/fence_apc_snmp.py
++++ b/agents/apc_snmp/fence_apc_snmp.py
+@@ -13,7 +13,7 @@
+ # - Tripplite PDUMH20HVNET 12.04.0055 - SNMP v1, v2c, v3
+ # - Tripplite PDU15NETLX 15.5.4 - SNMP v1, v2c, v3
+ 
+-import sys
++import sys, os
+ import atexit
+ import logging
+ sys.path.append("@FENCEAGENTSLIBDIR@")
+@@ -216,10 +216,10 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for APC, Tripplite PDU over SNMP"
+-	docs["longdesc"] = "fence_apc_snmp is an I/O Fencing agent \
++	docs["longdesc"] = "{} is a Power Fencing agent \
+ which can be used with the APC network power switch or Tripplite PDU devices.\
+ It logs into a device via SNMP and reboots a specified outlet. It supports \
+-SNMP v1, v2c, v3 with all combinations of  authenticity/privacy settings."
++SNMP v1, v2c, v3 with all combinations of  authenticity/privacy settings.".format(os.path.basename(__file__))
+ 	docs["vendorurl"] = "http://www.apc.com"
+ 	docs["symlink"] = [("fence_tripplite_snmp", "Fence agent for Tripplife over SNMP")]
+ 	show_docs(options, docs)
+diff --git a/agents/aws/fence_aws.py b/agents/aws/fence_aws.py
+index 0a375bbec..5b32106f0 100644
+--- a/agents/aws/fence_aws.py
++++ b/agents/aws/fence_aws.py
+@@ -185,7 +185,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for AWS (Amazon Web Services)"
+-	docs["longdesc"] = "fence_aws is an I/O Fencing agent for AWS (Amazon Web\
++	docs["longdesc"] = "fence_aws is a Power Fencing agent for AWS (Amazon Web\
+ Services). It uses the boto3 library to connect to AWS.\
+ \n.P\n\
+ boto3 can be configured with AWS CLI or by creating ~/.aws/credentials.\n\
+diff --git a/agents/azure_arm/fence_azure_arm.py b/agents/azure_arm/fence_azure_arm.py
+index 515aae294..0dca8f30d 100755
+--- a/agents/azure_arm/fence_azure_arm.py
++++ b/agents/azure_arm/fence_azure_arm.py
+@@ -221,7 +221,7 @@ def main():
+ 
+     docs = {}
+     docs["shortdesc"] = "Fence agent for Azure Resource Manager"
+-    docs["longdesc"] = "fence_azure_arm is an I/O Fencing agent for Azure Resource Manager. It uses Azure SDK for Python to connect to Azure.\
++    docs["longdesc"] = "fence_azure_arm is a Power Fencing agent for Azure Resource Manager. It uses Azure SDK for Python to connect to Azure.\
+ \n.P\n\
+ For instructions to setup credentials see: https://docs.microsoft.com/en-us/azure/azure-resource-manager/resource-group-create-service-principal-portal\
+ \n.P\n\
+diff --git a/agents/bladecenter/fence_bladecenter.py b/agents/bladecenter/fence_bladecenter.py
+index d670367f2..2f2c65fce 100644
+--- a/agents/bladecenter/fence_bladecenter.py
++++ b/agents/bladecenter/fence_bladecenter.py
+@@ -86,7 +86,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for IBM BladeCenter"
+-	docs["longdesc"] = "fence_bladecenter is an I/O Fencing agent \
++	docs["longdesc"] = "fence_bladecenter is a Power Fencing agent \
+ which can be used with IBM Bladecenters with recent enough firmware that \
+ includes telnet support. It logs into a Brocade chasis via telnet or ssh \
+ and uses the command line interface to power on and off blades."
+diff --git a/agents/cdu/fence_cdu.py b/agents/cdu/fence_cdu.py
+index 483ac5128..ba76e6d76 100644
+--- a/agents/cdu/fence_cdu.py
++++ b/agents/cdu/fence_cdu.py
+@@ -136,7 +136,7 @@ def main():
+ 
+     docs = { }
+     docs["shortdesc"] = "Fence agent for a Sentry Switch CDU over telnet"
+-    docs["longdesc"] = "fence_cdu is an I/O Fencing agent \
++    docs["longdesc"] = "fence_cdu is a Power Fencing agent \
+ which can be used with the Sentry Switch CDU. It logs into the device \
+ via telnet and power's on/off an outlet."
+     docs["vendorurl"] = "http://www.servertech.com"
+diff --git a/agents/cisco_mds/fence_cisco_mds.py b/agents/cisco_mds/fence_cisco_mds.py
+index fbb876a94..04cd1f842 100644
+--- a/agents/cisco_mds/fence_cisco_mds.py
++++ b/agents/cisco_mds/fence_cisco_mds.py
+@@ -77,7 +77,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Cisco MDS"
+-	docs["longdesc"] = "fence_cisco_mds is an I/O Fencing agent \
++	docs["longdesc"] = "fence_cisco_mds is a Power Fencing agent \
+ which can be used with any Cisco MDS 9000 series with SNMP enabled device."
+ 	docs["vendorurl"] = "http://www.cisco.com"
+ 	show_docs(options, docs)
+diff --git a/agents/cisco_ucs/fence_cisco_ucs.py b/agents/cisco_ucs/fence_cisco_ucs.py
+index b85379a73..cada20d5e 100644
+--- a/agents/cisco_ucs/fence_cisco_ucs.py
++++ b/agents/cisco_ucs/fence_cisco_ucs.py
+@@ -161,7 +161,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Cisco UCS"
+-	docs["longdesc"] = "fence_cisco_ucs is an I/O Fencing agent which can be \
++	docs["longdesc"] = "fence_cisco_ucs is a Power Fencing agent which can be \
+ used with Cisco UCS to fence machines."
+ 	docs["vendorurl"] = "http://www.cisco.com"
+ 	show_docs(options_global, docs)
+diff --git a/agents/docker/fence_docker.py b/agents/docker/fence_docker.py
+index 004402518..8042515a3 100644
+--- a/agents/docker/fence_docker.py
++++ b/agents/docker/fence_docker.py
+@@ -143,7 +143,7 @@ def main():
+ 
+ 	docs = { }
+ 	docs["shortdesc"] = "Fence agent for Docker"
+-	docs["longdesc"] = "fence_docker is I/O fencing agent which \
++	docs["longdesc"] = "fence_docker is a Power Fencing agent which \
+ can be used with the Docker Engine containers. You can use this \
+ fence-agent without any authentication, or you can use TLS authentication \
+ (use --ssl option, more info about TLS authentication in docker: \
+diff --git a/agents/drac/fence_drac.py b/agents/drac/fence_drac.py
+index be3e9a584..b7d335640 100644
+--- a/agents/drac/fence_drac.py
++++ b/agents/drac/fence_drac.py
+@@ -34,8 +34,8 @@ def main():
+ 	options = check_input(device_opt, opt)
+ 
+ 	docs = {}
+-	docs["shortdesc"] = "I/O Fencing agent for Dell DRAC IV"
+-	docs["longdesc"] = "fence_drac is an I/O Fencing agent which can be used with \
++	docs["shortdesc"] = "Power Fencing agent for Dell DRAC IV"
++	docs["longdesc"] = "fence_drac is a Power Fencing agent which can be used with \
+ the Dell Remote Access Card (DRAC). This card provides remote access to controlling \
+ power to a server. It logs into the DRAC through the telnet interface of the card. By \
+ default, the telnet interface is not enabled. To enable the interface, you will need \
+diff --git a/agents/drac5/fence_drac5.py b/agents/drac5/fence_drac5.py
+index 648ecd917..7b279217e 100644
+--- a/agents/drac5/fence_drac5.py
++++ b/agents/drac5/fence_drac5.py
+@@ -110,7 +110,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Dell DRAC CMC/5"
+-	docs["longdesc"] = "fence_drac5 is an I/O Fencing agent \
++	docs["longdesc"] = "fence_drac5 is a Power Fencing agent \
+ which can be used with the Dell Remote Access Card v5 or CMC (DRAC). \
+ This device provides remote access to controlling  power to a server. \
+ It logs into the DRAC through the telnet/ssh interface of the card. \
+diff --git a/agents/eaton_snmp/fence_eaton_snmp.py b/agents/eaton_snmp/fence_eaton_snmp.py
+index 9fbc05634..83ec92a27 100644
+--- a/agents/eaton_snmp/fence_eaton_snmp.py
++++ b/agents/eaton_snmp/fence_eaton_snmp.py
+@@ -214,7 +214,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Eaton over SNMP"
+-	docs["longdesc"] = "fence_eaton_snmp is an I/O Fencing agent \
++	docs["longdesc"] = "fence_eaton_snmp is a Power Fencing agent \
+ which can be used with the Eaton network power switch. It logs \
+ into a device via SNMP and reboots a specified outlet. It supports \
+ SNMP v1 and v3 with all combinations of  authenticity/privacy settings."
+diff --git a/agents/emerson/fence_emerson.py b/agents/emerson/fence_emerson.py
+index 2e65cda0e..67b3a4106 100644
+--- a/agents/emerson/fence_emerson.py
++++ b/agents/emerson/fence_emerson.py
+@@ -49,8 +49,8 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Emerson over SNMP"
+-	docs["longdesc"] = "fence_emerson is an I/O Fencing agent \
+-	which can be used with MPX and MPH2 managed rack PDU."
++	docs["longdesc"] = "fence_emerson is a Power Fencing agent \
++which can be used with MPX and MPH2 managed rack PDU."
+ 	docs["vendorurl"] = "http://www.emersonnetworkpower.com"
+ 	show_docs(options, docs)
+ 
+diff --git a/agents/eps/fence_eps.py b/agents/eps/fence_eps.py
+index f0df86231..81e439533 100644
+--- a/agents/eps/fence_eps.py
++++ b/agents/eps/fence_eps.py
+@@ -108,7 +108,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for ePowerSwitch"
+-	docs["longdesc"] = "fence_eps  is an I/O Fencing agent \
++	docs["longdesc"] = "fence_eps is a Power Fencing agent \
+ which can be used with the ePowerSwitch 8M+ power switch to fence \
+ connected machines. Fence agent works ONLY on 8M+ device, because \
+ this is only one, which has support for hidden page feature. \
+diff --git a/agents/gce/fence_gce.py b/agents/gce/fence_gce.py
+index 2c815b849..b8871038e 100644
+--- a/agents/gce/fence_gce.py
++++ b/agents/gce/fence_gce.py
+@@ -515,7 +515,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for GCE (Google Cloud Engine)"
+-	docs["longdesc"] = "fence_gce is an I/O Fencing agent for GCE (Google Cloud " \
++	docs["longdesc"] = "fence_gce is a Power Fencing agent for GCE (Google Cloud " \
+ 			   "Engine). It uses the googleapiclient library to connect to GCE.\n" \
+ 			   "googleapiclient can be configured with Google SDK CLI or by " \
+ 			   "executing 'gcloud auth application-default login'.\n" \
+diff --git a/agents/hds_cb/fence_hds_cb.py b/agents/hds_cb/fence_hds_cb.py
+index 375054cf2..1a064644b 100755
+--- a/agents/hds_cb/fence_hds_cb.py
++++ b/agents/hds_cb/fence_hds_cb.py
+@@ -113,7 +113,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Hitachi Compute Blade systems"
+-	docs["longdesc"] = "fence_hds_cb is an I/O Fencing agent \
++	docs["longdesc"] = "fence_hds_cb is a Power Fencing agent \
+ which can be used with Hitachi Compute Blades with recent enough firmware that \
+ includes telnet support."
+ 	docs["vendorurl"] = "http://www.hds.com"
+diff --git a/agents/hpblade/fence_hpblade.py b/agents/hpblade/fence_hpblade.py
+index fbc89f614..eb8f459b2 100644
+--- a/agents/hpblade/fence_hpblade.py
++++ b/agents/hpblade/fence_hpblade.py
+@@ -110,7 +110,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for HP BladeSystem"
+-	docs["longdesc"] = "fence_hpblade is an I/O Fencing agent \
++	docs["longdesc"] = "fence_hpblade is a Power Fencing agent \
+ which can be used with HP BladeSystem and HP Integrity Superdome X. \
+ It logs into the onboard administrator of an enclosure via telnet or \
+ ssh and uses the command line interface to power blades or partitions \
+diff --git a/agents/ibm_powervs/fence_ibm_powervs.py b/agents/ibm_powervs/fence_ibm_powervs.py
+index e65462cb9..73dfe0ab1 100755
+--- a/agents/ibm_powervs/fence_ibm_powervs.py
++++ b/agents/ibm_powervs/fence_ibm_powervs.py
+@@ -275,7 +275,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for IBM PowerVS"
+-	docs["longdesc"] = """fence_ibm_powervs is an I/O Fencing agent which can be \
++	docs["longdesc"] = """fence_ibm_powervs is a Power Fencing agent which can be \
+ used with IBM PowerVS to fence virtual machines."""
+ 	docs["vendorurl"] = "https://www.ibm.com"
+ 	show_docs(options, docs)
+diff --git a/agents/ibm_vpc/fence_ibm_vpc.py b/agents/ibm_vpc/fence_ibm_vpc.py
+index 847010584..035a3235a 100755
+--- a/agents/ibm_vpc/fence_ibm_vpc.py
++++ b/agents/ibm_vpc/fence_ibm_vpc.py
+@@ -295,7 +295,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for IBM Cloud VPC"
+-	docs["longdesc"] = """fence_ibm_vpc is an I/O Fencing agent which can be \
++	docs["longdesc"] = """fence_ibm_vpc is a Power Fencing agent which can be \
+ used with IBM Cloud VPC to fence virtual machines."""
+ 	docs["vendorurl"] = "https://www.ibm.com"
+ 	show_docs(options, docs)
+diff --git a/agents/ibmblade/fence_ibmblade.py b/agents/ibmblade/fence_ibmblade.py
+index d623fff3d..ca6e21793 100644
+--- a/agents/ibmblade/fence_ibmblade.py
++++ b/agents/ibmblade/fence_ibmblade.py
+@@ -57,7 +57,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for IBM BladeCenter over SNMP"
+-	docs["longdesc"] = "fence_ibmblade is an I/O Fencing agent \
++	docs["longdesc"] = "fence_ibmblade is a Power Fencing agent \
+ which can be used with IBM BladeCenter chassis. It issues SNMP Set \
+ request to BladeCenter chassis, rebooting, powering up or down \
+ the specified Blade Server."
+diff --git a/agents/ibmz/fence_ibmz.py b/agents/ibmz/fence_ibmz.py
+index d477adeb9..a4cc12d5c 100644
+--- a/agents/ibmz/fence_ibmz.py
++++ b/agents/ibmz/fence_ibmz.py
+@@ -520,7 +520,7 @@ def main():
+     docs = {
+         "shortdesc": "Fence agent for IBM z LPARs",
+         "longdesc": (
+-            "fence_ibmz is a power fencing agent which uses the HMC Web "
++            "fence_ibmz is a Power Fencing agent which uses the HMC Web "
+             "Services API to fence IBM z LPARs."),
+         "vendorurl": "http://www.ibm.com"
+     }
+diff --git a/agents/ilo/fence_ilo.py b/agents/ilo/fence_ilo.py
+index 612450568..f30a1da28 100644
+--- a/agents/ilo/fence_ilo.py
++++ b/agents/ilo/fence_ilo.py
+@@ -11,7 +11,7 @@
+ ##  iLO2 / firmware 1.50 / RIBCL 2.22
+ #####
+ 
+-import sys, re
++import sys, os, re
+ sys.path.insert(0, '/usr/lib/fence-agents/support/common')
+ try:
+         import pexpect
+@@ -73,11 +73,11 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for HP iLO"
+-	docs["longdesc"] = "fence_ilo is an I/O Fencing agent \
++	docs["longdesc"] = "{} is a Power Fencing agent \
+ used for HP servers with the Integrated Light Out (iLO) PCI card.\
+ The agent opens an SSL connection to the iLO card. Once the SSL \
+ connection is established, the agent is able to communicate with \
+-the iLO card through an XML stream."
++the iLO card through an XML stream.".format(os.path.basename(__file__))
+ 	docs["vendorurl"] = "http://www.hp.com"
+ 	docs["symlink"] = [("fence_ilo2", "Fence agent for HP iLO2")]
+ 	show_docs(options, docs)
+diff --git a/agents/ilo_moonshot/fence_ilo_moonshot.py b/agents/ilo_moonshot/fence_ilo_moonshot.py
+index 1923eeb1c..92bc74525 100644
+--- a/agents/ilo_moonshot/fence_ilo_moonshot.py
++++ b/agents/ilo_moonshot/fence_ilo_moonshot.py
+@@ -48,6 +48,8 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for HP Moonshot iLO"
++	docs["longdesc"] = "fence_ilo_moonshot is a Power Fencing agent \
++for HP Moonshot iLO."
+ 	docs["longdesc"] = ""
+ 	docs["vendorurl"] = "http://www.hp.com"
+ 	show_docs(options, docs)
+diff --git a/agents/ilo_mp/fence_ilo_mp.py b/agents/ilo_mp/fence_ilo_mp.py
+index 1ae4d3ed5..cc1c2decd 100644
+--- a/agents/ilo_mp/fence_ilo_mp.py
++++ b/agents/ilo_mp/fence_ilo_mp.py
+@@ -40,7 +40,8 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for HP iLO MP"
+-	docs["longdesc"] = ""
++	docs["longdesc"] = "fence_ilo_mp is a Power Fencing agent \
++for HP iLO MP."
+ 	docs["vendorurl"] = "http://www.hp.com"
+ 	show_docs(options, docs)
+ 
+diff --git a/agents/ilo_ssh/fence_ilo_ssh.py b/agents/ilo_ssh/fence_ilo_ssh.py
+index a27e34189..1d5be21ef 100644
+--- a/agents/ilo_ssh/fence_ilo_ssh.py
++++ b/agents/ilo_ssh/fence_ilo_ssh.py
+@@ -1,6 +1,6 @@
+ #!@PYTHON@ -tt
+ 
+-import sys, re
++import sys, os, re
+ import atexit
+ import logging
+ sys.path.append("@FENCEAGENTSLIBDIR@")
+@@ -50,11 +50,11 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for HP iLO over SSH"
+-	docs["longdesc"] = "fence_ilo_ssh is a fence agent that connects to iLO device. It logs into \
++	docs["longdesc"] = "{} is a Power Fencing agent that connects to iLO device. It logs into \
+ device via ssh and reboot a specified outlet.\
+ \n.P\n\
+ WARNING: The monitor-action is prone to timeouts. Use the fence_ilo-equivalent \
+-to avoid this issue."
++to avoid this issue.".format(os.path.basename(__file__))
+ 	docs["vendorurl"] = "http://www.hp.com"
+ 	docs["symlink"] = [("fence_ilo3_ssh", "Fence agent for HP iLO3 over SSH"),
+ 		("fence_ilo4_ssh", "Fence agent for HP iLO4 over SSH"),
+diff --git a/agents/intelmodular/fence_intelmodular.py b/agents/intelmodular/fence_intelmodular.py
+index 294ea4ddb..e9c417a95 100644
+--- a/agents/intelmodular/fence_intelmodular.py
++++ b/agents/intelmodular/fence_intelmodular.py
+@@ -66,7 +66,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Intel Modular"
+-	docs["longdesc"] = "fence_intelmodular is an I/O Fencing agent \
++	docs["longdesc"] = "fence_intelmodular is a Power Fencing agent \
+ which can be used with Intel Modular device (tested on Intel MFSYS25, should \
+ work with MFSYS35 as well). \
+ \n.P\n\
+diff --git a/agents/ipdu/fence_ipdu.py b/agents/ipdu/fence_ipdu.py
+index da34d2b64..f7093b8bc 100644
+--- a/agents/ipdu/fence_ipdu.py
++++ b/agents/ipdu/fence_ipdu.py
+@@ -138,7 +138,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for iPDU over SNMP"
+-	docs["longdesc"] = "fence_ipdu is an I/O Fencing agent \
++	docs["longdesc"] = "fence_ipdu is a Power Fencing agent \
+ which can be used with the IBM iPDU network power switch. It logs \
+ into a device via SNMP and reboots a specified outlet. It supports \
+ SNMP v3 with all combinations of authenticity/privacy settings."
+diff --git a/agents/ipmilan/fence_ipmilan.py b/agents/ipmilan/fence_ipmilan.py
+index 91e09ac7d..a47fbdd82 100644
+--- a/agents/ipmilan/fence_ipmilan.py
++++ b/agents/ipmilan/fence_ipmilan.py
+@@ -203,11 +203,11 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for IPMI"
+-	docs["longdesc"] = "fence_ipmilan is an I/O Fencing agent \
++	docs["longdesc"] = "{} is a Power Fencing agent \
+ which can be used with machines controlled by IPMI. \
+ This agent calls support software ipmitool (http://ipmitool.sf.net/). \
+ WARNING! This fence agent might report success before the node is powered off. \
+-You should use -m/method onoff if your fence device works correctly with that option."
++You should use -m/method onoff if your fence device works correctly with that option.".format(os.path.basename(__file__))
+ 	docs["vendorurl"] = ""
+ 	docs["symlink"] = [("fence_ilo3", "Fence agent for HP iLO3"),
+ 		("fence_ilo4", "Fence agent for HP iLO4"),
+diff --git a/agents/ironic/fence_ironic.py b/agents/ironic/fence_ironic.py
+index d0c9d9c19..76a9250f1 100644
+--- a/agents/ironic/fence_ironic.py
++++ b/agents/ironic/fence_ironic.py
+@@ -115,7 +115,7 @@ def main():
+ 
+     docs = {}
+     docs["shortdesc"] = "Fence agent for OpenStack's Ironic (Bare Metal as a service) service"
+-    docs["longdesc"] = "fence_ironic is a Fencing agent \
++    docs["longdesc"] = "fence_ironic is a Power Fencing agent \
+ which can be used with machines controlled by the Ironic service. \
+ This agent calls the openstack CLI. \
+ WARNING! This fence agent is not intended for production use. Relying on a functional ironic service for fencing is not a good design choice."
+diff --git a/agents/kubevirt/fence_kubevirt.py b/agents/kubevirt/fence_kubevirt.py
+index 8c27a0334..e3817b0fb 100755
+--- a/agents/kubevirt/fence_kubevirt.py
++++ b/agents/kubevirt/fence_kubevirt.py
+@@ -125,7 +125,7 @@ def main():
+ 
+     docs = {}
+     docs["shortdesc"] = "Fence agent for KubeVirt"
+-    docs["longdesc"] = "fence_kubevirt is an I/O Fencing agent for KubeVirt."
++    docs["longdesc"] = "fence_kubevirt is a Power Fencing agent for KubeVirt."
+     docs["vendorurl"] = "https://kubevirt.io/"
+     show_docs(options, docs)
+ 
+diff --git a/agents/ldom/fence_ldom.py b/agents/ldom/fence_ldom.py
+index 0cb3320b3..78edd2950 100644
+--- a/agents/ldom/fence_ldom.py
++++ b/agents/ldom/fence_ldom.py
+@@ -75,7 +75,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Sun LDOM"
+-	docs["longdesc"] = "fence_ldom is an I/O Fencing agent \
++	docs["longdesc"] = "fence_ldom is a Power Fencing agent \
+ which can be used with LDoms virtual machines. This agent works \
+ so, that run ldm command on host machine. So ldm must be directly \
+ runnable.\
+diff --git a/agents/lindy_pdu/fence_lindypdu.py b/agents/lindy_pdu/fence_lindypdu.py
+index 432b74151..f51288449 100644
+--- a/agents/lindy_pdu/fence_lindypdu.py
++++ b/agents/lindy_pdu/fence_lindypdu.py
+@@ -191,7 +191,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Lindy over SNMP"
+-	docs["longdesc"] = "fence_lindypdu is an I/O Fencing agent \
++	docs["longdesc"] = "fence_lindypdu is a Power Fencing agent \
+ which can be used with the Lindy PDU network power switch. It logs \
+ into a device via SNMP and reboots a specified outlet. It supports \
+ SNMP v1 with all combinations of authenticity/privacy settings."
+diff --git a/agents/lpar/fence_lpar.py b/agents/lpar/fence_lpar.py
+index 975971a57..a18e1c9ae 100644
+--- a/agents/lpar/fence_lpar.py
++++ b/agents/lpar/fence_lpar.py
+@@ -175,7 +175,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for IBM LPAR"
+-	docs["longdesc"] = ""
++	docs["longdesc"] = "fence_lpar is a Power Fencing agent for IBM LPAR."
+ 	docs["vendorurl"] = "http://www.ibm.com"
+ 	show_docs(options, docs)
+ 
+diff --git a/agents/mpath/fence_mpath.py b/agents/mpath/fence_mpath.py
+index 6976fee90..0e5d9ed30 100644
+--- a/agents/mpath/fence_mpath.py
++++ b/agents/mpath/fence_mpath.py
+@@ -304,7 +304,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for multipath persistent reservation"
+-	docs["longdesc"] = "fence_mpath is an I/O fencing agent that uses SCSI-3 \
++	docs["longdesc"] = "fence_mpath is an I/O Fencing agent that uses SCSI-3 \
+ persistent reservations to control access multipath devices. Underlying \
+ devices must support SCSI-3 persistent reservations (SPC-3 or greater) as \
+ well as the \"preempt-and-abort\" subcommand.\nThe fence_mpath agent works by \
+diff --git a/agents/netio/fence_netio.py b/agents/netio/fence_netio.py
+index 4fb59cffc..fc3bf9d83 100755
+--- a/agents/netio/fence_netio.py
++++ b/agents/netio/fence_netio.py
+@@ -58,8 +58,8 @@ def main():
+ 	options = check_input(device_opt, opt)
+ 
+ 	docs = {}
+-	docs["shortdesc"] = "I/O Fencing agent for Koukaam NETIO-230B"
+-	docs["longdesc"] = "fence_netio is an I/O Fencing agent which can be \
++	docs["shortdesc"] = "Power Fencing agent for Koukaam NETIO-230B"
++	docs["longdesc"] = "fence_netio is a Power Fencing agent which can be \
+ used with the Koukaam NETIO-230B Power Distribution Unit. It logs into \
+ device via telnet and reboots a specified outlet. Lengthy telnet connections \
+ should be avoided while a GFS cluster is running because the connection will \
+diff --git a/agents/openstack/fence_openstack.py b/agents/openstack/fence_openstack.py
+index 666016d78..e7aea0865 100644
+--- a/agents/openstack/fence_openstack.py
++++ b/agents/openstack/fence_openstack.py
+@@ -301,7 +301,7 @@ def main():
+ 
+     docs = {}
+     docs["shortdesc"] = "Fence agent for OpenStack's Nova service"
+-    docs["longdesc"] = "fence_openstack is a Fencing agent \
++    docs["longdesc"] = "fence_openstack is a Power Fencing agent \
+ which can be used with machines controlled by the Openstack's Nova service. \
+ This agent calls the python-novaclient and it is mandatory to be installed "
+     docs["vendorurl"] = "https://wiki.openstack.org/wiki/Nova"
+diff --git a/agents/ovh/fence_ovh.py b/agents/ovh/fence_ovh.py
+index 2b7eb864f..f0ea67c69 100644
+--- a/agents/ovh/fence_ovh.py
++++ b/agents/ovh/fence_ovh.py
+@@ -86,7 +86,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for OVH"
+-	docs["longdesc"] = "fence_ovh is an Power Fencing agent \
++	docs["longdesc"] = "fence_ovh is a Power Fencing agent \
+ which can be used within OVH datecentre. \
+ Poweroff is simulated with a reboot into rescue-pro mode."
+ 
+diff --git a/agents/powerman/fence_powerman.py b/agents/powerman/fence_powerman.py
+index 7aeeaf125..cdca5d36d 100755
+--- a/agents/powerman/fence_powerman.py
++++ b/agents/powerman/fence_powerman.py
+@@ -231,7 +231,7 @@ def main():
+ 	options = check_input(device_opt, process_input(device_opt))
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence Agent for Powerman"
+-	docs["longdesc"] = "This is a Pacemaker Fence Agent for the \
++	docs["longdesc"] = "fence_powerman is a Power Fence Agent for the \
+ Powerman management utility that was designed for LLNL systems."
+ 	docs["vendorurl"] = "https://github.com/chaos/powerman"
+ 	show_docs(options, docs)
+diff --git a/agents/pve/fence_pve.py b/agents/pve/fence_pve.py
+index 0d820355f..f97007dc5 100755
+--- a/agents/pve/fence_pve.py
++++ b/agents/pve/fence_pve.py
+@@ -195,8 +195,8 @@ def main():
+ 	options = check_input(device_opt, process_input(device_opt))
+ 	docs = {}
+ 	docs["shortdesc"] = "Fencing agent for the Proxmox Virtual Environment"
+-	docs["longdesc"] = "The fence_pve agent can be used to fence virtual \
+-machines acting as nodes in a virtualized cluster."
++	docs["longdesc"] = "fence_pve is a Power Fencing agent for virtual machines \
++acting as nodes in a virtualized cluster."
+ 	docs["vendorurl"] = "http://www.proxmox.com/"
+ 
+ 	show_docs(options, docs)
+diff --git a/agents/raritan/fence_raritan.py b/agents/raritan/fence_raritan.py
+index 169fa8197..d3510e4a1 100644
+--- a/agents/raritan/fence_raritan.py
++++ b/agents/raritan/fence_raritan.py
+@@ -39,8 +39,8 @@ def main():
+ 	options = check_input(device_opt, opt)
+ 
+ 	docs = {}
+-	docs["shortdesc"] = "I/O Fencing agent for Raritan Dominion PX"
+-	docs["longdesc"] = "fence_raritan is an I/O Fencing agent which can be \
++	docs["shortdesc"] = "Power Fencing agent for Raritan Dominion PX"
++	docs["longdesc"] = "fence_raritan is a Power Fencing agent which can be \
+ used with the Raritan DPXS12-20 Power Distribution Unit. It logs into \
+ device via telnet and reboots a specified outlet. Lengthy telnet connections \
+ should be avoided while a GFS cluster is running because the connection will \
+diff --git a/agents/rcd_serial/fence_rcd_serial.py b/agents/rcd_serial/fence_rcd_serial.py
+index 2614772ff..d14b4c661 100644
+--- a/agents/rcd_serial/fence_rcd_serial.py
++++ b/agents/rcd_serial/fence_rcd_serial.py
+@@ -77,11 +77,12 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "rcd_serial fence agent"
+-	docs["longdesc"] = "fence_rcd_serial operates a serial cable that toggles a \
+-reset of an opposing server using the reset switch on its motherboard. The \
+-cable itself is simple with no power, network or moving parts. An example of \
+-the cable is available here: https://smcleod.net/rcd-stonith/ and the circuit \
+-design is available in the fence-agents src as SVG"
++	docs["longdesc"] = "fence_rcd_serial is a Power Fencing agent that \
++operates a serial cable that toggles a reset of an opposing server using the \
++reset switch on its motherboard. The cable itself is simple with no power, \
++network or moving parts. An example of the cable is available here: \
++https://smcleod.net/rcd-stonith/ and the circuit design is available in the \
++fence-agents src as SVG"
+ 	docs["vendorurl"] = "https://github.com/sammcj/fence_rcd_serial"
+ 	show_docs(options, docs)
+ 
+diff --git a/agents/redfish/fence_redfish.py b/agents/redfish/fence_redfish.py
+index 0f5af523c..a935122ec 100644
+--- a/agents/redfish/fence_redfish.py
++++ b/agents/redfish/fence_redfish.py
+@@ -132,8 +132,8 @@ def main():
+     options = check_input(device_opt, opt)
+ 
+     docs = {}
+-    docs["shortdesc"] = "I/O Fencing agent for Redfish"
+-    docs["longdesc"] = "fence_redfish is an I/O Fencing agent which can be used with \
++    docs["shortdesc"] = "Power Fencing agent for Redfish"
++    docs["longdesc"] = "fence_redfish is a Power Fencing agent which can be used with \
+ Out-of-Band controllers that support Redfish APIs. These controllers provide remote \
+ access to control power on a server."
+     docs["vendorurl"] = "http://www.dmtf.org"
+diff --git a/agents/rhevm/fence_rhevm.py b/agents/rhevm/fence_rhevm.py
+index 5f74d06f6..1eb53bed0 100644
+--- a/agents/rhevm/fence_rhevm.py
++++ b/agents/rhevm/fence_rhevm.py
+@@ -232,7 +232,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for RHEV-M REST API"
+-	docs["longdesc"] = "fence_rhevm is an I/O Fencing agent which can be \
++	docs["longdesc"] = "fence_rhevm is a Power Fencing agent which can be \
+ used with RHEV-M REST API to fence virtual machines."
+ 	docs["vendorurl"] = "http://www.redhat.com"
+ 	show_docs(options, docs)
+diff --git a/agents/rsa/fence_rsa.py b/agents/rsa/fence_rsa.py
+index 44fdd9d05..79ed109eb 100644
+--- a/agents/rsa/fence_rsa.py
++++ b/agents/rsa/fence_rsa.py
+@@ -42,7 +42,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for IBM RSA"
+-	docs["longdesc"] = "fence_rsa is an I/O Fencing agent \
++	docs["longdesc"] = "fence_rsa is a Power Fencing agent \
+ which can be used with the IBM RSA II management interface. It \
+ logs into an RSA II device via telnet and reboots the associated \
+ machine. Lengthy telnet connections to the RSA II device should \
+diff --git a/agents/rsb/fence_rsb.py b/agents/rsb/fence_rsb.py
+index 45355f51e..e4622ae9f 100755
+--- a/agents/rsb/fence_rsb.py
++++ b/agents/rsb/fence_rsb.py
+@@ -49,8 +49,8 @@ def main():
+ 	options = check_input(device_opt, opt)
+ 
+ 	docs = {}
+-	docs["shortdesc"] = "I/O Fencing agent for Fujitsu-Siemens RSB"
+-	docs["longdesc"] = "fence_rsb is an I/O Fencing agent \
++	docs["shortdesc"] = "Power Fencing agent for Fujitsu-Siemens RSB"
++	docs["longdesc"] = "fence_rsb is a Power Fencing agent \
+ which can be used with the Fujitsu-Siemens RSB management interface. It logs \
+ into device via telnet/ssh  and reboots a specified outlet. Lengthy telnet/ssh \
+ connections should be avoided while a GFS cluster is running because the connection \
+diff --git a/agents/sbd/fence_sbd.py b/agents/sbd/fence_sbd.py
+index 2b0127d55..5c498263e 100644
+--- a/agents/sbd/fence_sbd.py
++++ b/agents/sbd/fence_sbd.py
+@@ -377,7 +377,7 @@ def main():
+     # fill the needed variables to generate metadata and help text output
+     docs = {}
+     docs["shortdesc"] = "Fence agent for sbd"
+-    docs["longdesc"] = "fence_sbd is I/O Fencing agent \
++    docs["longdesc"] = "fence_sbd is an I/O Fencing agent \
+ which can be used in environments where sbd can be used (shared storage)."
+     docs["vendorurl"] = ""
+     show_docs(options, docs)
+diff --git a/agents/scsi/fence_scsi.py b/agents/scsi/fence_scsi.py
+index 519319bf5..5cb5dbee9 100644
+--- a/agents/scsi/fence_scsi.py
++++ b/agents/scsi/fence_scsi.py
+@@ -546,7 +546,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for SCSI persistent reservation"
+-	docs["longdesc"] = "fence_scsi is an I/O fencing agent that uses SCSI-3 \
++	docs["longdesc"] = "fence_scsi is an I/O Fencing agent that uses SCSI-3 \
+ persistent reservations to control access to shared storage devices. These \
+ devices must support SCSI-3 persistent reservations (SPC-3 or greater) as \
+ well as the \"preempt-and-abort\" subcommand.\nThe fence_scsi agent works by \
+diff --git a/agents/skalar/fence_skalar.py b/agents/skalar/fence_skalar.py
+index 0e11d83f9..c8589c1a4 100644
+--- a/agents/skalar/fence_skalar.py
++++ b/agents/skalar/fence_skalar.py
+@@ -192,7 +192,7 @@ def main():
+ 
+     docs = {}
+     docs["shortdesc"] = "Skala-R Fence agent"
+-    docs["longdesc"] = "A fence agent for Skala-R."
++    docs["longdesc"] = "fence_skalar is a Power Fencing agent for Skala-R."
+     docs["vendorurl"] = "https://www.skala-r.ru/"
+     show_docs(options, docs)
+     options["eol"] = "\r"
+diff --git a/agents/vbox/fence_vbox.py b/agents/vbox/fence_vbox.py
+index c2df28811..52f0a2a8a 100644
+--- a/agents/vbox/fence_vbox.py
++++ b/agents/vbox/fence_vbox.py
+@@ -115,7 +115,7 @@ def main():
+ 
+     docs = {}
+     docs["shortdesc"] = "Fence agent for VirtualBox"
+-    docs["longdesc"] = "fence_vbox is an I/O Fencing agent \
++    docs["longdesc"] = "fence_vbox is a Power Fencing agent \
+ which can be used with the virtual machines managed by VirtualBox. \
+ It logs via ssh to a dom0 where it runs VBoxManage to do all of \
+ the work. \
+diff --git a/agents/virsh/fence_virsh.py b/agents/virsh/fence_virsh.py
+index 88cee48de..bde189c2b 100644
+--- a/agents/virsh/fence_virsh.py
++++ b/agents/virsh/fence_virsh.py
+@@ -76,7 +76,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for virsh"
+-	docs["longdesc"] = "fence_virsh is an I/O Fencing agent \
++	docs["longdesc"] = "fence_virsh is a Power Fencing agent \
+ which can be used with the virtual machines managed by libvirt. \
+ It logs via ssh to a dom0 and there run virsh command, which does \
+ all work. \
+diff --git a/agents/virt/client/options.c b/agents/virt/client/options.c
+index ddd6bc4e0..ce7ba14da 100644
+--- a/agents/virt/client/options.c
++++ b/agents/virt/client/options.c
+@@ -765,7 +765,7 @@ args_metadata(char *progname, const char *optstr)
+ 
+ 	printf("<?xml version=\"1.0\" ?>\n");
+ 	printf("<resource-agent name=\"%s\" shortdesc=\"Fence agent for virtual machines\">\n", basename(progname));
+-	printf("<longdesc>%s is an I/O Fencing agent which can be used with "
++	printf("<longdesc>%s is a Power Fencing agent which can be used with "
+ 	       "virtual machines.\n\nNOTE: reboot-action does not power on nodes that are powered off."
+ 	       "</longdesc>\n", basename(progname));
+ 	printf("<vendor-url>https://libvirt.org</vendor-url>\n");
+diff --git a/agents/vmware/fence_vmware.py b/agents/vmware/fence_vmware.py
+index bc1785f4c..ccef92bb2 100644
+--- a/agents/vmware/fence_vmware.py
++++ b/agents/vmware/fence_vmware.py
+@@ -292,7 +292,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for VMWare"
+-	docs["longdesc"] = "fence_vmware is an I/O Fencing agent \
++	docs["longdesc"] = "fence_vmware is a Power Fencing agent \
+ which can be used with the VMware ESX, VMware ESXi or VMware Server \
+ to fence virtual machines.\
+ \n.P\n\
+diff --git a/agents/vmware_rest/fence_vmware_rest.py b/agents/vmware_rest/fence_vmware_rest.py
+index 4b884fc62..378771863 100644
+--- a/agents/vmware_rest/fence_vmware_rest.py
++++ b/agents/vmware_rest/fence_vmware_rest.py
+@@ -204,7 +204,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for VMware REST API"
+-	docs["longdesc"] = """fence_vmware_rest is an I/O Fencing agent which can be \
++	docs["longdesc"] = """fence_vmware_rest is a Power Fencing agent which can be \
+ used with VMware API to fence virtual machines.
+ 
+ NOTE: If there's more than 1000 VMs there is a filter parameter to work around \
+diff --git a/agents/vmware_soap/fence_vmware_soap.py b/agents/vmware_soap/fence_vmware_soap.py
+index 4a4ec1780..4b3c404ce 100644
+--- a/agents/vmware_soap/fence_vmware_soap.py
++++ b/agents/vmware_soap/fence_vmware_soap.py
+@@ -235,7 +235,7 @@ def main():
+ 	#####
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for VMWare over SOAP API"
+-	docs["longdesc"] = "fence_vmware_soap is an I/O Fencing agent \
++	docs["longdesc"] = "fence_vmware_soap is a Power Fencing agent \
+ which can be used with the virtual machines managed by VMWare products \
+ that have SOAP API v4.1+. \
+ \n.P\n\
+diff --git a/agents/vmware_vcloud/fence_vmware_vcloud.py b/agents/vmware_vcloud/fence_vmware_vcloud.py
+index 7626b82bb..e0a714b84 100644
+--- a/agents/vmware_vcloud/fence_vmware_vcloud.py
++++ b/agents/vmware_vcloud/fence_vmware_vcloud.py
+@@ -194,7 +194,8 @@ def main():
+ 
+         docs = {}
+         docs["shortdesc"] = "Fence agent for VMware vCloud Director API"
+-        docs["longdesc"] = "fence_vmware_vcloud is an I/O Fencing agent which can be used with VMware vCloud Director API to fence virtual machines."
++        docs["longdesc"] = "fence_vmware_vcloud is a Power Fencing agent which \
++can be used with VMware vCloud Director API to fence virtual machines."
+         docs["vendorurl"] = "https://www.vmware.com"
+         show_docs(options, docs)
+ 
+diff --git a/agents/wti/fence_wti.py b/agents/wti/fence_wti.py
+index 97cc66de2..ffa3d019c 100644
+--- a/agents/wti/fence_wti.py
++++ b/agents/wti/fence_wti.py
+@@ -184,7 +184,7 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for WTI"
+-	docs["longdesc"] = "fence_wti is an I/O Fencing agent \
++	docs["longdesc"] = "fence_wti is a Power Fencing agent \
+ which can be used with the WTI Network Power Switch (NPS). It logs \
+ into an NPS via telnet or ssh and boots a specified plug. \
+ Lengthy telnet connections to the NPS should be avoided while a GFS cluster \
+diff --git a/agents/xenapi/fence_xenapi.py b/agents/xenapi/fence_xenapi.py
+index 10c8ee03e..884fbc79f 100644
+--- a/agents/xenapi/fence_xenapi.py
++++ b/agents/xenapi/fence_xenapi.py
+@@ -202,7 +202,7 @@ def main():
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for Citrix XenServer over XenAPI"
+ 	docs["longdesc"] = "\
+-fence_cxs is an I/O Fencing agent used on Citrix XenServer hosts. \
++fence_xenapi is a Power Fencing agent used on Citrix XenServer hosts. \
+ It uses the XenAPI, supplied by Citrix, to establish an XML-RPC session \
+ to a XenServer host. Once the session is established, further XML-RPC \
+ commands are issued in order to switch on, switch off, restart and query \
+diff --git a/agents/zvm/fence_zvmip.py b/agents/zvm/fence_zvmip.py
+index c37950a20..f1cea2652 100644
+--- a/agents/zvm/fence_zvmip.py
++++ b/agents/zvm/fence_zvmip.py
+@@ -199,8 +199,8 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for use with z/VM Virtual Machines"
+-	docs["longdesc"] = """The fence_zvmip agent is intended to be used with the
+-z/VM SMAPI service via TCP/IP.
++	docs["longdesc"] = """fence_zvmip is a Power Fencing agent for z/VM \
++SMAPI service via TCP/IP.
+ 
+ The z/VM SMAPI service must be configured so that the virtual machine running
+ the agent can connect to the service, access the system's directory manager,
+diff --git a/tests/data/metadata/fence_aliyun.xml b/tests/data/metadata/fence_aliyun.xml
+index b06718891..a52de014c 100644
+--- a/tests/data/metadata/fence_aliyun.xml
++++ b/tests/data/metadata/fence_aliyun.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_aliyun" shortdesc="Fence agent for Aliyun (Aliyun Web Services)" >
+-<longdesc>fence_aliyun is an I/O Fencing agent for Aliyun</longdesc>
++<longdesc>fence_aliyun is a Power Fencing agent for Aliyun.</longdesc>
+ <vendor-url>http://www.aliyun.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_alom.xml b/tests/data/metadata/fence_alom.xml
+index 6532ad6dd..de0a4b60d 100644
+--- a/tests/data/metadata/fence_alom.xml
++++ b/tests/data/metadata/fence_alom.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_alom" shortdesc="Fence agent for Sun ALOM" >
+-<longdesc>fence_alom is an I/O Fencing agent which can be used with ALOM connected machines.</longdesc>
++<longdesc>fence_alom is a Power Fencing agent which can be used with ALOM connected machines.</longdesc>
+ <vendor-url>http://www.sun.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_amt.xml b/tests/data/metadata/fence_amt.xml
+index 809c2dfea..58eb86761 100644
+--- a/tests/data/metadata/fence_amt.xml
++++ b/tests/data/metadata/fence_amt.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_amt" shortdesc="Fence agent for AMT" >
+-<longdesc>fence_amt is an I/O Fencing agent which can be used with Intel AMT. This agent calls support software amttool(http://www.kraxel.org/cgit/amtterm/).</longdesc>
++<longdesc>fence_amt is a Power Fencing agent which can be used with Intel AMT. This agent calls support software amttool(http://www.kraxel.org/cgit/amtterm/).</longdesc>
+ <vendor-url>http://www.intel.com/</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_amt_ws.xml b/tests/data/metadata/fence_amt_ws.xml
+index 97a222526..08ed75148 100644
+--- a/tests/data/metadata/fence_amt_ws.xml
++++ b/tests/data/metadata/fence_amt_ws.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_amt_ws" shortdesc="Fence agent for AMT (WS)" >
+-<longdesc>fence_amt_ws is an I/O Fencing agent which can be used with Intel AMT (WS). This agent requires the pywsman Python library which is included in OpenWSMAN. (http://openwsman.github.io/).</longdesc>
++<longdesc>fence_amt_ws is a Power Fencing agent which can be used with Intel AMT (WS). This agent requires the pywsman Python library which is included in OpenWSMAN. (http://openwsman.github.io/).</longdesc>
+ <vendor-url>http://www.intel.com/</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_apc.xml b/tests/data/metadata/fence_apc.xml
+index 6081b1ff5..e40c7879d 100644
+--- a/tests/data/metadata/fence_apc.xml
++++ b/tests/data/metadata/fence_apc.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_apc" shortdesc="Fence agent for APC over telnet/ssh" >
+-<longdesc>fence_apc is an I/O Fencing agent which can be used with the APC network power switch. It logs into device via telnet/ssh  and reboots a specified outlet. Lengthy telnet/ssh connections should be avoided while a GFS cluster  is  running  because  the  connection will block any necessary fencing actions.</longdesc>
++<longdesc>fence_apc is a Power Fencing agent which can be used with the APC network power switch. It logs into device via telnet/ssh  and reboots a specified outlet. Lengthy telnet/ssh connections should be avoided while a GFS cluster  is  running  because  the  connection will block any necessary fencing actions.</longdesc>
+ <vendor-url>http://www.apc.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_apc_snmp.xml b/tests/data/metadata/fence_apc_snmp.xml
+index 02efbb0b0..8df05345c 100644
+--- a/tests/data/metadata/fence_apc_snmp.xml
++++ b/tests/data/metadata/fence_apc_snmp.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_apc_snmp" shortdesc="Fence agent for APC, Tripplite PDU over SNMP" >
+ <symlink name="fence_tripplite_snmp" shortdesc="Fence agent for Tripplife over SNMP"/>
+-<longdesc>fence_apc_snmp is an I/O Fencing agent which can be used with the APC network power switch or Tripplite PDU devices.It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v1, v2c, v3 with all combinations of  authenticity/privacy settings.</longdesc>
++<longdesc>fence_apc_snmp is a Power Fencing agent which can be used with the APC network power switch or Tripplite PDU devices.It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v1, v2c, v3 with all combinations of  authenticity/privacy settings.</longdesc>
+ <vendor-url>http://www.apc.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_aws.xml b/tests/data/metadata/fence_aws.xml
+index 32de4418a..ad471c797 100644
+--- a/tests/data/metadata/fence_aws.xml
++++ b/tests/data/metadata/fence_aws.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_aws" shortdesc="Fence agent for AWS (Amazon Web Services)" >
+-<longdesc>fence_aws is an I/O Fencing agent for AWS (Amazon WebServices). It uses the boto3 library to connect to AWS.
++<longdesc>fence_aws is a Power Fencing agent for AWS (Amazon WebServices). It uses the boto3 library to connect to AWS.
+ 
+ boto3 can be configured with AWS CLI or by creating ~/.aws/credentials.
+ For instructions see: https://boto3.readthedocs.io/en/latest/guide/quickstart.html#configuration</longdesc>
+diff --git a/tests/data/metadata/fence_azure_arm.xml b/tests/data/metadata/fence_azure_arm.xml
+index 8b7450762..59c3b7433 100644
+--- a/tests/data/metadata/fence_azure_arm.xml
++++ b/tests/data/metadata/fence_azure_arm.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_azure_arm" shortdesc="Fence agent for Azure Resource Manager" >
+-<longdesc>fence_azure_arm is an I/O Fencing agent for Azure Resource Manager. It uses Azure SDK for Python to connect to Azure.
++<longdesc>fence_azure_arm is a Power Fencing agent for Azure Resource Manager. It uses Azure SDK for Python to connect to Azure.
+ 
+ For instructions to setup credentials see: https://docs.microsoft.com/en-us/azure/azure-resource-manager/resource-group-create-service-principal-portal
+ 
+diff --git a/tests/data/metadata/fence_bladecenter.xml b/tests/data/metadata/fence_bladecenter.xml
+index 3cc415355..e8468e336 100644
+--- a/tests/data/metadata/fence_bladecenter.xml
++++ b/tests/data/metadata/fence_bladecenter.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_bladecenter" shortdesc="Fence agent for IBM BladeCenter" >
+-<longdesc>fence_bladecenter is an I/O Fencing agent which can be used with IBM Bladecenters with recent enough firmware that includes telnet support. It logs into a Brocade chasis via telnet or ssh and uses the command line interface to power on and off blades.</longdesc>
++<longdesc>fence_bladecenter is a Power Fencing agent which can be used with IBM Bladecenters with recent enough firmware that includes telnet support. It logs into a Brocade chasis via telnet or ssh and uses the command line interface to power on and off blades.</longdesc>
+ <vendor-url>http://www.ibm.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_cdu.xml b/tests/data/metadata/fence_cdu.xml
+index ef87d795d..b92e7a937 100644
+--- a/tests/data/metadata/fence_cdu.xml
++++ b/tests/data/metadata/fence_cdu.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_cdu" shortdesc="Fence agent for a Sentry Switch CDU over telnet" >
+-<longdesc>fence_cdu is an I/O Fencing agent which can be used with the Sentry Switch CDU. It logs into the device via telnet and power's on/off an outlet.</longdesc>
++<longdesc>fence_cdu is a Power Fencing agent which can be used with the Sentry Switch CDU. It logs into the device via telnet and power's on/off an outlet.</longdesc>
+ <vendor-url>http://www.servertech.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_cisco_mds.xml b/tests/data/metadata/fence_cisco_mds.xml
+index 829c9dcbe..2105ecccc 100644
+--- a/tests/data/metadata/fence_cisco_mds.xml
++++ b/tests/data/metadata/fence_cisco_mds.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_cisco_mds" shortdesc="Fence agent for Cisco MDS" >
+-<longdesc>fence_cisco_mds is an I/O Fencing agent which can be used with any Cisco MDS 9000 series with SNMP enabled device.</longdesc>
++<longdesc>fence_cisco_mds is a Power Fencing agent which can be used with any Cisco MDS 9000 series with SNMP enabled device.</longdesc>
+ <vendor-url>http://www.cisco.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_cisco_ucs.xml b/tests/data/metadata/fence_cisco_ucs.xml
+index 76d15e9f4..a9368e8be 100644
+--- a/tests/data/metadata/fence_cisco_ucs.xml
++++ b/tests/data/metadata/fence_cisco_ucs.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_cisco_ucs" shortdesc="Fence agent for Cisco UCS" >
+-<longdesc>fence_cisco_ucs is an I/O Fencing agent which can be used with Cisco UCS to fence machines.</longdesc>
++<longdesc>fence_cisco_ucs is a Power Fencing agent which can be used with Cisco UCS to fence machines.</longdesc>
+ <vendor-url>http://www.cisco.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_docker.xml b/tests/data/metadata/fence_docker.xml
+index f685b1162..f0cacd4d9 100644
+--- a/tests/data/metadata/fence_docker.xml
++++ b/tests/data/metadata/fence_docker.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_docker" shortdesc="Fence agent for Docker" >
+-<longdesc>fence_docker is I/O fencing agent which can be used with the Docker Engine containers. You can use this fence-agent without any authentication, or you can use TLS authentication (use --ssl option, more info about TLS authentication in docker: http://docs.docker.com/examples/https/).</longdesc>
++<longdesc>fence_docker is a Power Fencing agent which can be used with the Docker Engine containers. You can use this fence-agent without any authentication, or you can use TLS authentication (use --ssl option, more info about TLS authentication in docker: http://docs.docker.com/examples/https/).</longdesc>
+ <vendor-url>www.docker.io</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_drac.xml b/tests/data/metadata/fence_drac.xml
+index a99126132..b2ce0825f 100644
+--- a/tests/data/metadata/fence_drac.xml
++++ b/tests/data/metadata/fence_drac.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+-<resource-agent name="fence_drac" shortdesc="I/O Fencing agent for Dell DRAC IV" >
+-<longdesc>fence_drac is an I/O Fencing agent which can be used with the Dell Remote Access Card (DRAC). This card provides remote access to controlling power to a server. It logs into the DRAC through the telnet interface of the card. By default, the telnet interface is not enabled. To enable the interface, you will need to use the racadm command in the racser-devel rpm available from Dell.  To enable telnet on the DRAC: [root]# racadm config -g cfgSerial -o cfgSerialTelnetEnable 1 [root]# racadm racreset </longdesc>
++<resource-agent name="fence_drac" shortdesc="Power Fencing agent for Dell DRAC IV" >
++<longdesc>fence_drac is a Power Fencing agent which can be used with the Dell Remote Access Card (DRAC). This card provides remote access to controlling power to a server. It logs into the DRAC through the telnet interface of the card. By default, the telnet interface is not enabled. To enable the interface, you will need to use the racadm command in the racser-devel rpm available from Dell.  To enable telnet on the DRAC: [root]# racadm config -g cfgSerial -o cfgSerialTelnetEnable 1 [root]# racadm racreset </longdesc>
+ <vendor-url>http://www.dell.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_drac5.xml b/tests/data/metadata/fence_drac5.xml
+index a0c73ebf8..a633d43b5 100644
+--- a/tests/data/metadata/fence_drac5.xml
++++ b/tests/data/metadata/fence_drac5.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_drac5" shortdesc="Fence agent for Dell DRAC CMC/5" >
+-<longdesc>fence_drac5 is an I/O Fencing agent which can be used with the Dell Remote Access Card v5 or CMC (DRAC). This device provides remote access to controlling  power to a server. It logs into the DRAC through the telnet/ssh interface of the card. By default, the telnet interface is not  enabled.</longdesc>
++<longdesc>fence_drac5 is a Power Fencing agent which can be used with the Dell Remote Access Card v5 or CMC (DRAC). This device provides remote access to controlling  power to a server. It logs into the DRAC through the telnet/ssh interface of the card. By default, the telnet interface is not  enabled.</longdesc>
+ <vendor-url>http://www.dell.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_eaton_snmp.xml b/tests/data/metadata/fence_eaton_snmp.xml
+index 1d89b5272..cb852fb0d 100644
+--- a/tests/data/metadata/fence_eaton_snmp.xml
++++ b/tests/data/metadata/fence_eaton_snmp.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_eaton_snmp" shortdesc="Fence agent for Eaton over SNMP" >
+-<longdesc>fence_eaton_snmp is an I/O Fencing agent which can be used with the Eaton network power switch. It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v1 and v3 with all combinations of  authenticity/privacy settings.</longdesc>
++<longdesc>fence_eaton_snmp is a Power Fencing agent which can be used with the Eaton network power switch. It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v1 and v3 with all combinations of  authenticity/privacy settings.</longdesc>
+ <vendor-url>http://powerquality.eaton.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_emerson.xml b/tests/data/metadata/fence_emerson.xml
+index 1ed792e2b..fde75bd54 100644
+--- a/tests/data/metadata/fence_emerson.xml
++++ b/tests/data/metadata/fence_emerson.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_emerson" shortdesc="Fence agent for Emerson over SNMP" >
+-<longdesc>fence_emerson is an I/O Fencing agent 	which can be used with MPX and MPH2 managed rack PDU.</longdesc>
++<longdesc>fence_emerson is a Power Fencing agent which can be used with MPX and MPH2 managed rack PDU.</longdesc>
+ <vendor-url>http://www.emersonnetworkpower.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_eps.xml b/tests/data/metadata/fence_eps.xml
+index a8cf8ad41..3f9ebdc22 100644
+--- a/tests/data/metadata/fence_eps.xml
++++ b/tests/data/metadata/fence_eps.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_eps" shortdesc="Fence agent for ePowerSwitch" >
+-<longdesc>fence_eps  is an I/O Fencing agent which can be used with the ePowerSwitch 8M+ power switch to fence connected machines. Fence agent works ONLY on 8M+ device, because this is only one, which has support for hidden page feature. 
++<longdesc>fence_eps is a Power Fencing agent which can be used with the ePowerSwitch 8M+ power switch to fence connected machines. Fence agent works ONLY on 8M+ device, because this is only one, which has support for hidden page feature. 
+ 
+ Agent basically works by connecting to hidden page and pass appropriate arguments to GET request. This means, that hidden page feature must be enabled and properly configured.</longdesc>
+ <vendor-url>http://www.epowerswitch.com</vendor-url>
+diff --git a/tests/data/metadata/fence_gce.xml b/tests/data/metadata/fence_gce.xml
+index 2a89b16c2..8226e1aa0 100644
+--- a/tests/data/metadata/fence_gce.xml
++++ b/tests/data/metadata/fence_gce.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_gce" shortdesc="Fence agent for GCE (Google Cloud Engine)" >
+-<longdesc>fence_gce is an I/O Fencing agent for GCE (Google Cloud Engine). It uses the googleapiclient library to connect to GCE.
++<longdesc>fence_gce is a Power Fencing agent for GCE (Google Cloud Engine). It uses the googleapiclient library to connect to GCE.
+ googleapiclient can be configured with Google SDK CLI or by executing 'gcloud auth application-default login'.
+ For instructions see: https://cloud.google.com/compute/docs/tutorials/python-guide</longdesc>
+ <vendor-url>http://cloud.google.com</vendor-url>
+diff --git a/tests/data/metadata/fence_hds_cb.xml b/tests/data/metadata/fence_hds_cb.xml
+index e25d889e3..1e3a4889e 100644
+--- a/tests/data/metadata/fence_hds_cb.xml
++++ b/tests/data/metadata/fence_hds_cb.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_hds_cb" shortdesc="Fence agent for Hitachi Compute Blade systems" >
+-<longdesc>fence_hds_cb is an I/O Fencing agent which can be used with Hitachi Compute Blades with recent enough firmware that includes telnet support.</longdesc>
++<longdesc>fence_hds_cb is a Power Fencing agent which can be used with Hitachi Compute Blades with recent enough firmware that includes telnet support.</longdesc>
+ <vendor-url>http://www.hds.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_hpblade.xml b/tests/data/metadata/fence_hpblade.xml
+index 0957fcdd4..3f05be222 100644
+--- a/tests/data/metadata/fence_hpblade.xml
++++ b/tests/data/metadata/fence_hpblade.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_hpblade" shortdesc="Fence agent for HP BladeSystem" >
+-<longdesc>fence_hpblade is an I/O Fencing agent which can be used with HP BladeSystem and HP Integrity Superdome X. It logs into the onboard administrator of an enclosure via telnet or ssh and uses the command line interface to power blades or partitions on or off.</longdesc>
++<longdesc>fence_hpblade is a Power Fencing agent which can be used with HP BladeSystem and HP Integrity Superdome X. It logs into the onboard administrator of an enclosure via telnet or ssh and uses the command line interface to power blades or partitions on or off.</longdesc>
+ <vendor-url>http://www.hp.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ibm_powervs.xml b/tests/data/metadata/fence_ibm_powervs.xml
+index 7bdee4e29..c1dc034dc 100644
+--- a/tests/data/metadata/fence_ibm_powervs.xml
++++ b/tests/data/metadata/fence_ibm_powervs.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ibm_powervs" shortdesc="Fence agent for IBM PowerVS" >
+-<longdesc>fence_ibm_powervs is an I/O Fencing agent which can be used with IBM PowerVS to fence virtual machines.</longdesc>
++<longdesc>fence_ibm_powervs is a Power Fencing agent which can be used with IBM PowerVS to fence virtual machines.</longdesc>
+ <vendor-url>https://www.ibm.com</vendor-url>
+ <parameters>
+ 	<parameter name="api-type" unique="0" required="0" deprecated="1">
+diff --git a/tests/data/metadata/fence_ibm_vpc.xml b/tests/data/metadata/fence_ibm_vpc.xml
+index fe29ffb89..fafcad214 100644
+--- a/tests/data/metadata/fence_ibm_vpc.xml
++++ b/tests/data/metadata/fence_ibm_vpc.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ibm_vpc" shortdesc="Fence agent for IBM Cloud VPC" >
+-<longdesc>fence_ibm_vpc is an I/O Fencing agent which can be used with IBM Cloud VPC to fence virtual machines.</longdesc>
++<longdesc>fence_ibm_vpc is a Power Fencing agent which can be used with IBM Cloud VPC to fence virtual machines.</longdesc>
+ <vendor-url>https://www.ibm.com</vendor-url>
+ <parameters>
+ 	<parameter name="apikey" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ibmblade.xml b/tests/data/metadata/fence_ibmblade.xml
+index 3286ca6de..61366ca3c 100644
+--- a/tests/data/metadata/fence_ibmblade.xml
++++ b/tests/data/metadata/fence_ibmblade.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ibmblade" shortdesc="Fence agent for IBM BladeCenter over SNMP" >
+-<longdesc>fence_ibmblade is an I/O Fencing agent which can be used with IBM BladeCenter chassis. It issues SNMP Set request to BladeCenter chassis, rebooting, powering up or down the specified Blade Server.</longdesc>
++<longdesc>fence_ibmblade is a Power Fencing agent which can be used with IBM BladeCenter chassis. It issues SNMP Set request to BladeCenter chassis, rebooting, powering up or down the specified Blade Server.</longdesc>
+ <vendor-url>http://www.ibm.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ibmz.xml b/tests/data/metadata/fence_ibmz.xml
+index ba74fa6fe..7554d4d78 100644
+--- a/tests/data/metadata/fence_ibmz.xml
++++ b/tests/data/metadata/fence_ibmz.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ibmz" shortdesc="Fence agent for IBM z LPARs" >
+-<longdesc>fence_ibmz is a power fencing agent which uses the HMC Web Services API to fence IBM z LPARs.</longdesc>
++<longdesc>fence_ibmz is a Power Fencing agent which uses the HMC Web Services API to fence IBM z LPARs.</longdesc>
+ <vendor-url>http://www.ibm.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_idrac.xml b/tests/data/metadata/fence_idrac.xml
+index d1f283e4a..aa291345a 100644
+--- a/tests/data/metadata/fence_idrac.xml
++++ b/tests/data/metadata/fence_idrac.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_idrac is a Power Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo.xml b/tests/data/metadata/fence_ilo.xml
+index 0bac03c83..f8fe61cbb 100644
+--- a/tests/data/metadata/fence_ilo.xml
++++ b/tests/data/metadata/fence_ilo.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ilo" shortdesc="Fence agent for HP iLO" >
+ <symlink name="fence_ilo2" shortdesc="Fence agent for HP iLO2"/>
+-<longdesc>fence_ilo is an I/O Fencing agent used for HP servers with the Integrated Light Out (iLO) PCI card.The agent opens an SSL connection to the iLO card. Once the SSL connection is established, the agent is able to communicate with the iLO card through an XML stream.</longdesc>
++<longdesc>fence_ilo is a Power Fencing agent used for HP servers with the Integrated Light Out (iLO) PCI card.The agent opens an SSL connection to the iLO card. Once the SSL connection is established, the agent is able to communicate with the iLO card through an XML stream.</longdesc>
+ <vendor-url>http://www.hp.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo2.xml b/tests/data/metadata/fence_ilo2.xml
+index 3d954a345..d7e72084e 100644
+--- a/tests/data/metadata/fence_ilo2.xml
++++ b/tests/data/metadata/fence_ilo2.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ilo2" shortdesc="Fence agent for HP iLO" >
+ <symlink name="fence_ilo2" shortdesc="Fence agent for HP iLO2"/>
+-<longdesc>fence_ilo is an I/O Fencing agent used for HP servers with the Integrated Light Out (iLO) PCI card.The agent opens an SSL connection to the iLO card. Once the SSL connection is established, the agent is able to communicate with the iLO card through an XML stream.</longdesc>
++<longdesc>fence_ilo2 is a Power Fencing agent used for HP servers with the Integrated Light Out (iLO) PCI card.The agent opens an SSL connection to the iLO card. Once the SSL connection is established, the agent is able to communicate with the iLO card through an XML stream.</longdesc>
+ <vendor-url>http://www.hp.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo3.xml b/tests/data/metadata/fence_ilo3.xml
+index 5aca0211b..90dc2f657 100644
+--- a/tests/data/metadata/fence_ilo3.xml
++++ b/tests/data/metadata/fence_ilo3.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ilo3 is a Power Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo3_ssh.xml b/tests/data/metadata/fence_ilo3_ssh.xml
+index e2a25661d..f46ec7d13 100644
+--- a/tests/data/metadata/fence_ilo3_ssh.xml
++++ b/tests/data/metadata/fence_ilo3_ssh.xml
+@@ -3,7 +3,7 @@
+ <symlink name="fence_ilo3_ssh" shortdesc="Fence agent for HP iLO3 over SSH"/>
+ <symlink name="fence_ilo4_ssh" shortdesc="Fence agent for HP iLO4 over SSH"/>
+ <symlink name="fence_ilo5_ssh" shortdesc="Fence agent for HP iLO5 over SSH"/>
+-<longdesc>fence_ilo_ssh is a fence agent that connects to iLO device. It logs into device via ssh and reboot a specified outlet.
++<longdesc>fence_ilo3_ssh is a Power Fencing agent that connects to iLO device. It logs into device via ssh and reboot a specified outlet.
+ 
+ WARNING: The monitor-action is prone to timeouts. Use the fence_ilo-equivalent to avoid this issue.</longdesc>
+ <vendor-url>http://www.hp.com</vendor-url>
+diff --git a/tests/data/metadata/fence_ilo4.xml b/tests/data/metadata/fence_ilo4.xml
+index 3aa001ad2..494ff0b3b 100644
+--- a/tests/data/metadata/fence_ilo4.xml
++++ b/tests/data/metadata/fence_ilo4.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ilo4 is a Power Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo4_ssh.xml b/tests/data/metadata/fence_ilo4_ssh.xml
+index 4fd6b2ef1..e2a5b7167 100644
+--- a/tests/data/metadata/fence_ilo4_ssh.xml
++++ b/tests/data/metadata/fence_ilo4_ssh.xml
+@@ -3,7 +3,7 @@
+ <symlink name="fence_ilo3_ssh" shortdesc="Fence agent for HP iLO3 over SSH"/>
+ <symlink name="fence_ilo4_ssh" shortdesc="Fence agent for HP iLO4 over SSH"/>
+ <symlink name="fence_ilo5_ssh" shortdesc="Fence agent for HP iLO5 over SSH"/>
+-<longdesc>fence_ilo_ssh is a fence agent that connects to iLO device. It logs into device via ssh and reboot a specified outlet.
++<longdesc>fence_ilo4_ssh is a Power Fencing agent that connects to iLO device. It logs into device via ssh and reboot a specified outlet.
+ 
+ WARNING: The monitor-action is prone to timeouts. Use the fence_ilo-equivalent to avoid this issue.</longdesc>
+ <vendor-url>http://www.hp.com</vendor-url>
+diff --git a/tests/data/metadata/fence_ilo5.xml b/tests/data/metadata/fence_ilo5.xml
+index 262787905..25e7446b3 100644
+--- a/tests/data/metadata/fence_ilo5.xml
++++ b/tests/data/metadata/fence_ilo5.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ilo5 is a Power Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo5_ssh.xml b/tests/data/metadata/fence_ilo5_ssh.xml
+index 036aec5c6..f4bd8622b 100644
+--- a/tests/data/metadata/fence_ilo5_ssh.xml
++++ b/tests/data/metadata/fence_ilo5_ssh.xml
+@@ -3,7 +3,7 @@
+ <symlink name="fence_ilo3_ssh" shortdesc="Fence agent for HP iLO3 over SSH"/>
+ <symlink name="fence_ilo4_ssh" shortdesc="Fence agent for HP iLO4 over SSH"/>
+ <symlink name="fence_ilo5_ssh" shortdesc="Fence agent for HP iLO5 over SSH"/>
+-<longdesc>fence_ilo_ssh is a fence agent that connects to iLO device. It logs into device via ssh and reboot a specified outlet.
++<longdesc>fence_ilo5_ssh is a Power Fencing agent that connects to iLO device. It logs into device via ssh and reboot a specified outlet.
+ 
+ WARNING: The monitor-action is prone to timeouts. Use the fence_ilo-equivalent to avoid this issue.</longdesc>
+ <vendor-url>http://www.hp.com</vendor-url>
+diff --git a/tests/data/metadata/fence_ilo_mp.xml b/tests/data/metadata/fence_ilo_mp.xml
+index 7d4fd22d5..4ac9484d6 100644
+--- a/tests/data/metadata/fence_ilo_mp.xml
++++ b/tests/data/metadata/fence_ilo_mp.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ilo_mp" shortdesc="Fence agent for HP iLO MP" >
+-<longdesc></longdesc>
++<longdesc>fence_ilo_mp is a Power Fencing agent for HP iLO MP.</longdesc>
+ <vendor-url>http://www.hp.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo_ssh.xml b/tests/data/metadata/fence_ilo_ssh.xml
+index 2e1cb84b2..7564200da 100644
+--- a/tests/data/metadata/fence_ilo_ssh.xml
++++ b/tests/data/metadata/fence_ilo_ssh.xml
+@@ -3,7 +3,7 @@
+ <symlink name="fence_ilo3_ssh" shortdesc="Fence agent for HP iLO3 over SSH"/>
+ <symlink name="fence_ilo4_ssh" shortdesc="Fence agent for HP iLO4 over SSH"/>
+ <symlink name="fence_ilo5_ssh" shortdesc="Fence agent for HP iLO5 over SSH"/>
+-<longdesc>fence_ilo_ssh is a fence agent that connects to iLO device. It logs into device via ssh and reboot a specified outlet.
++<longdesc>fence_ilo_ssh is a Power Fencing agent that connects to iLO device. It logs into device via ssh and reboot a specified outlet.
+ 
+ WARNING: The monitor-action is prone to timeouts. Use the fence_ilo-equivalent to avoid this issue.</longdesc>
+ <vendor-url>http://www.hp.com</vendor-url>
+diff --git a/tests/data/metadata/fence_imm.xml b/tests/data/metadata/fence_imm.xml
+index 26f9a76d3..943e9c3f2 100644
+--- a/tests/data/metadata/fence_imm.xml
++++ b/tests/data/metadata/fence_imm.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_imm is a Power Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_intelmodular.xml b/tests/data/metadata/fence_intelmodular.xml
+index 5dad0d0bd..66ddb47ae 100644
+--- a/tests/data/metadata/fence_intelmodular.xml
++++ b/tests/data/metadata/fence_intelmodular.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_intelmodular" shortdesc="Fence agent for Intel Modular" >
+-<longdesc>fence_intelmodular is an I/O Fencing agent which can be used with Intel Modular device (tested on Intel MFSYS25, should work with MFSYS35 as well). 
++<longdesc>fence_intelmodular is a Power Fencing agent which can be used with Intel Modular device (tested on Intel MFSYS25, should work with MFSYS35 as well). 
+ 
+ Note: Since firmware update version 2.7, SNMP v2 write support is removed, and replaced by SNMP v3 support. So agent now has default SNMP version 3. If you are using older firmware, please supply -d for command line and snmp_version option for your cluster.conf.</longdesc>
+ <vendor-url>http://www.intel.com</vendor-url>
+diff --git a/tests/data/metadata/fence_ipdu.xml b/tests/data/metadata/fence_ipdu.xml
+index 22024a7a1..941dcbedf 100644
+--- a/tests/data/metadata/fence_ipdu.xml
++++ b/tests/data/metadata/fence_ipdu.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ipdu" shortdesc="Fence agent for iPDU over SNMP" >
+-<longdesc>fence_ipdu is an I/O Fencing agent which can be used with the IBM iPDU network power switch. It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v3 with all combinations of authenticity/privacy settings.</longdesc>
++<longdesc>fence_ipdu is a Power Fencing agent which can be used with the IBM iPDU network power switch. It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v3 with all combinations of authenticity/privacy settings.</longdesc>
+ <vendor-url>http://www.ibm.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ipmilan.xml b/tests/data/metadata/fence_ipmilan.xml
+index daad65a70..3107cad33 100644
+--- a/tests/data/metadata/fence_ipmilan.xml
++++ b/tests/data/metadata/fence_ipmilan.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ipmilan is a Power Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ipmilanplus.xml b/tests/data/metadata/fence_ipmilanplus.xml
+index 7b678b245..146d05a70 100644
+--- a/tests/data/metadata/fence_ipmilanplus.xml
++++ b/tests/data/metadata/fence_ipmilanplus.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ipmilanplus is a Power Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ironic.xml b/tests/data/metadata/fence_ironic.xml
+index 813b03732..f9bec38da 100644
+--- a/tests/data/metadata/fence_ironic.xml
++++ b/tests/data/metadata/fence_ironic.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ironic" shortdesc="Fence agent for OpenStack's Ironic (Bare Metal as a service) service" >
+-<longdesc>fence_ironic is a Fencing agent which can be used with machines controlled by the Ironic service. This agent calls the openstack CLI. WARNING! This fence agent is not intended for production use. Relying on a functional ironic service for fencing is not a good design choice.</longdesc>
++<longdesc>fence_ironic is a Power Fencing agent which can be used with machines controlled by the Ironic service. This agent calls the openstack CLI. WARNING! This fence agent is not intended for production use. Relying on a functional ironic service for fencing is not a good design choice.</longdesc>
+ <vendor-url>https://wiki.openstack.org/wiki/Ironic</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_kubevirt.xml b/tests/data/metadata/fence_kubevirt.xml
+index e6b42aa55..2850c3434 100644
+--- a/tests/data/metadata/fence_kubevirt.xml
++++ b/tests/data/metadata/fence_kubevirt.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_kubevirt" shortdesc="Fence agent for KubeVirt" >
+-<longdesc>fence_kubevirt is an I/O Fencing agent for KubeVirt.</longdesc>
++<longdesc>fence_kubevirt is a Power Fencing agent for KubeVirt.</longdesc>
+ <vendor-url>https://kubevirt.io/</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ldom.xml b/tests/data/metadata/fence_ldom.xml
+index 59facad6f..aaa737015 100644
+--- a/tests/data/metadata/fence_ldom.xml
++++ b/tests/data/metadata/fence_ldom.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ldom" shortdesc="Fence agent for Sun LDOM" >
+-<longdesc>fence_ldom is an I/O Fencing agent which can be used with LDoms virtual machines. This agent works so, that run ldm command on host machine. So ldm must be directly runnable.
++<longdesc>fence_ldom is a Power Fencing agent which can be used with LDoms virtual machines. This agent works so, that run ldm command on host machine. So ldm must be directly runnable.
+ 
+ Very useful parameter is -c (or cmd_prompt in stdin mode). This must be set to something, what is displayed after successful login to host machine. Default string is space on end of string (default for root in bash). But (for example) csh use ], so in that case you must use parameter -c with argument ]. Very similar situation is, if you use bash and login to host machine with other user than root. Than prompt is $, so again, you must use parameter -c.</longdesc>
+ <vendor-url>http://www.sun.com</vendor-url>
+diff --git a/tests/data/metadata/fence_lindypdu.xml b/tests/data/metadata/fence_lindypdu.xml
+index 56f81f4cb..79be15a8f 100644
+--- a/tests/data/metadata/fence_lindypdu.xml
++++ b/tests/data/metadata/fence_lindypdu.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_lindypdu" shortdesc="Fence agent for Lindy over SNMP" >
+-<longdesc>fence_lindypdu is an I/O Fencing agent which can be used with the Lindy PDU network power switch. It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v1 with all combinations of authenticity/privacy settings.</longdesc>
++<longdesc>fence_lindypdu is a Power Fencing agent which can be used with the Lindy PDU network power switch. It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v1 with all combinations of authenticity/privacy settings.</longdesc>
+ <vendor-url>http://www.lindy.co.uk</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_lpar.xml b/tests/data/metadata/fence_lpar.xml
+index 22f12dc23..018409e26 100644
+--- a/tests/data/metadata/fence_lpar.xml
++++ b/tests/data/metadata/fence_lpar.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_lpar" shortdesc="Fence agent for IBM LPAR" >
+-<longdesc></longdesc>
++<longdesc>fence_lpar is a Power Fencing agent for IBM LPAR.</longdesc>
+ <vendor-url>http://www.ibm.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_mpath.xml b/tests/data/metadata/fence_mpath.xml
+index 262956dca..b36fab96e 100644
+--- a/tests/data/metadata/fence_mpath.xml
++++ b/tests/data/metadata/fence_mpath.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_mpath" shortdesc="Fence agent for multipath persistent reservation" >
+-<longdesc>fence_mpath is an I/O fencing agent that uses SCSI-3 persistent reservations to control access multipath devices. Underlying devices must support SCSI-3 persistent reservations (SPC-3 or greater) as well as the "preempt-and-abort" subcommand.
++<longdesc>fence_mpath is an I/O Fencing agent that uses SCSI-3 persistent reservations to control access multipath devices. Underlying devices must support SCSI-3 persistent reservations (SPC-3 or greater) as well as the "preempt-and-abort" subcommand.
+ The fence_mpath agent works by having a unique key for each node that has to be set in /etc/multipath.conf. Once registered, a single node will become the reservation holder by creating a "write exclusive, registrants only" reservation on the device(s). The result is that only registered nodes may write to the device(s). When a node failure occurs, the fence_mpath agent will remove the key belonging to the failed node from the device(s). The failed node will no longer be able to write to the device(s). A manual reboot is required.
+ 
+ When used as a watchdog device you can define e.g. retry=1, retry-sleep=2 and verbose=yes parameters in /etc/sysconfig/stonith if you have issues with it failing.</longdesc>
+diff --git a/tests/data/metadata/fence_netio.xml b/tests/data/metadata/fence_netio.xml
+index 95f3cf34a..c1486c955 100644
+--- a/tests/data/metadata/fence_netio.xml
++++ b/tests/data/metadata/fence_netio.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+-<resource-agent name="fence_netio" shortdesc="I/O Fencing agent for Koukaam NETIO-230B" >
+-<longdesc>fence_netio is an I/O Fencing agent which can be used with the Koukaam NETIO-230B Power Distribution Unit. It logs into device via telnet and reboots a specified outlet. Lengthy telnet connections should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
++<resource-agent name="fence_netio" shortdesc="Power Fencing agent for Koukaam NETIO-230B" >
++<longdesc>fence_netio is a Power Fencing agent which can be used with the Koukaam NETIO-230B Power Distribution Unit. It logs into device via telnet and reboots a specified outlet. Lengthy telnet connections should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
+ <vendor-url>http://www.koukaam.se/</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_openstack.xml b/tests/data/metadata/fence_openstack.xml
+index 0bf1a78e2..5eeaee018 100644
+--- a/tests/data/metadata/fence_openstack.xml
++++ b/tests/data/metadata/fence_openstack.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_openstack" shortdesc="Fence agent for OpenStack's Nova service" >
+-<longdesc>fence_openstack is a Fencing agent which can be used with machines controlled by the Openstack's Nova service. This agent calls the python-novaclient and it is mandatory to be installed </longdesc>
++<longdesc>fence_openstack is a Power Fencing agent which can be used with machines controlled by the Openstack's Nova service. This agent calls the python-novaclient and it is mandatory to be installed </longdesc>
+ <vendor-url>https://wiki.openstack.org/wiki/Nova</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ovh.xml b/tests/data/metadata/fence_ovh.xml
+index 79d5eda94..f369f46ca 100644
+--- a/tests/data/metadata/fence_ovh.xml
++++ b/tests/data/metadata/fence_ovh.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_ovh" shortdesc="Fence agent for OVH" >
+-<longdesc>fence_ovh is an Power Fencing agent which can be used within OVH datecentre. Poweroff is simulated with a reboot into rescue-pro mode.</longdesc>
++<longdesc>fence_ovh is a Power Fencing agent which can be used within OVH datecentre. Poweroff is simulated with a reboot into rescue-pro mode.</longdesc>
+ <vendor-url>http://www.ovh.net</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_powerman.xml b/tests/data/metadata/fence_powerman.xml
+index 10514fd3c..09d0b2bae 100644
+--- a/tests/data/metadata/fence_powerman.xml
++++ b/tests/data/metadata/fence_powerman.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_powerman" shortdesc="Fence Agent for Powerman" >
+-<longdesc>This is a Pacemaker Fence Agent for the Powerman management utility that was designed for LLNL systems.</longdesc>
++<longdesc>fence_powerman is a Power Fence Agent for the Powerman management utility that was designed for LLNL systems.</longdesc>
+ <vendor-url>https://github.com/chaos/powerman</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_pve.xml b/tests/data/metadata/fence_pve.xml
+index 1ed3cda4f..1aeebfe3f 100644
+--- a/tests/data/metadata/fence_pve.xml
++++ b/tests/data/metadata/fence_pve.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_pve" shortdesc="Fencing agent for the Proxmox Virtual Environment" >
+-<longdesc>The fence_pve agent can be used to fence virtual machines acting as nodes in a virtualized cluster.</longdesc>
++<longdesc>fence_pve is a Power Fencing agent for virtual machines acting as nodes in a virtualized cluster.</longdesc>
+ <vendor-url>http://www.proxmox.com/</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_raritan.xml b/tests/data/metadata/fence_raritan.xml
+index 5e387c784..00bfadb7a 100644
+--- a/tests/data/metadata/fence_raritan.xml
++++ b/tests/data/metadata/fence_raritan.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+-<resource-agent name="fence_raritan" shortdesc="I/O Fencing agent for Raritan Dominion PX" >
+-<longdesc>fence_raritan is an I/O Fencing agent which can be used with the Raritan DPXS12-20 Power Distribution Unit. It logs into device via telnet and reboots a specified outlet. Lengthy telnet connections should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
++<resource-agent name="fence_raritan" shortdesc="Power Fencing agent for Raritan Dominion PX" >
++<longdesc>fence_raritan is a Power Fencing agent which can be used with the Raritan DPXS12-20 Power Distribution Unit. It logs into device via telnet and reboots a specified outlet. Lengthy telnet connections should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
+ <vendor-url>http://www.raritan.com/</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_rcd_serial.xml b/tests/data/metadata/fence_rcd_serial.xml
+index c14d342f7..030696efe 100644
+--- a/tests/data/metadata/fence_rcd_serial.xml
++++ b/tests/data/metadata/fence_rcd_serial.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_rcd_serial" shortdesc="rcd_serial fence agent" >
+-<longdesc>fence_rcd_serial operates a serial cable that toggles a reset of an opposing server using the reset switch on its motherboard. The cable itself is simple with no power, network or moving parts. An example of the cable is available here: https://smcleod.net/rcd-stonith/ and the circuit design is available in the fence-agents src as SVG</longdesc>
++<longdesc>fence_rcd_serial is a Power Fencing agent that operates a serial cable that toggles a reset of an opposing server using the reset switch on its motherboard. The cable itself is simple with no power, network or moving parts. An example of the cable is available here: https://smcleod.net/rcd-stonith/ and the circuit design is available in the fence-agents src as SVG</longdesc>
+ <vendor-url>https://github.com/sammcj/fence_rcd_serial</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_redfish.xml b/tests/data/metadata/fence_redfish.xml
+index 76a23af30..3285f77c4 100644
+--- a/tests/data/metadata/fence_redfish.xml
++++ b/tests/data/metadata/fence_redfish.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+-<resource-agent name="fence_redfish" shortdesc="I/O Fencing agent for Redfish" >
+-<longdesc>fence_redfish is an I/O Fencing agent which can be used with Out-of-Band controllers that support Redfish APIs. These controllers provide remote access to control power on a server.</longdesc>
++<resource-agent name="fence_redfish" shortdesc="Power Fencing agent for Redfish" >
++<longdesc>fence_redfish is a Power Fencing agent which can be used with Out-of-Band controllers that support Redfish APIs. These controllers provide remote access to control power on a server.</longdesc>
+ <vendor-url>http://www.dmtf.org</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_rhevm.xml b/tests/data/metadata/fence_rhevm.xml
+index 0b2239931..a51be18eb 100644
+--- a/tests/data/metadata/fence_rhevm.xml
++++ b/tests/data/metadata/fence_rhevm.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_rhevm" shortdesc="Fence agent for RHEV-M REST API" >
+-<longdesc>fence_rhevm is an I/O Fencing agent which can be used with RHEV-M REST API to fence virtual machines.</longdesc>
++<longdesc>fence_rhevm is a Power Fencing agent which can be used with RHEV-M REST API to fence virtual machines.</longdesc>
+ <vendor-url>http://www.redhat.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_rsa.xml b/tests/data/metadata/fence_rsa.xml
+index 284f9184d..8563d5005 100644
+--- a/tests/data/metadata/fence_rsa.xml
++++ b/tests/data/metadata/fence_rsa.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_rsa" shortdesc="Fence agent for IBM RSA" >
+-<longdesc>fence_rsa is an I/O Fencing agent which can be used with the IBM RSA II management interface. It logs into an RSA II device via telnet and reboots the associated machine. Lengthy telnet connections to the RSA II device should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
++<longdesc>fence_rsa is a Power Fencing agent which can be used with the IBM RSA II management interface. It logs into an RSA II device via telnet and reboots the associated machine. Lengthy telnet connections to the RSA II device should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
+ <vendor-url>http://www.ibm.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_rsb.xml b/tests/data/metadata/fence_rsb.xml
+index e3d6e1096..ca42ff435 100644
+--- a/tests/data/metadata/fence_rsb.xml
++++ b/tests/data/metadata/fence_rsb.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+-<resource-agent name="fence_rsb" shortdesc="I/O Fencing agent for Fujitsu-Siemens RSB" >
+-<longdesc>fence_rsb is an I/O Fencing agent which can be used with the Fujitsu-Siemens RSB management interface. It logs into device via telnet/ssh  and reboots a specified outlet. Lengthy telnet/ssh connections should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
++<resource-agent name="fence_rsb" shortdesc="Power Fencing agent for Fujitsu-Siemens RSB" >
++<longdesc>fence_rsb is a Power Fencing agent which can be used with the Fujitsu-Siemens RSB management interface. It logs into device via telnet/ssh  and reboots a specified outlet. Lengthy telnet/ssh connections should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
+ <vendor-url>http://www.fujitsu.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_sbd.xml b/tests/data/metadata/fence_sbd.xml
+index d5600b7ce..82ded25b9 100644
+--- a/tests/data/metadata/fence_sbd.xml
++++ b/tests/data/metadata/fence_sbd.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_sbd" shortdesc="Fence agent for sbd" >
+-<longdesc>fence_sbd is I/O Fencing agent which can be used in environments where sbd can be used (shared storage).</longdesc>
++<longdesc>fence_sbd is an I/O Fencing agent which can be used in environments where sbd can be used (shared storage).</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_scsi.xml b/tests/data/metadata/fence_scsi.xml
+index facb2f52e..b963fd772 100644
+--- a/tests/data/metadata/fence_scsi.xml
++++ b/tests/data/metadata/fence_scsi.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_scsi" shortdesc="Fence agent for SCSI persistent reservation" >
+-<longdesc>fence_scsi is an I/O fencing agent that uses SCSI-3 persistent reservations to control access to shared storage devices. These devices must support SCSI-3 persistent reservations (SPC-3 or greater) as well as the "preempt-and-abort" subcommand.
++<longdesc>fence_scsi is an I/O Fencing agent that uses SCSI-3 persistent reservations to control access to shared storage devices. These devices must support SCSI-3 persistent reservations (SPC-3 or greater) as well as the "preempt-and-abort" subcommand.
+ The fence_scsi agent works by having each node in the cluster register a unique key with the SCSI device(s). Reservation key is generated from "node id" (default) or from "node name hash" (RECOMMENDED) by adjusting "key_value" option. Using hash is recommended to prevent issues when removing nodes from cluster without full cluster restart. Once registered, a single node will become the reservation holder by creating a "write exclusive, registrants only" reservation on the device(s). The result is that only registered nodes may write to the device(s). When a node failure occurs, the fence_scsi agent will remove the key belonging to the failed node from the device(s). The failed node will no longer be able to write to the device(s). A manual reboot is required.
+ 
+ When used as a watchdog device you can define e.g. retry=1, retry-sleep=2 and verbose=yes parameters in /etc/sysconfig/stonith if you have issues with it failing.</longdesc>
+diff --git a/tests/data/metadata/fence_skalar.xml b/tests/data/metadata/fence_skalar.xml
+index 84f3f4ea6..5ce022b32 100644
+--- a/tests/data/metadata/fence_skalar.xml
++++ b/tests/data/metadata/fence_skalar.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_skalar" shortdesc="Skala-R Fence agent" >
+-<longdesc>A fence agent for Skala-R.</longdesc>
++<longdesc>fence_skalar is a Power Fencing agent for Skala-R.</longdesc>
+ <vendor-url>https://www.skala-r.ru/</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_tripplite_snmp.xml b/tests/data/metadata/fence_tripplite_snmp.xml
+index c5f66d56f..418832f9c 100644
+--- a/tests/data/metadata/fence_tripplite_snmp.xml
++++ b/tests/data/metadata/fence_tripplite_snmp.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_tripplite_snmp" shortdesc="Fence agent for APC, Tripplite PDU over SNMP" >
+ <symlink name="fence_tripplite_snmp" shortdesc="Fence agent for Tripplife over SNMP"/>
+-<longdesc>fence_apc_snmp is an I/O Fencing agent which can be used with the APC network power switch or Tripplite PDU devices.It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v1, v2c, v3 with all combinations of  authenticity/privacy settings.</longdesc>
++<longdesc>fence_tripplite_snmp is a Power Fencing agent which can be used with the APC network power switch or Tripplite PDU devices.It logs into a device via SNMP and reboots a specified outlet. It supports SNMP v1, v2c, v3 with all combinations of  authenticity/privacy settings.</longdesc>
+ <vendor-url>http://www.apc.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_vbox.xml b/tests/data/metadata/fence_vbox.xml
+index 35577a6b6..347f04c7e 100644
+--- a/tests/data/metadata/fence_vbox.xml
++++ b/tests/data/metadata/fence_vbox.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_vbox" shortdesc="Fence agent for VirtualBox" >
+-<longdesc>fence_vbox is an I/O Fencing agent which can be used with the virtual machines managed by VirtualBox. It logs via ssh to a dom0 where it runs VBoxManage to do all of the work. 
++<longdesc>fence_vbox is a Power Fencing agent which can be used with the virtual machines managed by VirtualBox. It logs via ssh to a dom0 where it runs VBoxManage to do all of the work. 
+ 
+ By default, vbox needs to log in as a user that is a member of the vboxusers group. Also, you must allow ssh login in your sshd_config.</longdesc>
+ <vendor-url>https://www.virtualbox.org/</vendor-url>
+diff --git a/tests/data/metadata/fence_virsh.xml b/tests/data/metadata/fence_virsh.xml
+index 82fe9b6d1..dc36693fc 100644
+--- a/tests/data/metadata/fence_virsh.xml
++++ b/tests/data/metadata/fence_virsh.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_virsh" shortdesc="Fence agent for virsh" >
+-<longdesc>fence_virsh is an I/O Fencing agent which can be used with the virtual machines managed by libvirt. It logs via ssh to a dom0 and there run virsh command, which does all work. 
++<longdesc>fence_virsh is a Power Fencing agent which can be used with the virtual machines managed by libvirt. It logs via ssh to a dom0 and there run virsh command, which does all work. 
+ 
+ By default, virsh needs root account to do properly work. So you must allow ssh login in your sshd_config.</longdesc>
+ <vendor-url>http://libvirt.org</vendor-url>
+diff --git a/tests/data/metadata/fence_virt.xml b/tests/data/metadata/fence_virt.xml
+index 612d4d3cb..eec67ad8c 100644
+--- a/tests/data/metadata/fence_virt.xml
++++ b/tests/data/metadata/fence_virt.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_virt" shortdesc="Fence agent for virtual machines">
+-<longdesc>fence_virt is an I/O Fencing agent which can be used with virtual machines.
++<longdesc>fence_virt is a Power Fencing agent which can be used with virtual machines.
+ 
+ NOTE: reboot-action does not power on nodes that are powered off.</longdesc>
+ <vendor-url>https://libvirt.org</vendor-url>
+diff --git a/tests/data/metadata/fence_vmware.xml b/tests/data/metadata/fence_vmware.xml
+index a46ffdb0f..a5fad2fd5 100644
+--- a/tests/data/metadata/fence_vmware.xml
++++ b/tests/data/metadata/fence_vmware.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_vmware" shortdesc="Fence agent for VMWare" >
+-<longdesc>fence_vmware is an I/O Fencing agent which can be used with the VMware ESX, VMware ESXi or VMware Server to fence virtual machines.
++<longdesc>fence_vmware is a Power Fencing agent which can be used with the VMware ESX, VMware ESXi or VMware Server to fence virtual machines.
+ 
+ Before you can use this agent, it must be installed VI Perl Toolkit or vmrun command on every node you want to make fencing.
+ 
+diff --git a/tests/data/metadata/fence_vmware_rest.xml b/tests/data/metadata/fence_vmware_rest.xml
+index 5c69c2f21..672769d99 100644
+--- a/tests/data/metadata/fence_vmware_rest.xml
++++ b/tests/data/metadata/fence_vmware_rest.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_vmware_rest" shortdesc="Fence agent for VMware REST API" >
+-<longdesc>fence_vmware_rest is an I/O Fencing agent which can be used with VMware API to fence virtual machines.
++<longdesc>fence_vmware_rest is a Power Fencing agent which can be used with VMware API to fence virtual machines.
+ 
+ NOTE: If there's more than 1000 VMs there is a filter parameter to work around the API limit. See https://code.vmware.com/apis/62/vcenter-management#/VM%20/get_vcenter_vm for full list of filters.</longdesc>
+ <vendor-url>https://www.vmware.com</vendor-url>
+diff --git a/tests/data/metadata/fence_vmware_soap.xml b/tests/data/metadata/fence_vmware_soap.xml
+index 72b27e351..5d5ff36e4 100644
+--- a/tests/data/metadata/fence_vmware_soap.xml
++++ b/tests/data/metadata/fence_vmware_soap.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_vmware_soap" shortdesc="Fence agent for VMWare over SOAP API" >
+-<longdesc>fence_vmware_soap is an I/O Fencing agent which can be used with the virtual machines managed by VMWare products that have SOAP API v4.1+. 
++<longdesc>fence_vmware_soap is a Power Fencing agent which can be used with the virtual machines managed by VMWare products that have SOAP API v4.1+. 
+ 
+ Name of virtual machine (-n / port) has to be used in inventory path format (e.g. /datacenter/vm/Discovered virtual machine/myMachine). In the cases when name of yours VM is unique you can use it instead. Alternatively you can always use UUID to access virtual machine.</longdesc>
+ <vendor-url>http://www.vmware.com</vendor-url>
+diff --git a/tests/data/metadata/fence_vmware_vcloud.xml b/tests/data/metadata/fence_vmware_vcloud.xml
+index 3c8bb74a3..c017daf5a 100644
+--- a/tests/data/metadata/fence_vmware_vcloud.xml
++++ b/tests/data/metadata/fence_vmware_vcloud.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_vmware_vcloud" shortdesc="Fence agent for VMware vCloud Director API" >
+-<longdesc>fence_vmware_vcloud is an I/O Fencing agent which can be used with VMware vCloud Director API to fence virtual machines.</longdesc>
++<longdesc>fence_vmware_vcloud is a Power Fencing agent which can be used with VMware vCloud Director API to fence virtual machines.</longdesc>
+ <vendor-url>https://www.vmware.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_wti.xml b/tests/data/metadata/fence_wti.xml
+index b9eb9c6bc..72e6d17f7 100644
+--- a/tests/data/metadata/fence_wti.xml
++++ b/tests/data/metadata/fence_wti.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_wti" shortdesc="Fence agent for WTI" >
+-<longdesc>fence_wti is an I/O Fencing agent which can be used with the WTI Network Power Switch (NPS). It logs into an NPS via telnet or ssh and boots a specified plug. Lengthy telnet connections to the NPS should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
++<longdesc>fence_wti is a Power Fencing agent which can be used with the WTI Network Power Switch (NPS). It logs into an NPS via telnet or ssh and boots a specified plug. Lengthy telnet connections to the NPS should be avoided while a GFS cluster is running because the connection will block any necessary fencing actions.</longdesc>
+ <vendor-url>http://www.wti.com</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_xenapi.xml b/tests/data/metadata/fence_xenapi.xml
+index 380ac28da..c61d465f1 100644
+--- a/tests/data/metadata/fence_xenapi.xml
++++ b/tests/data/metadata/fence_xenapi.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_xenapi" shortdesc="Fence agent for Citrix XenServer over XenAPI" >
+-<longdesc>fence_cxs is an I/O Fencing agent used on Citrix XenServer hosts. It uses the XenAPI, supplied by Citrix, to establish an XML-RPC session to a XenServer host. Once the session is established, further XML-RPC commands are issued in order to switch on, switch off, restart and query the status of virtual machines running on the host.</longdesc>
++<longdesc>fence_xenapi is a Power Fencing agent used on Citrix XenServer hosts. It uses the XenAPI, supplied by Citrix, to establish an XML-RPC session to a XenServer host. Once the session is established, further XML-RPC commands are issued in order to switch on, switch off, restart and query the status of virtual machines running on the host.</longdesc>
+ <vendor-url>http://www.xenproject.org</vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_zvmip.xml b/tests/data/metadata/fence_zvmip.xml
+index 96393bdfa..67104386e 100644
+--- a/tests/data/metadata/fence_zvmip.xml
++++ b/tests/data/metadata/fence_zvmip.xml
+@@ -1,7 +1,6 @@
+ <?xml version="1.0" ?>
+ <resource-agent name="fence_zvmip" shortdesc="Fence agent for use with z/VM Virtual Machines" >
+-<longdesc>The fence_zvmip agent is intended to be used with the
+-z/VM SMAPI service via TCP/IP.
++<longdesc>fence_zvmip is a Power Fencing agent for z/VM SMAPI service via TCP/IP.
+ 
+ The z/VM SMAPI service must be configured so that the virtual machine running
+ the agent can connect to the service, access the system's directory manager,

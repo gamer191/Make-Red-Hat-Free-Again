@@ -1,0 +1,41 @@
+From 373d445993d0700d0d3801b08696b56486b3083b Mon Sep 17 00:00:00 2001
+From: Albert Chu <chu11@llnl.gov>
+Date: Wed, 21 Feb 2024 09:37:17 -0800
+Subject: [PATCH] ipmi-config: fix incorrect output of
+ IPv6_Dynamic_Address_Source_Type
+
+---
+ ChangeLog                                                 | 6 ++++++
+ ipmi-config/ipmi-config-category-core-lan6-conf-section.c | 2 +-
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 6ed5c9739..c761c4854 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,9 @@
++2024-02-21 Albert Chu <chu11@llnl.gov>
++
++	* ipmi-config/ipmi-config-category-core-lan6-conf-section.c
++	(ipv6_dynamic_address_source_type_checkout): Fix incorrect output
++	of IPv6_Dynamic_Address_Source_Type.
++
+ 2024-01-27 Albert Chu <chu11@llnl.gov>
+ 
+ 	* configure.ac: Remove duplicate inb/outb declaration check.  Could
+diff --git a/ipmi-config/ipmi-config-category-core-lan6-conf-section.c b/ipmi-config/ipmi-config-category-core-lan6-conf-section.c
+index 6d5e2943b..0b9db1d2d 100644
+--- a/ipmi-config/ipmi-config-category-core-lan6-conf-section.c
++++ b/ipmi-config/ipmi-config-category-core-lan6-conf-section.c
+@@ -1227,7 +1227,7 @@ ipv6_dynamic_address_source_type_checkout (ipmi_config_state_data_t *state_data,
+ 
+   if (ipmi_config_section_update_keyvalue_output (state_data,
+                                                   kv,
+-                                                  get_dynamic_address_source_type_string (ipv6_data.source)) < 0)
++                                                  get_dynamic_address_source_type_string (ipv6_data.source_type)) < 0)
+     return (IPMI_CONFIG_ERR_FATAL_ERROR);
+ 
+   rv = IPMI_CONFIG_ERR_SUCCESS;
+-- 
+2.43.0
+

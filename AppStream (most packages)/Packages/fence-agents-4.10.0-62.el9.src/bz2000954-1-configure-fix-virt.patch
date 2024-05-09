@@ -1,0 +1,24 @@
+From 52de83b30a8eea638b01f649f4884f50417121c0 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Mon, 8 Nov 2021 09:55:11 +0100
+Subject: [PATCH] configure: fix --with-agents to not match *virt in regex
+
+---
+ configure.ac | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 7aa51e75d..76aec7186 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -173,8 +173,8 @@ if echo "$AGENTS_LIST" | grep -q -E "all|zvm( |$)"; then
+ fi
+ 
+ FENCE_VIRT=0
+-if echo "$AGENTS_LIST" | grep -q -E "all|virt( |$)"; then
+-	AGENTS_LIST=$(echo "$AGENTS_LIST" | sed -E "s/virt( |$)//")
++if echo "$AGENTS_LIST" | grep -q -E "all|(^| )virt( |$)"; then
++	AGENTS_LIST=$(echo "$AGENTS_LIST" | sed -E "s/(^| )virt( |$)//")
+ 	case "$host_os" in
+ 		*bsd*)
+ 			;;

@@ -1,0 +1,139 @@
+From e339f304d4423a0e661d915f72ba88553b21d74a Mon Sep 17 00:00:00 2001
+From: MSSedusch <sedusch@microsoft.com>
+Date: Tue, 28 Sep 2021 12:23:37 +0000
+Subject: [PATCH 1/2] add support for sovereign clouds and MSI
+
+---
+ lib/azure_fence.py.py | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/lib/azure_fence.py.py b/lib/azure_fence.py.py
+index 1f38bd4ea..75b63fdad 100644
+--- a/lib/azure_fence.py.py
++++ b/lib/azure_fence.py.py
+@@ -286,11 +286,11 @@ def get_azure_credentials(config):
+     credentials = None
+     cloud_environment = get_azure_cloud_environment(config)
+     if config.UseMSI and cloud_environment:
+-        from msrestazure.azure_active_directory import MSIAuthentication
+-        credentials = MSIAuthentication(cloud_environment=cloud_environment)
++        from azure.identity import ManagedIdentityCredential
++        credentials = ManagedIdentityCredential(cloud_environment=cloud_environment)
+     elif config.UseMSI:
+-        from msrestazure.azure_active_directory import MSIAuthentication
+-        credentials = MSIAuthentication()
++        from azure.identity import ManagedIdentityCredential
++        credentials = ManagedIdentityCredential()
+     elif cloud_environment:
+         try:
+             # try to use new libraries ClientSecretCredential (azure.identity, based on azure.core)
+@@ -340,7 +340,8 @@ def get_azure_compute_client(config):
+         compute_client = ComputeManagementClient(
+             credentials,
+             config.SubscriptionId,
+-            base_url=cloud_environment.endpoints.resource_manager
++            base_url=cloud_environment.endpoints.resource_manager,
++            credential_scopes=[cloud_environment.endpoints.resource_manager + "/.default"]
+         )
+     else:
+         compute_client = ComputeManagementClient(
+@@ -359,7 +360,8 @@ def get_azure_network_client(config):
+         network_client = NetworkManagementClient(
+             credentials,
+             config.SubscriptionId,
+-            base_url=cloud_environment.endpoints.resource_manager
++            base_url=cloud_environment.endpoints.resource_manager,
++            credential_scopes=[cloud_environment.endpoints.resource_manager + "/.default"]
+         )
+     else:
+         network_client = NetworkManagementClient(
+
+From f08f02a7561e78dd9c95c66ccdcf6246c5ee7d6a Mon Sep 17 00:00:00 2001
+From: MSSedusch <sedusch@microsoft.com>
+Date: Fri, 1 Oct 2021 15:28:39 +0000
+Subject: [PATCH 2/2] compatiblity fix
+
+---
+ lib/azure_fence.py.py | 54 ++++++++++++++++++++++++++++++-------------
+ 1 file changed, 38 insertions(+), 16 deletions(-)
+
+diff --git a/lib/azure_fence.py.py b/lib/azure_fence.py.py
+index 75b63fdad..5ca71eb42 100644
+--- a/lib/azure_fence.py.py
++++ b/lib/azure_fence.py.py
+@@ -286,11 +286,19 @@ def get_azure_credentials(config):
+     credentials = None
+     cloud_environment = get_azure_cloud_environment(config)
+     if config.UseMSI and cloud_environment:
+-        from azure.identity import ManagedIdentityCredential
+-        credentials = ManagedIdentityCredential(cloud_environment=cloud_environment)
++        try:
++            from azure.identity import ManagedIdentityCredential
++            credentials = ManagedIdentityCredential(cloud_environment=cloud_environment)
++        except ImportError:
++            from msrestazure.azure_active_directory import MSIAuthentication
++            credentials = MSIAuthentication(cloud_environment=cloud_environment)
+     elif config.UseMSI:
+-        from azure.identity import ManagedIdentityCredential
+-        credentials = ManagedIdentityCredential()
++        try:
++            from azure.identity import ManagedIdentityCredential
++            credentials = ManagedIdentityCredential()
++        except ImportError:
++            from msrestazure.azure_active_directory import MSIAuthentication
++            credentials = MSIAuthentication()
+     elif cloud_environment:
+         try:
+             # try to use new libraries ClientSecretCredential (azure.identity, based on azure.core)
+@@ -337,12 +345,19 @@ def get_azure_compute_client(config):
+     credentials = get_azure_credentials(config)
+ 
+     if cloud_environment:
+-        compute_client = ComputeManagementClient(
+-            credentials,
+-            config.SubscriptionId,
+-            base_url=cloud_environment.endpoints.resource_manager,
+-            credential_scopes=[cloud_environment.endpoints.resource_manager + "/.default"]
+-        )
++        try:
++            compute_client = ComputeManagementClient(
++                credentials,
++                config.SubscriptionId,
++                base_url=cloud_environment.endpoints.resource_manager,
++                credential_scopes=[cloud_environment.endpoints.resource_manager + "/.default"]
++            )
++        except TypeError:
++            compute_client = ComputeManagementClient(
++                credentials,
++                config.SubscriptionId,
++                base_url=cloud_environment.endpoints.resource_manager
++            )
+     else:
+         compute_client = ComputeManagementClient(
+             credentials,
+@@ -357,12 +372,19 @@ def get_azure_network_client(config):
+     credentials = get_azure_credentials(config)
+ 
+     if cloud_environment:
+-        network_client = NetworkManagementClient(
+-            credentials,
+-            config.SubscriptionId,
+-            base_url=cloud_environment.endpoints.resource_manager,
+-            credential_scopes=[cloud_environment.endpoints.resource_manager + "/.default"]
+-        )
++        try:
++            network_client = NetworkManagementClient(
++                credentials,
++                config.SubscriptionId,
++                base_url=cloud_environment.endpoints.resource_manager,
++                credential_scopes=[cloud_environment.endpoints.resource_manager + "/.default"]
++            )
++        except TypeError:
++            network_client = NetworkManagementClient(
++                credentials,
++                config.SubscriptionId,
++                base_url=cloud_environment.endpoints.resource_manager
++            )
+     else:
+         network_client = NetworkManagementClient(
+             credentials,

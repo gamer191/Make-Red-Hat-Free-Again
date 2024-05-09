@@ -1,0 +1,29 @@
+From 6817d9ff018aa1af6fb9775bc9ae1f1cc07fa1ea Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Mon, 31 Oct 2022 10:54:10 +0100
+Subject: [PATCH] fence_virtd: add link and non-user socket example to man page
+
+---
+ agents/virt/man/fence_virt.conf.5 | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/agents/virt/man/fence_virt.conf.5 b/agents/virt/man/fence_virt.conf.5
+index c23ffd943..c8434ed65 100644
+--- a/agents/virt/man/fence_virt.conf.5
++++ b/agents/virt/man/fence_virt.conf.5
+@@ -230,6 +230,15 @@ by a user running a cluster of virtual machines on a single desktop computer.
+ .
+ the URI to use when connecting to libvirt.
+ 
++All libvirt URIs are accepted and passed as-is.
++
++See https://libvirt.org/uri.html#remote-uris for examples.
++
++NOTE: When VMs are run as non-root user the socket path must be set as part
++of the URI.
++
++Example: qemu:///session?socket=/run/user/<UID>/libvirt/virtqemud-sock
++
+ .SS libvirt-qmf
+ 
+ The libvirt-qmf plugin acts as a QMFv2 Console to the libvirt-qmf daemon in

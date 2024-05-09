@@ -1,0 +1,27 @@
+diff -pruN fontconfig-2.14.0.orig/conf.d/60-latin.conf fontconfig-2.14.0/conf.d/60-latin.conf
+--- fontconfig-2.14.0.orig/conf.d/60-latin.conf	2021-12-03 19:48:08.000000000 +0900
++++ fontconfig-2.14.0/conf.d/60-latin.conf	2022-04-18 19:21:20.287729201 +0900
+@@ -5,7 +5,6 @@
+ 	<alias>
+ 		<family>serif</family>
+ 		<prefer>
+-			<family>Noto Serif</family>
+ 			<family>DejaVu Serif</family>
+ 			<family>Times New Roman</family>
+ 			<family>Thorndale AMT</family>
+@@ -18,7 +17,6 @@
+ 	<alias>
+ 		<family>sans-serif</family>
+ 		<prefer>
+-			<family>Noto Sans</family>
+ 			<family>DejaVu Sans</family>
+ 			<family>Verdana</family>
+ 			<family>Arial</family>
+@@ -35,7 +33,6 @@
+ 	<alias>
+ 		<family>monospace</family>
+ 		<prefer>
+-			<family>Noto Sans Mono</family>
+ 			<family>DejaVu Sans Mono</family>
+ 			<family>Inconsolata</family>
+ 			<family>Andale Mono</family>

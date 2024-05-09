@@ -1,0 +1,21 @@
+diff --color -uNr a/agents/gce/fence_gce.py b/agents/gce/fence_gce.py
+--- a/agents/gce/fence_gce.py	2021-06-03 13:10:44.752999470 +0200
++++ b/agents/gce/fence_gce.py	2021-06-03 13:10:36.512971619 +0200
+@@ -9,7 +9,6 @@
+ #
+ 
+ import atexit
+-import httplib2
+ import logging
+ import json
+ import re
+@@ -30,6 +29,8 @@
+ 
+ from fencing import fail_usage, run_delay, all_opt, atexit_handler, check_input, process_input, show_docs, fence_action
+ try:
++  sys.path.insert(0, '/usr/lib/fence-agents/support/google')
++  import httplib2
+   import googleapiclient.discovery
+   import socks
+   try:
+Binary files a/agents/gce/.fence_gce.py.swp and b/agents/gce/.fence_gce.py.swp differ

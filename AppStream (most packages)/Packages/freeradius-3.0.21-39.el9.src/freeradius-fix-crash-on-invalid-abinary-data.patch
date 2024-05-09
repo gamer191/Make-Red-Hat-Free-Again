@@ -1,0 +1,47 @@
+From: Antonio Torres <antorres@redhat.com>
+Date: Fri, 09 Dec 2022
+Subject: Fix crash on invalid abinary data
+
+A malicious RADIUS client or home server can send a malformed abinary
+attribute which can cause the server to crash.
+
+Backport of https://github.com/FreeRADIUS/freeradius-server/commit/0ec2b39d260e
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2151707
+Signed-off-by: Antonio Torres <antorres@redhat.com>
+---
+diff --git a/src/lib/filters.c b/src/lib/filters.c
+index 4868cd385d9f..3f3b63daeef3 100644
+--- a/src/lib/filters.c
++++ b/src/lib/filters.c
+@@ -1205,13 +1205,19 @@ void print_abinary(char *out, size_t outlen, uint8_t const *data, size_t len, in
+ 			}
+ 		}
+ 	} else if (filter->type == RAD_FILTER_GENERIC) {
+-		int count;
++		size_t count, masklen;
++
++		masklen = ntohs(filter->u.generic.len);
++		if (masklen >= sizeof(filter->u.generic.mask)) {
++			*p = '\0';
++			return;
++		}
+ 
+ 		i = snprintf(p, outlen, " %u ", (unsigned int) ntohs(filter->u.generic.offset));
+ 		p += i;
+ 
+ 		/* show the mask */
+-		for (count = 0; count < ntohs(filter->u.generic.len); count++) {
++		for (count = 0; count < masklen; count++) {
+ 			i = snprintf(p, outlen, "%02x", filter->u.generic.mask[count]);
+ 			p += i;
+ 			outlen -= i;
+@@ -1222,7 +1228,7 @@ void print_abinary(char *out, size_t outlen, uint8_t const *data, size_t len, in
+ 		outlen--;
+ 
+ 		/* show the value */
+-		for (count = 0; count < ntohs(filter->u.generic.len); count++) {
++		for (count = 0; count < masklen; count++) {
+ 			i = snprintf(p, outlen, "%02x", filter->u.generic.value[count]);
+ 			p += i;
+ 			outlen -= i;

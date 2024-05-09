@@ -1,0 +1,46 @@
+From 3373431dc49d6e429bbf613765385cb33a56e917 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Tue, 25 Oct 2022 10:39:29 +0200
+Subject: [PATCH] fence_ibm_powervs: improve defaults based on testing
+
+---
+ agents/ibm_powervs/fence_ibm_powervs.py   | 4 ++--
+ tests/data/metadata/fence_ibm_powervs.xml | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/agents/ibm_powervs/fence_ibm_powervs.py b/agents/ibm_powervs/fence_ibm_powervs.py
+index b0caed7c5..183893616 100755
+--- a/agents/ibm_powervs/fence_ibm_powervs.py
++++ b/agents/ibm_powervs/fence_ibm_powervs.py
+@@ -232,10 +232,10 @@ def main():
+ 	atexit.register(atexit_handler)
+ 	define_new_opts()
+ 
+-	all_opt["shell_timeout"]["default"] = "15"
++	all_opt["shell_timeout"]["default"] = "500"
+ 	all_opt["power_timeout"]["default"] = "30"
+ 	all_opt["power_wait"]["default"] = "1"
+-	all_opt["stonith_status_sleep"]["default"] = "3"
++	all_opt["stonith_status_sleep"]["default"] = "2"
+ 	all_opt["api-type"]["default"] = "private"
+ 	all_opt["proxy"]["default"] = ""
+ 
+diff --git a/tests/data/metadata/fence_ibm_powervs.xml b/tests/data/metadata/fence_ibm_powervs.xml
+index 40c494110..326bc2378 100644
+--- a/tests/data/metadata/fence_ibm_powervs.xml
++++ b/tests/data/metadata/fence_ibm_powervs.xml
+@@ -119,12 +119,12 @@
+ 	</parameter>
+ 	<parameter name="shell_timeout" unique="0" required="0">
+ 		<getopt mixed="--shell-timeout=[seconds]" />
+-		<content type="second" default="15"  />
++		<content type="second" default="500"  />
+ 		<shortdesc lang="en">Wait X seconds for cmd prompt after issuing command</shortdesc>
+ 	</parameter>
+ 	<parameter name="stonith_status_sleep" unique="0" required="0">
+ 		<getopt mixed="--stonith-status-sleep=[seconds]" />
+-		<content type="second" default="3"  />
++		<content type="second" default="2"  />
+ 		<shortdesc lang="en">Sleep X seconds between status calls during a STONITH action</shortdesc>
+ 	</parameter>
+ 	<parameter name="retry_on" unique="0" required="0">

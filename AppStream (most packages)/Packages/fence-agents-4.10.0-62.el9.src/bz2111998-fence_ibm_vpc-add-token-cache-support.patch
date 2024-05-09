@@ -1,0 +1,432 @@
+From bccac64a5135815ada30d385ab573409f1176905 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Thu, 7 Jul 2022 14:18:21 +0200
+Subject: [PATCH 1/3] build: make xml-check: ignore detected paths in *_file
+ parameters not matching saved metadata
+
+---
+ make/agentpycheck.mk                          | 2 +-
+ 83 files changed, 1 insertion(+), 108 deletions(-)
+
+diff --git a/make/agentpycheck.mk b/make/agentpycheck.mk
+index f686c4c89..4044dbad3 100644
+--- a/make/agentpycheck.mk
++++ b/make/agentpycheck.mk
+@@ -1,5 +1,5 @@
+ DATADIR:=$(abs_top_srcdir)/tests/data/metadata
+-AWK_VAL='BEGIN {store=-1} /name=".*_path"/ {store=2} {if (store!=0) {print}; store--}'
++AWK_VAL='BEGIN {store=-1} /name=".*_path"/ || /name=".*_file"/ {store=2} {if (store!=0) {print}; store--}'
+ 
+ TEST_TARGET=$(filter-out $(TEST_TARGET_SKIP),$(TARGET))
+
+From 1b7f3cc431ca53962506e6d96e7a4938c4388416 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Fri, 1 Jul 2022 13:29:16 +0200
+Subject: [PATCH 2/3] build: add FENCETMPDIR for state files
+
+---
+ Makefile.am                  |  3 ++-
+ configure.ac                 | 30 ++++++++++++++++++++++++++++++
+ m4/PKG_CHECK_VAR.m4          | 24 ++++++++++++++++++++++++
+ make/fencebuild.mk           |  1 +
+ systemd/Makefile.am          | 24 ++++++++++++++++++++++++
+ systemd/fence-agents.conf.in |  1 +
+ 7 files changed, 97 insertions(+), 2 deletions(-)
+ create mode 100644 m4/PKG_CHECK_VAR.m4
+ create mode 100644 systemd/Makefile.am
+ create mode 100644 systemd/fence-agents.conf.in
+
+diff --git a/Makefile.am b/Makefile.am
+index c1091b93a..1d115e5aa 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -23,7 +23,7 @@ TARFILES		= $(PACKAGE_NAME)-$(VERSION).tar.bz2 \
+ 
+ ACLOCAL_AMFLAGS		= -I m4
+ 
+-SUBDIRS			= lib agents doc
++SUBDIRS			= lib agents doc systemd
+ 
+ .PHONY: $(SUBDIRS)
+ 
+@@ -34,6 +34,7 @@ doc: agents
+ install-exec-local:
+ 			$(INSTALL) -d $(DESTDIR)/$(LOGDIR)
+ 			$(INSTALL) -d $(DESTDIR)/$(CLUSTERVARRUN)
++			$(INSTALL) -d -m 1755 $(DESTDIR)$(FENCETMPDIR)
+ 
+ uninstall-local:
+ 			rmdir $(DESTDIR)/$(LOGDIR) || :;
+diff --git a/configure.ac b/configure.ac
+index 1bad8e3b0..d7afb8dbe 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -135,10 +135,38 @@ AC_ARG_WITH([agents],
+ 	[ AGENTS_LIST="$withval" ],
+ 	[ AGENTS_LIST="all" ])
+ 
++FENCETMPDIR=${localstatedir}/run/fence-agents
++AC_ARG_WITH(fencetmpdir,
++    [  --with-fencetmpdir=DIR      directory for fence agents state files [${FENCETMPDIR}]],
++    [ FENCETMPDIR="$withval" ])
++
++# Expand $prefix
++eval FENCETMPDIR="`eval echo ${FENCETMPDIR}`"
++AC_DEFINE_UNQUOTED(FENCETMPDIR,"$FENCETMPDIR", Where Fence agents keep state files)
++AC_SUBST(FENCETMPDIR)
++
++
+ if test "x$AGENTS_LIST" = x; then
+ 	AC_ERROR([No agents selected])
+ fi
+ 
++# PKG_CHECK_MODULES will fail if systemd is not found by default, so make sure
++# we set the proper vars and deal with it
++PKG_CHECK_MODULES([systemd], [systemd], [HAS_SYSTEMD=yes], [HAS_SYSTEMD=no])
++if test "x$HAS_SYSTEMD" == "xyes"; then
++	PKG_CHECK_VAR([SYSTEMD_TMPFILES_DIR], [systemd], [tmpfilesdir])
++	if test "x$SYSTEMD_TMPFILES_DIR" == "x"; then
++		AC_MSG_ERROR([Unable to detect systemd tmpfiles directory automatically])
++	fi
++
++	# sanitize systed vars when using non standard prefix
++	if test "$prefix" != "/usr"; then
++		SYSTEMD_TMPFILES_DIR="$prefix/$SYSTEMD_TMPFILES_DIR"
++		AC_SUBST([SYSTEMD_TMPFILES_DIR])
++	fi
++fi
++AM_CONDITIONAL(HAVE_SYSTEMD, [test "x$HAS_SYSTEMD" == xyes ])
++
+ FENCE_KDUMP=0
+ if echo "$AGENTS_LIST" | grep -q -E "all|kdump"; then
+ 	case "$host_os" in
+@@ -552,6 +580,8 @@ AC_CONFIG_FILES([Makefile
+ 		 agents/Makefile
+ 		 lib/Makefile
+ 		 doc/Makefile
++		 systemd/Makefile
++		 systemd/fence-agents.conf
+ 		 agents/virt/Makefile
+ 		 agents/virt/config/Makefile
+ 		 agents/virt/common/Makefile
+diff --git a/m4/PKG_CHECK_VAR.m4 b/m4/PKG_CHECK_VAR.m4
+new file mode 100644
+index 000000000..2221a69eb
+--- /dev/null
++++ b/m4/PKG_CHECK_VAR.m4
+@@ -0,0 +1,24 @@
++dnl PKG_CHECK_VAR(VARIABLE, MODULE, CONFIG-VARIABLE,
++dnl [ACTION-IF-FOUND], [ACTION-IF-NOT-FOUND])
++dnl -------------------------------------------
++dnl Since: 0.28
++dnl
++dnl Retrieves the value of the pkg-config variable for the given module.
++dnl
++dnl Origin (declared license: GPLv2+ with less restrictive exception):
++dnl https://cgit.freedesktop.org/pkg-config/tree/pkg.m4.in?h=pkg-config-0.29.1#n261
++dnl (AS_VAR_COPY replaced with backward-compatible equivalent and guard
++dnl to prefer system-wide variant by Jan Pokorny <jpokorny@redhat.com>)
++
++m4_ifndef([PKG_CHECK_VAR],[
++AC_DEFUN([PKG_CHECK_VAR],
++[AC_REQUIRE([PKG_PROG_PKG_CONFIG])dnl
++AC_ARG_VAR([$1], [value of $3 for $2, overriding pkg-config])dnl
++
++_PKG_CONFIG([$1], [variable="][$3]["], [$2])
++dnl AS_VAR_COPY([$1], [pkg_cv_][$1])
++$1=AS_VAR_GET([pkg_cv_][$1])
++
++AS_VAR_IF([$1], [""], [$5], [$4])dnl
++])dnl PKG_CHECK_VAR
++])dnl m4_ifndef
+diff --git a/make/fencebuild.mk b/make/fencebuild.mk
+index 762db62c4..9a3c6d6dd 100644
+--- a/make/fencebuild.mk
++++ b/make/fencebuild.mk
+@@ -8,6 +8,7 @@ define gen_agent_from_py
+ 		-e 's#@''LOGDIR@#${LOGDIR}#g' \
+ 		-e 's#@''SBINDIR@#${sbindir}#g' \
+ 		-e 's#@''LIBEXECDIR@#${libexecdir}#g' \
++		-e 's#@''FENCETMPDIR@#${FENCETMPDIR}#g' \
+ 		-e 's#@''IPMITOOL_PATH@#${IPMITOOL_PATH}#g' \
+ 		-e 's#@''OPENSTACK_PATH@#${OPENSTACK_PATH}#g' \
+ 		-e 's#@''AMTTOOL_PATH@#${AMTTOOL_PATH}#g' \
+diff --git a/systemd/Makefile.am b/systemd/Makefile.am
+new file mode 100644
+index 000000000..aa3a01679
+--- /dev/null
++++ b/systemd/Makefile.am
+@@ -0,0 +1,24 @@
++#
++# Copyright (C) 2017 Oyvind Albrigtsen
++#
++# This program is free software; you can redistribute it and/or
++# modify it under the terms of the GNU General Public License
++# as published by the Free Software Foundation; either version 2
++# of the License, or (at your option) any later version.
++# 
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++# 
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
++#
++
++MAINTAINERCLEANFILES    = Makefile.in
++
++if HAVE_SYSTEMD
++tmpfilesdir		= $(SYSTEMD_TMPFILES_DIR)
++tmpfiles_DATA		= fence-agents.conf
++endif
+diff --git a/systemd/fence-agents.conf.in b/systemd/fence-agents.conf.in
+new file mode 100644
+index 000000000..4181287da
+--- /dev/null
++++ b/systemd/fence-agents.conf.in
+@@ -0,0 +1 @@
++d @FENCETMPDIR@ 1755 root root
+
+From d5a12d9c30b66eb8720e037c4dce5fe0f3ad7dbb Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Thu, 30 Jun 2022 13:20:37 +0200
+Subject: [PATCH 3/3] fence_ibm_vpc: add token cache support
+
+---
+ agents/ibm_vpc/fence_ibm_vpc.py         | 126 ++++++++++++++++++++----
+ tests/data/metadata/fence_ibm_vpc.xml   |   4 +
+ 3 files changed, 110 insertions(+), 22 deletions(-)
+
+ def auth_connect(opt):
+diff --git a/agents/ibm_vpc/fence_ibm_vpc.py b/agents/ibm_vpc/fence_ibm_vpc.py
+index 3da3ce056..847010584 100755
+--- a/agents/ibm_vpc/fence_ibm_vpc.py
++++ b/agents/ibm_vpc/fence_ibm_vpc.py
+@@ -4,9 +4,10 @@
+ import pycurl, io, json
+ import logging
+ import atexit
++import hashlib
+ sys.path.append("@FENCEAGENTSLIBDIR@")
+ from fencing import *
+-from fencing import fail, run_delay, EC_LOGIN_DENIED, EC_STATUS
++from fencing import fail, run_delay, EC_LOGIN_DENIED, EC_STATUS, EC_GENERIC_ERROR
+ 
+ state = {
+ 	 "running": "on",
+@@ -22,7 +23,7 @@ def get_list(conn, options):
+ 
+ 	try:
+ 		command = "instances?version=2021-05-25&generation=2&limit={}".format(options["--limit"])
+-		res = send_command(conn, command)
++		res = send_command(conn, options, command)
+ 	except Exception as e:
+ 		logging.debug("Failed: Unable to get list: {}".format(e))
+ 		return outlets
+@@ -38,7 +39,7 @@ def get_list(conn, options):
+ def get_power_status(conn, options):
+ 	try:
+ 		command = "instances/{}?version=2021-05-25&generation=2".format(options["--plug"])
+-		res = send_command(conn, command)
++		res = send_command(conn, options, command)
+ 		result = state[res["status"]]
+ 		if options["--verbose-level"] > 1:
+ 			logging.debug("Result:\n{}".format(json.dumps(res, indent=2)))
+@@ -57,27 +58,71 @@ def set_power_status(conn, options):
+ 
+ 	try:
+ 		command = "instances/{}/actions?version=2021-05-25&generation=2".format(options["--plug"])
+-		send_command(conn, command, "POST", action, 201)
++		send_command(conn, options, command, "POST", action, 201)
+ 	except Exception as e:
+ 		logging.debug("Failed: Unable to set power to {} for {}".format(options["--action"], e))
+ 		fail(EC_STATUS)
+ 
+ def get_bearer_token(conn, options):
++	import os, errno
++
++	try:
++		# FIPS requires usedforsecurity=False and might not be
++		# available on all distros: https://bugs.python.org/issue9216
++		hash = hashlib.sha256(options["--apikey"].encode("utf-8"), usedforsecurity=False).hexdigest()
++	except (AttributeError, TypeError):
++		hash = hashlib.sha256(options["--apikey"].encode("utf-8")).hexdigest()
++	file_path = options["--token-file"].replace("[hash]", hash)
+ 	token = None
++
++	if not os.path.isdir(os.path.dirname(file_path)):
++		os.makedirs(os.path.dirname(file_path))
++
++	# For security, remove file with potentially elevated mode
+ 	try:
+-		conn.setopt(pycurl.HTTPHEADER, [
+-			"Content-Type: application/x-www-form-urlencoded",
+-			"User-Agent: curl",
+-		])
+-		token = send_command(conn, "https://iam.cloud.ibm.com/identity/token", "POST", "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey={}".format(options["--apikey"]))["access_token"]
+-	except Exception:
+-		logging.error("Failed: Unable to authenticate")
+-		fail(EC_LOGIN_DENIED)
++		os.remove(file_path)
++	except OSError:
++		pass
++
++	try:
++		oldumask = os.umask(0)
++		file_handle = os.open(file_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
++	except OSError as e:
++		if e.errno == errno.EEXIST:  # Failed as the file already exists.
++			logging.error("Failed: File already exists: {}".format(e))
++			sys.exit(EC_GENERIC_ERROR)
++		else:  # Something unexpected went wrong
++			logging.error("Failed: Unable to open file: {}".format(e))
++			sys.exit(EC_GENERIC_ERROR)
++	else:  # No exception, so the file must have been created successfully.
++		with os.fdopen(file_handle, 'w') as file_obj:
++			try:
++				conn.setopt(pycurl.HTTPHEADER, [
++					"Content-Type: application/x-www-form-urlencoded",
++					"User-Agent: curl",
++				])
++				token = send_command(conn, options, "https://iam.cloud.ibm.com/identity/token", "POST", "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey={}".format(options["--apikey"]))["access_token"]
++			except Exception as e:
++				logging.error("Failed: Unable to authenticate: {}".format(e))
++				fail(EC_LOGIN_DENIED)
++			file_obj.write(token)
++	finally:
++		os.umask(oldumask)
+ 
+ 	return token
+ 
++def set_bearer_token(conn, bearer_token):
++	conn.setopt(pycurl.HTTPHEADER, [
++		"Content-Type: application/json",
++		"Authorization: Bearer {}".format(bearer_token),
++		"User-Agent: curl",
++	])
++
++	return conn
++
+ def connect(opt):
+ 	conn = pycurl.Curl()
++	bearer_token = ""
+ 
+ 	## setup correct URL
+ 	conn.base_url = "https://" + opt["--region"] + ".iaas.cloud.ibm.com/v1/"
+@@ -91,21 +136,28 @@ def connect(opt):
+ 	conn.setopt(pycurl.PROXY, "{}".format(opt["--proxy"]))
+ 
+ 	# get bearer token
+-	bearer_token = get_bearer_token(conn, opt)
++	try:
++		try:
++			# FIPS requires usedforsecurity=False and might not be
++			# available on all distros: https://bugs.python.org/issue9216
++			hash = hashlib.sha256(opt["--apikey"].encode("utf-8"), usedforsecurity=False).hexdigest()
++		except (AttributeError, TypeError):
++			hash = hashlib.sha256(opt["--apikey"].encode("utf-8")).hexdigest()
++		f = open(opt["--token-file"].replace("[hash]", hash))
++		bearer_token = f.read()
++		f.close()
++	except IOError:
++		bearer_token = get_bearer_token(conn, opt)
+ 
+ 	# set auth token for later requests
+-	conn.setopt(pycurl.HTTPHEADER, [
+-		"Content-Type: application/json",
+-		"Authorization: Bearer {}".format(bearer_token),
+-		"User-Agent: curl",
+-	])
++	conn = set_bearer_token(conn, bearer_token)
+ 
+ 	return conn
+ 
+ def disconnect(conn):
+ 	conn.close()
+ 
+-def send_command(conn, command, method="GET", action=None, expected_rc=200):
++def send_command(conn, options, command, method="GET", action=None, expected_rc=200):
+ 	if not command.startswith("https"):
+ 		url = conn.base_url + command
+ 	else:
+@@ -130,6 +182,26 @@ def send_command(conn, command, method="GET", action=None, expected_rc=200):
+ 		raise(e)
+ 
+ 	rc = conn.getinfo(pycurl.HTTP_CODE)
++
++	# auth if token has expired
++	if rc in [400, 401, 415]:
++		tokenconn = pycurl.Curl()
++		token = get_bearer_token(tokenconn, options)
++		tokenconn.close()
++		conn = set_bearer_token(conn, token)
++
++		# flush web_buffer
++		web_buffer.close()
++		web_buffer = io.BytesIO()
++		conn.setopt(pycurl.WRITEFUNCTION, web_buffer.write)
++
++		try:
++			conn.perform()
++		except Exception as e:
++			raise(e)
++
++		rc = conn.getinfo(pycurl.HTTP_CODE)
++
+ 	result = web_buffer.getvalue().decode("UTF-8")
+ 
+ 	web_buffer.close()
+@@ -173,7 +245,7 @@ def define_new_opts():
+ 	all_opt["proxy"] = {
+                 "getopt" : ":",
+                 "longopt" : "proxy",
+-                "help" : "--proxy=[http://<URL>:<PORT>]          Proxy: 'http://<URL>:<PORT>'",
++                "help" : "--proxy=[http://<URL>:<PORT>]  Proxy: 'http://<URL>:<PORT>'",
+                 "required" : "0",
+ 		"default": "",
+                 "shortdesc" : "Network proxy",
+@@ -188,14 +260,26 @@ def define_new_opts():
+ 		"shortdesc" : "Number of nodes returned by API",
+ 		"order" : 0
+ 	}
++	all_opt["token_file"] = {
++		"getopt" : ":",
++		"longopt" : "token-file",
++		"help" : "--token-file=[path]            Path to the token cache file\n"
++			"\t\t\t\t  (Default: @FENCETMPDIR@/fence_ibm_vpc/[hash].token)\n"
++			"\t\t\t\t  [hash] will be replaced by a hashed value",
++		"required" : "0",
++		"default": "@FENCETMPDIR@/fence_ibm_vpc/[hash].token",
++		"shortdesc" : "Path to the token cache file",
++		"order" : 0
++	}
+ 
+ 
+ def main():
+ 	device_opt = [
+ 		"apikey",
+ 		"region",
+-		"limit",
+ 		"proxy",
++		"limit",
++		"token_file",
+ 		"port",
+ 		"no_password",
+ 	]
+diff --git a/tests/data/metadata/fence_ibm_vpc.xml b/tests/data/metadata/fence_ibm_vpc.xml
+index acf4925fc..c35bc4619 100644
+--- a/tests/data/metadata/fence_ibm_vpc.xml
++++ b/tests/data/metadata/fence_ibm_vpc.xml
+@@ -23,6 +23,10 @@
+ 		<content type="string"  />
+ 		<shortdesc lang="en">Region</shortdesc>
+ 	</parameter>
++	<parameter name="token_file" unique="0" required="0">
++		<getopt mixed="--token-file=[path]" />
++		<shortdesc lang="en">Path to the token cache file</shortdesc>
++	</parameter>
+ 	<parameter name="action" unique="0" required="1">
+ 		<getopt mixed="-o, --action=[action]" />
+ 		<content type="string" default="reboot"  />

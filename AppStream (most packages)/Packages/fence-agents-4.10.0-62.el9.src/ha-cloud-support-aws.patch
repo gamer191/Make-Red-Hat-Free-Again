@@ -1,0 +1,10 @@
+--- a/agents/aws/fence_aws.py	2021-02-08 13:31:49.748362643 +0100
++++ b/agents/aws/fence_aws.py	2021-02-08 13:31:46.836356513 +0100
+@@ -11,6 +11,7 @@
+ from requests import HTTPError
+ 
+ try:
++	sys.path.insert(0, '/usr/lib/fence-agents/support/aws')
+ 	import boto3
+ 	from botocore.exceptions import ConnectionError, ClientError, EndpointConnectionError, NoRegionError
+ except ImportError:

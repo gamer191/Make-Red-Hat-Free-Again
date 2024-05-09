@@ -1,0 +1,22 @@
+From 06855a8227fa91f6216119daa3d32d5858c62837 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Mon, 27 Sep 2021 12:05:41 +0200
+Subject: [PATCH] fence_amt_ws: fix "or" causing dead code
+
+---
+ agents/amt_ws/fence_amt_ws.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/agents/amt_ws/fence_amt_ws.py b/agents/amt_ws/fence_amt_ws.py
+index 23c8a61a4..122cec309 100755
+--- a/agents/amt_ws/fence_amt_ws.py
++++ b/agents/amt_ws/fence_amt_ws.py
+@@ -148,7 +148,7 @@ def set_boot_order(_, client, options):
+ 
+     if options["--boot-option"] == "pxe":
+         device = "Intel(r) AMT: Force PXE Boot"
+-    elif options["--boot-option"] == "hd" or "hdsafe":
++    elif options["--boot-option"] in ["hd", "hdsafe"]:
+         device = "Intel(r) AMT: Force Hard-drive Boot"
+     elif options["--boot-option"] == "cd":
+         device = "Intel(r) AMT: Force CD/DVD Boot"

@@ -1,0 +1,291 @@
+From 999f2f8b4dc7d258679daf8c3f13d9b317ff4435 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Thu, 7 Apr 2022 13:11:12 +0200
+Subject: [PATCH] all agents: unify ssl parameters to avoid having to use --ssl
+ when using --ssl-secure/--ssl-insecure for some agents
+
+THIS MIGHT BREAK SETUPS USING fence_docker or fence_pve!
+---
+ agents/cisco_ucs/fence_cisco_ucs.py         |  9 +++++----
+ agents/docker/fence_docker.py               |  9 ++++++---
+ agents/ibmz/fence_ibmz.py                   |  4 ++--
+ agents/rhevm/fence_rhevm.py                 |  8 ++++----
+ agents/skalar/fence_skalar.py               |  2 +-
+ agents/vmware_rest/fence_vmware_rest.py     |  8 ++++----
+ agents/vmware_soap/fence_vmware_soap.py     |  2 +-
+ agents/vmware_vcloud/fence_vmware_vcloud.py |  4 ++--
+ agents/zvm/fence_zvmip.py                   |  8 +++++---
+ lib/fencing.py.py                           |  6 ++++++
+ tests/data/metadata/fence_docker.xml        |  4 ++--
+ 13 files changed, 64 insertions(+), 31 deletions(-)
+
+diff --git a/agents/cisco_ucs/fence_cisco_ucs.py b/agents/cisco_ucs/fence_cisco_ucs.py
+index 2280dbbc7..b85379a73 100644
+--- a/agents/cisco_ucs/fence_cisco_ucs.py
++++ b/agents/cisco_ucs/fence_cisco_ucs.py
+@@ -99,7 +99,7 @@ def get_list(conn, options):
+ 
+ def send_command(opt, command, timeout):
+ 	## setup correct URL
+-	if "--ssl" in opt or "--ssl-secure" in opt or "--ssl-insecure" in opt:
++	if "--ssl-secure" in opt or "--ssl-insecure" in opt:
+ 		url = "https:"
+ 	else:
+ 		url = "http:"
+@@ -114,13 +114,14 @@ def send_command(opt, command, timeout):
+ 	conn.setopt(pycurl.POSTFIELDS, command.encode("ascii"))
+ 	conn.setopt(pycurl.WRITEFUNCTION, web_buffer.write)
+ 	conn.setopt(pycurl.TIMEOUT, timeout)
+-	if "--ssl" in opt or "--ssl-secure" in opt:
++
++	if "--ssl-secure" in opt:
+ 		conn.setopt(pycurl.SSL_VERIFYPEER, 1)
+ 		conn.setopt(pycurl.SSL_VERIFYHOST, 2)
+-
+-	if "--ssl-insecure" in opt:
++	elif "--ssl-insecure" in opt:
+ 		conn.setopt(pycurl.SSL_VERIFYPEER, 0)
+ 		conn.setopt(pycurl.SSL_VERIFYHOST, 0)
++
+ 	conn.perform()
+ 	result = web_buffer.getvalue().decode()
+ 
+diff --git a/agents/docker/fence_docker.py b/agents/docker/fence_docker.py
+index fef87da86..004402518 100644
+--- a/agents/docker/fence_docker.py
++++ b/agents/docker/fence_docker.py
+@@ -43,7 +43,7 @@ def get_list(conn, options):
+ 
+ 
+ def send_cmd(options, cmd, post = False):
+-	url = "http%s://%s:%s/v%s/%s" % ("s" if "--ssl" in options else "", options["--ip"], options["--ipport"], options["--api-version"], cmd)
++	url = "http%s://%s:%s/v%s/%s" % ("s" if "--ssl-secure" in options or "--ssl-insecure" in options else "", options["--ip"], options["--ipport"], options["--api-version"], cmd)
+ 	conn = pycurl.Curl()
+ 	output_buffer = io.BytesIO()
+ 	if logging.getLogger().getEffectiveLevel() < logging.WARNING:
+@@ -55,7 +55,8 @@ def send_cmd(options, cmd, post = False):
+ 		conn.setopt(pycurl.POSTFIELDSIZE, 0)
+ 	conn.setopt(pycurl.WRITEFUNCTION, output_buffer.write)
+ 	conn.setopt(pycurl.TIMEOUT, int(options["--shell-timeout"]))
+-	if "--ssl" in options:
++
++	if "--ssl-secure" in options:
+ 		if not (set(("--tlscert", "--tlskey", "--tlscacert")) <= set(options)):
+ 			fail_usage("Failed. If --ssl option is used, You have to also \
+ specify: --tlscert, --tlskey and --tlscacert")
+@@ -63,7 +64,7 @@ def send_cmd(options, cmd, post = False):
+ 		conn.setopt(pycurl.SSLCERT, options["--tlscert"])
+ 		conn.setopt(pycurl.SSLKEY, options["--tlskey"])
+ 		conn.setopt(pycurl.CAINFO, options["--tlscacert"])
+-	else:
++	elif "--ssl-insecure" in options:
+ 		conn.setopt(pycurl.SSL_VERIFYPEER, 0)
+ 		conn.setopt(pycurl.SSL_VERIFYHOST, 0)
+ 
+@@ -136,6 +137,8 @@ def main():
+ 
+ 	device_opt = ["ipaddr", "no_password", "no_login", "port", "method", "web", "tlscert", "tlskey", "tlscacert", "ssl", "api_version"]
+ 
++	all_opt["ssl"]["default"] = "1"
++
+ 	options = check_input(device_opt, process_input(device_opt))
+ 
+ 	docs = { }
+diff --git a/agents/ibmz/fence_ibmz.py b/agents/ibmz/fence_ibmz.py
+index 47408ccf4..d477adeb9 100644
+--- a/agents/ibmz/fence_ibmz.py
++++ b/agents/ibmz/fence_ibmz.py
+@@ -534,7 +534,7 @@ def main():
+     requests_log.propagate = True
+     if "--verbose" in options:
+         requests_log.setLevel(logging.DEBUG)
+-    if "--ssl-secure" not in options:
++    if "--ssl-insecure" in options:
+         urllib3.disable_warnings(
+             category=urllib3.exceptions.InsecureRequestWarning)
+ 
+@@ -548,7 +548,7 @@ def main():
+         'connect_timeout': int(options['--connect-timeout']),
+         'read_timeout': int(options['--read-timeout']),
+         'port': int(options['--ipport']),
+-        'ssl_verify': bool('--ssl-secure' in options),
++        'ssl_verify': bool('--ssl-insecure' not in options),
+     }
+     try:
+         conn = APIClient(hmc_address, hmc_userid, hmc_password, config)
+diff --git a/agents/rhevm/fence_rhevm.py b/agents/rhevm/fence_rhevm.py
+index 25aecbe58..5f74d06f6 100644
+--- a/agents/rhevm/fence_rhevm.py
++++ b/agents/rhevm/fence_rhevm.py
+@@ -85,7 +85,7 @@ def send_command(opt, command, method="GET"):
+ 		logging.debug("auto-detected API version: " + opt["--api-version"])
+ 
+ 	## setup correct URL
+-	if "--ssl" in opt or "--ssl-secure" in opt or "--ssl-insecure" in opt:
++	if "--ssl-secure" in opt or "--ssl-insecure" in opt:
+ 		url = "https:"
+ 	else:
+ 		url = "http:"
+@@ -126,11 +126,11 @@ def send_command(opt, command, method="GET"):
+ 			conn.setopt(pycurl.COOKIEJAR, cookie_file)
+ 
+ 	conn.setopt(pycurl.TIMEOUT, int(opt["--shell-timeout"]))
+-	if "--ssl" in opt or "--ssl-secure" in opt:
++
++	if "--ssl-secure" in opt:
+ 		conn.setopt(pycurl.SSL_VERIFYPEER, 1)
+ 		conn.setopt(pycurl.SSL_VERIFYHOST, 2)
+-
+-	if "--ssl-insecure" in opt:
++	elif "--ssl-insecure" in opt:
+ 		conn.setopt(pycurl.SSL_VERIFYPEER, 0)
+ 		conn.setopt(pycurl.SSL_VERIFYHOST, 0)
+ 
+diff --git a/agents/skalar/fence_skalar.py b/agents/skalar/fence_skalar.py
+index 959527411..0e11d83f9 100644
+--- a/agents/skalar/fence_skalar.py
++++ b/agents/skalar/fence_skalar.py
+@@ -200,7 +200,7 @@ def main():
+     run_delay(options)
+     
+     proto = "https://"
+-    if "--ssl" in options or "--ssl-secure" in options:
++    if "--ssl-secure" in options:
+         ssl_verify = True
+     elif "--ssl-insecure" in options:
+         ssl_verify = False
+diff --git a/agents/vmware_rest/fence_vmware_rest.py b/agents/vmware_rest/fence_vmware_rest.py
+index e49fd5663..4b884fc62 100644
+--- a/agents/vmware_rest/fence_vmware_rest.py
++++ b/agents/vmware_rest/fence_vmware_rest.py
+@@ -69,7 +69,7 @@ def connect(opt):
+ 	conn = pycurl.Curl()
+ 
+ 	## setup correct URL
+-	if "--ssl" in opt or "--ssl-secure" in opt or "--ssl-insecure" in opt:
++	if "--ssl-secure" in opt or "--ssl-insecure" in opt:
+ 		conn.base_url = "https:"
+ 	else:
+ 		conn.base_url = "http:"
+@@ -89,11 +89,11 @@ def connect(opt):
+ 	conn.setopt(pycurl.USERPWD, opt["--username"] + ":" + opt["--password"])
+ 
+ 	conn.setopt(pycurl.TIMEOUT, int(opt["--shell-timeout"]))
+-	if "--ssl" in opt or "--ssl-secure" in opt:
++
++	if "--ssl-secure" in opt:
+ 		conn.setopt(pycurl.SSL_VERIFYPEER, 1)
+ 		conn.setopt(pycurl.SSL_VERIFYHOST, 2)
+-
+-	if "--ssl-insecure" in opt:
++	elif "--ssl-insecure" in opt:
+ 		conn.setopt(pycurl.SSL_VERIFYPEER, 0)
+ 		conn.setopt(pycurl.SSL_VERIFYHOST, 0)
+ 
+diff --git a/agents/vmware_soap/fence_vmware_soap.py b/agents/vmware_soap/fence_vmware_soap.py
+index 2cd45e0b3..51fb0f147 100644
+--- a/agents/vmware_soap/fence_vmware_soap.py
++++ b/agents/vmware_soap/fence_vmware_soap.py
+@@ -34,7 +34,7 @@ def send(self, request):
+ def soap_login(options):
+ 	run_delay(options)
+ 
+-	if "--ssl" in options or "--ssl-secure" in options or "--ssl-insecure" in options:
++	if "--ssl-secure" in options or "--ssl-insecure" in options:
+ 		if "--ssl-insecure" in options:
+ 			import ssl
+ 			import urllib3
+diff --git a/agents/vmware_vcloud/fence_vmware_vcloud.py b/agents/vmware_vcloud/fence_vmware_vcloud.py
+index 42372a83d..7626b82bb 100644
+--- a/agents/vmware_vcloud/fence_vmware_vcloud.py
++++ b/agents/vmware_vcloud/fence_vmware_vcloud.py
+@@ -60,7 +60,7 @@ def connect(opt):
+         conn = pycurl.Curl()
+ 
+         ## setup correct URL
+-        if "--ssl" in opt or "--ssl-secure" in opt or "--ssl-insecure" in opt:
++        if "--ssl-secure" in opt or "--ssl-insecure" in opt:
+                 conn.base_url = "https:"
+         else:
+                 conn.base_url = "http:"
+@@ -76,7 +76,7 @@ def connect(opt):
+         conn.setopt(pycurl.USERPWD, opt["--username"] + ":" + opt["--password"])
+ 
+         conn.setopt(pycurl.TIMEOUT, int(opt["--shell-timeout"]))
+-        if "--ssl" in opt or "--ssl-secure" in opt:
++        if "--ssl-secure" in opt:
+                 conn.setopt(pycurl.SSL_VERIFYPEER, 1)
+                 conn.setopt(pycurl.SSL_VERIFYHOST, 2)
+         elif "--ssl-insecure" in opt:
+diff --git a/agents/zvm/fence_zvmip.py b/agents/zvm/fence_zvmip.py
+index e8f849eda..90ca95d45 100644
+--- a/agents/zvm/fence_zvmip.py
++++ b/agents/zvm/fence_zvmip.py
+@@ -26,7 +26,7 @@ def open_socket(options):
+ 	except socket.gaierror:
+ 		fail(EC_LOGIN_DENIED)
+ 
+-	if "--ssl" in options:
++	if "--ssl-secure" in options or "--ssl-insecure" in options:
+ 		import ssl
+ 		sock = socket.socket()
+ 		sslcx = ssl.create_default_context()
+@@ -132,7 +132,7 @@ def get_list_of_images(options, command, data_as_plug):
+ 	images = set()
+ 
+ 	if output_len > 3*INT4:
+-		recvflag = socket.MSG_WAITALL if "--ssl" not in options else 0
++		recvflag = socket.MSG_WAITALL if "--ssl-secure" not in options and "--ssl-insecure" not in options else 0
+ 		array_len = struct.unpack("!i", conn.recv(INT4))[0]
+ 		data = ""
+ 
+@@ -182,7 +182,9 @@ def main():
+ 	options = check_input(device_opt, process_input(device_opt), other_conditions=True)
+ 
+ 	if "--disable-ssl" in options or options["--ssl"] == "0":
+-		del options["--ssl"]
++		for k in ["--ssl", "--ssl-secure", "--ssl-insecure"]:
++			if k in options:
++				del options[k]
+ 
+ 	if len(options.get("--plug", "")) > 8:
+ 		fail_usage("Failed: Name of image can not be longer than 8 characters")
+diff --git a/lib/fencing.py.py b/lib/fencing.py.py
+index 696388d55..b746ede8b 100644
+--- a/lib/fencing.py.py
++++ b/lib/fencing.py.py
+@@ -789,6 +789,12 @@ def check_input(device_opt, opt, other_conditions = False):
+ 	if "--password-script" in options:
+ 		options["--password"] = os.popen(options["--password-script"]).read().rstrip()
+ 
++	if "--ssl-secure" in options or "--ssl-insecure" in options:
++		options["--ssl"] = ""
++
++	if "--ssl" in options and "--ssl-insecure" not in options:
++		options["--ssl-secure"] = ""
++
+ 	if os.environ.get("PCMK_service") == "pacemaker-fenced" and "--disable-timeout" not in options:
+ 		options["--disable-timeout"] = "1"
+ 
+diff --git a/tests/data/metadata/fence_docker.xml b/tests/data/metadata/fence_docker.xml
+index 723e72280..51c7c470a 100644
+--- a/tests/data/metadata/fence_docker.xml
++++ b/tests/data/metadata/fence_docker.xml
+@@ -20,7 +20,7 @@
+ 	</parameter>
+ 	<parameter name="ipport" unique="0" required="0">
+ 		<getopt mixed="-u, --ipport=[port]" />
+-		<content type="integer" default="80"  />
++		<content type="integer" default="443"  />
+ 		<shortdesc lang="en">TCP/UDP port to use for connection with device</shortdesc>
+ 	</parameter>
+ 	<parameter name="method" unique="0" required="0">
+@@ -43,7 +43,7 @@
+ 	</parameter>
+ 	<parameter name="ssl" unique="0" required="0">
+ 		<getopt mixed="-z, --ssl" />
+-		<content type="boolean"  />
++		<content type="boolean" default="1"  />
+ 		<shortdesc lang="en">Use SSL connection with verifying certificate</shortdesc>
+ 	</parameter>
+ 	<parameter name="ssl_insecure" unique="0" required="0">

@@ -1,0 +1,92 @@
+From e363e55169a7be1cbeac5568fe2a32692867d4c6 Mon Sep 17 00:00:00 2001
+From: Arslan Ahmad <arslan.ahmad97@googlemail.com>
+Date: Thu, 4 May 2023 12:55:41 +0530
+Subject: [PATCH] fence_scsi: Add support for space-separated devices and
+ update in meta-data
+
+Currently the devices associated with fence_scsi should be
+comma-separated. With this commit, fence_scsi will also work if the
+'devices' are space-separated.
+
+Additionally, this commit includes meta-data update:
+1. For fence_scsi:
+ - The 'devices' parameter is optional if the cluster is configured with
+clvm/lvmlock.
+ - The 'devices' parameter can be comma or space-separated.
+
+2. For fence_mpath:
+ - The 'devices' parameter can be comma or space-separated.
+---
+ agents/mpath/fence_mpath.py         | 2 +-
+ agents/scsi/fence_scsi.py           | 8 ++++----
+ tests/data/metadata/fence_mpath.xml | 2 +-
+ tests/data/metadata/fence_scsi.xml  | 2 +-
+ 4 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/agents/mpath/fence_mpath.py b/agents/mpath/fence_mpath.py
+index ee81eab3a..6976fee90 100644
+--- a/agents/mpath/fence_mpath.py
++++ b/agents/mpath/fence_mpath.py
+@@ -226,7 +226,7 @@ def define_new_opts():
+ 		"help" : "-d, --devices=[devices]        List of devices to use for current operation",
+ 		"required" : "0",
+ 		"shortdesc" : "List of devices to use for current operation. Devices can \
+-be comma-separated list of device-mapper multipath devices (eg. /dev/mapper/3600508b400105df70000e00000ac0000 or /dev/mapper/mpath1). \
++be comma or space separated list of device-mapper multipath devices (eg. /dev/mapper/3600508b400105df70000e00000ac0000 or /dev/mapper/mpath1). \
+ Each device must support SCSI-3 persistent reservations.",
+ 		"order": 1
+ 	}
+diff --git a/agents/scsi/fence_scsi.py b/agents/scsi/fence_scsi.py
+index 3de4ba0b2..42530ceb5 100644
+--- a/agents/scsi/fence_scsi.py
++++ b/agents/scsi/fence_scsi.py
+@@ -350,8 +350,8 @@ def define_new_opts():
+ 		"help" : "-d, --devices=[devices]        List of devices to use for current operation",
+ 		"required" : "0",
+ 		"shortdesc" : "List of devices to use for current operation. Devices can \
+-be comma-separated list of raw devices (eg. /dev/sdc). Each device must support SCSI-3 \
+-persistent reservations.",
++be comma or space separated list of raw devices (eg. /dev/sdc). Each device must support SCSI-3 \
++persistent reservations. Optional if cluster is configured with clvm or lvmlockd.",
+ 		"order": 1
+ 	}
+ 	all_opt["nodename"] = {
+@@ -612,10 +612,10 @@ def main():
+ 
+ 	options["--key"] = options["--key"].lstrip('0')
+ 
+-	if not ("--devices" in options and options["--devices"].split(",")):
++	if not ("--devices" in options and [d for d in re.split("\s*,\s*|\s+", options["--devices"].strip()) if d]):
+ 		options["devices"] = get_shared_devices(options)
+ 	else:
+-		options["devices"] = options["--devices"].split(",")
++		options["devices"] = [d for d in re.split("\s*,\s*|\s+", options["--devices"].strip()) if d]
+ 
+ 	if not options["devices"]:
+ 		fail_usage("Failed: No devices found")
+diff --git a/tests/data/metadata/fence_mpath.xml b/tests/data/metadata/fence_mpath.xml
+index e22d3a1f9..262956dca 100644
+--- a/tests/data/metadata/fence_mpath.xml
++++ b/tests/data/metadata/fence_mpath.xml
+@@ -14,7 +14,7 @@ When used as a watchdog device you can define e.g. retry=1, retry-sleep=2 and ve
+ 	<parameter name="devices" unique="0" required="0">
+ 		<getopt mixed="-d, --devices=[devices]" />
+ 		<content type="string"  />
+-		<shortdesc lang="en">List of devices to use for current operation. Devices can be comma-separated list of device-mapper multipath devices (eg. /dev/mapper/3600508b400105df70000e00000ac0000 or /dev/mapper/mpath1). Each device must support SCSI-3 persistent reservations.</shortdesc>
++		<shortdesc lang="en">List of devices to use for current operation. Devices can be comma or space separated list of device-mapper multipath devices (eg. /dev/mapper/3600508b400105df70000e00000ac0000 or /dev/mapper/mpath1). Each device must support SCSI-3 persistent reservations.</shortdesc>
+ 	</parameter>
+ 	<parameter name="key" unique="0" required="0">
+ 		<getopt mixed="-k, --key=[key]" />
+diff --git a/tests/data/metadata/fence_scsi.xml b/tests/data/metadata/fence_scsi.xml
+index 4fa86189c..facb2f52e 100644
+--- a/tests/data/metadata/fence_scsi.xml
++++ b/tests/data/metadata/fence_scsi.xml
+@@ -19,7 +19,7 @@ When used as a watchdog device you can define e.g. retry=1, retry-sleep=2 and ve
+ 	<parameter name="devices" unique="0" required="0">
+ 		<getopt mixed="-d, --devices=[devices]" />
+ 		<content type="string"  />
+-		<shortdesc lang="en">List of devices to use for current operation. Devices can be comma-separated list of raw devices (eg. /dev/sdc). Each device must support SCSI-3 persistent reservations.</shortdesc>
++		<shortdesc lang="en">List of devices to use for current operation. Devices can be comma or space separated list of raw devices (eg. /dev/sdc). Each device must support SCSI-3 persistent reservations. Optional if cluster is configured with clvm or lvmlockd.</shortdesc>
+ 	</parameter>
+ 	<parameter name="key" unique="0" required="0">
+ 		<getopt mixed="-k, --key=[key]" />

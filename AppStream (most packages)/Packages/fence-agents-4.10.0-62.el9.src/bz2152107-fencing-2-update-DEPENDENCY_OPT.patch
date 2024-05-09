@@ -1,0 +1,1382 @@
+From 0f280ea4a299037a7d4e99d80b0193fd6fcdbd79 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Tue, 24 Jan 2023 12:19:41 +0100
+Subject: [PATCH] fencing: add plug_separator to default DEPENDENCY_OPT
+
+---
+ lib/fencing.py.py                             | 2 +-
+ tests/data/metadata/fence_aliyun.xml          | 5 +++++
+ tests/data/metadata/fence_alom.xml            | 5 +++++
+ tests/data/metadata/fence_amt.xml             | 5 +++++
+ tests/data/metadata/fence_amt_ws.xml          | 5 +++++
+ tests/data/metadata/fence_apc.xml             | 5 +++++
+ tests/data/metadata/fence_apc_snmp.xml        | 5 +++++
+ tests/data/metadata/fence_aws.xml             | 5 +++++
+ tests/data/metadata/fence_azure_arm.xml       | 5 +++++
+ tests/data/metadata/fence_bladecenter.xml     | 5 +++++
+ tests/data/metadata/fence_brocade.xml         | 5 +++++
+ tests/data/metadata/fence_cdu.xml             | 5 +++++
+ tests/data/metadata/fence_cisco_mds.xml       | 5 +++++
+ tests/data/metadata/fence_cisco_ucs.xml       | 5 +++++
+ tests/data/metadata/fence_compute.xml         | 5 +++++
+ tests/data/metadata/fence_crosslink.xml       | 5 +++++
+ tests/data/metadata/fence_docker.xml          | 5 +++++
+ tests/data/metadata/fence_drac.xml            | 5 +++++
+ tests/data/metadata/fence_drac5.xml           | 5 +++++
+ tests/data/metadata/fence_dummy.xml           | 5 +++++
+ tests/data/metadata/fence_eaton_snmp.xml      | 5 +++++
+ tests/data/metadata/fence_emerson.xml         | 5 +++++
+ tests/data/metadata/fence_eps.xml             | 5 +++++
+ tests/data/metadata/fence_evacuate.xml        | 5 +++++
+ tests/data/metadata/fence_gce.xml             | 5 +++++
+ tests/data/metadata/fence_hds_cb.xml          | 5 +++++
+ tests/data/metadata/fence_heuristics_ping.xml | 5 +++++
+ tests/data/metadata/fence_hpblade.xml         | 5 +++++
+ tests/data/metadata/fence_ibm_powervs.xml     | 5 +++++
+ tests/data/metadata/fence_ibm_vpc.xml         | 5 +++++
+ tests/data/metadata/fence_ibmblade.xml        | 5 +++++
+ tests/data/metadata/fence_ibmz.xml            | 5 +++++
+ tests/data/metadata/fence_idrac.xml           | 5 +++++
+ tests/data/metadata/fence_ifmib.xml           | 5 +++++
+ tests/data/metadata/fence_ilo.xml             | 5 +++++
+ tests/data/metadata/fence_ilo2.xml            | 5 +++++
+ tests/data/metadata/fence_ilo3.xml            | 5 +++++
+ tests/data/metadata/fence_ilo3_ssh.xml        | 5 +++++
+ tests/data/metadata/fence_ilo4.xml            | 5 +++++
+ tests/data/metadata/fence_ilo4_ssh.xml        | 5 +++++
+ tests/data/metadata/fence_ilo5.xml            | 5 +++++
+ tests/data/metadata/fence_ilo5_ssh.xml        | 5 +++++
+ tests/data/metadata/fence_ilo_moonshot.xml    | 5 +++++
+ tests/data/metadata/fence_ilo_mp.xml          | 5 +++++
+ tests/data/metadata/fence_ilo_ssh.xml         | 5 +++++
+ tests/data/metadata/fence_imm.xml             | 5 +++++
+ tests/data/metadata/fence_intelmodular.xml    | 5 +++++
+ tests/data/metadata/fence_ipdu.xml            | 5 +++++
+ tests/data/metadata/fence_ipmilan.xml         | 5 +++++
+ tests/data/metadata/fence_ipmilanplus.xml     | 5 +++++
+ tests/data/metadata/fence_ironic.xml          | 5 +++++
+ tests/data/metadata/fence_kubevirt.xml        | 5 +++++
+ tests/data/metadata/fence_ldom.xml            | 5 +++++
+ tests/data/metadata/fence_lindypdu.xml        | 5 +++++
+ tests/data/metadata/fence_lpar.xml            | 5 +++++
+ tests/data/metadata/fence_mpath.xml           | 5 +++++
+ tests/data/metadata/fence_netio.xml           | 5 +++++
+ tests/data/metadata/fence_openstack.xml       | 5 +++++
+ tests/data/metadata/fence_ovh.xml             | 5 +++++
+ tests/data/metadata/fence_powerman.xml        | 5 +++++
+ tests/data/metadata/fence_pve.xml             | 5 +++++
+ tests/data/metadata/fence_raritan.xml         | 5 +++++
+ tests/data/metadata/fence_rcd_serial.xml      | 5 +++++
+ tests/data/metadata/fence_redfish.xml         | 5 +++++
+ tests/data/metadata/fence_rhevm.xml           | 5 +++++
+ tests/data/metadata/fence_rsa.xml             | 5 +++++
+ tests/data/metadata/fence_rsb.xml             | 5 +++++
+ tests/data/metadata/fence_sanbox2.xml         | 5 +++++
+ tests/data/metadata/fence_sbd.xml             | 5 +++++
+ tests/data/metadata/fence_scsi.xml            | 5 +++++
+ tests/data/metadata/fence_skalar.xml          | 5 +++++
+ tests/data/metadata/fence_tripplite_snmp.xml  | 5 +++++
+ tests/data/metadata/fence_vbox.xml            | 5 +++++
+ tests/data/metadata/fence_virsh.xml           | 5 +++++
+ tests/data/metadata/fence_vmware.xml          | 5 +++++
+ tests/data/metadata/fence_vmware_rest.xml     | 5 +++++
+ tests/data/metadata/fence_vmware_soap.xml     | 5 +++++
+ tests/data/metadata/fence_vmware_vcloud.xml   | 5 +++++
+ tests/data/metadata/fence_wti.xml             | 5 +++++
+ tests/data/metadata/fence_xenapi.xml          | 5 +++++
+ tests/data/metadata/fence_zvmip.xml           | 5 +++++
+ 84 files changed, 416 insertions(+), 1 deletion(-)
+
+diff --git a/lib/fencing.py.py b/lib/fencing.py.py
+index cf1c48e78..c5b5e94a1 100644
+--- a/lib/fencing.py.py
++++ b/lib/fencing.py.py
+@@ -494,7 +494,7 @@
+ 			 "version", "action", "agent", "power_timeout",
+ 			 "shell_timeout", "login_timeout", "disable_timeout",
+ 			 "power_wait", "stonith_status_sleep", "retry_on", "delay",
+-			 "quiet"],
++			 "plug_separator", "quiet"],
+ 		"passwd" : ["passwd_script"],
+ 		"sudo" : ["sudo_path"],
+ 		"secure" : ["identity_file", "ssh_options", "ssh_path", "inet4_only", "inet6_only"],
+diff --git a/tests/data/metadata/fence_aliyun.xml b/tests/data/metadata/fence_aliyun.xml
+index 35112eb68..56d792048 100644
+--- a/tests/data/metadata/fence_aliyun.xml
++++ b/tests/data/metadata/fence_aliyun.xml
+@@ -72,6 +72,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_alom.xml b/tests/data/metadata/fence_alom.xml
+index 939b3a56e..6532ad6dd 100644
+--- a/tests/data/metadata/fence_alom.xml
++++ b/tests/data/metadata/fence_alom.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_amt.xml b/tests/data/metadata/fence_amt.xml
+index 98b5ceeb4..809c2dfea 100644
+--- a/tests/data/metadata/fence_amt.xml
++++ b/tests/data/metadata/fence_amt.xml
+@@ -106,6 +106,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="amttool_path" unique="0" required="0">
+ 		<getopt mixed="--amttool-path=[path]" />
+ 		<shortdesc lang="en">Path to amttool binary</shortdesc>
+diff --git a/tests/data/metadata/fence_amt_ws.xml b/tests/data/metadata/fence_amt_ws.xml
+index af7c433f0..97a222526 100644
+--- a/tests/data/metadata/fence_amt_ws.xml
++++ b/tests/data/metadata/fence_amt_ws.xml
+@@ -106,6 +106,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_apc.xml b/tests/data/metadata/fence_apc.xml
+index da029bbb0..6081b1ff5 100644
+--- a/tests/data/metadata/fence_apc.xml
++++ b/tests/data/metadata/fence_apc.xml
+@@ -141,6 +141,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_apc_snmp.xml b/tests/data/metadata/fence_apc_snmp.xml
+index 5f5a33398..02efbb0b0 100644
+--- a/tests/data/metadata/fence_apc_snmp.xml
++++ b/tests/data/metadata/fence_apc_snmp.xml
+@@ -147,6 +147,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_aws.xml b/tests/data/metadata/fence_aws.xml
+index 682b9f0de..76995ecf2 100644
+--- a/tests/data/metadata/fence_aws.xml
++++ b/tests/data/metadata/fence_aws.xml
+@@ -80,6 +80,11 @@ For instructions see: https://boto3.readthedocs.io/en/latest/guide/quickstart.ht
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_azure_arm.xml b/tests/data/metadata/fence_azure_arm.xml
+index f7882fa23..c6e1f203b 100644
+--- a/tests/data/metadata/fence_azure_arm.xml
++++ b/tests/data/metadata/fence_azure_arm.xml
+@@ -132,6 +132,11 @@ When using network fencing the reboot-action will cause a quick-return once the
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_bladecenter.xml b/tests/data/metadata/fence_bladecenter.xml
+index 656d12b8b..3cc415355 100644
+--- a/tests/data/metadata/fence_bladecenter.xml
++++ b/tests/data/metadata/fence_bladecenter.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_brocade.xml b/tests/data/metadata/fence_brocade.xml
+index e6265b68f..a78738d96 100644
+--- a/tests/data/metadata/fence_brocade.xml
++++ b/tests/data/metadata/fence_brocade.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_cdu.xml b/tests/data/metadata/fence_cdu.xml
+index 7505b1bd9..ef87d795d 100644
+--- a/tests/data/metadata/fence_cdu.xml
++++ b/tests/data/metadata/fence_cdu.xml
+@@ -102,6 +102,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_cisco_mds.xml b/tests/data/metadata/fence_cisco_mds.xml
+index e2f5c5b6a..829c9dcbe 100644
+--- a/tests/data/metadata/fence_cisco_mds.xml
++++ b/tests/data/metadata/fence_cisco_mds.xml
+@@ -146,6 +146,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_cisco_ucs.xml b/tests/data/metadata/fence_cisco_ucs.xml
+index e232f33bc..76d15e9f4 100644
+--- a/tests/data/metadata/fence_cisco_ucs.xml
++++ b/tests/data/metadata/fence_cisco_ucs.xml
+@@ -122,6 +122,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_compute.xml b/tests/data/metadata/fence_compute.xml
+index 1b25910f5..f6aa1920b 100644
+--- a/tests/data/metadata/fence_compute.xml
++++ b/tests/data/metadata/fence_compute.xml
+@@ -157,6 +157,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_crosslink.xml b/tests/data/metadata/fence_crosslink.xml
+index 7f67337cd..1102b4e6b 100644
+--- a/tests/data/metadata/fence_crosslink.xml
++++ b/tests/data/metadata/fence_crosslink.xml
+@@ -62,6 +62,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_docker.xml b/tests/data/metadata/fence_docker.xml
+index 12725b95a..f685b1162 100644
+--- a/tests/data/metadata/fence_docker.xml
++++ b/tests/data/metadata/fence_docker.xml
+@@ -110,6 +110,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_drac.xml b/tests/data/metadata/fence_drac.xml
+index bb83f5860..a99126132 100644
+--- a/tests/data/metadata/fence_drac.xml
++++ b/tests/data/metadata/fence_drac.xml
+@@ -107,6 +107,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_drac5.xml b/tests/data/metadata/fence_drac5.xml
+index c539923c0..a0c73ebf8 100644
+--- a/tests/data/metadata/fence_drac5.xml
++++ b/tests/data/metadata/fence_drac5.xml
+@@ -145,6 +145,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_dummy.xml b/tests/data/metadata/fence_dummy.xml
+index a711d3869..0651f5ae0 100644
+--- a/tests/data/metadata/fence_dummy.xml
++++ b/tests/data/metadata/fence_dummy.xml
+@@ -56,6 +56,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_eaton_snmp.xml b/tests/data/metadata/fence_eaton_snmp.xml
+index b3e870b95..1d89b5272 100644
+--- a/tests/data/metadata/fence_eaton_snmp.xml
++++ b/tests/data/metadata/fence_eaton_snmp.xml
+@@ -146,6 +146,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_emerson.xml b/tests/data/metadata/fence_emerson.xml
+index b46ef8293..1ed792e2b 100644
+--- a/tests/data/metadata/fence_emerson.xml
++++ b/tests/data/metadata/fence_emerson.xml
+@@ -146,6 +146,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_eps.xml b/tests/data/metadata/fence_eps.xml
+index 6cf772895..a8cf8ad41 100644
+--- a/tests/data/metadata/fence_eps.xml
++++ b/tests/data/metadata/fence_eps.xml
+@@ -109,6 +109,11 @@ Agent basically works by connecting to hidden page and pass appropriate argument
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_evacuate.xml b/tests/data/metadata/fence_evacuate.xml
+index 10b84abca..df2181eb6 100644
+--- a/tests/data/metadata/fence_evacuate.xml
++++ b/tests/data/metadata/fence_evacuate.xml
+@@ -152,6 +152,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_gce.xml b/tests/data/metadata/fence_gce.xml
+index c7d400e10..2a89b16c2 100644
+--- a/tests/data/metadata/fence_gce.xml
++++ b/tests/data/metadata/fence_gce.xml
+@@ -147,6 +147,11 @@ For instructions see: https://cloud.google.com/compute/docs/tutorials/python-gui
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_hds_cb.xml b/tests/data/metadata/fence_hds_cb.xml
+index 90f4d2809..e25d889e3 100644
+--- a/tests/data/metadata/fence_hds_cb.xml
++++ b/tests/data/metadata/fence_hds_cb.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_heuristics_ping.xml b/tests/data/metadata/fence_heuristics_ping.xml
+index 3832e3c9d..b10189b91 100644
+--- a/tests/data/metadata/fence_heuristics_ping.xml
++++ b/tests/data/metadata/fence_heuristics_ping.xml
+@@ -82,6 +82,11 @@ This is not a fence agent by itself! Its only purpose is to enable/disable anoth
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_hpblade.xml b/tests/data/metadata/fence_hpblade.xml
+index 6f190f3f3..0957fcdd4 100644
+--- a/tests/data/metadata/fence_hpblade.xml
++++ b/tests/data/metadata/fence_hpblade.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ibm_powervs.xml b/tests/data/metadata/fence_ibm_powervs.xml
+index 326bc2378..79878a9a7 100644
+--- a/tests/data/metadata/fence_ibm_powervs.xml
++++ b/tests/data/metadata/fence_ibm_powervs.xml
+@@ -87,6 +87,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ibm_vpc.xml b/tests/data/metadata/fence_ibm_vpc.xml
+index c35bc4619..fe29ffb89 100644
+--- a/tests/data/metadata/fence_ibm_vpc.xml
++++ b/tests/data/metadata/fence_ibm_vpc.xml
+@@ -76,6 +76,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ibmblade.xml b/tests/data/metadata/fence_ibmblade.xml
+index 9598abf6f..3286ca6de 100644
+--- a/tests/data/metadata/fence_ibmblade.xml
++++ b/tests/data/metadata/fence_ibmblade.xml
+@@ -146,6 +146,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ibmz.xml b/tests/data/metadata/fence_ibmz.xml
+index 0671efc0e..ba74fa6fe 100644
+--- a/tests/data/metadata/fence_ibmz.xml
++++ b/tests/data/metadata/fence_ibmz.xml
+@@ -132,6 +132,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_idrac.xml b/tests/data/metadata/fence_idrac.xml
+index a38345629..2d4876493 100644
+--- a/tests/data/metadata/fence_idrac.xml
++++ b/tests/data/metadata/fence_idrac.xml
+@@ -150,6 +150,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ifmib.xml b/tests/data/metadata/fence_ifmib.xml
+index c9328797e..4b56e2335 100644
+--- a/tests/data/metadata/fence_ifmib.xml
++++ b/tests/data/metadata/fence_ifmib.xml
+@@ -148,6 +148,11 @@ It was written with managed ethernet switches in mind, in order to fence iSCSI S
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ilo.xml b/tests/data/metadata/fence_ilo.xml
+index 384b40dc6..0bac03c83 100644
+--- a/tests/data/metadata/fence_ilo.xml
++++ b/tests/data/metadata/fence_ilo.xml
+@@ -133,6 +133,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ilo2.xml b/tests/data/metadata/fence_ilo2.xml
+index 3c98719d9..3d954a345 100644
+--- a/tests/data/metadata/fence_ilo2.xml
++++ b/tests/data/metadata/fence_ilo2.xml
+@@ -133,6 +133,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ilo3.xml b/tests/data/metadata/fence_ilo3.xml
+index b0183ecee..0567b539c 100644
+--- a/tests/data/metadata/fence_ilo3.xml
++++ b/tests/data/metadata/fence_ilo3.xml
+@@ -150,6 +150,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ilo3_ssh.xml b/tests/data/metadata/fence_ilo3_ssh.xml
+index 1a9e56c50..e2a25661d 100644
+--- a/tests/data/metadata/fence_ilo3_ssh.xml
++++ b/tests/data/metadata/fence_ilo3_ssh.xml
+@@ -149,6 +149,11 @@ WARNING: The monitor-action is prone to timeouts. Use the fence_ilo-equivalent t
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ilo4.xml b/tests/data/metadata/fence_ilo4.xml
+index 22df71375..647bb1021 100644
+--- a/tests/data/metadata/fence_ilo4.xml
++++ b/tests/data/metadata/fence_ilo4.xml
+@@ -150,6 +150,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ilo4_ssh.xml b/tests/data/metadata/fence_ilo4_ssh.xml
+index 78aed1c4e..4fd6b2ef1 100644
+--- a/tests/data/metadata/fence_ilo4_ssh.xml
++++ b/tests/data/metadata/fence_ilo4_ssh.xml
+@@ -149,6 +149,11 @@ WARNING: The monitor-action is prone to timeouts. Use the fence_ilo-equivalent t
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ilo5.xml b/tests/data/metadata/fence_ilo5.xml
+index 2648c4bbc..6c99db22a 100644
+--- a/tests/data/metadata/fence_ilo5.xml
++++ b/tests/data/metadata/fence_ilo5.xml
+@@ -150,6 +150,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ilo5_ssh.xml b/tests/data/metadata/fence_ilo5_ssh.xml
+index d0d1096e8..036aec5c6 100644
+--- a/tests/data/metadata/fence_ilo5_ssh.xml
++++ b/tests/data/metadata/fence_ilo5_ssh.xml
+@@ -149,6 +149,11 @@ WARNING: The monitor-action is prone to timeouts. Use the fence_ilo-equivalent t
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ilo_moonshot.xml b/tests/data/metadata/fence_ilo_moonshot.xml
+index b38be58f3..c88c5922f 100644
+--- a/tests/data/metadata/fence_ilo_moonshot.xml
++++ b/tests/data/metadata/fence_ilo_moonshot.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ilo_mp.xml b/tests/data/metadata/fence_ilo_mp.xml
+index ea0a8e69c..7d4fd22d5 100644
+--- a/tests/data/metadata/fence_ilo_mp.xml
++++ b/tests/data/metadata/fence_ilo_mp.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ilo_ssh.xml b/tests/data/metadata/fence_ilo_ssh.xml
+index b8ffe3c6d..2e1cb84b2 100644
+--- a/tests/data/metadata/fence_ilo_ssh.xml
++++ b/tests/data/metadata/fence_ilo_ssh.xml
+@@ -149,6 +149,11 @@ WARNING: The monitor-action is prone to timeouts. Use the fence_ilo-equivalent t
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_imm.xml b/tests/data/metadata/fence_imm.xml
+index 5ed4e8c30..5c5bf910f 100644
+--- a/tests/data/metadata/fence_imm.xml
++++ b/tests/data/metadata/fence_imm.xml
+@@ -150,6 +150,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_intelmodular.xml b/tests/data/metadata/fence_intelmodular.xml
+index 03c7c55d8..5dad0d0bd 100644
+--- a/tests/data/metadata/fence_intelmodular.xml
++++ b/tests/data/metadata/fence_intelmodular.xml
+@@ -148,6 +148,11 @@ Note: Since firmware update version 2.7, SNMP v2 write support is removed, and r
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ipdu.xml b/tests/data/metadata/fence_ipdu.xml
+index d9a44dd0f..22024a7a1 100644
+--- a/tests/data/metadata/fence_ipdu.xml
++++ b/tests/data/metadata/fence_ipdu.xml
+@@ -146,6 +146,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ipmilan.xml b/tests/data/metadata/fence_ipmilan.xml
+index f8ede91cd..a31afcfd4 100644
+--- a/tests/data/metadata/fence_ipmilan.xml
++++ b/tests/data/metadata/fence_ipmilan.xml
+@@ -150,6 +150,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ipmilanplus.xml b/tests/data/metadata/fence_ipmilanplus.xml
+index 92f0cf8cf..19c252933 100644
+--- a/tests/data/metadata/fence_ipmilanplus.xml
++++ b/tests/data/metadata/fence_ipmilanplus.xml
+@@ -150,6 +150,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_ironic.xml b/tests/data/metadata/fence_ironic.xml
+index 4da784826..813b03732 100644
+--- a/tests/data/metadata/fence_ironic.xml
++++ b/tests/data/metadata/fence_ironic.xml
+@@ -102,6 +102,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_kubevirt.xml b/tests/data/metadata/fence_kubevirt.xml
+index 66701099a..e6b42aa55 100644
+--- a/tests/data/metadata/fence_kubevirt.xml
++++ b/tests/data/metadata/fence_kubevirt.xml
+@@ -72,6 +72,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ldom.xml b/tests/data/metadata/fence_ldom.xml
+index 0c8c45e24..59facad6f 100644
+--- a/tests/data/metadata/fence_ldom.xml
++++ b/tests/data/metadata/fence_ldom.xml
+@@ -138,6 +138,11 @@ Very useful parameter is -c (or cmd_prompt in stdin mode). This must be set to s
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_lindypdu.xml b/tests/data/metadata/fence_lindypdu.xml
+index 2e1d5c760..56f81f4cb 100644
+--- a/tests/data/metadata/fence_lindypdu.xml
++++ b/tests/data/metadata/fence_lindypdu.xml
+@@ -151,6 +151,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_lpar.xml b/tests/data/metadata/fence_lpar.xml
+index e2adbc334..22f12dc23 100644
+--- a/tests/data/metadata/fence_lpar.xml
++++ b/tests/data/metadata/fence_lpar.xml
+@@ -150,6 +150,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_mpath.xml b/tests/data/metadata/fence_mpath.xml
+index d656013bb..e22d3a1f9 100644
+--- a/tests/data/metadata/fence_mpath.xml
++++ b/tests/data/metadata/fence_mpath.xml
+@@ -75,6 +75,11 @@ When used as a watchdog device you can define e.g. retry=1, retry-sleep=2 and ve
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_netio.xml b/tests/data/metadata/fence_netio.xml
+index 7d8a4c723..95f3cf34a 100644
+--- a/tests/data/metadata/fence_netio.xml
++++ b/tests/data/metadata/fence_netio.xml
+@@ -97,6 +97,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_openstack.xml b/tests/data/metadata/fence_openstack.xml
+index 2e5bd9ff4..0bf1a78e2 100644
+--- a/tests/data/metadata/fence_openstack.xml
++++ b/tests/data/metadata/fence_openstack.xml
+@@ -152,6 +152,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_ovh.xml b/tests/data/metadata/fence_ovh.xml
+index 5913e49ad..79d5eda94 100644
+--- a/tests/data/metadata/fence_ovh.xml
++++ b/tests/data/metadata/fence_ovh.xml
+@@ -87,6 +87,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_powerman.xml b/tests/data/metadata/fence_powerman.xml
+index eb2509452..10514fd3c 100644
+--- a/tests/data/metadata/fence_powerman.xml
++++ b/tests/data/metadata/fence_powerman.xml
+@@ -67,6 +67,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="3"  />
+diff --git a/tests/data/metadata/fence_pve.xml b/tests/data/metadata/fence_pve.xml
+index ec1405448..1ed3cda4f 100644
+--- a/tests/data/metadata/fence_pve.xml
++++ b/tests/data/metadata/fence_pve.xml
+@@ -145,6 +145,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_raritan.xml b/tests/data/metadata/fence_raritan.xml
+index 9983cc08c..5e387c784 100644
+--- a/tests/data/metadata/fence_raritan.xml
++++ b/tests/data/metadata/fence_raritan.xml
+@@ -97,6 +97,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_rcd_serial.xml b/tests/data/metadata/fence_rcd_serial.xml
+index 2d0a49d9f..c14d342f7 100644
+--- a/tests/data/metadata/fence_rcd_serial.xml
++++ b/tests/data/metadata/fence_rcd_serial.xml
+@@ -55,6 +55,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_redfish.xml b/tests/data/metadata/fence_redfish.xml
+index 5bdb32365..76a23af30 100644
+--- a/tests/data/metadata/fence_redfish.xml
++++ b/tests/data/metadata/fence_redfish.xml
+@@ -132,6 +132,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_rhevm.xml b/tests/data/metadata/fence_rhevm.xml
+index 372c1bbca..0b2239931 100644
+--- a/tests/data/metadata/fence_rhevm.xml
++++ b/tests/data/metadata/fence_rhevm.xml
+@@ -140,6 +140,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_rsa.xml b/tests/data/metadata/fence_rsa.xml
+index 6dfb0925c..284f9184d 100644
+--- a/tests/data/metadata/fence_rsa.xml
++++ b/tests/data/metadata/fence_rsa.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_rsb.xml b/tests/data/metadata/fence_rsb.xml
+index 52978583c..e3d6e1096 100644
+--- a/tests/data/metadata/fence_rsb.xml
++++ b/tests/data/metadata/fence_rsb.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_sanbox2.xml b/tests/data/metadata/fence_sanbox2.xml
+index 2fa3f295b..b29b8bb75 100644
+--- a/tests/data/metadata/fence_sanbox2.xml
++++ b/tests/data/metadata/fence_sanbox2.xml
+@@ -107,6 +107,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_sbd.xml b/tests/data/metadata/fence_sbd.xml
+index 7248b864a..d5600b7ce 100644
+--- a/tests/data/metadata/fence_sbd.xml
++++ b/tests/data/metadata/fence_sbd.xml
+@@ -65,6 +65,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_scsi.xml b/tests/data/metadata/fence_scsi.xml
+index 97c44cc21..4fa86189c 100644
+--- a/tests/data/metadata/fence_scsi.xml
++++ b/tests/data/metadata/fence_scsi.xml
+@@ -90,6 +90,11 @@ When used as a watchdog device you can define e.g. retry=1, retry-sleep=2 and ve
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_skalar.xml b/tests/data/metadata/fence_skalar.xml
+index 5e9f94264..84f3f4ea6 100644
+--- a/tests/data/metadata/fence_skalar.xml
++++ b/tests/data/metadata/fence_skalar.xml
+@@ -122,6 +122,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_tripplite_snmp.xml b/tests/data/metadata/fence_tripplite_snmp.xml
+index b767597c5..c5f66d56f 100644
+--- a/tests/data/metadata/fence_tripplite_snmp.xml
++++ b/tests/data/metadata/fence_tripplite_snmp.xml
+@@ -147,6 +147,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_vbox.xml b/tests/data/metadata/fence_vbox.xml
+index daf8ee98a..35577a6b6 100644
+--- a/tests/data/metadata/fence_vbox.xml
++++ b/tests/data/metadata/fence_vbox.xml
+@@ -138,6 +138,11 @@ By default, vbox needs to log in as a user that is a member of the vboxusers gro
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_virsh.xml b/tests/data/metadata/fence_virsh.xml
+index b9b4082fe..82fe9b6d1 100644
+--- a/tests/data/metadata/fence_virsh.xml
++++ b/tests/data/metadata/fence_virsh.xml
+@@ -138,6 +138,11 @@ By default, virsh needs root account to do properly work. So you must allow ssh
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_vmware.xml b/tests/data/metadata/fence_vmware.xml
+index 8d6eabc6f..a46ffdb0f 100644
+--- a/tests/data/metadata/fence_vmware.xml
++++ b/tests/data/metadata/fence_vmware.xml
+@@ -149,6 +149,11 @@ After you have successfully installed VI Perl Toolkit or VIX API, you should be
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="delay" unique="0" required="0">
+ 		<getopt mixed="--delay=[seconds]" />
+ 		<content type="second" default="0"  />
+diff --git a/tests/data/metadata/fence_vmware_rest.xml b/tests/data/metadata/fence_vmware_rest.xml
+index e46c7a993..5c69c2f21 100644
+--- a/tests/data/metadata/fence_vmware_rest.xml
++++ b/tests/data/metadata/fence_vmware_rest.xml
+@@ -128,6 +128,11 @@ NOTE: If there's more than 1000 VMs there is a filter parameter to work around t
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_vmware_soap.xml b/tests/data/metadata/fence_vmware_soap.xml
+index 1327abac6..72b27e351 100644
+--- a/tests/data/metadata/fence_vmware_soap.xml
++++ b/tests/data/metadata/fence_vmware_soap.xml
+@@ -119,6 +119,11 @@ Name of virtual machine (-n / port) has to be used in inventory path format (e.g
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_vmware_vcloud.xml b/tests/data/metadata/fence_vmware_vcloud.xml
+index 85d970e0a..3c8bb74a3 100644
+--- a/tests/data/metadata/fence_vmware_vcloud.xml
++++ b/tests/data/metadata/fence_vmware_vcloud.xml
+@@ -121,6 +121,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_wti.xml b/tests/data/metadata/fence_wti.xml
+index 8e15f4852..b9eb9c6bc 100644
+--- a/tests/data/metadata/fence_wti.xml
++++ b/tests/data/metadata/fence_wti.xml
+@@ -136,6 +136,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_xenapi.xml b/tests/data/metadata/fence_xenapi.xml
+index 83c83fff0..380ac28da 100644
+--- a/tests/data/metadata/fence_xenapi.xml
++++ b/tests/data/metadata/fence_xenapi.xml
+@@ -87,6 +87,11 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />
+diff --git a/tests/data/metadata/fence_zvmip.xml b/tests/data/metadata/fence_zvmip.xml
+index 192d1e76b..6996ab736 100644
+--- a/tests/data/metadata/fence_zvmip.xml
++++ b/tests/data/metadata/fence_zvmip.xml
+@@ -150,6 +150,11 @@ to access the system's directory manager.
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Display help and exit</shortdesc>
+ 	</parameter>
++	<parameter name="plug_separator" unique="0" required="0">
++		<getopt mixed="--plug-separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for plug parameter when specifying more than 1 plug</shortdesc>
++	</parameter>
+ 	<parameter name="separator" unique="0" required="0">
+ 		<getopt mixed="-C, --separator=[char]" />
+ 		<content type="string" default=","  />

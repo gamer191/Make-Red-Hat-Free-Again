@@ -1,0 +1,136 @@
+From e089777942552c4fe3e58aa328566e7bb745dbf8 Mon Sep 17 00:00:00 2001
+From: Antonio Torres <antorres@redhat.com>
+Date: Fri, 22 Apr 2022 12:27:43 +0200
+Subject: [PATCH] bootstrap: pass -noenc to certificate generation
+
+Bootstrap script would fail to generate certificates if run on systems
+with FIPS enabled. By passing the -noenc option, we can skip the usage
+of unsupported algorithms on these systems.
+
+After generating the certificates, correct permissions are set.
+
+Signed-off-by: Antonio Torres <antorres@redhat.com>
+
+[antorres@redhat.com]: patch adapted to work together with freeradius-bootstrap-create-only.patch.
+In bootstrap diff, -f is changed to -e in conditionals.
+---
+ raddb/certs/Makefile  | 20 ++++++++++++++++----
+ raddb/certs/bootstrap |  6 +++---
+ 2 files changed, 19 insertions(+), 7 deletions(-)
+
+diff --git a/raddb/certs/Makefile b/raddb/certs/Makefile
+index 5cbfd467ce..cb10394ec3 100644
+--- a/raddb/certs/Makefile
++++ b/raddb/certs/Makefile
+@@ -60,6 +60,8 @@ passwords.mk: server.cnf ca.cnf client.cnf inner-server.cnf
+ ######################################################################
+ dh:
+ 	$(OPENSSL) dhparam -out dh -2 $(DH_KEY_SIZE)
++	chown root:radiusd dh
++	chmod 640 dh
+ 
+ ######################################################################
+ #
+@@ -71,8 +73,10 @@ ca.key ca.pem: ca.cnf
+ 	@[ -f serial ] || $(MAKE) serial
+ 	$(OPENSSL) req -new -x509 -keyout ca.key -out ca.pem \
+ 		-days $(CA_DEFAULT_DAYS) -config ./ca.cnf \
+-		-passin pass:$(PASSWORD_CA) -passout pass:$(PASSWORD_CA)
++		-passin pass:$(PASSWORD_CA) -passout pass:$(PASSWORD_CA) -noenc
+ 	chmod g+r ca.key
++	chown root:radiusd ca.*
++	chmod 640 ca.*
+ 
+ ca.der: ca.pem
+ 	$(OPENSSL) x509 -inform PEM -outform DER -in ca.pem -out ca.der
+@@ -81,6 +85,8 @@ ca.crl: ca.pem
+ 	$(OPENSSL) ca -gencrl -keyfile ca.key -cert ca.pem -config ./ca.cnf -out ca-crl.pem -key $(PASSWORD_CA)
+ 	$(OPENSSL) crl -in ca-crl.pem -outform der -out ca.crl
+ 	rm ca-crl.pem
++	chown root:radiusd ca.*
++	chmod 640 ca.*
+ 
+ ######################################################################
+ #
+@@ -88,7 +94,7 @@ ca.crl: ca.pem
+ #
+ ######################################################################
+ server.csr server.key: server.cnf
+-	$(OPENSSL) req -new  -out server.csr -keyout server.key -config ./server.cnf
++	$(OPENSSL) req -new  -out server.csr -keyout server.key -config ./server.cnf -noenc
+ 	chmod g+r server.key
+ 
+ server.crt: server.csr ca.key ca.pem
+@@ -101,6 +107,8 @@ server.p12: server.crt
+ server.pem: server.p12
+ 	$(OPENSSL) pkcs12 -in server.p12 -out server.pem -passin pass:$(PASSWORD_SERVER) -passout pass:$(PASSWORD_SERVER)
+ 	chmod g+r server.pem
++	chown root:radiusd server.*
++	chmod 640 server.*
+ 
+ .PHONY: server.vrfy
+ server.vrfy: ca.pem
+@@ -113,7 +121,7 @@ server.vrfy: ca.pem
+ #
+ ######################################################################
+ client.csr client.key: client.cnf
+-	$(OPENSSL) req -new  -out client.csr -keyout client.key -config ./client.cnf
++	$(OPENSSL) req -new  -out client.csr -keyout client.key -config ./client.cnf -noenc
+ 	chmod g+r client.key
+ 
+ client.crt: client.csr ca.pem ca.key
+@@ -127,6 +135,8 @@ client.pem: client.p12
+ 	$(OPENSSL) pkcs12 -in client.p12 -out client.pem -passin pass:$(PASSWORD_CLIENT) -passout pass:$(PASSWORD_CLIENT)
+ 	chmod g+r client.pem
+ 	cp client.pem $(USER_NAME).pem
++	chown root:radiusd client.*
++	chmod 640 client.*
+ 
+ .PHONY: client.vrfy
+ client.vrfy: ca.pem client.pem
+@@ -139,7 +149,7 @@ client.vrfy: ca.pem client.pem
+ #
+ ######################################################################
+ inner-server.csr inner-server.key: inner-server.cnf
+-	$(OPENSSL) req -new  -out inner-server.csr -keyout inner-server.key -config ./inner-server.cnf
++	$(OPENSSL) req -new  -out inner-server.csr -keyout inner-server.key -config ./inner-server.cnf -noenc
+ 	chmod g+r inner-server.key
+ 
+ inner-server.crt: inner-server.csr ca.key ca.pem
+@@ -152,6 +162,8 @@ inner-server.p12: inner-server.crt
+ inner-server.pem: inner-server.p12
+ 	$(OPENSSL) pkcs12 -in inner-server.p12 -out inner-server.pem -passin pass:$(PASSWORD_INNER) -passout pass:$(PASSWORD_INNER)
+ 	chmod g+r inner-server.pem
++	chown root:radiusd inner-server.*
++	chmod 640 inner-server.*
+ 
+ .PHONY: inner-server.vrfy
+ inner-server.vrfy: ca.pem
+diff --git a/raddb/certs/bootstrap b/raddb/certs/bootstrap
+index 57de8cf0d7..c258ec45e0 100755
+--- a/raddb/certs/bootstrap
++++ b/raddb/certs/bootstrap
+@@ -41,12 +41,12 @@ if [ ! -f dh ]; then
+ fi
+ 
+ if [ ! -e server.key ]; then
+-  openssl req -new  -out server.csr -keyout server.key -config ./server.cnf || exit 1
++  openssl req -new  -out server.csr -keyout server.key -config ./server.cnf -noenc || exit 1
+   chmod g+r server.key
+ fi
+ 
+ if [ ! -e ca.key ]; then
+-  openssl req -new -x509 -keyout ca.key -out ca.pem -days `grep default_days ca.cnf | sed 's/.*=//;s/^ *//'` -config ./ca.cnf || exit 1
++  openssl req -new -x509 -keyout ca.key -out ca.pem -days `grep default_days ca.cnf | sed 's/.*=//;s/^ *//'` -config ./ca.cnf -noenc || exit 1
+ fi
+ 
+ if [ ! -e index.txt ]; then
+@@ -77,7 +77,7 @@ if [ ! -f ca.der ]; then
+ fi
+ 
+ if [ ! -e client.key ]; then
+-  openssl req -new  -out client.csr -keyout client.key -config ./client.cnf
++  openssl req -new  -out client.csr -keyout client.key -config ./client.cnf -noenc
+   chmod g+r client.key
+ fi
+ 

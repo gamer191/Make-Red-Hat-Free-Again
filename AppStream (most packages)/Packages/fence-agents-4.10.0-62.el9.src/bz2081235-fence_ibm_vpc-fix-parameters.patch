@@ -1,0 +1,65 @@
+From d0254345472c9415af1e06e9e8df2fe0ce464db0 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Mon, 2 May 2022 11:14:42 +0200
+Subject: [PATCH] fence_ibm_vpc: remove unused instance parameter and make
+ limit optional
+
+---
+ agents/ibm_vpc/fence_ibm_vpc.py       | 11 +----------
+ tests/data/metadata/fence_ibm_vpc.xml |  7 +------
+ 2 files changed, 2 insertions(+), 16 deletions(-)
+
+diff --git a/agents/ibm_vpc/fence_ibm_vpc.py b/agents/ibm_vpc/fence_ibm_vpc.py
+index 9f84f7b2d..9e38e8301 100755
+--- a/agents/ibm_vpc/fence_ibm_vpc.py
++++ b/agents/ibm_vpc/fence_ibm_vpc.py
+@@ -161,14 +161,6 @@ def define_new_opts():
+ 		"shortdesc" : "API Key",
+ 		"order" : 0
+ 	}
+-	all_opt["instance"] = {
+-		"getopt" : ":",
+-		"longopt" : "instance",
+-		"help" : "--instance=[instance]          Cloud Instance",
+-		"required" : "1",
+-		"shortdesc" : "Cloud Instance",
+-		"order" : 0
+-	}
+ 	all_opt["region"] = {
+ 		"getopt" : ":",
+ 		"longopt" : "region",
+@@ -181,7 +173,7 @@ def define_new_opts():
+ 		"getopt" : ":",
+ 		"longopt" : "limit",
+ 		"help" : "--limit=[number]               Limit number of nodes returned by API",
+-		"required" : "1",
++		"required" : "0",
+ 		"default": 50,
+ 		"shortdesc" : "Number of nodes returned by API",
+ 		"order" : 0
+@@ -191,7 +183,6 @@ def define_new_opts():
+ def main():
+ 	device_opt = [
+ 		"apikey",
+-		"instance",
+ 		"region",
+ 		"limit",
+ 		"port",
+diff --git a/tests/data/metadata/fence_ibm_vpc.xml b/tests/data/metadata/fence_ibm_vpc.xml
+index 926efcaa0..ee7151673 100644
+--- a/tests/data/metadata/fence_ibm_vpc.xml
++++ b/tests/data/metadata/fence_ibm_vpc.xml
+@@ -8,12 +8,7 @@
+ 		<content type="string"  />
+ 		<shortdesc lang="en">API Key</shortdesc>
+ 	</parameter>
+-	<parameter name="instance" unique="0" required="1">
+-		<getopt mixed="--instance=[instance]" />
+-		<content type="string"  />
+-		<shortdesc lang="en">Cloud Instance</shortdesc>
+-	</parameter>
+-	<parameter name="limit" unique="0" required="1">
++	<parameter name="limit" unique="0" required="0">
+ 		<getopt mixed="--limit=[number]" />
+ 		<content type="string" default="50"  />
+ 		<shortdesc lang="en">Number of nodes returned by API</shortdesc>

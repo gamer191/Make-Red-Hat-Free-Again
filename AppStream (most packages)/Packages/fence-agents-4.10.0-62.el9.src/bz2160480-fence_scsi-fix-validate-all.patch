@@ -1,0 +1,30 @@
+From a416a367a804f1e5abaf142c629fe6ab5572d3b6 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Thu, 12 Jan 2023 15:46:41 +0100
+Subject: [PATCH] fence_scsi: skip key generation during validate-all action
+
+---
+ agents/scsi/fence_scsi.py | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/agents/scsi/fence_scsi.py b/agents/scsi/fence_scsi.py
+index e33339614..f9e6823b2 100644
+--- a/agents/scsi/fence_scsi.py
++++ b/agents/scsi/fence_scsi.py
+@@ -566,11 +566,12 @@ def main():
+ 	or ("--key" in options and options["--key"])):
+ 		fail_usage("Failed: nodename or key is required", stop_after_error)
+ 
+-	if not ("--key" in options and options["--key"]):
+-		options["--key"] = generate_key(options)
++	if options["--action"] != "validate-all":
++		if not ("--key" in options and options["--key"]):
++			options["--key"] = generate_key(options)
+ 
+-	if options["--key"] == "0" or not options["--key"]:
+-		fail_usage("Failed: key cannot be 0", stop_after_error)
++		if options["--key"] == "0" or not options["--key"]:
++			fail_usage("Failed: key cannot be 0", stop_after_error)
+ 
+ 	if "--key-value" in options\
+ 	and (options["--key-value"] != "id" and options["--key-value"] != "hash"):

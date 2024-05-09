@@ -1,0 +1,10 @@
+--- a/agents/aliyun/fence_aliyun.py	2021-02-08 16:27:46.587068911 +0100
++++ b/agents/aliyun/fence_aliyun.py	2021-02-08 16:27:41.368054268 +0100
+@@ -9,6 +9,7 @@
+ from fencing import fail, fail_usage, EC_TIMED_OUT, run_delay
+ 
+ try:
++	sys.path.insert(0, '/usr/lib/fence-agents/support/aliyun')
+ 	from aliyunsdkcore import client
+ 	from aliyunsdkcore.auth.credentials import EcsRamRoleCredential
+ 	from aliyunsdkecs.request.v20140526.DescribeInstancesRequest import DescribeInstancesRequest

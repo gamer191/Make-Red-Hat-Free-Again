@@ -1,0 +1,12 @@
+--- fence-agents-4.7.1/lib/azure_fence.py.py	2021-02-08 16:52:32.955244393 +0100
++++ fence-agents-4.7.1/lib/azure_fence.py.py.modif	2021-02-08 16:52:28.150234151 +0100
+@@ -1,6 +1,9 @@
+ import logging, re, time
+ from fencing import fail_usage
+ 
++import sys
++sys.path.insert(0, '/usr/lib/fence-agents/support/azure')
++
+ FENCE_SUBNET_NAME = "fence-subnet"
+ FENCE_INBOUND_RULE_NAME = "FENCE_DENY_ALL_INBOUND"
+ FENCE_INBOUND_RULE_DIRECTION = "Inbound"

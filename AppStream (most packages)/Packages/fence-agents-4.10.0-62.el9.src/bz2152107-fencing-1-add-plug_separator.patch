@@ -1,0 +1,74 @@
+From 90ea995038e560222f9345310f31a79b595a5219 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Thu, 24 Nov 2022 10:19:29 +0100
+Subject: [PATCH 1/2] fencing: add plug_separator parameter to be able to
+ specify one that isnt part of the plug name(s)
+
+---
+ lib/fencing.py.py | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/lib/fencing.py.py b/lib/fencing.py.py
+index 940bd01d1..cf1c48e78 100644
+--- a/lib/fencing.py.py
++++ b/lib/fencing.py.py
+@@ -322,6 +322,13 @@
+ 		"help" : "-6, --inet6-only               Forces agent to use IPv6 addresses only",
+ 		"required" : "0",
+ 		"order" : 1},
++	"plug_separator" : {
++		"getopt" : ":",
++		"longopt" : "plug-separator",
++		"help" : "--plug-separator=[char]        Separator for plug parameter when specifying more than 1 plug",
++		"default" : ",",
++		"required" : "0",
++		"order" : 100},
+ 	"separator" : {
+ 		"getopt" : "C:",
+ 		"longopt" : "separator",
+@@ -934,7 +941,7 @@ def fence_action(connection, options, set_power_fn, get_power_fn, get_outlet_lis
+ 
+ 	try:
+ 		if "--plug" in options:
+-			options["--plugs"] = options["--plug"].split(",")
++			options["--plugs"] = options["--plug"].split(options["--plug-separator"])
+ 
+ 		## Process options that manipulate fencing device
+ 		#####
+
+From 55e2a56b81ed2188dedfce07cc3155e2175183cd Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Mon, 28 Nov 2022 12:40:00 +0100
+Subject: [PATCH 2/2] fence_wti: increase login timeout to avoid random
+ timeouts
+
+---
+ agents/wti/fence_wti.py           | 1 +
+ tests/data/metadata/fence_wti.xml | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/agents/wti/fence_wti.py b/agents/wti/fence_wti.py
+index 68640ae65..97cc66de2 100644
+--- a/agents/wti/fence_wti.py
++++ b/agents/wti/fence_wti.py
+@@ -178,6 +178,7 @@ def main():
+ 	atexit.register(atexit_handler)
+ 
+ 	all_opt["cmd_prompt"]["default"] = ["RSM>", "MPC>", "IPS>", "TPS>", "NBB>", "NPS>", "VMR>"]
++	all_opt["login_timeout"]["default"] = "10"
+ 
+ 	options = check_input(device_opt, process_input(device_opt))
+ 
+diff --git a/tests/data/metadata/fence_wti.xml b/tests/data/metadata/fence_wti.xml
+index 6bdccd2dc..8e15f4852 100644
+--- a/tests/data/metadata/fence_wti.xml
++++ b/tests/data/metadata/fence_wti.xml
+@@ -153,7 +153,7 @@
+ 	</parameter>
+ 	<parameter name="login_timeout" unique="0" required="0">
+ 		<getopt mixed="--login-timeout=[seconds]" />
+-		<content type="second" default="5"  />
++		<content type="second" default="10"  />
+ 		<shortdesc lang="en">Wait X seconds for cmd prompt after login</shortdesc>
+ 	</parameter>
+ 	<parameter name="power_timeout" unique="0" required="0">

@@ -1,0 +1,32 @@
+From 9812473270e9a404c632358c1debfa4a1fb440fe Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Wed, 20 Oct 2021 15:46:42 +0200
+Subject: [PATCH] fence_amt_ws: fix --boot-option (choices are uppercased while
+ getting parsed)
+
+---
+ agents/amt_ws/fence_amt_ws.py | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/agents/amt_ws/fence_amt_ws.py b/agents/amt_ws/fence_amt_ws.py
+index 122cec309..5e7452a97 100755
+--- a/agents/amt_ws/fence_amt_ws.py
++++ b/agents/amt_ws/fence_amt_ws.py
+@@ -146,13 +146,13 @@ def set_boot_order(_, client, options):
+     wsman = 'http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd'
+     namespace = CIM_BootConfigSetting
+ 
+-    if options["--boot-option"] == "pxe":
++    if options["--boot-option"] == "PXE":
+         device = "Intel(r) AMT: Force PXE Boot"
+-    elif options["--boot-option"] in ["hd", "hdsafe"]:
++    elif options["--boot-option"] in ["HD", "HDSAFE"]:
+         device = "Intel(r) AMT: Force Hard-drive Boot"
+-    elif options["--boot-option"] == "cd":
++    elif options["--boot-option"] == "CD":
+         device = "Intel(r) AMT: Force CD/DVD Boot"
+-    elif options["--boot-option"] == "diag":
++    elif options["--boot-option"] == "DIAG":
+         device = "Intel(r) AMT: Force Diagnostic Boot"
+     else:
+         logging.error('Boot device: %s not supported.', \

@@ -1,0 +1,114 @@
+From 3b311a1b069cec59f3d47242282f5d9c67a82e06 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Mon, 21 Nov 2022 12:33:22 +0100
+Subject: [PATCH] fence_virtd: make fence_virtd.conf file mode 600 and fail if
+ fence_virtd.conf or key file are not mode 600
+
+---
+ agents/virt/config/Makefile.am     |  3 +++
+ agents/virt/include/simpleconfig.h |  2 ++
+ agents/virt/server/config.c        | 26 ++++++++++++++++++++++++++
+ agents/virt/server/main.c          | 16 ++++++++++++++++
+ 4 files changed, 47 insertions(+)
+
+diff --git a/agents/virt/config/Makefile.am b/agents/virt/config/Makefile.am
+index 86d8df415..19d974278 100644
+--- a/agents/virt/config/Makefile.am
++++ b/agents/virt/config/Makefile.am
+@@ -37,5 +37,8 @@ y.tab.c: config.y
+ config.c: y.tab.c config.l
+ 	$(LEX) -oconfig.c $(srcdir)/config.l
+ 
++install-exec-hook:
++	chmod 600 $(DESTDIR)$(sysconfdir)/fence_virt.conf
++
+ clean-local:
+ 	rm -f config.tab.c config.tab.h config.c y.tab.c y.tab.h
+diff --git a/agents/virt/include/simpleconfig.h b/agents/virt/include/simpleconfig.h
+index 83d54377a..6aba85f02 100644
+--- a/agents/virt/include/simpleconfig.h
++++ b/agents/virt/include/simpleconfig.h
+@@ -49,6 +49,8 @@ config_object_t *sc_init(void);
+ /* Frees a previously-allocated copy of our simple config object */
+ void sc_release(config_object_t *c);
+ 
++int check_file_permissions(const char *fname);
++
+ int do_configure(config_object_t *config, const char *filename);
+ 
+ #endif
+diff -uNr a/agents/virt/server/config.c b/agents/virt/server/config.c
+--- a/agents/virt/server/config.c	2021-07-08 13:09:05.000000000 +0200
++++ b/agents/virt/server/config.c	2022-11-22 10:59:09.547919852 +0100
+@@ -11,6 +11,7 @@
+ #include <fcntl.h>
+ #include <net/if.h>
+ #include <arpa/inet.h>
++#include <errno.h>
+ 
+ #include "simpleconfig.h"
+ #include "static_map.h"
+@@ -595,6 +596,31 @@ listener_configure(config_object_t *config)
+ }
+ 
+ 
++int
++check_file_permissions(const char *fname)
++{
++	struct stat st;
++	mode_t file_perms = 0600;
++	int ret;
++
++	ret = stat(fname, &st);
++	if (ret != 0) {
++		printf("stat failed on file '%s': %s\n",
++			 fname, strerror(errno));
++		return 1;
++	}
++
++	if ((st.st_mode & 0777) != file_perms) {
++		printf("WARNING: invalid permissions on file "
++			 "'%s': has 0%o should be 0%o\n", fname,
++			 (unsigned int)(st.st_mode & 0777),
++			 (unsigned int)file_perms);
++		return 1;
++	}
++
++	return 0;
++}
++
+ int
+ do_configure(config_object_t *config, const char *config_file)
+ {
+diff -uNr a/agents/virt/server/main.c b/agents/virt/server/main.c
+--- a/agents/virt/server/main.c	2021-07-08 13:09:05.000000000 +0200
++++ b/agents/virt/server/main.c	2022-11-22 10:58:05.894530187 +0100
+@@ -14,7 +14,9 @@
+ /* Local includes */
+ #include "simpleconfig.h"
+ #include "static_map.h"
++#include "xvm.h"
+ #include "server_plugin.h"
++#include "simple_auth.h"
+ #include "debug.h"
+ 
+ /* configure.c */
+@@ -203,6 +205,18 @@
+ 		snprintf(pid_file, PATH_MAX, "/var/run/%s.pid", basename(argv[0]));
+ 	}
+ 
++	check_file_permissions(config_file);
++
++	sprintf(val, "listeners/%s/@key_file", listener_name);
++	if (sc_get(config, val,
++		   val, sizeof(val)-1) == 0) {
++		dbg_printf(1, "Got %s for key_file\n", val);
++	} else {
++		snprintf(val, sizeof(val), "%s", DEFAULT_KEY_FILE);
++	}
++
++	check_file_permissions(val);
++
+ 	openlog(basename(argv[0]), LOG_NDELAY | LOG_PID, LOG_DAEMON);
+ 
+ 	daemon_init(basename(argv[0]), pid_file, foreground);

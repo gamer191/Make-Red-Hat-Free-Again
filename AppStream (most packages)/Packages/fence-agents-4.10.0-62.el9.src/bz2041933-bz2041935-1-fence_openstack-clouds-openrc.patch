@@ -1,0 +1,313 @@
+From 2f741df2ce73da85bbd205d861b527aa141d9776 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Fri, 14 Jan 2022 14:47:41 +0100
+Subject: [PATCH 1/2] fencing: add source_env()
+
+---
+ lib/fencing.py.py | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/lib/fencing.py.py b/lib/fencing.py.py
+index d85b23568..55e38c407 100644
+--- a/lib/fencing.py.py
++++ b/lib/fencing.py.py
+@@ -1143,6 +1143,14 @@ def fence_logout(conn, logout_string, sleep=0):
+ 	except pexpect.ExceptionPexpect:
+ 		pass
+ 
++def source_env(env_file):
++    # POSIX: name shall not contain '=', value doesn't contain '\0'
++    output = subprocess.check_output("source {} && env -0".format(env_file), shell=True,
++                          executable="/bin/sh")
++    # replace env
++    os.environ.clear()
++    os.environ.update(line.partition('=')[::2] for line in output.decode("utf-8").split('\0'))
++
+ # Convert array of format [[key1, value1], [key2, value2], ... [keyN, valueN]] to dict, where key is
+ # in format a.b.c.d...z and returned dict has key only z
+ def array_to_dict(array):
+
+From fe2183a97e0a5734702e9cba8da21f01afd8f577 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Fri, 14 Jan 2022 14:54:10 +0100
+Subject: [PATCH 2/2] fence_openstack: add support for reading config from
+ clouds.yaml and openrc
+
+---
+ agents/openstack/fence_openstack.py     | 116 ++++++++++++++++++++----
+ tests/data/metadata/fence_openstack.xml |  32 +++++--
+ 2 files changed, 126 insertions(+), 22 deletions(-)
+ mode change 100755 => 100644 agents/openstack/fence_openstack.py
+
+diff --git a/agents/openstack/fence_openstack.py b/agents/openstack/fence_openstack.py
+old mode 100755
+new mode 100644
+index 36b353b52..d3a4be3aa
+--- a/agents/openstack/fence_openstack.py
++++ b/agents/openstack/fence_openstack.py
+@@ -8,7 +8,7 @@
+ 
+ sys.path.append("@FENCEAGENTSLIBDIR@")
+ from fencing import *
+-from fencing import fail_usage, run_delay
++from fencing import fail_usage, run_delay, source_env
+ 
+ try:
+     from novaclient import client
+@@ -26,6 +26,23 @@ def translate_status(instance_status):
+         return "off"
+     return "unknown"
+ 
++def get_cloud(options):
++    import os, yaml
++
++    clouds_yaml = os.path.expanduser("~/.config/openstack/clouds.yaml")
++    if os.path.exists(clouds_yaml):
++        with open(clouds_yaml, "r") as yaml_stream:
++            try:
++                clouds = yaml.safe_load(yaml_stream)
++            except yaml.YAMLError as exc:
++                fail_usage("Failed: Unable to read: " + clouds_yaml)
++
++    cloud = clouds.get("clouds").get(options["--cloud"])
++    if not cloud:
++        fail_usage("Cloud: {} not found.".format(options["--cloud"]))
++
++    return cloud
++
+ 
+ def get_nodes_list(conn, options):
+     logging.info("Running %s action", options["--action"])
+@@ -153,7 +170,7 @@ def define_new_opts():
+         "getopt": ":",
+         "longopt": "auth-url",
+         "help": "--auth-url=[authurl]           Keystone Auth URL",
+-        "required": "1",
++        "required": "0",
+         "shortdesc": "Keystone Auth URL",
+         "order": 2,
+     }
+@@ -161,7 +178,7 @@ def define_new_opts():
+         "getopt": ":",
+         "longopt": "project-name",
+         "help": "--project-name=[project]       Tenant Or Project Name",
+-        "required": "1",
++        "required": "0",
+         "shortdesc": "Keystone Project",
+         "default": "admin",
+         "order": 3,
+@@ -184,13 +201,38 @@ def define_new_opts():
+         "default": "Default",
+         "order": 5,
+     }
++    all_opt["clouds-yaml"] = {
++        "getopt": ":",
++        "longopt": "clouds-yaml",
++        "help": "--clouds-yaml=[clouds-yaml]  Path to the clouds.yaml config file",
++        "required": "0",
++        "shortdesc": "clouds.yaml config file",
++        "default": "~/.config/openstack/clouds.yaml",
++        "order": 6,
++    }
++    all_opt["cloud"] = {
++        "getopt": ":",
++        "longopt": "cloud",
++        "help": "--cloud=[cloud]              Openstack cloud (from clouds.yaml).",
++        "required": "0",
++        "shortdesc": "Cloud from clouds.yaml",
++        "order": 7,
++    }
++    all_opt["openrc"] = {
++        "getopt": ":",
++        "longopt": "openrc",
++        "help": "--openrc=[openrc]              Path to the openrc config file",
++        "required": "0",
++        "shortdesc": "openrc config file",
++        "order": 8,
++    }
+     all_opt["uuid"] = {
+         "getopt": ":",
+         "longopt": "uuid",
+         "help": "--uuid=[uuid]                  Replaced by -n, --plug",
+         "required": "0",
+         "shortdesc": "Replaced by port/-n/--plug",
+-        "order": 6,
++        "order": 9,
+     }
+     all_opt["cacert"] = {
+         "getopt": ":",
+@@ -199,7 +241,7 @@ def define_new_opts():
+         "required": "0",
+         "shortdesc": "SSL X.509 certificates file",
+         "default": "",
+-        "order": 7,
++        "order": 10,
+     }
+     all_opt["apitimeout"] = {
+         "getopt": ":",
+@@ -209,7 +251,7 @@ def define_new_opts():
+         "shortdesc": "Timeout in seconds to use for API calls, default is 60.",
+         "required": "0",
+         "default": 60,
+-        "order": 8,
++        "order": 11,
+     }
+ 
+ 
+@@ -218,11 +260,16 @@ def main():
+ 
+     device_opt = [
+         "login",
++        "no_login",
+         "passwd",
++        "no_password",
+         "auth-url",
+         "project-name",
+         "user-domain-name",
+         "project-domain-name",
++        "clouds-yaml",
++        "cloud",
++        "openrc",
+         "port",
+         "no_port",
+         "uuid",
+@@ -265,19 +312,56 @@ def main():
+ 
+     run_delay(options)
+ 
+-    username = options["--username"]
+-    password = options["--password"]
+-    projectname = options["--project-name"]
+-    auth_url = None
+-    try:
+-        auth_url = options["--auth-url"]
+-    except KeyError:
+-        fail_usage("Failed: You have to set the Keystone service endpoint for authorization")
+-    user_domain_name = options["--user-domain-name"]
+-    project_domain_name = options["--project-domain-name"]
++    if options.get("--clouds-yaml"):
++        if not os.path.exists(os.path.expanduser(options["--clouds-yaml"])):
++            fail_usage("Failed: {} does not exist".format(options.get("--clouds-yaml")))
++        if not options.get("--cloud"):
++            fail_usage("Failed: \"cloud\" not specified")
++        cloud = get_cloud(options)
++        username = cloud.get("username")
++        password = cloud.get("password")
++        projectname = cloud.get("project_name")
++        auth_url = None
++        try:
++            auth_url = cloud.get("auth_url")
++        except KeyError:
++            fail_usage("Failed: You have to set the Keystone service endpoint for authorization")
++        user_domain_name = cloud.get("user_domain_name")
++        project_domain_name = cloud.get("project_domain_name")
++        caverify = cloud.get("verify")
++        if caverify in [True, False]:
++                options["--ssl-insecure"] = caverify
++        else:
++                options["--cacert"] = caverify
++    if options.get("--openrc") and os.path.exists(os.path.expanduser(options["--openrc"])):
++        source_env(options["--openrc"])
++        env = os.environ
++        username = env.get("OS_USERNAME")
++        password = env.get("OS_PASSWORD")
++        projectname = env.get("OS_PROJECT_NAME")
++        auth_url = None
++        try:
++            auth_url = env["OS_AUTH_URL"]
++        except KeyError:
++            fail_usage("Failed: You have to set the Keystone service endpoint for authorization")
++        user_domain_name = env.get("OS_USER_DOMAIN_NAME")
++        project_domain_name = env.get("OS_PROJECT_DOMAIN_NAME")
++    else:
++        username = options["--username"]
++        password = options["--password"]
++        projectname = options["--project-name"]
++        auth_url = None
++        try:
++            auth_url = options["--auth-url"]
++        except KeyError:
++            fail_usage("Failed: You have to set the Keystone service endpoint for authorization")
++        user_domain_name = options["--user-domain-name"]
++        project_domain_name = options["--project-domain-name"]
++
+     ssl_insecure = "--ssl-insecure" in options
+     cacert = options["--cacert"]
+     apitimeout = options["--apitimeout"]
++
+     try:
+         conn = nova_login(
+             username,
+diff --git a/tests/data/metadata/fence_openstack.xml b/tests/data/metadata/fence_openstack.xml
+index c8dc2e60f..55a57b4d7 100644
+--- a/tests/data/metadata/fence_openstack.xml
++++ b/tests/data/metadata/fence_openstack.xml
+@@ -8,7 +8,7 @@
+ 		<content type="string" default="reboot"  />
+ 		<shortdesc lang="en">Fencing action</shortdesc>
+ 	</parameter>
+-	<parameter name="login" unique="0" required="1" deprecated="1">
++	<parameter name="login" unique="0" required="0" deprecated="1">
+ 		<getopt mixed="-l, --username=[name]" />
+ 		<content type="string"  />
+ 		<shortdesc lang="en">Login name</shortdesc>
+@@ -48,27 +48,27 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Use SSL connection without verifying certificate</shortdesc>
+ 	</parameter>
+-	<parameter name="username" unique="0" required="1" obsoletes="login">
++	<parameter name="username" unique="0" required="0" obsoletes="login">
+ 		<getopt mixed="-l, --username=[name]" />
+ 		<content type="string"  />
+ 		<shortdesc lang="en">Login name</shortdesc>
+ 	</parameter>
+-	<parameter name="auth-url" unique="0" required="1" deprecated="1">
++	<parameter name="auth-url" unique="0" required="0" deprecated="1">
+ 		<getopt mixed="--auth-url=[authurl]" />
+ 		<content type="string"  />
+ 		<shortdesc lang="en">Keystone Auth URL</shortdesc>
+ 	</parameter>
+-	<parameter name="auth_url" unique="0" required="1" obsoletes="auth-url">
++	<parameter name="auth_url" unique="0" required="0" obsoletes="auth-url">
+ 		<getopt mixed="--auth-url=[authurl]" />
+ 		<content type="string"  />
+ 		<shortdesc lang="en">Keystone Auth URL</shortdesc>
+ 	</parameter>
+-	<parameter name="project-name" unique="0" required="1" deprecated="1">
++	<parameter name="project-name" unique="0" required="0" deprecated="1">
+ 		<getopt mixed="--project-name=[project]" />
+ 		<content type="string" default="admin"  />
+ 		<shortdesc lang="en">Keystone Project</shortdesc>
+ 	</parameter>
+-	<parameter name="project_name" unique="0" required="1" obsoletes="project-name">
++	<parameter name="project_name" unique="0" required="0" obsoletes="project-name">
+ 		<getopt mixed="--project-name=[project]" />
+ 		<content type="string" default="admin"  />
+ 		<shortdesc lang="en">Keystone Project</shortdesc>
+@@ -93,6 +93,26 @@
+ 		<content type="string" default="Default"  />
+ 		<shortdesc lang="en">Keystone Project Domain Name</shortdesc>
+ 	</parameter>
++	<parameter name="clouds-yaml" unique="0" required="0" deprecated="1">
++		<getopt mixed="--clouds-yaml=[clouds-yaml]" />
++		<content type="string" default="~/.config/openstack/clouds.yaml"  />
++		<shortdesc lang="en">clouds.yaml config file</shortdesc>
++	</parameter>
++	<parameter name="clouds_yaml" unique="0" required="0" obsoletes="clouds-yaml">
++		<getopt mixed="--clouds-yaml=[clouds-yaml]" />
++		<content type="string" default="~/.config/openstack/clouds.yaml"  />
++		<shortdesc lang="en">clouds.yaml config file</shortdesc>
++	</parameter>
++	<parameter name="cloud" unique="0" required="0">
++		<getopt mixed="--cloud=[cloud]" />
++		<content type="string"  />
++		<shortdesc lang="en">Cloud from clouds.yaml</shortdesc>
++	</parameter>
++	<parameter name="openrc" unique="0" required="0">
++		<getopt mixed="--openrc=[openrc]" />
++		<content type="string"  />
++		<shortdesc lang="en">openrc config file</shortdesc>
++	</parameter>
+ 	<parameter name="uuid" unique="0" required="0">
+ 		<getopt mixed="--uuid=[uuid]" />
+ 		<content type="string"  />

@@ -1,0 +1,10 @@
+--- a/agents/vmware_soap/fence_vmware_soap.py	2021-08-24 15:38:05.145039598 +0200
++++ b/agents/vmware_soap/fence_vmware_soap.py	2021-08-24 15:37:51.885003751 +0200
+@@ -1,6 +1,7 @@
+ #!@PYTHON@ -tt
+ 
+ import sys
++sys.path.insert(0, '/usr/lib/fence-agents/support/common')
+ import shutil, tempfile, suds
+ import logging, requests
+ import atexit, signal

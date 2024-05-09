@@ -1,0 +1,4 @@
+google-api-python-client==1.12.8
+chardet<4.0
+# for gcp-vpc-move-route
+pyroute2

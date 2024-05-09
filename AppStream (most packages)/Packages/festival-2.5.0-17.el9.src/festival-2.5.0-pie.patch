@@ -1,0 +1,20 @@
+diff -up festival/src/main/Makefile.pie festival/src/main/Makefile
+--- festival/src/main/Makefile.pie	2022-01-26 10:33:55.420688190 -0500
++++ festival/src/main/Makefile	2022-01-26 10:34:45.928050436 -0500
+@@ -54,13 +54,13 @@ ifeq (SIOD_PYTHON, $(findstring SIOD_PYT
+ endif
+ 
+ festival: festival_main.o $(LIBDEPS)
+-	$(LINK_COMMAND) -o festival festival_main.o $(LIBS)
++	$(LINK_COMMAND) -o festival festival_main.o -Wp,-pie $(LIBS)
+ 
+ festival_client: festival_client.o $(REQUIRED_LIBDEPS)
+-	$(LINK_COMMAND) -o festival_client festival_client.o $(LIBS)
++	$(LINK_COMMAND) -o festival_client festival_client.o -Wp,-pie $(LIBS)
+ 
+ $(ETCDIR)/audsp: $(ETCDIR)/.made audsp.o $(LIBDEPS)
+-	$(LINK_COMMAND) -o $(ETCDIR)/audsp audsp.o $(LIBS)
++	$(LINK_COMMAND) -o $(ETCDIR)/audsp audsp.o -Wp,-pie $(LIBS)
+ 
+ # Can't just rely on the dir as it gets updated with new files
+ # check for the data of a file created in etcdir

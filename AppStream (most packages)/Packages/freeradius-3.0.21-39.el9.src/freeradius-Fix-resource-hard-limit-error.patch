@@ -1,0 +1,32 @@
+commit 1ce4508c92493cf03ea1b3c42e83540b387884fa
+Author: Antonio Torres <antorres@redhat.com>
+Date:   Fri Jul 2 07:12:48 2021 -0400
+Subject: [PATCH] debug: don't set resource hard limit to zero
+
+    Setting the resource hard limit to zero is irreversible, meaning if it
+    is set to zero then there is no way to set it higher. This means
+    enabling core dump is not possible, since setting a new resource limit
+    for RLIMIT_CORE would fail. By only setting the soft limit to zero, we
+    can disable and enable core dumps without failures.
+
+    This fix is present in both main and 3.0.x upstream branches.
+    
+    Ticket in RHEL Bugzilla: https://bugzilla.redhat.com/show_bug.cgi?id=1977572
+    Signed-off-by: Antonio Torres antorres@redhat.com
+---
+ src/lib/debug.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lib/debug.c b/src/lib/debug.c
+index 576bcb2a65..6330c9cb66 100644
+--- a/src/lib/debug.c
++++ b/src/lib/debug.c
+@@ -599,7 +599,7 @@ int fr_set_dumpable(bool allow_core_dumps)
+ 		struct rlimit no_core;
+ 
+ 		no_core.rlim_cur = 0;
+-		no_core.rlim_max = 0;
++		no_core.rlim_max = core_limits.rlim_max;
+ 
+ 		if (setrlimit(RLIMIT_CORE, &no_core) < 0) {
+ 			fr_strerror_printf("Failed disabling core dumps: %s", fr_syserror(errno));

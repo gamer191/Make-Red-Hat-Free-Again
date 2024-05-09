@@ -1,0 +1,23 @@
+From 2d4b3ea47fa7a9a301d34cefc8f279cae7df4afd Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Thu, 26 Jan 2023 13:19:16 +0100
+Subject: [PATCH] fence_vmware_soap: set login_timeout lower than default
+ pcmk_monitor_timeout (20s) to remove tmp dirs on fail
+
+---
+ agents/vmware_soap/fence_vmware_soap.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/agents/vmware_soap/fence_vmware_soap.py b/agents/vmware_soap/fence_vmware_soap.py
+index b1d27a9fb..4a4ec1780 100644
+--- a/agents/vmware_soap/fence_vmware_soap.py
++++ b/agents/vmware_soap/fence_vmware_soap.py
+@@ -57,7 +57,7 @@ def soap_login(options):
+ 
+ 	try:
+ 		headers = {"Content-Type" : "text/xml;charset=UTF-8", "SOAPAction" : "vim25"}
+-		login_timeout = int(options["--login-timeout"]) or 60
++		login_timeout = int(options["--login-timeout"]) or 15
+ 		conn = Client(url + "/vimService.wsdl", location=url, transport=RequestsTransport(verify=verify), headers=headers, timeout=login_timeout)
+ 
+ 		mo_ServiceInstance = Property('ServiceInstance')

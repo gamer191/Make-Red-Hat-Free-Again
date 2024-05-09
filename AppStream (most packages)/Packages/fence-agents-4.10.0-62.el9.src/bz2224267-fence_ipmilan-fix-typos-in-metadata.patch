@@ -1,0 +1,123 @@
+From ddfaa29150d0d6fd8841b3e39fa5e806812542b5 Mon Sep 17 00:00:00 2001
+From: razo7 <oraz@redhat.com>
+Date: Wed, 19 Jul 2023 16:33:01 +0300
+Subject: [PATCH] Fix typo in fence_ipmilan description
+
+Add spaces in the long description
+---
+ agents/ipmilan/fence_ipmilan.py           | 4 ++--
+ tests/data/metadata/fence_idrac.xml       | 2 +-
+ tests/data/metadata/fence_ilo3.xml        | 2 +-
+ tests/data/metadata/fence_ilo4.xml        | 2 +-
+ tests/data/metadata/fence_ilo5.xml        | 2 +-
+ tests/data/metadata/fence_imm.xml         | 2 +-
+ tests/data/metadata/fence_ipmilan.xml     | 2 +-
+ tests/data/metadata/fence_ipmilanplus.xml | 2 +-
+ 8 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/agents/ipmilan/fence_ipmilan.py b/agents/ipmilan/fence_ipmilan.py
+index 0acf977da..91e09ac7d 100644
+--- a/agents/ipmilan/fence_ipmilan.py
++++ b/agents/ipmilan/fence_ipmilan.py
+@@ -203,8 +203,8 @@ def main():
+ 
+ 	docs = {}
+ 	docs["shortdesc"] = "Fence agent for IPMI"
+-	docs["longdesc"] = "fence_ipmilan is an I/O Fencing agent\
+-which can be used with machines controlled by IPMI.\
++	docs["longdesc"] = "fence_ipmilan is an I/O Fencing agent \
++which can be used with machines controlled by IPMI. \
+ This agent calls support software ipmitool (http://ipmitool.sf.net/). \
+ WARNING! This fence agent might report success before the node is powered off. \
+ You should use -m/method onoff if your fence device works correctly with that option."
+diff --git a/tests/data/metadata/fence_idrac.xml b/tests/data/metadata/fence_idrac.xml
+index 2d4876493..d1f283e4a 100644
+--- a/tests/data/metadata/fence_idrac.xml
++++ b/tests/data/metadata/fence_idrac.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agentwhich can be used with machines controlled by IPMI.This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo3.xml b/tests/data/metadata/fence_ilo3.xml
+index 0567b539c..5aca0211b 100644
+--- a/tests/data/metadata/fence_ilo3.xml
++++ b/tests/data/metadata/fence_ilo3.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agentwhich can be used with machines controlled by IPMI.This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo4.xml b/tests/data/metadata/fence_ilo4.xml
+index 647bb1021..3aa001ad2 100644
+--- a/tests/data/metadata/fence_ilo4.xml
++++ b/tests/data/metadata/fence_ilo4.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agentwhich can be used with machines controlled by IPMI.This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ilo5.xml b/tests/data/metadata/fence_ilo5.xml
+index 6c99db22a..262787905 100644
+--- a/tests/data/metadata/fence_ilo5.xml
++++ b/tests/data/metadata/fence_ilo5.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agentwhich can be used with machines controlled by IPMI.This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_imm.xml b/tests/data/metadata/fence_imm.xml
+index 5c5bf910f..26f9a76d3 100644
+--- a/tests/data/metadata/fence_imm.xml
++++ b/tests/data/metadata/fence_imm.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agentwhich can be used with machines controlled by IPMI.This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ipmilan.xml b/tests/data/metadata/fence_ipmilan.xml
+index a31afcfd4..daad65a70 100644
+--- a/tests/data/metadata/fence_ipmilan.xml
++++ b/tests/data/metadata/fence_ipmilan.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agentwhich can be used with machines controlled by IPMI.This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">
+diff --git a/tests/data/metadata/fence_ipmilanplus.xml b/tests/data/metadata/fence_ipmilanplus.xml
+index 19c252933..7b678b245 100644
+--- a/tests/data/metadata/fence_ipmilanplus.xml
++++ b/tests/data/metadata/fence_ipmilanplus.xml
+@@ -6,7 +6,7 @@
+ <symlink name="fence_ipmilanplus" shortdesc="Fence agent for IPMIv2 lanplus"/>
+ <symlink name="fence_imm" shortdesc="Fence agent for IBM Integrated Management Module"/>
+ <symlink name="fence_idrac" shortdesc="Fence agent for Dell iDRAC"/>
+-<longdesc>fence_ipmilan is an I/O Fencing agentwhich can be used with machines controlled by IPMI.This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
++<longdesc>fence_ipmilan is an I/O Fencing agent which can be used with machines controlled by IPMI. This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.</longdesc>
+ <vendor-url></vendor-url>
+ <parameters>
+ 	<parameter name="action" unique="0" required="1">

@@ -1,0 +1,22 @@
+From fbca33a536413565108374dd4ed3237b6f7896bd Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Mon, 15 Aug 2022 10:40:19 +0200
+Subject: [PATCH] fencing: source_env(): dont process empty lines
+
+---
+ lib/fencing.py.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/fencing.py.py b/lib/fencing.py.py
+index fc3679e33..940bd01d1 100644
+--- a/lib/fencing.py.py
++++ b/lib/fencing.py.py
+@@ -1264,7 +1264,7 @@ def source_env(env_file):
+                           executable="/bin/sh")
+     # replace env
+     os.environ.clear()
+-    os.environ.update(line.partition('=')[::2] for line in output.decode("utf-8").split('\0'))
++    os.environ.update(line.partition('=')[::2] for line in output.decode("utf-8").split('\0') if not re.match("^\s*$", line))
+ 
+ # Convert array of format [[key1, value1], [key2, value2], ... [keyN, valueN]] to dict, where key is
+ # in format a.b.c.d...z and returned dict has key only z

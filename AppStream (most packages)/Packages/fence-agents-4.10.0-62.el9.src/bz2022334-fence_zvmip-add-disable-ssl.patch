@@ -1,0 +1,98 @@
+From 90c4f78e005ca4141039d1dce032b5f2c2ff4783 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Thu, 10 Feb 2022 12:22:58 +0100
+Subject: [PATCH 1/2] fencing: add ability to set bool parameters to 0 or false
+
+---
+ lib/fencing.py.py | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/lib/fencing.py.py b/lib/fencing.py.py
+index 55e38c407..696388d55 100644
+--- a/lib/fencing.py.py
++++ b/lib/fencing.py.py
+@@ -1502,6 +1502,8 @@ def _parse_input_stdin(avail_opt):
+ 			opt["--"+all_opt[name]["longopt"].rstrip(":")] = value
+ 		elif value.lower() in ["1", "yes", "on", "true"]:
+ 			opt["--"+all_opt[name]["longopt"]] = "1"
++		elif value.lower() in ["0", "no", "off", "false"]:
++			opt["--"+all_opt[name]["longopt"]] = "0"
+ 		else:
+ 			logging.warning("Parse error: Ignoring option '%s' because it does not have value\n", name)
+ 
+
+From 249abc8e5620fb1a3d97a0af6db34b1f2cbf3ae5 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Thu, 10 Feb 2022 12:27:02 +0100
+Subject: [PATCH 2/2] fence_zvmip: add --disable-ssl
+
+---
+ agents/zvm/fence_zvmip.py           | 18 +++++++++++++++++-
+ tests/data/metadata/fence_zvmip.xml |  7 ++++++-
+ 2 files changed, 23 insertions(+), 2 deletions(-)
+
+diff --git a/agents/zvm/fence_zvmip.py b/agents/zvm/fence_zvmip.py
+index 96021b13e..e8f849eda 100644
+--- a/agents/zvm/fence_zvmip.py
++++ b/agents/zvm/fence_zvmip.py
+@@ -156,11 +156,24 @@ def get_list_of_images(options, command, data_as_plug):
+ 	conn.close()
+ 	return (return_code, reason_code, images)
+ 
++def define_new_opts():
++	all_opt["disable_ssl"] = {
++		"getopt" : "",
++		"longopt" : "disable-ssl",
++		"help" : "--disable-ssl                  Don't use SSL connection",
++		"required" : "0",
++		"shortdesc" : "Don't use SSL",
++		"order": 2
++	}
++
+ def main():
+ 	device_opt = ["ipaddr", "login", "passwd", "port", "method", "missing_as_off",
+-		      "inet4_only", "inet6_only", "ssl"]
++		      "inet4_only", "inet6_only", "ssl", "disable_ssl"]
+ 
+ 	atexit.register(atexit_handler)
++	define_new_opts()
++
++	all_opt["ssl"]["help"] = "-z, --ssl                      Use SSL connection with verifying certificate (Default)"
+ 
+ 	all_opt["ipport"]["default"] = "44444"
+ 	all_opt["shell_timeout"]["default"] = "5"
+@@ -168,6 +181,9 @@ def main():
+ 	all_opt["ssl"]["default"] = "1"
+ 	options = check_input(device_opt, process_input(device_opt), other_conditions=True)
+ 
++	if "--disable-ssl" in options or options["--ssl"] == "0":
++		del options["--ssl"]
++
+ 	if len(options.get("--plug", "")) > 8:
+ 		fail_usage("Failed: Name of image can not be longer than 8 characters")
+ 
+diff --git a/tests/data/metadata/fence_zvmip.xml b/tests/data/metadata/fence_zvmip.xml
+index f32fc159d..0b7ba4785 100644
+--- a/tests/data/metadata/fence_zvmip.xml
++++ b/tests/data/metadata/fence_zvmip.xml
+@@ -94,7 +94,7 @@ to access the system's directory manager.
+ 	<parameter name="ssl" unique="0" required="0">
+ 		<getopt mixed="-z, --ssl" />
+ 		<content type="boolean" default="1"  />
+-		<shortdesc lang="en">Use SSL connection with verifying certificate</shortdesc>
++		<shortdesc lang="en">Use SSL connection with verifying certificate (Default)</shortdesc>
+ 	</parameter>
+ 	<parameter name="ssl_insecure" unique="0" required="0">
+ 		<getopt mixed="--ssl-insecure" />
+@@ -111,6 +111,11 @@ to access the system's directory manager.
+ 		<content type="string"  />
+ 		<shortdesc lang="en">Login name</shortdesc>
+ 	</parameter>
++	<parameter name="disable_ssl" unique="0" required="0">
++		<getopt mixed="--disable-ssl" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Don't use SSL</shortdesc>
++	</parameter>
+ 	<parameter name="quiet" unique="0" required="0">
+ 		<getopt mixed="-q, --quiet" />
+ 		<content type="boolean"  />

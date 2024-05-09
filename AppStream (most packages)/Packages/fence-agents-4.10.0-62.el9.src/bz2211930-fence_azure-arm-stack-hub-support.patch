@@ -1,0 +1,170 @@
+From 6e0228536d30ca1bd95bfd1628c0247f094ecaa8 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Wed, 2 Mar 2022 13:49:16 +0100
+Subject: [PATCH 1/2] fence_azure_arm: add stack cloud support
+
+---
+ agents/azure_arm/fence_azure_arm.py     | 18 ++++++++++++++----
+ lib/azure_fence.py.py                   | 10 ++++++++++
+ tests/data/metadata/fence_azure_arm.xml | 10 ++++++++++
+ 3 files changed, 34 insertions(+), 4 deletions(-)
+
+diff --git a/agents/azure_arm/fence_azure_arm.py b/agents/azure_arm/fence_azure_arm.py
+index 6908169c8..e3b7c85c7 100755
+--- a/agents/azure_arm/fence_azure_arm.py
++++ b/agents/azure_arm/fence_azure_arm.py
+@@ -183,20 +183,30 @@ def define_new_opts():
+         "getopt" : ":",
+         "longopt" : "cloud",
+         "help" : "--cloud=[name]                 Name of the cloud you want to use. Supported\n\
+-                                  values are china, germany or usgov. Do not use\n\
+-                                  this parameter if you want to use public\n\
+-                                  Azure.",
++                                  values are china, germany, usgov, or stack. Do\n\
++                                  not use this parameter if you want to use\n\
++                                  public Azure.",
+         "shortdesc" : "Name of the cloud you want to use.",
+         "required" : "0",
+         "order" : 7
+     }
++    all_opt["metadata-endpoint"] = {
++        "getopt" : ":",
++        "longopt" : "metadata-endpoint",
++        "help" : "--metadata-endpoint=[URL]      URL to metadata endpoint (used when cloud=stack).",
++        "shortdesc" : "URL to metadata endpoint (used when cloud=stack).",
++        "required" : "0",
++        "order" : 8
++    }
+ 
+ # Main agent method
+ def main():
+     compute_client = None
+     network_client = None
+ 
+-    device_opt = ["login", "no_login", "no_password", "passwd", "port", "resourceGroup", "tenantId", "subscriptionId", "network-fencing", "msi", "cloud"]
++    device_opt = ["login", "no_login", "no_password", "passwd", "port",
++		  "resourceGroup", "tenantId", "subscriptionId",
++		  "network-fencing", "msi", "cloud", "metadata-endpoint"]
+ 
+     atexit.register(atexit_handler)
+ 
+diff --git a/lib/azure_fence.py.py b/lib/azure_fence.py.py
+index 5ca71eb42..6f1eee5b9 100644
+--- a/lib/azure_fence.py.py
++++ b/lib/azure_fence.py.py
+@@ -251,6 +251,7 @@ def get_azure_config(options):
+     config.VMName = options.get("--plug")
+     config.SubscriptionId = options.get("--subscriptionId")
+     config.Cloud = options.get("--cloud")
++    config.MetadataEndpoint = options.get("--metadata-endpoint")
+     config.UseMSI = "--msi" in options
+     config.Tenantid = options.get("--tenantId")
+     config.ApplicationId = options.get("--username")
+@@ -279,6 +280,9 @@ def get_azure_cloud_environment(config):
+         elif (config.Cloud.lower() == "usgov"):
+             from msrestazure.azure_cloud import AZURE_US_GOV_CLOUD
+             cloud_environment = AZURE_US_GOV_CLOUD
++        elif (config.Cloud.lower() == "stack"):
++            from msrestazure.azure_cloud import get_cloud_from_metadata_endpoint
++            cloud_environment = get_cloud_from_metadata_endpoint(config.MetadataEndpoint)
+ 
+     return cloud_environment
+ 
+@@ -345,6 +349,9 @@ def get_azure_compute_client(config):
+     credentials = get_azure_credentials(config)
+ 
+     if cloud_environment:
++        if (config.Cloud.lower() == "stack") and not config.MetadataEndpoint:
++                fail_usage("metadata-endpoint not specified")
++
+         try:
+             compute_client = ComputeManagementClient(
+                 credentials,
+@@ -372,6 +379,9 @@ def get_azure_network_client(config):
+     credentials = get_azure_credentials(config)
+ 
+     if cloud_environment:
++        if (config.Cloud.lower() == "stack") and not config.MetadataEndpoint:
++                fail_usage("metadata-endpoint not specified")
++
+         try:
+             network_client = NetworkManagementClient(
+                 credentials,
+diff --git a/tests/data/metadata/fence_azure_arm.xml b/tests/data/metadata/fence_azure_arm.xml
+index c6e1f203b..8b7450762 100644
+--- a/tests/data/metadata/fence_azure_arm.xml
++++ b/tests/data/metadata/fence_azure_arm.xml
+@@ -98,6 +98,16 @@ When using network fencing the reboot-action will cause a quick-return once the
+ 		<content type="string"  />
+ 		<shortdesc lang="en">Name of the cloud you want to use.</shortdesc>
+ 	</parameter>
++	<parameter name="metadata-endpoint" unique="0" required="0" deprecated="1">
++		<getopt mixed="--metadata-endpoint=[URL]" />
++		<content type="string"  />
++		<shortdesc lang="en">URL to metadata endpoint (used when cloud=stack).</shortdesc>
++	</parameter>
++	<parameter name="metadata_endpoint" unique="0" required="0" obsoletes="metadata-endpoint">
++		<getopt mixed="--metadata-endpoint=[URL]" />
++		<content type="string"  />
++		<shortdesc lang="en">URL to metadata endpoint (used when cloud=stack).</shortdesc>
++	</parameter>
+ 	<parameter name="quiet" unique="0" required="0">
+ 		<getopt mixed="-q, --quiet" />
+ 		<content type="boolean"  />
+
+From 9087760db005abfd9b3e07319846232214d8dae2 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Fri, 16 Jun 2023 16:03:11 +0200
+Subject: [PATCH 2/2] azure_fence: use correct credential_scope and profile for
+ stack hub
+
+---
+ lib/azure_fence.py.py | 20 ++++++++++++++++++--
+ 1 file changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/lib/azure_fence.py.py b/lib/azure_fence.py.py
+index 6f1eee5b9..ab40b483a 100644
+--- a/lib/azure_fence.py.py
++++ b/lib/azure_fence.py.py
+@@ -353,11 +353,19 @@ def get_azure_compute_client(config):
+                 fail_usage("metadata-endpoint not specified")
+ 
+         try:
++            from azure.profiles import KnownProfiles
++            if (config.Cloud.lower() == "stack"):
++                client_profile = KnownProfiles.v2020_09_01_hybrid
++                credential_scope = cloud_environment.endpoints.active_directory_resource_id + "/.default"
++            else:
++                client_profile = KnownProfiles.default
++                credential_scope = cloud_environment.endpoints.resource_manager + "/.default"
+             compute_client = ComputeManagementClient(
+                 credentials,
+                 config.SubscriptionId,
+                 base_url=cloud_environment.endpoints.resource_manager,
+-                credential_scopes=[cloud_environment.endpoints.resource_manager + "/.default"]
++                profile=client_profile,
++                credential_scopes=[credential_scope],
+             )
+         except TypeError:
+             compute_client = ComputeManagementClient(
+@@ -383,11 +391,19 @@ def get_azure_network_client(config):
+                 fail_usage("metadata-endpoint not specified")
+ 
+         try:
++            from azure.profiles import KnownProfiles
++            if (config.Cloud.lower() == "stack"):
++                client_profile = KnownProfiles.v2020_09_01_hybrid
++                credential_scope = cloud_environment.endpoints.active_directory_resource_id + "/.default"
++            else:
++                client_profile = KnownProfiles.default
++                credential_scope = cloud_environment.endpoints.resource_manager + "/.default"
+             network_client = NetworkManagementClient(
+                 credentials,
+                 config.SubscriptionId,
+                 base_url=cloud_environment.endpoints.resource_manager,
+-                credential_scopes=[cloud_environment.endpoints.resource_manager + "/.default"]
++                profile=client_profile,
++                credential_scopes=[credential_scope],
+             )
+         except TypeError:
+             network_client = NetworkManagementClient(

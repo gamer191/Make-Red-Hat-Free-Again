@@ -1,0 +1,102 @@
+From 647841dea9d93922779a4aa7d0b5f52f5bc2b4e9 Mon Sep 17 00:00:00 2001
+From: Dan Kenigsberg <danken@redhat.com>
+Date: Thu, 13 Jan 2022 14:57:26 +0200
+Subject: [PATCH] fence_kubevirt: take default namespace from context
+
+If --namespace is not provided to kubectl, a default one is taken from
+kubeconfig context. Let fence_kubevirt behave similarly.
+
+Signed-off-by: Dan Kenigsberg <danken@redhat.com>
+---
+ agents/kubevirt/fence_kubevirt.py      | 24 +++++++++++++-----------
+ tests/data/metadata/fence_kubevirt.xml |  2 +-
+ 2 files changed, 14 insertions(+), 12 deletions(-)
+
+diff --git a/agents/kubevirt/fence_kubevirt.py b/agents/kubevirt/fence_kubevirt.py
+index 8392b75a0..8c27a0334 100755
+--- a/agents/kubevirt/fence_kubevirt.py
++++ b/agents/kubevirt/fence_kubevirt.py
+@@ -12,12 +12,21 @@
+ except ImportError:
+     logging.error("Couldn\'t import kubernetes.client.exceptions.ApiException - not found or not accessible")
+ 
++def _get_namespace(options):
++    from kubernetes import config
++
++    ns = options.get("--namespace")
++    if ns is None:
++        ns = config.kube_config.list_kube_config_contexts()[1]['context']['namespace']
++
++    return ns
++
+ def get_nodes_list(conn, options):
+     logging.debug("Starting list/monitor operation")
+     result = {}
+     try:
+         apiversion = options.get("--apiversion")
+-        namespace = options.get("--namespace")
++        namespace = _get_namespace(options)
+         include_uninitialized = True
+         vm_api = conn.resources.get(api_version=apiversion, kind='VirtualMachine')
+         vm_list = vm_api.get(namespace=namespace)
+@@ -31,7 +40,7 @@ def get_power_status(conn, options):
+     logging.debug("Starting get status operation")
+     try:
+         apiversion = options.get("--apiversion")
+-        namespace = options.get("--namespace")
++        namespace = _get_namespace(options)
+         name = options.get("--plug")
+         vmi_api = conn.resources.get(api_version=apiversion,
+                                               kind='VirtualMachineInstance')
+@@ -61,7 +70,7 @@ def set_power_status(conn, options):
+     logging.debug("Starting set status operation")
+     try:
+         apiversion= options.get("--apiversion")
+-        namespace = options.get("--namespace")
++        namespace = _get_namespace(options)
+         name = options.get("--plug")
+         action = 'start' if options["--action"] == "on" else 'stop'
+         virtctl_vm_action(conn, action, namespace, name, apiversion)
+@@ -75,7 +84,7 @@ def define_new_opts():
+         "longopt" : "namespace",
+         "help" : "--namespace=[namespace]        Namespace of the KubeVirt machine",
+         "shortdesc" : "Namespace of the KubeVirt machine.",
+-        "required" : "1",
++        "required" : "0",
+         "order" : 2
+     }
+     all_opt["kubeconfig"] = {
+@@ -101,11 +110,6 @@ def virtctl_vm_action(conn, action, namespace, name, apiversion):
+     path = path.format(api_version=apiversion, namespace=namespace, name=name, action=action)
+     return conn.request('put', path, header_params={'accept': '*/*'})
+ 
+-def validate_options(required_options_list, options):
+-    for required_option in required_options_list:
+-        if required_option not in options:
+-            fail_usage("Failed: %s option must be provided" % required_option)
+-
+ # Main agent method
+ def main():
+     conn = None
+@@ -127,8 +131,6 @@ def main():
+ 
+     run_delay(options)
+ 
+-    validate_options(['--namespace'], options)
+-
+     # Disable insecure-certificate-warning message
+     if "--ssl-insecure" in options:
+         import urllib3
+diff --git a/tests/data/metadata/fence_kubevirt.xml b/tests/data/metadata/fence_kubevirt.xml
+index 24e975587..ccb20c224 100644
+--- a/tests/data/metadata/fence_kubevirt.xml
++++ b/tests/data/metadata/fence_kubevirt.xml
+@@ -23,7 +23,7 @@
+ 		<content type="boolean"  />
+ 		<shortdesc lang="en">Use SSL connection without verifying certificate</shortdesc>
+ 	</parameter>
+-	<parameter name="namespace" unique="0" required="1">
++	<parameter name="namespace" unique="0" required="0">
+ 		<getopt mixed="--namespace=[namespace]" />
+ 		<content type="string"  />
+ 		<shortdesc lang="en">Namespace of the KubeVirt machine.</shortdesc>

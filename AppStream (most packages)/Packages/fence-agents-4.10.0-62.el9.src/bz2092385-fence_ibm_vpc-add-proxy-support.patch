@@ -1,0 +1,62 @@
+From be409554bbc99df2bba22cb01e8a6df634af896d Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Tue, 31 May 2022 15:46:40 +0200
+Subject: [PATCH] fence_ibm_vpc: add proxy support
+
+---
+ agents/ibm_vpc/fence_ibm_vpc.py       | 11 +++++++++++
+ tests/data/metadata/fence_ibm_vpc.xml |  5 +++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/agents/ibm_vpc/fence_ibm_vpc.py b/agents/ibm_vpc/fence_ibm_vpc.py
+index 9e38e8301..3da3ce056 100755
+--- a/agents/ibm_vpc/fence_ibm_vpc.py
++++ b/agents/ibm_vpc/fence_ibm_vpc.py
+@@ -88,6 +88,7 @@ def connect(opt):
+ 	conn.setopt(pycurl.TIMEOUT, int(opt["--shell-timeout"]))
+ 	conn.setopt(pycurl.SSL_VERIFYPEER, 1)
+ 	conn.setopt(pycurl.SSL_VERIFYHOST, 2)
++	conn.setopt(pycurl.PROXY, "{}".format(opt["--proxy"]))
+ 
+ 	# get bearer token
+ 	bearer_token = get_bearer_token(conn, opt)
+@@ -169,6 +170,15 @@ def define_new_opts():
+ 		"shortdesc" : "Region",
+ 		"order" : 0
+ 	}
++	all_opt["proxy"] = {
++                "getopt" : ":",
++                "longopt" : "proxy",
++                "help" : "--proxy=[http://<URL>:<PORT>]          Proxy: 'http://<URL>:<PORT>'",
++                "required" : "0",
++		"default": "",
++                "shortdesc" : "Network proxy",
++                "order" : 0
++        }
+ 	all_opt["limit"] = {
+ 		"getopt" : ":",
+ 		"longopt" : "limit",
+@@ -185,6 +195,7 @@ def main():
+ 		"apikey",
+ 		"region",
+ 		"limit",
++		"proxy",
+ 		"port",
+ 		"no_password",
+ 	]
+diff --git a/tests/data/metadata/fence_ibm_vpc.xml b/tests/data/metadata/fence_ibm_vpc.xml
+index ee7151673..09da0e303 100644
+--- a/tests/data/metadata/fence_ibm_vpc.xml
++++ b/tests/data/metadata/fence_ibm_vpc.xml
+@@ -13,6 +13,11 @@
+ 		<content type="string" default="50"  />
+ 		<shortdesc lang="en">Number of nodes returned by API</shortdesc>
+ 	</parameter>
++	<parameter name="proxy" unique="0" required="0">
++		<getopt mixed="--proxy=[http://&lt;URL&gt;:&lt;PORT&gt;]" />
++		<content type="string" default=""  />
++		<shortdesc lang="en">Network proxy</shortdesc>
++	</parameter>
+ 	<parameter name="region" unique="0" required="1">
+ 		<getopt mixed="--region=[region]" />
+ 		<content type="string"  />

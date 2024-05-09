@@ -1,0 +1,740 @@
+From 3078e4d55d3bad2bbf9309785fdb2b53afac8d65 Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Tue, 13 Jul 2021 13:39:33 +0200
+Subject: [PATCH] fence_ibm_vpc/fence_ibm_powervs: new fence agents
+
+---
+ agents/ibm_powervs/fence_ibm_powervs.py   | 202 +++++++++++++++++++
+ agents/ibm_vpc/fence_ibm_vpc.py           | 230 ++++++++++++++++++++++
+ tests/data/metadata/fence_ibm_powervs.xml | 134 +++++++++++++
+ tests/data/metadata/fence_ibm_vpc.xml     | 134 +++++++++++++
+ 5 files changed, 724 insertions(+)
+ create mode 100755 agents/ibm_powervs/fence_ibm_powervs.py
+ create mode 100755 agents/ibm_vpc/fence_ibm_vpc.py
+ create mode 100644 tests/data/metadata/fence_ibm_powervs.xml
+ create mode 100644 tests/data/metadata/fence_ibm_vpc.xml
+
+diff --git a/agents/ibm_powervs/fence_ibm_powervs.py b/agents/ibm_powervs/fence_ibm_powervs.py
+new file mode 100755
+index 000000000..6649771ea
+--- /dev/null
++++ b/agents/ibm_powervs/fence_ibm_powervs.py
+@@ -0,0 +1,202 @@
++#!@PYTHON@ -tt
++
++import sys
++import pycurl, io, json
++import logging
++import atexit
++sys.path.append("@FENCEAGENTSLIBDIR@")
++from fencing import *
++from fencing import fail, run_delay, EC_LOGIN_DENIED, EC_STATUS
++
++state = {
++	 "ACTIVE": "on",
++	 "SHUTOFF": "off",
++	 "ERROR": "unknown"
++}
++
++def get_list(conn, options):
++	outlets = {}
++
++	try:
++		command = "cloud-instances/{}/pvm-instances".format(options["--instance"])
++		res = send_command(conn, command)
++	except Exception as e:
++		logging.debug("Failed: {}".format(e))
++		return outlets
++
++	for r in res["pvmInstances"]:
++		if "--verbose" in options:
++			logging.debug(json.dumps(r, indent=2))
++		outlets[r["pvmInstanceID"]] = (r["serverName"], state[r["status"]])
++
++	return outlets
++
++def get_power_status(conn, options):
++	try:
++		command = "cloud-instances/{}/pvm-instances/{}".format(
++				options["--instance"], options["--plug"])
++		res = send_command(conn, command)
++		result = get_list(conn, options)[options["--plug"]][1]
++	except KeyError as e:
++		logging.debug("Failed: Unable to get status for {}".format(e))
++		fail(EC_STATUS)
++
++	return result
++
++def set_power_status(conn, options):
++	action = {
++		"on" :  '{"action" : "start"}',
++		"off" : '{"action" : "immediate-shutdown"}',
++	}[options["--action"]]
++
++	try:
++		send_command(conn, "cloud-instances/{}/pvm-instances/{}/action".format(
++				options["--instance"], options["--plug"]), "POST", action)
++	except Exception as e:
++		logging.debug("Failed: Unable to set power to {} for {}".format(options["--action"], e))
++		fail(EC_STATUS)
++
++def connect(opt):
++	conn = pycurl.Curl()
++
++	## setup correct URL
++	conn.base_url = "https://" + opt["--region"] + ".power-iaas.cloud.ibm.com/pcloud/v1/"
++
++	if opt["--verbose-level"] > 1:
++		conn.setopt(pycurl.VERBOSE, 1)
++
++	conn.setopt(pycurl.TIMEOUT, int(opt["--shell-timeout"]))
++	conn.setopt(pycurl.SSL_VERIFYPEER, 1)
++	conn.setopt(pycurl.SSL_VERIFYHOST, 2)
++
++	# set auth token for later requests
++	conn.setopt(pycurl.HTTPHEADER, [
++		"Content-Type: application/json",
++		"Authorization: Bearer {}".format(opt["--token"]),
++		"CRN: {}".format(opt["--crn"]),
++		"User-Agent: curl",
++	])
++
++	return conn
++
++def disconnect(conn):
++	conn.close()
++
++def send_command(conn, command, method="GET", action=None):
++	url = conn.base_url + command
++
++	conn.setopt(pycurl.URL, url.encode("ascii"))
++
++	web_buffer = io.BytesIO()
++
++	if method == "GET":
++		conn.setopt(pycurl.POST, 0)
++	if method == "POST":
++		conn.setopt(pycurl.POSTFIELDS, action)
++	if method == "DELETE":
++		conn.setopt(pycurl.CUSTOMREQUEST, "DELETE")
++
++	conn.setopt(pycurl.WRITEFUNCTION, web_buffer.write)
++
++	try:
++		conn.perform()
++	except Exception as e:
++		raise(e)
++
++	rc = conn.getinfo(pycurl.HTTP_CODE)
++	result = web_buffer.getvalue().decode("UTF-8")
++
++	web_buffer.close()
++
++	if rc != 200:
++		if len(result) > 0:
++			raise Exception("{}: {}".format(rc,
++					result["value"]["messages"][0]["default_message"]))
++		else:
++			raise Exception("Remote returned {} for request to {}".format(rc, url))
++
++	if len(result) > 0:
++		result = json.loads(result)
++
++	logging.debug("url: {}".format(url))
++	logging.debug("method: {}".format(method))
++	logging.debug("response code: {}".format(rc))
++	logging.debug("result: {}\n".format(result))
++
++	return result
++
++def define_new_opts():
++	all_opt["token"] = {
++		"getopt" : ":",
++		"longopt" : "token",
++		"help" : "--token=[token]                Bearer Token",
++		"required" : "1",
++		"shortdesc" : "Bearer Token",
++		"order" : 0
++	}
++	all_opt["crn"] = {
++		"getopt" : ":",
++		"longopt" : "crn",
++		"help" : "--crn=[crn]                    CRN",
++		"required" : "1",
++		"shortdesc" : "CRN",
++		"order" : 0
++	}
++	all_opt["instance"] = {
++		"getopt" : ":",
++		"longopt" : "instance",
++		"help" : "--instance=[instance]          PowerVS Instance",
++		"required" : "1",
++		"shortdesc" : "PowerVS Instance",
++		"order" : 0
++	}
++	all_opt["region"] = {
++		"getopt" : ":",
++		"longopt" : "region",
++		"help" : "--region=[region]              Region",
++		"required" : "1",
++		"shortdesc" : "Region",
++		"order" : 0
++	}
++
++
++def main():
++	device_opt = [
++		"token",
++		"crn",
++		"instance",
++		"region",
++		"port",
++		"no_password",
++	]
++
++	atexit.register(atexit_handler)
++	define_new_opts()
++
++	all_opt["shell_timeout"]["default"] = "15"
++	all_opt["power_timeout"]["default"] = "30"
++	all_opt["power_wait"]["default"] = "1"
++
++	options = check_input(device_opt, process_input(device_opt))
++
++	docs = {}
++	docs["shortdesc"] = "Fence agent for IBM PowerVS"
++	docs["longdesc"] = """fence_ibm_powervs is an I/O Fencing agent which can be \
++used with IBM PowerVS to fence virtual machines."""
++	docs["vendorurl"] = "https://www.ibm.com"
++	show_docs(options, docs)
++
++	####
++	## Fence operations
++	####
++	run_delay(options)
++
++	conn = connect(options)
++	atexit.register(disconnect, conn)
++
++	result = fence_action(conn, options, set_power_status, get_power_status, get_list)
++
++	sys.exit(result)
++
++if __name__ == "__main__":
++	main()
+diff --git a/agents/ibm_vpc/fence_ibm_vpc.py b/agents/ibm_vpc/fence_ibm_vpc.py
+new file mode 100755
+index 000000000..9f84f7b2d
+--- /dev/null
++++ b/agents/ibm_vpc/fence_ibm_vpc.py
+@@ -0,0 +1,230 @@
++#!@PYTHON@ -tt
++
++import sys
++import pycurl, io, json
++import logging
++import atexit
++sys.path.append("@FENCEAGENTSLIBDIR@")
++from fencing import *
++from fencing import fail, run_delay, EC_LOGIN_DENIED, EC_STATUS
++
++state = {
++	 "running": "on",
++	 "stopped": "off",
++	 "starting": "unknown",
++	 "stopping": "unknown",
++	 "restarting": "unknown",
++	 "pending": "unknown",
++}
++
++def get_list(conn, options):
++	outlets = {}
++
++	try:
++		command = "instances?version=2021-05-25&generation=2&limit={}".format(options["--limit"])
++		res = send_command(conn, command)
++	except Exception as e:
++		logging.debug("Failed: Unable to get list: {}".format(e))
++		return outlets
++
++	for r in res["instances"]:
++		if options["--verbose-level"] > 1:
++			logging.debug("Node:\n{}".format(json.dumps(r, indent=2)))
++			logging.debug("Status: " + state[r["status"]])
++		outlets[r["id"]] = (r["name"], state[r["status"]])
++
++	return outlets
++
++def get_power_status(conn, options):
++	try:
++		command = "instances/{}?version=2021-05-25&generation=2".format(options["--plug"])
++		res = send_command(conn, command)
++		result = state[res["status"]]
++		if options["--verbose-level"] > 1:
++			logging.debug("Result:\n{}".format(json.dumps(res, indent=2)))
++			logging.debug("Status: " + result)
++	except Exception as e:
++		logging.debug("Failed: Unable to get status for {}: {}".format(options["--plug"], e))
++		fail(EC_STATUS)
++
++	return result
++
++def set_power_status(conn, options):
++	action = {
++		"on" :  '{"type" : "start"}',
++		"off" : '{"type" : "stop"}',
++	}[options["--action"]]
++
++	try:
++		command = "instances/{}/actions?version=2021-05-25&generation=2".format(options["--plug"])
++		send_command(conn, command, "POST", action, 201)
++	except Exception as e:
++		logging.debug("Failed: Unable to set power to {} for {}".format(options["--action"], e))
++		fail(EC_STATUS)
++
++def get_bearer_token(conn, options):
++	token = None
++	try:
++		conn.setopt(pycurl.HTTPHEADER, [
++			"Content-Type: application/x-www-form-urlencoded",
++			"User-Agent: curl",
++		])
++		token = send_command(conn, "https://iam.cloud.ibm.com/identity/token", "POST", "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey={}".format(options["--apikey"]))["access_token"]
++	except Exception:
++		logging.error("Failed: Unable to authenticate")
++		fail(EC_LOGIN_DENIED)
++
++	return token
++
++def connect(opt):
++	conn = pycurl.Curl()
++
++	## setup correct URL
++	conn.base_url = "https://" + opt["--region"] + ".iaas.cloud.ibm.com/v1/"
++
++	if opt["--verbose-level"] > 1:
++		conn.setopt(pycurl.VERBOSE, 1)
++
++	conn.setopt(pycurl.TIMEOUT, int(opt["--shell-timeout"]))
++	conn.setopt(pycurl.SSL_VERIFYPEER, 1)
++	conn.setopt(pycurl.SSL_VERIFYHOST, 2)
++
++	# get bearer token
++	bearer_token = get_bearer_token(conn, opt)
++
++	# set auth token for later requests
++	conn.setopt(pycurl.HTTPHEADER, [
++		"Content-Type: application/json",
++		"Authorization: Bearer {}".format(bearer_token),
++		"User-Agent: curl",
++	])
++
++	return conn
++
++def disconnect(conn):
++	conn.close()
++
++def send_command(conn, command, method="GET", action=None, expected_rc=200):
++	if not command.startswith("https"):
++		url = conn.base_url + command
++	else:
++		url = command
++
++	conn.setopt(pycurl.URL, url.encode("ascii"))
++
++	web_buffer = io.BytesIO()
++
++	if method == "GET":
++		conn.setopt(pycurl.POST, 0)
++	if method == "POST":
++		conn.setopt(pycurl.POSTFIELDS, action)
++	if method == "DELETE":
++		conn.setopt(pycurl.CUSTOMREQUEST, "DELETE")
++
++	conn.setopt(pycurl.WRITEFUNCTION, web_buffer.write)
++
++	try:
++		conn.perform()
++	except Exception as e:
++		raise(e)
++
++	rc = conn.getinfo(pycurl.HTTP_CODE)
++	result = web_buffer.getvalue().decode("UTF-8")
++
++	web_buffer.close()
++
++	# actions (start/stop/reboot) report 201 when they've been created
++	if rc != expected_rc:
++		logging.debug("rc: {}, result: {}".format(rc, result))
++		if len(result) > 0:
++			raise Exception("{}: {}".format(rc, 
++					result["value"]["messages"][0]["default_message"]))
++		else:
++			raise Exception("Remote returned {} for request to {}".format(rc, url))
++
++	if len(result) > 0:
++		result = json.loads(result)
++
++	logging.debug("url: {}".format(url))
++	logging.debug("method: {}".format(method))
++	logging.debug("response code: {}".format(rc))
++	logging.debug("result: {}\n".format(result))
++
++	return result
++
++def define_new_opts():
++	all_opt["apikey"] = {
++		"getopt" : ":",
++		"longopt" : "apikey",
++		"help" : "--apikey=[key]                 API Key",
++		"required" : "1",
++		"shortdesc" : "API Key",
++		"order" : 0
++	}
++	all_opt["instance"] = {
++		"getopt" : ":",
++		"longopt" : "instance",
++		"help" : "--instance=[instance]          Cloud Instance",
++		"required" : "1",
++		"shortdesc" : "Cloud Instance",
++		"order" : 0
++	}
++	all_opt["region"] = {
++		"getopt" : ":",
++		"longopt" : "region",
++		"help" : "--region=[region]              Region",
++		"required" : "1",
++		"shortdesc" : "Region",
++		"order" : 0
++	}
++	all_opt["limit"] = {
++		"getopt" : ":",
++		"longopt" : "limit",
++		"help" : "--limit=[number]               Limit number of nodes returned by API",
++		"required" : "1",
++		"default": 50,
++		"shortdesc" : "Number of nodes returned by API",
++		"order" : 0
++	}
++
++
++def main():
++	device_opt = [
++		"apikey",
++		"instance",
++		"region",
++		"limit",
++		"port",
++		"no_password",
++	]
++
++	atexit.register(atexit_handler)
++	define_new_opts()
++
++	all_opt["shell_timeout"]["default"] = "15"
++	all_opt["power_timeout"]["default"] = "30"
++	all_opt["power_wait"]["default"] = "1"
++
++	options = check_input(device_opt, process_input(device_opt))
++
++	docs = {}
++	docs["shortdesc"] = "Fence agent for IBM Cloud VPC"
++	docs["longdesc"] = """fence_ibm_vpc is an I/O Fencing agent which can be \
++used with IBM Cloud VPC to fence virtual machines."""
++	docs["vendorurl"] = "https://www.ibm.com"
++	show_docs(options, docs)
++
++	####
++	## Fence operations
++	####
++	run_delay(options)
++
++	conn = connect(options)
++	atexit.register(disconnect, conn)
++
++	result = fence_action(conn, options, set_power_status, get_power_status, get_list)
++
++	sys.exit(result)
++
++if __name__ == "__main__":
++	main()
+diff --git a/tests/data/metadata/fence_ibm_powervs.xml b/tests/data/metadata/fence_ibm_powervs.xml
+new file mode 100644
+index 000000000..fe86331bd
+--- /dev/null
++++ b/tests/data/metadata/fence_ibm_powervs.xml
+@@ -0,0 +1,134 @@
++<?xml version="1.0" ?>
++<resource-agent name="fence_ibm_powervs" shortdesc="Fence agent for IBM PowerVS" >
++<longdesc>fence_ibm_powervs is an I/O Fencing agent which can be used with IBM PowerVS to fence virtual machines.</longdesc>
++<vendor-url>https://www.ibm.com</vendor-url>
++<parameters>
++	<parameter name="crn" unique="0" required="1">
++		<getopt mixed="--crn=[crn]" />
++		<content type="string"  />
++		<shortdesc lang="en">CRN</shortdesc>
++	</parameter>
++	<parameter name="instance" unique="0" required="1">
++		<getopt mixed="--instance=[instance]" />
++		<content type="string"  />
++		<shortdesc lang="en">PowerVS Instance</shortdesc>
++	</parameter>
++	<parameter name="region" unique="0" required="1">
++		<getopt mixed="--region=[region]" />
++		<content type="string"  />
++		<shortdesc lang="en">Region</shortdesc>
++	</parameter>
++	<parameter name="token" unique="0" required="1">
++		<getopt mixed="--token=[token]" />
++		<content type="string"  />
++		<shortdesc lang="en">Bearer Token</shortdesc>
++	</parameter>
++	<parameter name="action" unique="0" required="1">
++		<getopt mixed="-o, --action=[action]" />
++		<content type="string" default="reboot"  />
++		<shortdesc lang="en">Fencing action</shortdesc>
++	</parameter>
++	<parameter name="plug" unique="0" required="1" obsoletes="port">
++		<getopt mixed="-n, --plug=[id]" />
++		<content type="string"  />
++		<shortdesc lang="en">Physical plug number on device, UUID or identification of machine</shortdesc>
++	</parameter>
++	<parameter name="port" unique="0" required="1" deprecated="1">
++		<getopt mixed="-n, --plug=[id]" />
++		<content type="string"  />
++		<shortdesc lang="en">Physical plug number on device, UUID or identification of machine</shortdesc>
++	</parameter>
++	<parameter name="quiet" unique="0" required="0">
++		<getopt mixed="-q, --quiet" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Disable logging to stderr. Does not affect --verbose or --debug-file or logging to syslog.</shortdesc>
++	</parameter>
++	<parameter name="verbose" unique="0" required="0">
++		<getopt mixed="-v, --verbose" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Verbose mode. Multiple -v flags can be stacked on the command line (e.g., -vvv) to increase verbosity.</shortdesc>
++	</parameter>
++	<parameter name="verbose_level" unique="0" required="0">
++		<getopt mixed="--verbose-level" />
++		<content type="integer"  />
++		<shortdesc lang="en">Level of debugging detail in output. Defaults to the number of --verbose flags specified on the command line, or to 1 if verbose=1 in a stonith device configuration (i.e., on stdin).</shortdesc>
++	</parameter>
++	<parameter name="debug" unique="0" required="0" deprecated="1">
++		<getopt mixed="-D, --debug-file=[debugfile]" />
++		<content type="string"  />
++		<shortdesc lang="en">Write debug information to given file</shortdesc>
++	</parameter>
++	<parameter name="debug_file" unique="0" required="0" obsoletes="debug">
++		<getopt mixed="-D, --debug-file=[debugfile]" />
++		<content type="string"  />
++		<shortdesc lang="en">Write debug information to given file</shortdesc>
++	</parameter>
++	<parameter name="version" unique="0" required="0">
++		<getopt mixed="-V, --version" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Display version information and exit</shortdesc>
++	</parameter>
++	<parameter name="help" unique="0" required="0">
++		<getopt mixed="-h, --help" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Display help and exit</shortdesc>
++	</parameter>
++	<parameter name="separator" unique="0" required="0">
++		<getopt mixed="-C, --separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for CSV created by 'list' operation</shortdesc>
++	</parameter>
++	<parameter name="delay" unique="0" required="0">
++		<getopt mixed="--delay=[seconds]" />
++		<content type="second" default="0"  />
++		<shortdesc lang="en">Wait X seconds before fencing is started</shortdesc>
++	</parameter>
++	<parameter name="disable_timeout" unique="0" required="0">
++		<getopt mixed="--disable-timeout=[true/false]" />
++		<content type="string"  />
++		<shortdesc lang="en">Disable timeout (true/false) (default: true when run from Pacemaker 2.0+)</shortdesc>
++	</parameter>
++	<parameter name="login_timeout" unique="0" required="0">
++		<getopt mixed="--login-timeout=[seconds]" />
++		<content type="second" default="5"  />
++		<shortdesc lang="en">Wait X seconds for cmd prompt after login</shortdesc>
++	</parameter>
++	<parameter name="power_timeout" unique="0" required="0">
++		<getopt mixed="--power-timeout=[seconds]" />
++		<content type="second" default="30"  />
++		<shortdesc lang="en">Test X seconds for status change after ON/OFF</shortdesc>
++	</parameter>
++	<parameter name="power_wait" unique="0" required="0">
++		<getopt mixed="--power-wait=[seconds]" />
++		<content type="second" default="1"  />
++		<shortdesc lang="en">Wait X seconds after issuing ON/OFF</shortdesc>
++	</parameter>
++	<parameter name="shell_timeout" unique="0" required="0">
++		<getopt mixed="--shell-timeout=[seconds]" />
++		<content type="second" default="15"  />
++		<shortdesc lang="en">Wait X seconds for cmd prompt after issuing command</shortdesc>
++	</parameter>
++	<parameter name="stonith_status_sleep" unique="0" required="0">
++		<getopt mixed="--stonith-status-sleep=[seconds]" />
++		<content type="second" default="1"  />
++		<shortdesc lang="en">Sleep X seconds between status calls during a STONITH action</shortdesc>
++	</parameter>
++	<parameter name="retry_on" unique="0" required="0">
++		<getopt mixed="--retry-on=[attempts]" />
++		<content type="integer" default="1"  />
++		<shortdesc lang="en">Count of attempts to retry power on</shortdesc>
++	</parameter>
++</parameters>
++<actions>
++	<action name="on" automatic="0"/>
++	<action name="off" />
++	<action name="reboot" />
++	<action name="status" />
++	<action name="list" />
++	<action name="list-status" />
++	<action name="monitor" />
++	<action name="metadata" />
++	<action name="manpage" />
++	<action name="validate-all" />
++</actions>
++</resource-agent>
+diff --git a/tests/data/metadata/fence_ibm_vpc.xml b/tests/data/metadata/fence_ibm_vpc.xml
+new file mode 100644
+index 000000000..926efcaa0
+--- /dev/null
++++ b/tests/data/metadata/fence_ibm_vpc.xml
+@@ -0,0 +1,134 @@
++<?xml version="1.0" ?>
++<resource-agent name="fence_ibm_vpc" shortdesc="Fence agent for IBM Cloud VPC" >
++<longdesc>fence_ibm_vpc is an I/O Fencing agent which can be used with IBM Cloud VPC to fence virtual machines.</longdesc>
++<vendor-url>https://www.ibm.com</vendor-url>
++<parameters>
++	<parameter name="apikey" unique="0" required="1">
++		<getopt mixed="--apikey=[key]" />
++		<content type="string"  />
++		<shortdesc lang="en">API Key</shortdesc>
++	</parameter>
++	<parameter name="instance" unique="0" required="1">
++		<getopt mixed="--instance=[instance]" />
++		<content type="string"  />
++		<shortdesc lang="en">Cloud Instance</shortdesc>
++	</parameter>
++	<parameter name="limit" unique="0" required="1">
++		<getopt mixed="--limit=[number]" />
++		<content type="string" default="50"  />
++		<shortdesc lang="en">Number of nodes returned by API</shortdesc>
++	</parameter>
++	<parameter name="region" unique="0" required="1">
++		<getopt mixed="--region=[region]" />
++		<content type="string"  />
++		<shortdesc lang="en">Region</shortdesc>
++	</parameter>
++	<parameter name="action" unique="0" required="1">
++		<getopt mixed="-o, --action=[action]" />
++		<content type="string" default="reboot"  />
++		<shortdesc lang="en">Fencing action</shortdesc>
++	</parameter>
++	<parameter name="plug" unique="0" required="1" obsoletes="port">
++		<getopt mixed="-n, --plug=[id]" />
++		<content type="string"  />
++		<shortdesc lang="en">Physical plug number on device, UUID or identification of machine</shortdesc>
++	</parameter>
++	<parameter name="port" unique="0" required="1" deprecated="1">
++		<getopt mixed="-n, --plug=[id]" />
++		<content type="string"  />
++		<shortdesc lang="en">Physical plug number on device, UUID or identification of machine</shortdesc>
++	</parameter>
++	<parameter name="quiet" unique="0" required="0">
++		<getopt mixed="-q, --quiet" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Disable logging to stderr. Does not affect --verbose or --debug-file or logging to syslog.</shortdesc>
++	</parameter>
++	<parameter name="verbose" unique="0" required="0">
++		<getopt mixed="-v, --verbose" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Verbose mode. Multiple -v flags can be stacked on the command line (e.g., -vvv) to increase verbosity.</shortdesc>
++	</parameter>
++	<parameter name="verbose_level" unique="0" required="0">
++		<getopt mixed="--verbose-level" />
++		<content type="integer"  />
++		<shortdesc lang="en">Level of debugging detail in output. Defaults to the number of --verbose flags specified on the command line, or to 1 if verbose=1 in a stonith device configuration (i.e., on stdin).</shortdesc>
++	</parameter>
++	<parameter name="debug" unique="0" required="0" deprecated="1">
++		<getopt mixed="-D, --debug-file=[debugfile]" />
++		<content type="string"  />
++		<shortdesc lang="en">Write debug information to given file</shortdesc>
++	</parameter>
++	<parameter name="debug_file" unique="0" required="0" obsoletes="debug">
++		<getopt mixed="-D, --debug-file=[debugfile]" />
++		<content type="string"  />
++		<shortdesc lang="en">Write debug information to given file</shortdesc>
++	</parameter>
++	<parameter name="version" unique="0" required="0">
++		<getopt mixed="-V, --version" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Display version information and exit</shortdesc>
++	</parameter>
++	<parameter name="help" unique="0" required="0">
++		<getopt mixed="-h, --help" />
++		<content type="boolean"  />
++		<shortdesc lang="en">Display help and exit</shortdesc>
++	</parameter>
++	<parameter name="separator" unique="0" required="0">
++		<getopt mixed="-C, --separator=[char]" />
++		<content type="string" default=","  />
++		<shortdesc lang="en">Separator for CSV created by 'list' operation</shortdesc>
++	</parameter>
++	<parameter name="delay" unique="0" required="0">
++		<getopt mixed="--delay=[seconds]" />
++		<content type="second" default="0"  />
++		<shortdesc lang="en">Wait X seconds before fencing is started</shortdesc>
++	</parameter>
++	<parameter name="disable_timeout" unique="0" required="0">
++		<getopt mixed="--disable-timeout=[true/false]" />
++		<content type="string"  />
++		<shortdesc lang="en">Disable timeout (true/false) (default: true when run from Pacemaker 2.0+)</shortdesc>
++	</parameter>
++	<parameter name="login_timeout" unique="0" required="0">
++		<getopt mixed="--login-timeout=[seconds]" />
++		<content type="second" default="5"  />
++		<shortdesc lang="en">Wait X seconds for cmd prompt after login</shortdesc>
++	</parameter>
++	<parameter name="power_timeout" unique="0" required="0">
++		<getopt mixed="--power-timeout=[seconds]" />
++		<content type="second" default="30"  />
++		<shortdesc lang="en">Test X seconds for status change after ON/OFF</shortdesc>
++	</parameter>
++	<parameter name="power_wait" unique="0" required="0">
++		<getopt mixed="--power-wait=[seconds]" />
++		<content type="second" default="1"  />
++		<shortdesc lang="en">Wait X seconds after issuing ON/OFF</shortdesc>
++	</parameter>
++	<parameter name="shell_timeout" unique="0" required="0">
++		<getopt mixed="--shell-timeout=[seconds]" />
++		<content type="second" default="15"  />
++		<shortdesc lang="en">Wait X seconds for cmd prompt after issuing command</shortdesc>
++	</parameter>
++	<parameter name="stonith_status_sleep" unique="0" required="0">
++		<getopt mixed="--stonith-status-sleep=[seconds]" />
++		<content type="second" default="1"  />
++		<shortdesc lang="en">Sleep X seconds between status calls during a STONITH action</shortdesc>
++	</parameter>
++	<parameter name="retry_on" unique="0" required="0">
++		<getopt mixed="--retry-on=[attempts]" />
++		<content type="integer" default="1"  />
++		<shortdesc lang="en">Count of attempts to retry power on</shortdesc>
++	</parameter>
++</parameters>
++<actions>
++	<action name="on" automatic="0"/>
++	<action name="off" />
++	<action name="reboot" />
++	<action name="status" />
++	<action name="list" />
++	<action name="list-status" />
++	<action name="monitor" />
++	<action name="metadata" />
++	<action name="manpage" />
++	<action name="validate-all" />
++</actions>
++</resource-agent>

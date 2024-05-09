@@ -1,0 +1,17 @@
+diff -u --recursive festival-vanilla/config/config.in festival/config/config.in
+--- festival-vanilla/config/config.in	2018-08-29 21:19:10.570829790 -0400
++++ festival/config/config.in	2018-08-29 21:19:57.329977377 -0400
+@@ -10,7 +10,12 @@
+ ###########################################################################
+ ## Which speech tools to use
+ 
+-EST=$(TOP)/../speech_tools
++ARCH := $(shell uname -p)
++ifeq ($(ARCH),$(filter $(ARCH),x86_64 s390x ppc64le aarch64))
++EST=/usr/lib64/speech_tools
++else
++EST=/usr/lib/speech_tools
++endif
+ 
+ ###########################################################################
+ ## Where the festival tree will be installed.

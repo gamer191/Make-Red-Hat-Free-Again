@@ -1,0 +1,21 @@
+From a2e2432cfec0af9a8a90f9d7fed18759da6f9b0c Mon Sep 17 00:00:00 2001
+From: Oyvind Albrigtsen <oalbrigt@redhat.com>
+Date: Thu, 13 Apr 2023 10:14:31 +0200
+Subject: [PATCH] fence_aws: fail when power action request fails
+
+---
+ agents/aws/fence_aws.py | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/agents/aws/fence_aws.py b/agents/aws/fence_aws.py
+index 5d1677144..0a375bbec 100644
+--- a/agents/aws/fence_aws.py
++++ b/agents/aws/fence_aws.py
+@@ -116,6 +116,7 @@ def set_power_status(conn, options):
+ 	except Exception as e:
+ 		logger.debug("Failed to power %s %s: %s", \
+ 				options["--action"], options["--plug"], e)
++		fail(EC_STATUS)
+ 
+ def define_new_opts():
+ 	all_opt["region"] = {

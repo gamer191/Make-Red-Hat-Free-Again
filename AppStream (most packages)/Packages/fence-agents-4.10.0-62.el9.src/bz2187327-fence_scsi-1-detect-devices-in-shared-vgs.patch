@@ -1,0 +1,58 @@
+From 4661b6f625c57a728ec58023da89ba378d4d1c27 Mon Sep 17 00:00:00 2001
+From: Arslan Ahmad <arslan.ahmad97@googlemail.com>
+Date: Mon, 17 Apr 2023 15:59:49 +0530
+Subject: [PATCH] fence_scsi: Automatically detect devices for shared VGs
+
+Currently, if no devices option is given, fence_scsi automatically
+builds a device list containing all LVM PVs that back VGs with the
+clustered ('c') bit set. With this commit, fence_scsi will also consider
+VGs with the shared ('s') bit set.
+
+Additionally, the existing check is too broad. We should consider a
+volume group to be clustered or shared only if the 6th bit is set to 'c'
+or 's'. This way, we can avoid false positives.
+
+Closes RHBZ#2187327
+Closes RHBZ#2187329
+---
+ agents/scsi/fence_scsi.py | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/agents/scsi/fence_scsi.py b/agents/scsi/fence_scsi.py
+index 85e4f29e6..3de4ba0b2 100644
+--- a/agents/scsi/fence_scsi.py
++++ b/agents/scsi/fence_scsi.py
+@@ -314,7 +314,7 @@ def dev_read(fail=True, opt=None):
+ 	return devs
+ 
+ 
+-def get_clvm_devices(options):
++def get_shared_devices(options):
+ 	devs = []
+ 	cmd = options["--vgs-path"] + " " +\
+ 	"--noheadings " +\
+@@ -324,10 +324,11 @@ def get_clvm_devices(options):
+ 	"--config 'global { locking_type = 0 } devices { preferred_names = [ \"^/dev/dm\" ] }'"
+ 	out = run_cmd(options, cmd)
+ 	if out["rc"]:
+-		fail_usage("Failed: Cannot get clvm devices")
+-	for line in out["out"].split("\n"):
+-		if 'c' in line.split(":")[0]:
+-			devs.append(line.split(":")[1])
++		fail_usage("Failed: Cannot get shared devices")
++	for line in out["out"].splitlines():
++		vg_attr, pv_name = line.strip().split(":")
++		if vg_attr[5] in "cs":
++			devs.append(pv_name)
+ 	return devs
+ 
+ 
+@@ -612,7 +613,7 @@ def main():
+ 	options["--key"] = options["--key"].lstrip('0')
+ 
+ 	if not ("--devices" in options and options["--devices"].split(",")):
+-		options["devices"] = get_clvm_devices(options)
++		options["devices"] = get_shared_devices(options)
+ 	else:
+ 		options["devices"] = options["--devices"].split(",")
+ 
