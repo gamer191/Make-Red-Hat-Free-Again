@@ -1,0 +1,132 @@
+From b800e25258353dbb1a88506123c21ac3298fd2d0 Mon Sep 17 00:00:00 2001
+From: Carlos Santos <casantos@redhat.com>
+Date: Tue, 18 Oct 2022 08:59:16 -0300
+Subject: [PATCH 2/2] Always set the home directory permissions according to
+ HOME_MODE
+
+Currently the home directory permissions are set by taking the /etc/skel
+mode and masking it with HOME_MODE:
+
+    override_umask = 0777 & ~get_umask(&configured_umask, "HOME_MODE");
+    stat(skel, &sb); /* performed by nftw() */
+    oddjob_selinux_mkdir(newpath, sb->st_mode & ~override_umask, uid, gid);
+
+The problem is that when HOME_MODE is more permissive than /etc/skel,
+the masking will not produce the desired result, e.g.
+
+    skel_mode = 0755
+    HOME_MODE = 0775
+    override_umask = 0777 & ~HOME_MODE /* 0002 */
+    mode = skel_mode & ~override_umask /* 0755 & 0775 = 0755 */
+
+In order to fix the problem, always use 0777 & ~override_umask for the
+top home directory.
+
+Signed-off-by: Carlos Santos <casantos@redhat.com>
+Fixes: https://pagure.io/oddjob/issue/17
+---
+ src/mkhomedir.c | 45 +++++++++++++++++++++------------------------
+ 1 file changed, 21 insertions(+), 24 deletions(-)
+
+diff --git a/src/mkhomedir.c b/src/mkhomedir.c
+index ac813a9..932918f 100644
+--- a/src/mkhomedir.c
++++ b/src/mkhomedir.c
+@@ -67,6 +67,7 @@ copy_single_item(const char *source, const struct stat *sb,
+ {
+ 	uid_t uid = pwd->pw_uid;
+ 	gid_t gid = pwd->pw_gid;
++	mode_t mode = sb->st_mode & ~override_umask;
+ 	int sfd, dfd, i, res;
+ 	char target[PATH_MAX + 1], newpath[PATH_MAX + 1];
+ 	unsigned char buf[BUFSIZ];
+@@ -112,8 +113,7 @@ copy_single_item(const char *source, const struct stat *sb,
+ 			oddjob_set_selinux_file_creation_context(newpath,
+ 								 sb->st_mode |
+ 								 S_IFREG);
+-			dfd = open(newpath, O_WRONLY | O_CREAT | O_EXCL,
+-				   sb->st_mode & ~override_umask);
++			dfd = open(newpath, O_WRONLY | O_CREAT | O_EXCL, mode);
+ 			if (dfd != -1) {
+ 				while ((i = read(sfd, buf, sizeof(buf))) > 0) {
+ 					retry_write(dfd, buf, i);
+@@ -156,20 +156,22 @@ copy_single_item(const char *source, const struct stat *sb,
+ 		}
+ 		return 0;
+ 	case FTW_D:
+-		/* It's the home directory itself. Don't give it to the
+-		 * target user just yet to avoid potential race conditions
+-		 * involving symlink attacks when we copy over the skeleton
+-		 * tree. */
+-		if (status->level == 0 && !owner_mkdir_first) {
+-			uid = 0;
+-			gid = 0;
+-		}
+-
+ 		/* It's a directory.  Make one with the same name and
+ 		 * permissions, but owned by the target user. */
+-		res = oddjob_selinux_mkdir(newpath,
+-					   sb->st_mode & ~override_umask,
+-					   uid, gid);
++		if (status->level == 0) {
++			/* It's the home directory itself.  Use the configured
++			 * (or overriden) mode, not the source mode & umask. */
++			mode = 0777 & ~override_umask;
++
++			/* Don't give it to the target user just yet to avoid
++			 * potential race conditions involving symlink attacks
++			 * when we copy over the skeleton tree. */
++			if (!owner_mkdir_first) {
++				uid = 0;
++				gid = 0;
++			}
++		}
++		res = oddjob_selinux_mkdir(newpath, mode, uid, gid);
+ 
+ 		/* on unexpected errors, or if the home directory itself
+ 		 * suddenly already exists, abort the copy operation. */
+@@ -248,12 +250,8 @@ mkhomedir(const char *user, int flags)
+ 
+ 				return res;
+ 			} else {
+-				if (stat(skel, &st) != 0) {
+-					st.st_mode = S_IRWXU;
+-				}
+ 				if ((oddjob_selinux_mkdir(pwd->pw_dir,
+-							  st.st_mode &
+-							  ~override_umask,
++							  0777 & ~override_umask,
+ 							  pwd->pw_uid,
+ 							  pwd->pw_gid) != 0) &&
+ 				    (errno != EEXIST)) {
+@@ -269,11 +267,11 @@ mkhomedir(const char *user, int flags)
+ }
+ 
+ static mode_t
+-get_umask(int *configured, const char *variable)
++get_umask(int *configured, const char *variable, mode_t default_value)
+ {
+ 	FILE *fp;
+ 	char buf[BUFSIZ], *p, *end;
+-	mode_t mask = umask(0777);
++	mode_t mask = default_value;
+ 	long tmp;
+ 	size_t vlen = strlen(variable);
+ 
+@@ -315,11 +313,10 @@ main(int argc, char **argv)
+ 
+ 	openlog(PACKAGE "-mkhomedir", LOG_PID, LOG_DAEMON);
+ 	/* Unlike UMASK, HOME_MODE is the file mode, so needs to be reverted */
+-	override_umask = 0777 & ~get_umask(&configured_umask, "HOME_MODE");
++	override_umask = 0777 & ~get_umask(&configured_umask, "HOME_MODE", 0);
+ 	if (configured_umask == 0) {
+-		override_umask = get_umask(&configured_umask, "UMASK");
++		override_umask = get_umask(&configured_umask, "UMASK", 022);
+ 	}
+-	umask(override_umask);
+ 	skel_dir = "/etc/skel";
+ 
+ 	while ((i = getopt(argc, argv, "nqfs:u:")) != -1) {
+-- 
+2.38.1
+
