@@ -1,0 +1,41 @@
+diff -up rsyslog-8.2310.0/doc/configuration/modules/omprog.html.orig rsyslog-8.2310.0/doc/configuration/modules/omprog.html
+--- rsyslog-8.2310.0/doc/configuration/modules/omprog.html.orig	2024-01-05 13:21:14.474252913 +0100
++++ rsyslog-8.2310.0/doc/configuration/modules/omprog.html	2024-01-05 13:25:09.128562192 +0100
+@@ -144,8 +144,11 @@ passed to the external program.</p>
+ </tr>
+ </tbody>
+ </table>
+-<p>Full path and command line parameters of the external program to execute.</p>
+-<p>In legacy config, it is <strong>not possible</strong> to specify command line parameters.</p>
++<p>Full path and command line parameters of the external program to execute.
++  Arbitrary external programs should be placed under the /usr/libexec/rsyslog directory.
++  That is, the binaries put in this namespaced directory are meant for the consumption
++  of rsyslog, and are not intended to be executed by users.
++  In legacy config, it is <strong>not possible</strong> to specify command line parameters.</p>
+ </div>
+ <div class="section" id="confirmmessages">
+ <span id="id1"></span><h4>confirmMessages<a class="headerlink" href="#confirmmessages" title="Permalink to this headline">¶</a></h4>
+@@ -587,12 +590,12 @@ multiple processes.</p>
+ <div class="section" id="example-command-line-arguments">
+ <h3>Example: command line arguments<a class="headerlink" href="#example-command-line-arguments" title="Permalink to this headline">¶</a></h3>
+ <p>In the following example, logs will be sent to a program <code class="docutils literal notranslate"><span class="pre">log.sh</span></code> located
+-in <code class="docutils literal notranslate"><span class="pre">/path/to</span></code>. The program will receive the command line arguments
++in <code class="docutils literal notranslate"><span class="pre">/usr/libexec/rsyslog</span></code>. The program will receive the command line arguments
+ <code class="docutils literal notranslate"><span class="pre">p1</span></code>, <code class="docutils literal notranslate"><span class="pre">p2</span></code> and <code class="docutils literal notranslate"><span class="pre">--param3=&quot;value</span> <span class="pre">3&quot;</span></code>.</p>
+ <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>module(load=&quot;omprog&quot;)
+ 
+ action(type=&quot;omprog&quot;
+-       binary=&quot;/path/to/log.sh p1 p2 --param3=\&quot;value 3\&quot;&quot;
++       binary=&quot;/usr/libexec/rsyslog/log.sh p1 p2 --param3=\&quot;value 3\&quot;&quot;
+        template=&quot;RSYSLOG_TraditionalFileFormat&quot;)
+ </pre></div>
+ </div>
+@@ -618,7 +621,7 @@ rsyslog will kill and restart it.</p>
+ 
+ action(type=&quot;omprog&quot;
+        name=&quot;db_forward&quot;
+-       binary=&quot;/usr/share/logging/db_forward.py&quot;
++       binary=&quot;/usr/libexec/rsyslog/db_forward.py&quot;
+        confirmMessages=&quot;on&quot;
+        confirmTimeout=&quot;30000&quot;
+        queue.type=&quot;LinkedList&quot;

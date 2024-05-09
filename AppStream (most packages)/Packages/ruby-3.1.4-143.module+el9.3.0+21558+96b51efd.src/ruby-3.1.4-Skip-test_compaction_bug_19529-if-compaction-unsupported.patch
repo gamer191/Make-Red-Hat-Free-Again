@@ -1,0 +1,23 @@
+From bffadcd6d46ccfccade79ce0efb60ced8eac4483 Mon Sep 17 00:00:00 2001
+From: Peter Zhu <peter@peterzhu.ca>
+Date: Thu, 6 Apr 2023 13:35:25 -0400
+Subject: [PATCH] Add guard to compaction test in WeakMap
+
+Some platforms don't support compaction, so we should skip this test.
+---
+ test/ruby/test_weakmap.rb | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/test/ruby/test_weakmap.rb b/test/ruby/test_weakmap.rb
+index c72e7310db101..7fc956dfae474 100644
+--- a/test/ruby/test_weakmap.rb
++++ b/test/ruby/test_weakmap.rb
+@@ -178,6 +178,8 @@ def test_no_memory_leak
+   end
+ 
+   def test_compaction_bug_19529
++    omit "compaction is not supported on this platform" unless GC.respond_to?(:compact)
++
+     obj = Object.new
+     100.times do |i|
+       GC.compact

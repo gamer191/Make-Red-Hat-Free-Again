@@ -1,0 +1,34 @@
+From 251d082403b371098c8420c01d1b058b12a9cc78 Mon Sep 17 00:00:00 2001
+From: Marcelo Tosatti <mtosatti@redhat.com>
+Date: Thu, 1 Feb 2024 13:05:38 -0300
+Subject: [PATCH 1/2] rt-tests: oslat should use MHz, not Mhz
+
+Usage of Mhz, in oslat, is incorrect:
+
+From https://www.nist.gov/pml/owm/writing-si-metric-system-units#:~:text=NOT%20250%20mms.-,Capitalization,the%20beginning%20of%20the%20sentence:
+
+"When the unit is derived from the name of a person, the symbol or the first letter of the symbol is an uppercase letter (W for the unit "watt" or Pa for the unit "pascal")."
+
+Signed-off-by: Marcelo Tosatti <mtosatti@redhat.com>
+Reported-by: Chuck Newman <chuck.newman@hpe.com>
+Signed-off-by: John Kacur <jkacur@redhat.com>
+---
+ src/oslat/oslat.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/oslat/oslat.c b/src/oslat/oslat.c
+index 4bdca643da72..e398f205b40a 100644
+--- a/src/oslat/oslat.c
++++ b/src/oslat/oslat.c
+@@ -501,7 +501,7 @@ static void write_summary(struct thread *t)
+ 	calculate(t);
+ 
+ 	putfield("Core", t[i].core_i, "d", "");
+-	putfield("Counter Freq", t[i].counter_mhz, "u", " (Mhz)");
++	putfield("Counter Freq", t[i].counter_mhz, "u", " (MHz)");
+ 
+ 	for (j = 0; j < g.bucket_size; j++) {
+ 		if (j < g.bucket_size-1 && g.output_omit_zero_buckets) {
+-- 
+2.43.0
+

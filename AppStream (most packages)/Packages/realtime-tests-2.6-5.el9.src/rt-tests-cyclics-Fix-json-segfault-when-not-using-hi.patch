@@ -1,0 +1,62 @@
+From 36f634cf8853e00558512b5b48ce600b629402bb Mon Sep 17 00:00:00 2001
+From: Crystal Wood <crwood@redhat.com>
+Date: Mon, 22 Jan 2024 16:13:19 -0600
+Subject: [PATCH 1/3] rt-tests: cyclics: Fix json segfault when not using
+ histogram
+
+If we're not generating a histogram, don't call the histogram code with
+a NULL pointer.  Also don't print the rest of the histogram json node.
+
+Signed-off-by: Crystal Wood <crwood@redhat.com>
+Signed-off-by: John Kacur <jkacur@redhat.com>
+---
+ src/cyclictest/cyclictest.c         | 11 ++++++-----
+ src/sched_deadline/cyclicdeadline.c |  9 +++++----
+ 2 files changed, 11 insertions(+), 9 deletions(-)
+
+diff --git a/src/cyclictest/cyclictest.c b/src/cyclictest/cyclictest.c
+index 6169170fc66d..33fac3b95f5d 100644
+--- a/src/cyclictest/cyclictest.c
++++ b/src/cyclictest/cyclictest.c
+@@ -1778,12 +1778,13 @@ static void write_stats(FILE *f, void *data __attribute__ ((unused)))
+ 	fprintf(f, "  \"resolution_in_ns\": %u,\n", use_nsecs);
+ 	fprintf(f, "  \"thread\": {\n");
+ 	for (i = 0; i < num_threads; i++) {
+-		fprintf(f, "    \"%u\": {\n", i);
+-
+-		fprintf(f, "      \"histogram\": {");
+ 		s = par[i]->stats;
+-		hist_print_json(par[i]->stats->hist, f);
+-		fprintf(f, "      },\n");
++		fprintf(f, "    \"%u\": {\n", i);
++		if (s->hist) {
++			fprintf(f, "      \"histogram\": {");
++			hist_print_json(s->hist, f);
++			fprintf(f, "      },\n");
++		}
+ 		fprintf(f, "      \"cycles\": %ld,\n", s->cycles);
+ 		fprintf(f, "      \"min\": %ld,\n", s->min);
+ 		fprintf(f, "      \"max\": %ld,\n", s->max);
+diff --git a/src/sched_deadline/cyclicdeadline.c b/src/sched_deadline/cyclicdeadline.c
+index e449be57870e..b3155547b9bb 100644
+--- a/src/sched_deadline/cyclicdeadline.c
++++ b/src/sched_deadline/cyclicdeadline.c
+@@ -1141,10 +1141,11 @@ static void write_stats(FILE *f, void *data)
+ 	for (i = 0; i < nr_threads; i++) {
+ 		s = &sd[i].stat;
+ 		fprintf(f, "    \"%u\": {\n", i);
+-
+-		fprintf(f, "      \"histogram\": {");
+-		hist_print_json(s->hist, f);
+-		fprintf(f, "      },\n");
++		if (s->hist) {
++			fprintf(f, "      \"histogram\": {");
++			hist_print_json(s->hist, f);
++			fprintf(f, "      },\n");
++		}
+ 		fprintf(f, "      \"cycles\": %ld,\n", s->cycles);
+ 		fprintf(f, "      \"min\": %ld,\n", s->min);
+ 		fprintf(f, "      \"max\": %ld,\n", s->max);
+-- 
+2.43.0
+

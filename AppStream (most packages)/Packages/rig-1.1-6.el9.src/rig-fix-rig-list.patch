@@ -1,0 +1,96 @@
+From dedd8733d6cac622903a58cf7a94503cdbd13d88 Mon Sep 17 00:00:00 2001
+From: Jake Hunsaker <jhunsake@redhat.com>
+Date: Tue, 24 May 2022 12:06:46 -0400
+Subject: [PATCH] [BaseRig] Fix fatal error when querying rig list during
+ pre_action()
+
+If a rig used the sosreport action, and specified `--initial-sos`, *and*
+queried `rig list` immediately after the rig was deployed, there was a
+race condition where the status query would have failed and terminated
+the rig during `pre_action()` execution.
+
+Fix this, by first not detaching until all `pre_action`s are completed,
+and second better handle failed `status` queries better generically.
+
+Signed-off-by: Jake Hunsaker <jhunsake@redhat.com>
+---
+ rigging/__init__.py      | 19 +++++++++++++++----
+ rigging/rigs/__init__.py |  6 +++---
+ 2 files changed, 18 insertions(+), 7 deletions(-)
+
+diff --git a/rigging/__init__.py b/rigging/__init__.py
+index 245d2d1..04ad08e 100644
+--- a/rigging/__init__.py
++++ b/rigging/__init__.py
+@@ -234,6 +234,7 @@ class RigConnection():
+     """
+ 
+     def __init__(self, socket_name):
++        self.name = socket_name
+         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+         _address = "/var/run/rig/%s" % socket_name
+         try:
+@@ -278,10 +279,20 @@ class RigConnection():
+         Returns
+             dict of rig's status information
+         """
+-        ret = json.loads(self._rig_communicate('status').decode())
+-        if ret['success']:
+-            return ast.literal_eval(ret['result'])
+-        raise Exception
++        try:
++            ret = json.loads(self._rig_communicate('status').decode())
++            if ret['success']:
++                return ast.literal_eval(ret['result'])
++        except Exception as err:
++            print("Error retreiving status for %s: %s" % (self.name, err))
++            return {
++                'id': self.name,
++                'pid': '',
++                'rig_type': '',
++                'watch': 'Error retrieving status',
++                'trigger': '',
++                'status': 'Unknown'
++            }
+ 
+     def info(self):
+         """
+diff --git a/rigging/rigs/__init__.py b/rigging/rigs/__init__.py
+index 1d2f2df..f14f312 100644
+--- a/rigging/rigs/__init__.py
++++ b/rigging/rigs/__init__.py
+@@ -77,6 +77,7 @@ class BaseRig():
+         self.resource_name = self.__class__.__name__.lower()
+         self.parser_usage = self.parser_usage % {'name': self.resource_name}
+         self.pool = None
++        self.archive_name = None
+         self.parser = parser
+         self.restart_count = 0
+         subparser = self.parser.add_subparsers()
+@@ -484,7 +485,6 @@ class BaseRig():
+                 conn.sendall(self._fmt_return(command=req['command'],
+                                               output='No such attribute',
+                                               success=False))
+-            continue
+ 
+     def _register_actions(self):
+         """
+@@ -536,13 +536,13 @@ class BaseRig():
+         Main entry point for rigs.
+         """
+         try:
++            self.setup()
++            self._register_actions()
+             # detach from console
+             if not self.args['foreground']:
+                 print(self.id)
+                 self._detach()
+                 self.detached = True
+-            self.setup()
+-            self._register_actions()
+             if self.detached:
+                 for action in self._actions:
+                     self._actions[action].detached = True
+-- 
+2.34.3
+

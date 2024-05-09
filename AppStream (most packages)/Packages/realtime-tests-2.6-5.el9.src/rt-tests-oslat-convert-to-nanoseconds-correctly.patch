@@ -1,0 +1,42 @@
+From 4aeacf722cee26a3f88ab7f631c9ab9ba6ecdb49 Mon Sep 17 00:00:00 2001
+From: Marcelo Tosatti <mtosatti@redhat.com>
+Date: Thu, 1 Feb 2024 14:50:54 -0300
+Subject: [PATCH 2/2] rt-tests: oslat: convert to nanoseconds correctly
+
+With buckets of size 1us, accounting for measurements in the
+[1ns, 999ns] range are done to the 2us bucket (while they
+should be accounted in the 1us bucket):
+
+    001 (us):	0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    002 (us):	41916187 41937649 41938461 42029055 ...
+    003 (us):	969 985 958 972 964 986 970 961 973 ...
+
+Fix this by doing a plain cycles -> nanoseconds convertion:
+
+    001 (us):	43287555 43086678 43087427 43109974 ...
+    002 (us):	983 987 985 975 982 960 993 961 992 ...
+    003 (us):	9 6 7 13 9 22 3 21 3 3 8 8 10 11 3 55
+
+Signed-off-by: Marcelo Tosatti <mtosatti@redhat.com>
+Reported-by: Chuck Newman <chuck.newman@hpe.com>
+Signed-off-by: John Kacur <jkacur@redhat.com>
+---
+ src/oslat/oslat.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/oslat/oslat.c b/src/oslat/oslat.c
+index e398f205b40a..0863297f2cf1 100644
+--- a/src/oslat/oslat.c
++++ b/src/oslat/oslat.c
+@@ -334,7 +334,7 @@ static void insert_bucket(struct thread *t, stamp_t value)
+ 	uint64_t extra;
+ 	double us;
+ 
+-	lat = (value * g.unit_per_us + t->counter_mhz - 1) / t->counter_mhz;
++	lat = (value * g.unit_per_us) / t->counter_mhz;
+ 	us = (double)lat / g.unit_per_us;
+ 	if (!g.preheat && g.trace_threshold && us >= g.trace_threshold) {
+ 		char *line = "%s: Trace threshold (%d us) triggered on cpu %d with %.*f us!\n";
+-- 
+2.43.0
+

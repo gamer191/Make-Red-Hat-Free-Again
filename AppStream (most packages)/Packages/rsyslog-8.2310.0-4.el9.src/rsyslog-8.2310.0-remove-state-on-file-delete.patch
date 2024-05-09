@@ -1,0 +1,11 @@
+diff -up rsyslog-8.2310.0/plugins/imfile/imfile.c.orig rsyslog-8.2310.0/plugins/imfile/imfile.c
+--- rsyslog-8.2310.0/plugins/imfile/imfile.c.orig	2023-11-03 12:19:39.179103408 +0100
++++ rsyslog-8.2310.0/plugins/imfile/imfile.c	2023-11-03 12:19:54.228237199 +0100
+@@ -1162,6 +1162,7 @@ fs_node_destroy(fs_node_t *const node)
+ 	DBGPRINTF("node destroy: %p edges:\n", node);
+ 
+ 	for(edge = node->edges ; edge != NULL ; ) {
++		detect_updates(edge);
+ 		fs_node_destroy(edge->node);
+ 		fs_edge_t *const toDel = edge;
+ 		edge = edge->next;

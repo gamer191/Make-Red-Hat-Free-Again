@@ -1,0 +1,33 @@
+From bbace21828d7e82f1c481f0e1caece31b661cbd9 Mon Sep 17 00:00:00 2001
+From: Florian Weimer <fweimer@redhat.com>
+Date: Mon, 5 Dec 2022 11:10:37 +0100
+Subject: [PATCH 2/2] deps/jemalloc: Do not force building in gnu99 mode
+Content-type: text/plain
+
+The jemalloc configure logic switches to gnu11 mode if available,
+and this explicit flags injection prevents that.  The main difference
+seems to be that in gnu99 mode, <stdatomic.h> is presumed to be
+unavailable and is not used.
+
+Submitted upstream: <https://github.com/redis/redis/pull/11583>
+
+---
+ deps/Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/deps/Makefile b/deps/Makefile
+index 8592e17..d6cb06e 100644
+--- a/deps/Makefile
++++ b/deps/Makefile
+@@ -90,7 +90,7 @@ lua: .make-prerequisites
+ 
+ .PHONY: lua
+ 
+-JEMALLOC_CFLAGS= -std=gnu99 -Wall -pipe -g3 -O3 -funroll-loops $(CFLAGS)
++JEMALLOC_CFLAGS= -Wall -pipe -g3 -O3 -funroll-loops $(CFLAGS)
+ JEMALLOC_LDFLAGS= $(LDFLAGS)
+ 
+ ifneq ($(DEB_HOST_GNU_TYPE),)
+-- 
+2.38.1
+

@@ -1,0 +1,144 @@
+From 0985592ad2d815ac461100807f5b2621e5f49b21 Mon Sep 17 00:00:00 2001
+From: Jarek Prokop <jprokop@redhat.com>
+Date: Fri, 31 Mar 2023 11:54:07 +0200
+Subject: [PATCH 1/2] Provide fix for bundler Gemfile resolving regression.
+
+Instead of resolving to correct Ruby platform, it preferred the
+archful package, that is actually incompatible.
+
+See https://github.com/sclorg/s2i-ruby-container/issues/469
+for an example of the bug.
+
+Commit taken from:
+<https://github.com/rubygems/rubygems/pull/6225>
+and adapted:
+<https://github.com/rubygems/rubygems/commit/7b64c64262a7a980c0eb23b96ea56cf72ea06e89>
+for the PR#6225.
+---
+ bundler/lib/bundler/index.rb              |  5 ++
+ bundler/lib/bundler/lazy_specification.rb | 64 ++++++++++-------------
+ 2 files changed, 34 insertions(+), 35 deletions(-)
+
+diff --git a/bundler/lib/bundler/index.rb b/bundler/lib/bundler/index.rb
+index ed16c90a3..903e220d5 100644
+--- a/bundler/lib/bundler/index.rb
++++ b/bundler/lib/bundler/index.rb
+@@ -71,6 +71,7 @@ def local_search(query)
+       when Gem::Specification, RemoteSpecification, LazySpecification, EndpointSpecification then search_by_spec(query)
+       when String then specs_by_name(query)
+       when Gem::Dependency then search_by_dependency(query)
++      when Array then search_by_name_and_version(*query)
+       else
+         raise "You can't search for a #{query.inspect}."
+       end
+@@ -173,6 +174,10 @@ def search_by_dependency(dependency)
+       end
+     end
+ 
++    def search_by_name_and_version(name, version)
++      specs_by_name(name).select { |spec| spec.version == version }
++    end
++
+     EMPTY_SEARCH = [].freeze
+ 
+     def search_by_spec(spec)
+diff --git a/bundler/lib/bundler/lazy_specification.rb b/bundler/lib/bundler/lazy_specification.rb
+index 949e8264b..e8bee25ab 100644
+--- a/bundler/lib/bundler/lazy_specification.rb
++++ b/bundler/lib/bundler/lazy_specification.rb
+@@ -13,7 +13,6 @@ def initialize(name, version, platform, source = nil)
+       @dependencies  = []
+       @platform      = platform || Gem::Platform::RUBY
+       @source        = source
+-      @specification = nil
+     end
+ 
+     def full_name
+@@ -76,37 +75,41 @@ def to_lock
+     def materialize_for_installation
+       source.local!
+ 
+-      candidates = if source.is_a?(Source::Path) || !ruby_platform_materializes_to_ruby_platform?
+-        target_platform = ruby_platform_materializes_to_ruby_platform? ? platform : local_platform
++      matching_specs = source.specs.search(use_exact_resolved_specifications? ? self : [name, version])
++      return self if matching_specs.empty?
+ 
+-        GemHelpers.select_best_platform_match(source.specs.search(Dependency.new(name, version)), target_platform)
+-      else
+-        source.specs.search(self)
+-      end
++      candidates = if use_exact_resolved_specifications?
++                     matching_specs
++                   else
++                     target_platform = ruby_platform_materializes_to_ruby_platform? ? platform : local_platform
++
++                     installable_candidates = GemHelpers.select_best_platform_match(matching_specs, target_platform)
++
++                     specification = __materialize__(installable_candidates)
++                     return specification unless specification.nil?
+ 
+-      return self if candidates.empty?
++                     if target_platform != platform
++                       installable_candidates = GemHelpers.select_best_platform_match(matching_specs, platform)
++                     end
++
++                     installable_candidates
++                   end
+ 
+       __materialize__(candidates)
+     end
+ 
+     def __materialize__(candidates)
+-      @specification = begin
+-        search = candidates.reverse.find do |spec|
+-          spec.is_a?(StubSpecification) ||
+-            (spec.matches_current_ruby? &&
+-              spec.matches_current_rubygems?)
+-        end
+-        if search.nil? && Bundler.frozen_bundle?
+-          search = candidates.last
+-        else
+-          search.dependencies = dependencies if search && search.full_name == full_name && (search.is_a?(RemoteSpecification) || search.is_a?(EndpointSpecification))
+-        end
+-        search
++      search = candidates.reverse.find do |spec|
++        spec.is_a?(StubSpecification) ||
++          (spec.matches_current_ruby? &&
++           spec.matches_current_rubygems?)
+       end
+-    end
+-
+-    def respond_to?(*args)
+-      super || @specification ? @specification.respond_to?(*args) : nil
++      if search.nil? && Bundler.frozen_bundle?
++        search = candidates.last
++      else
++        search.dependencies = dependencies if search && search.full_name == full_name && (search.is_a?(RemoteSpecification) || search.is_a?(EndpointSpecification))
++      end
++      search
+     end
+ 
+     def to_s
+@@ -127,17 +130,8 @@ def git_version
+     end
+ 
+     private
+-
+-    def to_ary
+-      nil
+-    end
+-
+-    def method_missing(method, *args, &blk)
+-      raise "LazySpecification has not been materialized yet (calling :#{method} #{args.inspect})" unless @specification
+-
+-      return super unless respond_to?(method)
+-
+-      @specification.send(method, *args, &blk)
++    def use_exact_resolved_specifications?
++      @use_exact_resolved_specifications ||= !source.is_a?(Source::Path) && ruby_platform_materializes_to_ruby_platform?
+     end
+ 
+     #
+-- 
+2.40.0
+

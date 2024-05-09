@@ -1,0 +1,22 @@
+# This file is part of insights-client.
+#
+# Any changes made to this file will be overwritten during a software update. To
+# override a parameter in this file, create a drop-in file, typically located at
+# /etc/systemd/system/insights-unregistered.service.d/override.conf. Put the
+# desired overrides in that file and reload systemd. The next time this service
+# is run (either manually or via a systemd timer), the overridden values will be
+# in effect.
+#
+# For more information about systemd drop-in files, see systemd.unit(5).
+
+[Unit]
+Description=Automatically check if manually Unregistered from Red Hat Insights Client
+Documentation=man:insights-client(8)
+After=network-online.target
+ConditionPathExists=@sysconfdir@/insights-client/.unregistered
+
+[Service]
+Type=simple
+ExecStart=/bin/systemctl unmask --now insights-register.path
+ExecStop=/bin/systemctl start insights-register.path
+Restart=no

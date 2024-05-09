@@ -1,0 +1,33 @@
+From 110665fa55292027e835f9d6bdfb3ed608b0a6ca Mon Sep 17 00:00:00 2001
+From: Jarek Prokop <jprokop@redhat.com>
+Date: Fri, 20 Oct 2023 17:52:11 +0200
+Subject: [PATCH] Explicitly retype timespec fields to int64_t to fix
+ compatibility with 32bit arches.
+
+Timespec fields' time_t type is not guaranteed to be any particular integer.
+Tests with binary timestamp conversion are failing on 32bit arches (e.g. intel x86)
+until they are retyped into int64_t, which fixes the issue with encoding the Time instances.
+
+Decoder doesn't need adjusting. It returns the correct time from the encoded binary representation.
+
+Resolves: https://github.com/ged/ruby-pg/issues/545
+---
+ ext/pg_binary_encoder.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ext/pg_binary_encoder.c b/ext/pg_binary_encoder.c
+index e074a85..df45676 100644
+--- a/ext/pg_binary_encoder.c
++++ b/ext/pg_binary_encoder.c
+@@ -185,7 +185,7 @@ pg_bin_enc_timestamp(t_pg_coder *this, VALUE value, char *out, VALUE *intermedia
+ 		ts = rb_time_timespec(*intermediate);
+ 		/* PostgreSQL's timestamp is based on year 2000 and Ruby's time is based on 1970.
+ 			* Adjust the 30 years difference. */
+-		timestamp = (ts.tv_sec - 10957L * 24L * 3600L) * 1000000 + (ts.tv_nsec / 1000);
++		timestamp = ((int64_t)ts.tv_sec - 10957L * 24L * 3600L) * 1000000 + ((int64_t)ts.tv_nsec / 1000);
+ 
+ 		if( this->flags & PG_CODER_TIMESTAMP_DB_LOCAL ) {
+ 			/* send as local time */
+-- 
+2.42.0
+

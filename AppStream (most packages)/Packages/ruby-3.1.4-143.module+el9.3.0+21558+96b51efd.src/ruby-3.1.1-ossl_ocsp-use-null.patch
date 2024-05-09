@@ -1,0 +1,31 @@
+--- ext/openssl/ossl_ocsp.c.orig	2022-04-07 16:40:13.263752886 +0200
++++ ext/openssl/ossl_ocsp.c	2022-04-07 16:45:56.818971187 +0200
+@@ -382,7 +382,7 @@
+     if (!NIL_P(flags))
+ 	flg = NUM2INT(flags);
+     if (NIL_P(digest))
+-	md = EVP_sha1();
++	md = NULL;
+     else
+ 	md = ossl_evp_get_digestbyname(digest);
+     if (NIL_P(certs))
+@@ -1033,7 +1033,7 @@
+     if (!NIL_P(flags))
+ 	flg = NUM2INT(flags);
+     if (NIL_P(digest))
+-	md = EVP_sha1();
++	md = NULL;
+     else
+ 	md = ossl_evp_get_digestbyname(digest);
+     if (NIL_P(certs))
+--- test/openssl/test_ocsp.rb.orig      2022-04-08 08:20:31.400739869 +0200
++++ test/openssl/test_ocsp.rb   2022-04-08 08:20:37.208727488 +0200
+@@ -99,7 +99,7 @@
+     request.sign(@cert, @cert_key, [@ca_cert], 0)
+     asn1 = OpenSSL::ASN1.decode(request.to_der)
+     assert_equal cid.to_der, asn1.value[0].value.find { |a| a.tag_class == :UNIVERSAL }.value[0].value[0].to_der
+-    assert_equal OpenSSL::ASN1.ObjectId("sha1WithRSAEncryption").to_der, asn1.value[1].value[0].value[0].value[0].to_der
++    assert_equal OpenSSL::ASN1.ObjectId("sha256WithRSAEncryption").to_der, asn1.value[1].value[0].value[0].value[0].to_der
+     assert_equal @cert.to_der, asn1.value[1].value[0].value[2].value[0].value[0].to_der
+     assert_equal @ca_cert.to_der, asn1.value[1].value[0].value[2].value[0].value[1].to_der
+     assert_equal asn1.to_der, OpenSSL::OCSP::Request.new(asn1.to_der).to_der

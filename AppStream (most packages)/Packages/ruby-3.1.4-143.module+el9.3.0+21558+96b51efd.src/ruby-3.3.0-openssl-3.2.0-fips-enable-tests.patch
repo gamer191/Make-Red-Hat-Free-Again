@@ -1,0 +1,32 @@
+From f0b254f1f6610294821bbfc06b414d2af452db5b Mon Sep 17 00:00:00 2001
+From: Jun Aruga <jaruga@redhat.com>
+Date: Thu, 13 Apr 2023 17:28:27 +0200
+Subject: [PATCH] [ruby/openssl] Drop a common logic disabling the FIPS mode in
+ the tests.
+
+We want to run the unit tests in the FIPS mode too.
+
+https://github.com/ruby/openssl/commit/ab92baff34
+---
+ test/openssl/utils.rb | 5 -----
+ 1 file changed, 5 deletions(-)
+
+diff --git a/test/openssl/utils.rb b/test/openssl/utils.rb
+index 4ebcb9837b..8a0be0d154 100644
+--- a/test/openssl/utils.rb
++++ b/test/openssl/utils.rb
+@@ -1,11 +1,6 @@
+ # frozen_string_literal: true
+ begin
+   require "openssl"
+-
+-  # Disable FIPS mode for tests for installations
+-  # where FIPS mode would be enabled by default.
+-  # Has no effect on all other installations.
+-  OpenSSL.fips_mode=false
+ rescue LoadError
+ end
+ 
+-- 
+2.41.0
+
