@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkgrafana=self.webpackChunkgrafana||[]).push([[3395],{91286:(e,n,r)=>{r.r(n),r.d(n,{default:()=>f});r(76687);var a,i=r(28781),l=r(49102),s=r(52010);function f(){const e=(0,l.q)("profile-settings");return(0,s.jsx)(i.T,{navModel:e,children:a||(a=(0,s.jsxs)(i.T.Contents,{children:[(0,s.jsx)("h1",{children:"Profile is not enabled."}),"Enable profile in the Grafana config file.",(0,s.jsx)("div",{children:(0,s.jsx)("pre",{children:"[profile]\nenable = true\n"})})]}))})}}}]);
+//# sourceMappingURL=ProfileFeatureTogglePage.30c960f8fbb956a0cb25.js.map

@@ -1,0 +1,11 @@
+coverage:
+  status:
+    project:
+      default:
+        threshold: 1%
+    patch: off
+ignore:
+  - "internal/controlpb/control*"  # generated code
+  - "emulation.go" # experimental code
+  - "handler_http_stream.go" # experimental code
+  - "handler_sse.go" # experimental code

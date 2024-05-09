@@ -1,0 +1,4 @@
+"use strict";(self.webpackChunkgrafana=self.webpackChunkgrafana||[]).push([[5310],{28287:(e,n,s)=>{s.r(n),s.d(n,{default:()=>u});var i=s(77813),t=s(76687),r=s(5205),a=s(27668),c=s(28781),l=s(49102),d=s(52010);function u(){const e=(0,l.q)("live-cloud"),[n,s]=(0,t.useState)([]),[i,u]=(0,t.useState)(),f=(0,a.yK)(o);return(0,t.useEffect)((()=>{(0,r.i)().get("api/live/write-configs").then((e=>{s(e.writeConfigs)})).catch((e=>{e.data&&u(JSON.stringify(e.data,null,2))}))}),[]),(0,d.jsx)(c.T,{navModel:e,children:(0,d.jsxs)(c.T.Contents,{children:[i&&(0,d.jsx)("pre",{children:i}),!n&&(0,d.jsx)(d.Fragment,{children:"Loading cloud definitions"}),n&&n.map((e=>(0,d.jsxs)("div",{children:[(0,d.jsx)("h2",{children:e.uid}),(0,d.jsx)("pre",{className:f.row,children:JSON.stringify(e.settings,null,2)})]},e.uid)))]})})}const o=e=>({row:i.css`
+      cursor: pointer;
+    `})}}]);
+//# sourceMappingURL=CloudAdminPage.9f615b5049ab40eafefa.js.map

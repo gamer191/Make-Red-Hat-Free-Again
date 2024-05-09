@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkgrafana=self.webpackChunkgrafana||[]).push([[2120],{69670:(e,n,a)=>{a.r(n),a.d(n,{default:()=>u});a(76687);var s,t=a(28781),r=a(49102),i=a(52010);function u(){const e=(0,r.q)("live-status");return(0,i.jsx)(t.T,{navModel:e,children:s||(s=(0,i.jsx)(t.T.Contents,{children:"Live/Live/Live"}))})}}}]);
+//# sourceMappingURL=LiveStatusPage.63d8177922275830a482.js.map

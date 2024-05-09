@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkgrafana=self.webpackChunkgrafana||[]).push([[4716],{14716:(e,r,s)=>{s.r(r),s.d(r,{plugin:()=>n});var a=s(28594);class t extends a.MF{constructor(e){super(e)}getCollapsedText(e){return`Dashboard Reference: ${e.panelId}`}query(e){return Promise.reject("This should not be called directly")}testDatasource(){return Promise.resolve({})}}const n=new a.hf(t)}}]);
+//# sourceMappingURL=4716.c72f7bdf015759113698.js.map

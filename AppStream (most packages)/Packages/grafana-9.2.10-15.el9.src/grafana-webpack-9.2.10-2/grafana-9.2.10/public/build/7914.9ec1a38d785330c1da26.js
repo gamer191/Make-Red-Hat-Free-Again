@@ -1,0 +1,2 @@
+(self.webpackChunkgrafana=self.webpackChunkgrafana||[]).push([[7914],{7914:()=>{ace.define("ace/snippets/text",["require","exports","module"],(function(e,t,a){"use strict";t.snippetText=void 0,t.scope="text"}))}}]);
+//# sourceMappingURL=7914.9ec1a38d785330c1da26.js.map

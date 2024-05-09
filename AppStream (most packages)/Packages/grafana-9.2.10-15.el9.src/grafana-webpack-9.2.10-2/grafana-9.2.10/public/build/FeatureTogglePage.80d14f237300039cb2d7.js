@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkgrafana=self.webpackChunkgrafana||[]).push([[7586],{53249:(e,n,l)=>{l.r(n),l.d(n,{default:()=>r});l(76687);var a,s=l(28781),t=l(49102),i=l(52010);function r(){const e=(0,t.q)("live-status");return(0,i.jsx)(s.T,{navModel:e,children:a||(a=(0,i.jsxs)(s.T.Contents,{children:[(0,i.jsx)("h1",{children:"Pipeline is not enabled"}),"To enable pipelines, enable the feature toggle:",(0,i.jsx)("pre",{children:"[feature_toggles] \nenable = live-pipeline\n"})]}))})}}}]);
+//# sourceMappingURL=FeatureTogglePage.80d14f237300039cb2d7.js.map

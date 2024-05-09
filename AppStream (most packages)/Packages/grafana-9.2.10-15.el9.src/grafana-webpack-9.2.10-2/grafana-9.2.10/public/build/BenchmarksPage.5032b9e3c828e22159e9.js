@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkgrafana=self.webpackChunkgrafana||[]).push([[4908],{75966:(a,e,s)=>{s.r(e),s.d(e,{BenchmarksPage:()=>h,default:()=>k});s(76687);var c,n=s(7053),r=s(79597),f=s(52010);const h=()=>c||(c=(0,f.jsx)(n.wc,{children:(0,f.jsx)(r.j,{})})),k=h}}]);
+//# sourceMappingURL=BenchmarksPage.5032b9e3c828e22159e9.js.map
