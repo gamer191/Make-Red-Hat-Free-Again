@@ -1,0 +1,90 @@
+From d33ed342af50b66c7c49c2843d7495febfd663e9 Mon Sep 17 00:00:00 2001
+From: Christian Hergert <chergert@redhat.com>
+Date: Wed, 28 Jul 2021 17:49:40 -0700
+Subject: [PATCH 1/1] view: fix decrement of negative numbers
+
+Fixes #117
+---
+ gtksourceview/gtksourceview.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/gtksourceview/gtksourceview.c b/gtksourceview/gtksourceview.c
+index e10584aa..377cdd8d 100644
+--- a/gtksourceview/gtksourceview.c
++++ b/gtksourceview/gtksourceview.c
+@@ -360,61 +360,72 @@ gtk_source_view_move_to_matching_bracket (GtkSourceView *view,
+ 			gtk_text_buffer_move_mark (buffer, insert_mark, &bracket_match);
+ 		}
+ 		else
+ 		{
+ 			gtk_text_buffer_place_cursor (buffer, &bracket_match);
+ 		}
+ 
+ 		gtk_text_view_scroll_mark_onscreen (text_view, insert_mark);
+ 	}
+ }
+ 
+ static void
+ gtk_source_view_change_number (GtkSourceView *view,
+ 			       gint           count)
+ {
+ 	GtkTextView *text_view = GTK_TEXT_VIEW (view);
+ 	GtkTextBuffer *buffer;
+ 	GtkTextIter start, end;
+ 	gchar *str;
+ 
+ 	buffer = gtk_text_view_get_buffer (text_view);
+ 	if (!GTK_SOURCE_IS_BUFFER (buffer))
+ 	{
+ 		return;
+ 	}
+ 
+ 	if (!gtk_text_buffer_get_selection_bounds (buffer, &start, &end))
+ 	{
+ 		if (!gtk_text_iter_starts_word (&start))
+ 		{
++			GtkTextIter prev;
++
+ 			gtk_text_iter_backward_word_start (&start);
++
++			/* Include the negative sign if there is one.
++			 * https://gitlab.gnome.org/GNOME/gtksourceview/-/issues/117
++			 */
++			prev = start;
++			if (gtk_text_iter_backward_char (&prev) && gtk_text_iter_get_char (&prev) == '-')
++			{
++				start = prev;
++			}
+ 		}
+ 
+ 		if (!gtk_text_iter_ends_word (&end))
+ 		{
+ 			gtk_text_iter_forward_word_end (&end);
+ 		}
+ 	}
+ 
+ 	str = gtk_text_buffer_get_text (buffer, &start, &end, FALSE);
+ 
+ 	if (str != NULL && *str != '\0')
+ 	{
+ 		gchar *p;
+ 		gint64 n;
+ 		glong len;
+ 
+ 		len = gtk_text_iter_get_offset (&end) - gtk_text_iter_get_offset (&start);
+ 		g_assert (len > 0);
+ 
+ 		n = g_ascii_strtoll (str, &p, 10);
+ 
+ 		/* do the action only if strtoll succeeds (p != str) and
+ 		 * the whole string is the number, e.g. not 123abc
+ 		 */
+ 		if ((p - str) == len)
+ 		{
+ 			gchar *newstr;
+ 
+ 			newstr = g_strdup_printf ("%"G_GINT64_FORMAT, (n + count));
+ 
+-- 
+2.39.1
+

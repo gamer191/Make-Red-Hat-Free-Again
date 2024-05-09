@@ -1,0 +1,147 @@
+From fa324fc228691cd2b1aa86dbbde43f37a5dd7758 Mon Sep 17 00:00:00 2001
+From: Christian Hergert <chergert@redhat.com>
+Date: Sun, 7 Mar 2021 08:54:15 -0800
+Subject: [PATCH 1/1] build: ensure access to resources in corelib build
+
+This should help with some transient build failures in dependent projects.
+---
+ gtksourceview/meson.build | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/gtksourceview/meson.build b/gtksourceview/meson.build
+index fd080a9c..b6192604 100644
+--- a/gtksourceview/meson.build
++++ b/gtksourceview/meson.build
+@@ -145,122 +145,123 @@ core_enums_header = '''
+ 
+ #if !defined (GTK_SOURCE_H_INSIDE) && !defined (GTK_SOURCE_COMPILATION)
+ # error "Only <gtksourceview/gtksource.h> can be included directly."
+ #endif
+ 
+ #include <gtksourceview/gtksourceversion.h>
+ '''
+ 
+ core_enums = gnome.mkenums_simple('gtksource-enumtypes',
+             sources: core_public_h,
+   identifier_prefix: 'GtkSource',
+       symbol_prefix: 'gtk_source',
+       header_prefix: core_enums_header,
+           decorator: 'GTK_SOURCE_ENUM_EXTERN',
+      install_header: true,
+         install_dir: join_paths(pkgincludedir, 'gtksourceview'),
+ )
+ 
+ version_h = configuration_data()
+ version_h.set('GTK_SOURCE_MAJOR_VERSION', version_major)
+ version_h.set('GTK_SOURCE_MINOR_VERSION', version_minor)
+ version_h.set('GTK_SOURCE_MICRO_VERSION', version_micro)
+ 
+ gtksourceversion_h = configure_file(
+           input: 'gtksourceversion.h.in',
+          output: 'gtksourceversion.h',
+   configuration: version_h,
+     install_dir: join_paths(pkgincludedir, 'gtksourceview'),
+ )
+ 
++gtksource_res = gnome.compile_resources(
++  'gtksourceview-gresources',
++  'gtksourceview.gresource.xml'
++)
++
+ core_sources = [
+   core_public_c,
+   core_private_c,
+   core_enums,
+   gtksourceversion_h,
+   core_marshallers,
++  gtksource_res,
+ ]
+ 
+ install_headers(
+   core_public_h,
+   install_dir: join_paths(pkgincludedir, 'gtksourceview'),
+ )
+ 
+ core_enums_h = core_enums.get(1)
+ 
+ # Unfortunately, Visual Studio builds must build the core
+ # sources twice, once for the GtkSourceView DLL, and once for
+ # the tests (static core lib), so that we can ensure that
+ # all the items from the core sources are properly linked into
+ # the final GtkSourceView DLL and exported from it.
+ core_lib = static_library(package_string + 'core', core_sources,
+   include_directories: gtksourceview_include_dirs,
+          dependencies: core_deps,
+                c_args: core_c_args,
+               install: false
+ )
+ 
+ core_dep = declare_dependency(
+             link_with: core_lib,
+   include_directories: rootdir,
+          dependencies: core_deps,
+               sources: [core_enums_h]
+ )
+ 
+ gtksource_deps = [
+   core_dep,
+ ]
+ 
+ gtksource_libs = [core_lib]
+ 
+ extra_public_sources = []
+ 
+ subdir('completion-providers')
+ 
+-gtksource_res = gnome.compile_resources(
+-  'gtksourceview-gresources',
+-  'gtksourceview.gresource.xml'
+-)
+-
+ 
+ # We can't use the static libs on Visual Studio builds
+ # to form our DLL here directly, so we must use
+ # extract_all_objects() to extract all the core and word
+ # completion provider objects that we previously built
+ # into static .lib's and link them into the main DLL
+ # instead
+ gtksource_objs = []
+ foreach int_lib : gtksource_libs
+   gtksource_objs += int_lib.extract_all_objects()
+ endforeach
+ 
+-gtksource_lib = shared_library(package_string, gtksource_res,
++gtksource_lib = shared_library(package_string,
+                 version: lib_version,
+         darwin_versions: lib_osx_version,
+     include_directories: gtksourceview_include_dirs,
+            dependencies: cc.get_id() == 'msvc' ? core_deps : gtksource_deps,
+                 objects: cc.get_id() == 'msvc' ? gtksource_objs : [],
+              link_whole: cc.get_id() == 'msvc' ? [] : gtksource_libs,
+                  c_args: core_c_args,
+               link_args: release_link_args,
+                 install: true,
+   gnu_symbol_visibility: 'hidden',
+ )
+ 
+ gtksource_dep_sources = [
+   core_enums_h,
+ ]
+ 
+ if generate_gir
+   gtksource_gir_sources = [
+     core_public_c,
+     core_public_h,
+     core_enums_h,
+     extra_public_sources,
+   ]
+ 
+   gtksource_gir = gnome.generate_gir(gtksource_lib,
+                 sources: gtksource_gir_sources,
+               nsversion: api_version,
+               namespace: 'GtkSource',
+           symbol_prefix: 'gtk_source',
+       identifier_prefix: 'GtkSource',
+-- 
+2.39.1
+

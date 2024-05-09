@@ -1,0 +1,106 @@
+From 346f12459aa67cdb5ff9e267c2c8cccc17f4a376 Mon Sep 17 00:00:00 2001
+From: Chris Liddell <chris.liddell@artifex.com>
+Date: Wed, 15 Mar 2023 15:38:29 +0000
+Subject: [PATCH] Bug 706478: pdfwrite: Substituted TTF CIDFont CID handling
+
+The PS interpreter callback that handles converting a CID to a TTF GID did
+not handle the case of substituted CIDFonts.
+
+It requires looking up the CID on the Decoding (to get a Unicode code point),
+and then looking up the code point in the TTF cmap table to get the GID.
+
+The rendering code already handled it.
+---
+ psi/zfcid1.c | 73 +++++++++++++++++++++++++++++++++-------------------
+ 1 file changed, 46 insertions(+), 27 deletions(-)
+
+diff --git a/psi/zfcid1.c b/psi/zfcid1.c
+index fd502ff12..55de85d45 100644
+--- a/psi/zfcid1.c
++++ b/psi/zfcid1.c
+@@ -77,37 +77,56 @@
+     int gdbytes = pfont->cidata.common.GDBytes;
+     int gnum = 0;
+     const byte *data;
+-    int i, code;
++    int i, code = -1;
+     ref rcid;
+     ref *prgnum;
++    ref *p, *fdict = pfont_dict(pfont);
++
++    if (r_has_type(fdict, t_dictionary) && dict_find_string(fdict, "Path", &p)) {
++        ref *Decoding = NULL, *TT_cmap = NULL, *SubstNWP = NULL, src_type, dst_type;
++        uint c;
++
++        code = dict_find_string(fdict, "Decoding", &Decoding);
++        if (code > 0)
++            code = dict_find_string(fdict, "TT_cmap", &TT_cmap);
++        if (code > 0)
++            code = dict_find_string(fdict, "SubstNWP", &SubstNWP);
++        if (code > 0) {
++            code = cid_to_TT_charcode(pfont->memory, Decoding, TT_cmap, SubstNWP, cid, &c, &src_type, &dst_type);
++            if (code >= 0)
++                gnum = c;
++        }
++    }
+ 
+-    switch (r_type(pcidmap)) {
+-    case t_string:
+-        if (cid >= r_size(pcidmap) / gdbytes)
+-            return_error(gs_error_rangecheck);
+-        data = pcidmap->value.const_bytes + cid * gdbytes;
+-        break;
+-    case t_integer:
+-        return cid + pcidmap->value.intval;
+-    case t_dictionary:
+-        make_int(&rcid, cid);
+-        code = dict_find(pcidmap, &rcid, &prgnum);
+-        if (code <= 0)
+-            return (code < 0 ? code : gs_note_error(gs_error_undefined));
+-        if (!r_has_type(prgnum, t_integer))
+-            return_error(gs_error_typecheck);
+-        return prgnum->value.intval;
+-    default:			/* array type */
+-        code = string_array_access_proc(pfont->memory, pcidmap, 1, cid * gdbytes,
+-                                        gdbytes, NULL, NULL, &data);
++    if (code < 0) {
++        switch (r_type(pcidmap)) {
++        case t_string:
++            if (cid >= r_size(pcidmap) / gdbytes)
++                return_error(gs_error_rangecheck);
++            data = pcidmap->value.const_bytes + cid * gdbytes;
++            break;
++        case t_integer:
++            return cid + pcidmap->value.intval;
++        case t_dictionary:
++            make_int(&rcid, cid);
++            code = dict_find(pcidmap, &rcid, &prgnum);
++            if (code <= 0)
++                return (code < 0 ? code : gs_note_error(gs_error_undefined));
++            if (!r_has_type(prgnum, t_integer))
++                return_error(gs_error_typecheck);
++            return prgnum->value.intval;
++        default:			/* array type */
++            code = string_array_access_proc(pfont->memory, pcidmap, 1, cid * gdbytes,
++                                            gdbytes, NULL, NULL, &data);
+ 
+-        if (code < 0)
+-            return code;
+-        if ( code > 0 )
+-            return_error(gs_error_invalidfont);
++            if (code < 0)
++                return code;
++            if ( code > 0 )
++                return_error(gs_error_invalidfont);
++        }
++        for (i = 0; i < gdbytes; ++i)
++            gnum = (gnum << 8) + data[i];
+     }
+-    for (i = 0; i < gdbytes; ++i)
+-        gnum = (gnum << 8) + data[i];
+     if (gnum >= pfont->data.trueNumGlyphs)
+         return_error(gs_error_invalidfont);
+     return gnum;
+-- 
+2.39.2
+

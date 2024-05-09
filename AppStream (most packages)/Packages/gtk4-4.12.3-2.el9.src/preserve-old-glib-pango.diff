@@ -1,0 +1,3264 @@
+From 5b85f27a19e96c6e39d24cf815e05d94c3de1133 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 29 Nov 2023 17:02:16 +0100
+Subject: [PATCH 01/10] all: Drop usage of g_source_set_static_name()
+
+---
+ gdk/gdk.c                                   |  2 +-
+ gdk/gdkframeclockidle.c                     |  5 -----
+ gdk/wayland/gdkdevice-wayland.c             |  3 ---
+ gtk/deprecated/gtkentrycompletion.c         |  1 -
+ gtk/gtktextlinedisplaycache.c               |  1 -
+ gtk/print/gtkprintoperation.c               | 15 +++++----------
+ gtk/print/gtkprintunixdialog.c              |  2 --
+ modules/printbackends/gtkprintbackendcups.c |  1 -
+ testsuite/css/data.c                        |  2 +-
+ testsuite/gdk/clipboard.c                   |  6 +++---
+ testsuite/gdk/glcontext.c                   |  6 +++---
+ testsuite/gtk/meson.build                   |  1 -
+ 12 files changed, 13 insertions(+), 32 deletions(-)
+
+diff --git a/gdk/gdk.c b/gdk/gdk.c
+index 19cf1aa6b0..bfd9a96c34 100644
+--- a/gdk/gdk.c
++++ b/gdk/gdk.c
+@@ -425,5 +425,5 @@ gdk_source_set_static_name_by_id (guint           tag,
+   if (source == NULL)
+     return;
+ 
+-  g_source_set_static_name (source, name);
++  /* No-op */
+ }
+diff --git a/gdk/gdkframeclockidle.c b/gdk/gdkframeclockidle.c
+index 3deade7b05..70b4a4e3d5 100644
+--- a/gdk/gdkframeclockidle.c
++++ b/gdk/gdkframeclockidle.c
+@@ -123,7 +123,6 @@ get_sleep_serial (void)
+     {
+       sleep_source = g_source_new (&sleep_source_funcs, sizeof (GSource));
+ 
+-      g_source_set_static_name (sleep_source, "[gtk] sleep serial");
+       g_source_set_priority (sleep_source, G_PRIORITY_HIGH);
+       g_source_attach (sleep_source, NULL);
+       g_source_unref (sleep_source);
+@@ -330,15 +329,11 @@ maybe_start_idle (GdkFrameClockIdle *self,
+ 
+       if (priv->flush_idle_id == 0 && should_run_flush_idle (self))
+         {
+-          GSource *source;
+-
+           priv->flush_idle_id = g_timeout_add_full (GDK_PRIORITY_EVENTS + 1,
+                                                     min_interval,
+                                                     gdk_frame_clock_flush_idle,
+                                                     g_object_ref (self),
+                                                     (GDestroyNotify) g_object_unref);
+-          source = g_main_context_find_source_by_id (NULL, priv->flush_idle_id);
+-          g_source_set_static_name (source, "[gtk] gdk_frame_clock_flush_idle");
+         }
+ 
+       if (!priv->in_paint_idle &&
+diff --git a/gdk/wayland/gdkdevice-wayland.c b/gdk/wayland/gdkdevice-wayland.c
+index 9cb3cfbfda..20438bc452 100644
+--- a/gdk/wayland/gdkdevice-wayland.c
++++ b/gdk/wayland/gdkdevice-wayland.c
+@@ -333,7 +333,6 @@ gdk_wayland_device_update_surface_cursor (GdkDevice *device)
+           pointer->cursor_timeout_id == 0)
+         {
+           guint id;
+-          GSource *source;
+ 
+           gdk_wayland_seat_stop_cursor_animation (seat, pointer);
+ 
+@@ -341,8 +340,6 @@ gdk_wayland_device_update_surface_cursor (GdkDevice *device)
+           id = g_timeout_add (next_image_delay,
+                               (GSourceFunc) gdk_wayland_device_update_surface_cursor,
+                               device);
+-          source = g_main_context_find_source_by_id (NULL, id);
+-          g_source_set_static_name (source, "[gtk] gdk_wayland_device_update_surface_cursor");
+           pointer->cursor_timeout_id = id;
+         }
+       else
+diff --git a/gtk/deprecated/gtkentrycompletion.c b/gtk/deprecated/gtkentrycompletion.c
+index f3319e26af..d83651d28a 100644
+--- a/gtk/deprecated/gtkentrycompletion.c
++++ b/gtk/deprecated/gtkentrycompletion.c
+@@ -2088,7 +2088,6 @@ completion_inserted_text_callback (GtkEntryBuffer     *buffer,
+                             g_cclosure_new_object (G_CALLBACK (check_completion_callback),
+                                                    G_OBJECT (completion)));
+       g_source_attach (completion->check_completion_idle, NULL);
+-      g_source_set_static_name (completion->check_completion_idle, "[gtk] check_completion_callback");
+     }
+ }
+ 
+diff --git a/gtk/gtktextlinedisplaycache.c b/gtk/gtktextlinedisplaycache.c
+index c99ef06d01..28a6a91eb2 100644
+--- a/gtk/gtktextlinedisplaycache.c
++++ b/gtk/gtktextlinedisplaycache.c
+@@ -142,7 +142,6 @@ gtk_text_line_display_cache_delay_eviction (GtkTextLineDisplayCache *cache)
+                                    gtk_text_line_display_cache_blow_cb,
+                                    cache);
+       cache->evict_source = g_main_context_find_source_by_id (NULL, tag);
+-      g_source_set_static_name (cache->evict_source, "[gtk+] gtk_text_line_display_cache_blow_cb");
+     }
+ }
+ 
+diff --git a/gtk/print/gtkprintoperation.c b/gtk/print/gtkprintoperation.c
+index 8aa8976a10..bb169b0ae1 100644
+--- a/gtk/print/gtkprintoperation.c
++++ b/gtk/print/gtkprintoperation.c
+@@ -620,17 +620,14 @@ preview_ready (GtkPrintOperationPreview *preview,
+                GtkPrintContext          *context,
+ 	       PreviewOp                *pop)
+ {
+-  guint id;
+-
+   pop->print_context = context;
+ 
+   g_object_ref (preview);
+-      
+-  id = g_idle_add_full (G_PRIORITY_DEFAULT_IDLE + 10,
+-                        preview_print_idle,
+-                        pop,
+-                        preview_print_idle_done);
+-  g_source_set_static_name (g_main_context_find_source_by_id (NULL, id), "[gtk] preview_print_idle");
++
++  g_idle_add_full (G_PRIORITY_DEFAULT_IDLE + 10,
++                   preview_print_idle,
++                   pop,
++                   preview_print_idle_done);
+ }
+ 
+ 
+@@ -2877,7 +2874,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
+         g_timeout_add (SHOW_PROGRESS_TIME,
+                        (GSourceFunc) show_progress_timeout,
+                        data);
+-      g_source_set_static_name (g_main_context_find_source_by_id (NULL, priv->show_progress_timeout_id), "[gtk] show_progress_timeout");
+ 
+       data->progress = progress;
+     }
+@@ -2948,7 +2944,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
+                                                print_pages_idle,
+                                                data,
+                                                print_pages_idle_done);
+-  g_source_set_static_name (g_main_context_find_source_by_id (NULL, priv->print_pages_idle_id), "[gtk] print_pages_idle");
+   
+   /* Recursive main loop to make sure we don't exit  on sync operations  */
+   if (priv->is_sync)
+diff --git a/gtk/print/gtkprintunixdialog.c b/gtk/print/gtkprintunixdialog.c
+index f39a361a1a..94b427e145 100644
+--- a/gtk/print/gtkprintunixdialog.c
++++ b/gtk/print/gtkprintunixdialog.c
+@@ -1799,8 +1799,6 @@ schedule_idle_mark_conflicts (GtkPrintUnixDialog *dialog)
+     return;
+ 
+   dialog->mark_conflicts_id = g_idle_add (mark_conflicts_callback, dialog);
+-  g_source_set_static_name (g_main_context_find_source_by_id (NULL, dialog->mark_conflicts_id),
+-                            "[gtk] mark_conflicts_callback");
+ }
+ 
+ static void
+diff --git a/modules/printbackends/gtkprintbackendcups.c b/modules/printbackends/gtkprintbackendcups.c
+index 0382c8983d..be6fbbcd2a 100644
+--- a/modules/printbackends/gtkprintbackendcups.c
++++ b/modules/printbackends/gtkprintbackendcups.c
+@@ -1673,7 +1673,6 @@ cups_request_execute (GtkPrintBackendCups              *print_backend,
+ 
+   dispatch = (GtkPrintCupsDispatchWatch *) g_source_new (&_cups_dispatch_watch_funcs,
+                                                          sizeof (GtkPrintCupsDispatchWatch));
+-  g_source_set_static_name (&dispatch->source, "GTK CUPS backend");
+ 
+   GTK_DEBUG (PRINTING, "CUPS Backend: %s <source %p> - Executing cups request on server '%s' and resource '%s'",
+                        G_STRFUNC, dispatch, request->server, request->resource);
+diff --git a/testsuite/css/data.c b/testsuite/css/data.c
+index 8022bcd96f..82db8f3852 100644
+--- a/testsuite/css/data.c
++++ b/testsuite/css/data.c
+@@ -63,7 +63,7 @@ test_parse (gconstpointer data)
+       iconv = g_iconv_open ("UTF-8", test->charset);
+       if (iconv == (GIConv) -1)
+         {
+-          g_test_skip_printf ("Conversion from %s to UTF-8 not supported", test->charset);
++          g_test_skip ("Conversion to UTF-8 not supported");
+           return;
+         }
+ 
+diff --git a/testsuite/gdk/clipboard.c b/testsuite/gdk/clipboard.c
+index 1a414c5b6a..eb2b58d238 100644
+--- a/testsuite/gdk/clipboard.c
++++ b/testsuite/gdk/clipboard.c
+@@ -135,9 +135,9 @@ compare_files (const char *file1,
+   g_assert_no_error (error);
+ 
+   if (l1 != l2)
+-    g_test_fail_printf ("file length mismatch: %s %s\n", file1, file2);
++    g_test_fail ();
+   else if (memcmp (m1, m2, l1) != 0)
+-    g_test_fail_printf ("file mismatch: %s %s\n", file1, file2);
++    g_test_fail ();
+ 
+   g_free (m1);
+   g_free (m2);
+@@ -208,7 +208,7 @@ test_clipboard_roundtrip (const char *type,
+     g_assert_cmpstr (stdout_buf, ==, result);
+   else if (g_str_has_prefix (stdout_buf, "ERROR"))
+     {
+-      g_test_fail_printf ("dest error: %s", stdout_buf);
++      g_test_fail ();
+     }
+   else if (g_str_equal (type, "image"))
+     {
+diff --git a/testsuite/gdk/glcontext.c b/testsuite/gdk/glcontext.c
+index 2fecec2f24..121d40f2ca 100644
+--- a/testsuite/gdk/glcontext.c
++++ b/testsuite/gdk/glcontext.c
+@@ -21,7 +21,7 @@ test_allowed_backends (gconstpointer data)
+   display = gdk_display_get_default ();
+   if (!gdk_display_prepare_gl (display, &error))
+     {
+-      g_test_skip_printf ("no GL support: %s", error->message);
++      g_test_skip ("no GL support");
+       g_clear_error (&error);
+       return;
+     }
+@@ -79,7 +79,7 @@ test_use_es (void)
+   display = gdk_display_get_default ();
+   if (!gdk_display_prepare_gl (display, &error))
+     {
+-      g_test_skip_printf ("no GL support: %s", error->message);
++      g_test_skip ("no GL support");
+       g_clear_error (&error);
+       return;
+     }
+@@ -127,7 +127,7 @@ test_version (void)
+   display = gdk_display_get_default ();
+   if (!gdk_display_prepare_gl (display, &error))
+     {
+-      g_test_skip_printf ("no GL support: %s", error->message);
++      g_test_skip ("no GL support");
+       g_clear_error (&error);
+       return;
+     }
+diff --git a/testsuite/gtk/meson.build b/testsuite/gtk/meson.build
+index 12b025f317..e95fd95bfb 100644
+--- a/testsuite/gtk/meson.build
++++ b/testsuite/gtk/meson.build
+@@ -53,7 +53,6 @@ tests = [
+   { 'name': 'grid' },
+   { 'name': 'grid-layout' },
+   { 'name': 'icontheme' },
+-  { 'name': 'label' },
+   { 'name': 'listbox' },
+   { 'name': 'listlistmodel' },
+   { 'name': 'main' },
+-- 
+2.43.0
+
+
+From 6197d5dbfbc1a6cfbb66c423591a45b1e5f6402e Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 29 Nov 2023 17:02:57 +0100
+Subject: [PATCH 02/10] gsk: Add internal GtkPangoGlyphVisAttr struct
+
+This struct has an is_color field.
+---
+ gsk/gl/gskglrenderjob.c   |  3 ++-
+ gsk/gskprivate.h          |  8 ++++++++
+ gsk/gskrendernodeimpl.c   |  5 +++--
+ gsk/gskrendernodeparser.c | 11 ++++++-----
+ 4 files changed, 19 insertions(+), 8 deletions(-)
+
+diff --git a/gsk/gl/gskglrenderjob.c b/gsk/gl/gskglrenderjob.c
+index 938f9f7fb1..1a3cea3e90 100644
+--- a/gsk/gl/gskglrenderjob.c
++++ b/gsk/gl/gskglrenderjob.c
+@@ -43,6 +43,7 @@
+ #include "gskglprogramprivate.h"
+ #include "gskglrenderjobprivate.h"
+ #include "gskglshadowlibraryprivate.h"
++#include "gskprivate.h"
+ 
+ #include "ninesliceprivate.h"
+ #include "fp16private.h"
+@@ -3021,7 +3022,7 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob      *job,
+           /* If the glyph has color, we don't need to recolor anything.
+            * We tell the shader by setting the color to vec4(-1).
+            */
+-          if (!force_color && gi->attr.is_color)
++          if (!force_color && ((GtkPangoGlyphVisAttr*) &gi->attr)->is_color)
+             c = nc;
+           else
+             c = cc;
+diff --git a/gsk/gskprivate.h b/gsk/gskprivate.h
+index 150b89eb78..9be7a8cffc 100644
+--- a/gsk/gskprivate.h
++++ b/gsk/gskprivate.h
+@@ -7,5 +7,13 @@ G_BEGIN_DECLS
+ 
+ void gsk_ensure_resources (void);
+ 
++typedef struct _GtkPangoGlyphVisAttr GtkPangoGlyphVisAttr;
++
++struct _GtkPangoGlyphVisAttr
++{
++	guint is_cluster_start : 1;
++	guint is_color : 1;
++};
++
+ G_END_DECLS
+ 
+diff --git a/gsk/gskrendernodeimpl.c b/gsk/gskrendernodeimpl.c
+index 3790fcb4c3..d0043b08e6 100644
+--- a/gsk/gskrendernodeimpl.c
++++ b/gsk/gskrendernodeimpl.c
+@@ -28,6 +28,7 @@
+ #include "gskrendererprivate.h"
+ #include "gskroundedrectprivate.h"
+ #include "gsktransformprivate.h"
++#include "gskprivate.h"
+ 
+ #include "gdk/gdktextureprivate.h"
+ #include "gdk/gdkmemoryformatprivate.h"
+@@ -5105,7 +5106,7 @@ gsk_text_node_diff (GskRenderNode  *node1,
+               info1->geometry.x_offset == info2->geometry.x_offset &&
+               info1->geometry.y_offset == info2->geometry.y_offset &&
+               info1->attr.is_cluster_start == info2->attr.is_cluster_start &&
+-              info1->attr.is_color == info2->attr.is_color)
++              ((GtkPangoGlyphVisAttr*) &info1->attr)->is_color == ((GtkPangoGlyphVisAttr*) &info2->attr)->is_color)
+             continue;
+ 
+           gsk_render_node_diff_impossible (node1, node2, region);
+@@ -5184,7 +5185,7 @@ gsk_text_node_new (PangoFont              *font,
+ 
+       glyph_infos[n] = glyphs->glyphs[i];
+ 
+-      if (glyphs->glyphs[i].attr.is_color)
++      if (((GtkPangoGlyphVisAttr*) &glyphs->glyphs[i].attr)->is_color)
+         self->has_color_glyphs = TRUE;
+ 
+       n++;
+diff --git a/gsk/gskrendernodeparser.c b/gsk/gskrendernodeparser.c
+index 7f00437068..2c39447352 100644
+--- a/gsk/gskrendernodeparser.c
++++ b/gsk/gskrendernodeparser.c
+@@ -26,6 +26,7 @@
+ #include "gskroundedrectprivate.h"
+ #include "gskrendernodeprivate.h"
+ #include "gsktransformprivate.h"
++#include "gskprivate.h"
+ 
+ #include "gdk/gdkrgbaprivate.h"
+ #include "gdk/gdktextureprivate.h"
+@@ -1013,9 +1014,9 @@ parse_glyphs (GtkCssParser *parser,
+                 gi.attr.is_cluster_start = 1;
+ 
+               if (gtk_css_parser_try_ident (parser, "color"))
+-                gi.attr.is_color = 1;
++                ((GtkPangoGlyphVisAttr*) &gi.attr)->is_color = 1;
+               else
+-                gi.attr.is_color = 0;
++                ((GtkPangoGlyphVisAttr*) &gi.attr)->is_color = 0;
+             }
+ 
+           pango_glyph_string_set_size (glyph_string, glyph_string->num_glyphs + 1);
+@@ -2979,7 +2980,7 @@ gsk_text_node_serialize_glyphs (GskRenderNode *node,
+                   glyphs[i].geometry.x_offset == 0 &&
+                   glyphs[i].geometry.y_offset == 0 &&
+                   glyphs[i].attr.is_cluster_start &&
+-                  !glyphs[i].attr.is_color)
++                  !((GtkPangoGlyphVisAttr*) &glyphs[i].attr)->is_color)
+                 {
+                   switch (j + MIN_ASCII_GLYPH)
+                     {
+@@ -3009,7 +3010,7 @@ gsk_text_node_serialize_glyphs (GskRenderNode *node,
+       g_string_append_printf (p, "%u ", glyphs[i].glyph);
+       string_append_double (p, (double) glyphs[i].geometry.width / PANGO_SCALE);
+       if (!glyphs[i].attr.is_cluster_start ||
+-          glyphs[i].attr.is_color ||
++          ((GtkPangoGlyphVisAttr*) &glyphs[i].attr)->is_color ||
+           glyphs[i].geometry.x_offset != 0 ||
+           glyphs[i].geometry.y_offset != 0)
+         {
+@@ -3019,7 +3020,7 @@ gsk_text_node_serialize_glyphs (GskRenderNode *node,
+           string_append_double (p, (double) glyphs[i].geometry.y_offset / PANGO_SCALE);
+           if (!glyphs[i].attr.is_cluster_start)
+             g_string_append (p, " same-cluster");
+-          if (glyphs[i].attr.is_color)
++          if (((GtkPangoGlyphVisAttr*) &glyphs[i].attr)->is_color)
+             g_string_append (p, " color");
+         }
+ 
+-- 
+2.43.0
+
+
+From c0e1849b0c5e06ca648e6ed2d4731c269d872e6e Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 29 Nov 2023 17:04:37 +0100
+Subject: [PATCH 03/10] all: Avoid G_DEFINE_FINAL_TYPE
+
+---
+ gtk/gtkfilethumbnail.c | 2 +-
+ testsuite/gtk/action.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/gtk/gtkfilethumbnail.c b/gtk/gtkfilethumbnail.c
+index 84df7dcc07..850c6b306e 100644
+--- a/gtk/gtkfilethumbnail.c
++++ b/gtk/gtkfilethumbnail.c
+@@ -46,7 +46,7 @@ typedef struct
+   GtkWidgetClass parent;
+ } GtkFileThumbnailClass;
+ 
+-G_DEFINE_FINAL_TYPE (GtkFileThumbnail, _gtk_file_thumbnail, GTK_TYPE_WIDGET)
++G_DEFINE_TYPE (GtkFileThumbnail, _gtk_file_thumbnail, GTK_TYPE_WIDGET)
+ 
+ enum {
+   PROP_0,
+diff --git a/testsuite/gtk/action.c b/testsuite/gtk/action.c
+index d99b16c33b..c1859644fc 100644
+--- a/testsuite/gtk/action.c
++++ b/testsuite/gtk/action.c
+@@ -725,7 +725,7 @@ struct _MyGtkActionable
+   GtkButton parent_instance;
+ };
+ 
+-G_DEFINE_FINAL_TYPE (MyGtkActionable, my_gtk_actionable, GTK_TYPE_BUTTON);
++G_DEFINE_TYPE (MyGtkActionable, my_gtk_actionable, GTK_TYPE_BUTTON);
+ 
+ static void
+ test_cb (GtkWidget  *sender,
+-- 
+2.43.0
+
+
+From c380212c74569ba6ff63e8b605a03d68ab26e69c Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 29 Nov 2023 17:05:12 +0100
+Subject: [PATCH 04/10] gtk: Add internal GtkSignalGroup
+
+Copied from GSignalGroup at newer GLib
+---
+ gtk/deprecated/gtkentrycompletion.c |  12 +-
+ gtk/gtkentryprivate.h               |   3 +-
+ gtk/gtksignalgroup.c                | 732 ++++++++++++++++++++++++++++
+ gtk/gtksignalgroup.h                |  72 +++
+ gtk/meson.build                     |   1 +
+ 5 files changed, 813 insertions(+), 7 deletions(-)
+ create mode 100644 gtk/gtksignalgroup.c
+ create mode 100644 gtk/gtksignalgroup.h
+
+diff --git a/gtk/deprecated/gtkentrycompletion.c b/gtk/deprecated/gtkentrycompletion.c
+index d83651d28a..129472f4a4 100644
+--- a/gtk/deprecated/gtkentrycompletion.c
++++ b/gtk/deprecated/gtkentrycompletion.c
+@@ -1391,7 +1391,7 @@ gtk_entry_completion_insert_completion_text (GtkEntryCompletion *completion,
+     g_signal_handler_block (text, completion->changed_id);
+ 
+   if (completion->insert_text_signal_group != NULL)
+-    g_signal_group_block (completion->insert_text_signal_group);
++    gtk_signal_group_block (completion->insert_text_signal_group);
+ 
+   gtk_editable_set_text (GTK_EDITABLE (completion->entry), new_text);
+ 
+@@ -1402,7 +1402,7 @@ gtk_entry_completion_insert_completion_text (GtkEntryCompletion *completion,
+     g_signal_handler_unblock (text, completion->changed_id);
+ 
+   if (completion->insert_text_signal_group != NULL)
+-    g_signal_group_unblock (completion->insert_text_signal_group);
++    gtk_signal_group_unblock (completion->insert_text_signal_group);
+ }
+ 
+ static gboolean
+@@ -1443,7 +1443,7 @@ gtk_entry_completion_insert_prefix (GtkEntryCompletion *completion)
+   char *prefix;
+ 
+   if (completion->insert_text_signal_group != NULL)
+-    g_signal_group_block (completion->insert_text_signal_group);
++    gtk_signal_group_block (completion->insert_text_signal_group);
+ 
+   prefix = gtk_entry_completion_compute_prefix (completion,
+                                                 gtk_editable_get_text (GTK_EDITABLE (completion->entry)));
+@@ -1456,7 +1456,7 @@ gtk_entry_completion_insert_prefix (GtkEntryCompletion *completion)
+     }
+ 
+   if (completion->insert_text_signal_group != NULL)
+-    g_signal_group_unblock (completion->insert_text_signal_group);
++    gtk_signal_group_unblock (completion->insert_text_signal_group);
+ }
+ 
+ /**
+@@ -2110,8 +2110,8 @@ connect_completion_signals (GtkEntryCompletion *completion)
+   completion->changed_id =
+     g_signal_connect (text, "changed", G_CALLBACK (gtk_entry_completion_changed), completion);
+ 
+-  completion->insert_text_signal_group = g_signal_group_new (GTK_TYPE_ENTRY_BUFFER);
+-  g_signal_group_connect (completion->insert_text_signal_group, "inserted-text", G_CALLBACK (completion_inserted_text_callback), completion);
++  completion->insert_text_signal_group = gtk_signal_group_new (GTK_TYPE_ENTRY_BUFFER);
++  gtk_signal_group_connect (completion->insert_text_signal_group, "inserted-text", G_CALLBACK (completion_inserted_text_callback), completion);
+   g_object_bind_property (text, "buffer", completion->insert_text_signal_group, "target", G_BINDING_SYNC_CREATE);
+ 
+   g_signal_connect (text, "notify", G_CALLBACK (clear_completion_callback), completion);
+diff --git a/gtk/gtkentryprivate.h b/gtk/gtkentryprivate.h
+index e5c381021e..38165c6c47 100644
+--- a/gtk/gtkentryprivate.h
++++ b/gtk/gtkentryprivate.h
+@@ -26,6 +26,7 @@
+ #include "deprecated/gtktreeviewcolumn.h"
+ #include "gtkeventcontrollerkey.h"
+ #include "gtktextprivate.h"
++#include "gtksignalgroup.h"
+ 
+ G_BEGIN_DECLS
+ 
+@@ -61,7 +62,7 @@ struct _GtkEntryCompletion
+   gulong completion_timeout;
+   gulong changed_id;
+ 
+-  GSignalGroup *insert_text_signal_group;
++  GtkSignalGroup *insert_text_signal_group;
+ 
+   int current_selected;
+ 
+diff --git a/gtk/gtksignalgroup.c b/gtk/gtksignalgroup.c
+new file mode 100644
+index 0000000000..38b39e8996
+--- /dev/null
++++ b/gtk/gtksignalgroup.c
+@@ -0,0 +1,732 @@
++/* GObject - GLib Type, Object, Parameter and Signal Library
++ *
++ * Copyright (C) 2015-2022 Christian Hergert <christian@hergert.me>
++ * Copyright (C) 2015 Garrett Regier <garrettregier@gmail.com>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General
++ * Public License along with this library; if not, see <http://www.gnu.org/licenses/>.
++ *
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++
++#include "config.h"
++
++#include <glib.h>
++
++#include "gtksignalgroup.h"
++
++struct _GtkSignalGroup
++{
++  GObject     parent_instance;
++
++  GWeakRef    target_ref;
++  GRecMutex   mutex;
++  GPtrArray  *handlers;
++  GType       target_type;
++  gssize      block_count;
++
++  guint       has_bound_at_least_once : 1;
++};
++
++typedef struct _GtkSignalGroupClass
++{
++  GObjectClass parent_class;
++
++  void (*bind) (GtkSignalGroup *self,
++                GObject        *target);
++} GtkSignalGroupClass;
++
++typedef struct
++{
++  GtkSignalGroup *group;
++  gulong             handler_id;
++  GClosure          *closure;
++  guint              signal_id;
++  GQuark             signal_detail;
++  guint              connect_after : 1;
++} SignalHandler;
++
++G_DEFINE_TYPE (GtkSignalGroup, gtk_signal_group, G_TYPE_OBJECT)
++
++typedef enum
++{
++  PROP_TARGET = 1,
++  PROP_TARGET_TYPE,
++  LAST_PROP
++} GSignalGroupProperty;
++
++enum
++{
++  BIND,
++  UNBIND,
++  LAST_SIGNAL
++};
++
++static GParamSpec *properties[LAST_PROP];
++static guint signals[LAST_SIGNAL];
++
++static void
++g_signal_group_set_target_type (GtkSignalGroup *self,
++                                GType           target_type)
++{
++  g_assert (GTK_IS_SIGNAL_GROUP (self));
++  g_assert (g_type_is_a (target_type, G_TYPE_OBJECT));
++
++  self->target_type = target_type;
++
++  /* The class must be created at least once for the signals
++   * to be registered, otherwise g_signal_parse_name() will fail
++   */
++  if (G_TYPE_IS_INTERFACE (target_type))
++    {
++      if (g_type_default_interface_peek (target_type) == NULL)
++        g_type_default_interface_unref (g_type_default_interface_ref (target_type));
++    }
++  else
++    {
++      if (g_type_class_peek (target_type) == NULL)
++        g_type_class_unref (g_type_class_ref (target_type));
++    }
++}
++
++static void
++g_signal_group_gc_handlers (GtkSignalGroup *self)
++{
++  guint i;
++
++  g_assert (GTK_IS_SIGNAL_GROUP (self));
++
++  /*
++   * Remove any handlers for which the closures have become invalid. We do
++   * this cleanup lazily to avoid situations where we could have disposal
++   * active on both the signal group and the peer object.
++   */
++
++  for (i = self->handlers->len; i > 0; i--)
++    {
++      const SignalHandler *handler = g_ptr_array_index (self->handlers, i - 1);
++
++      g_assert (handler != NULL);
++      g_assert (handler->closure != NULL);
++
++      if (handler->closure->is_invalid)
++        g_ptr_array_remove_index (self->handlers, i - 1);
++    }
++}
++
++static void
++g_signal_group__target_weak_notify (gpointer  data,
++                                    GObject  *where_object_was)
++{
++  GtkSignalGroup *self = data;
++  guint i;
++
++  g_assert (GTK_IS_SIGNAL_GROUP (self));
++  g_assert (where_object_was != NULL);
++
++  g_rec_mutex_lock (&self->mutex);
++
++  g_weak_ref_set (&self->target_ref, NULL);
++
++  for (i = 0; i < self->handlers->len; i++)
++    {
++      SignalHandler *handler = g_ptr_array_index (self->handlers, i);
++
++      handler->handler_id = 0;
++    }
++
++  g_signal_emit (self, signals[UNBIND], 0);
++  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_TARGET]);
++
++  g_rec_mutex_unlock (&self->mutex);
++}
++
++static void
++g_signal_group_bind_handler (GtkSignalGroup  *self,
++                             SignalHandler   *handler,
++                             GObject         *target)
++{
++  gssize i;
++
++  g_assert (self != NULL);
++  g_assert (G_IS_OBJECT (target));
++  g_assert (handler != NULL);
++  g_assert (handler->signal_id != 0);
++  g_assert (handler->closure != NULL);
++  g_assert (handler->closure->is_invalid == 0);
++  g_assert (handler->handler_id == 0);
++
++  handler->handler_id = g_signal_connect_closure_by_id (target,
++                                                        handler->signal_id,
++                                                        handler->signal_detail,
++                                                        handler->closure,
++                                                        handler->connect_after);
++
++  g_assert (handler->handler_id != 0);
++
++  for (i = 0; i < self->block_count; i++)
++    g_signal_handler_block (target, handler->handler_id);
++}
++
++static void
++g_signal_group_bind (GtkSignalGroup *self,
++                     GObject        *target)
++{
++  GObject *hold;
++  guint i;
++
++  g_assert (GTK_IS_SIGNAL_GROUP (self));
++  g_assert (!target || G_IS_OBJECT (target));
++
++  if (target == NULL)
++    return;
++
++  self->has_bound_at_least_once = TRUE;
++
++  hold = g_object_ref (target);
++
++  g_weak_ref_set (&self->target_ref, hold);
++  g_object_weak_ref (hold, g_signal_group__target_weak_notify, self);
++
++  g_signal_group_gc_handlers (self);
++
++  for (i = 0; i < self->handlers->len; i++)
++    {
++      SignalHandler *handler = g_ptr_array_index (self->handlers, i);
++
++      g_signal_group_bind_handler (self, handler, hold);
++    }
++
++  g_signal_emit (self, signals [BIND], 0, hold);
++
++  g_object_unref (hold);
++}
++
++static void
++g_signal_group_unbind (GtkSignalGroup *self)
++{
++  GObject *target;
++  guint i;
++
++  g_return_if_fail (GTK_IS_SIGNAL_GROUP (self));
++
++  target = g_weak_ref_get (&self->target_ref);
++
++  /*
++   * Target may be NULL by this point, as we got notified of its destruction.
++   * However, if we're early enough, we may get a full reference back and can
++   * cleanly disconnect our connections.
++   */
++
++  if (target != NULL)
++    {
++      g_weak_ref_set (&self->target_ref, NULL);
++
++      /*
++       * Let go of our weak reference now that we have a full reference
++       * for the life of this function.
++       */
++      g_object_weak_unref (target,
++                           g_signal_group__target_weak_notify,
++                           self);
++    }
++
++  g_signal_group_gc_handlers (self);
++
++  for (i = 0; i < self->handlers->len; i++)
++    {
++      SignalHandler *handler;
++      gulong handler_id;
++
++      handler = g_ptr_array_index (self->handlers, i);
++
++      g_assert (handler != NULL);
++      g_assert (handler->signal_id != 0);
++      g_assert (handler->closure != NULL);
++
++      handler_id = handler->handler_id;
++      handler->handler_id = 0;
++
++      /*
++       * If @target is NULL, we lost a race to cleanup the weak
++       * instance and the signal connections have already been
++       * finalized and therefore nothing to do.
++       */
++
++      if (target != NULL && handler_id != 0)
++        g_signal_handler_disconnect (target, handler_id);
++    }
++
++  g_signal_emit (self, signals [UNBIND], 0);
++
++  g_clear_object (&target);
++}
++
++static gboolean
++g_signal_group_check_target_type (GtkSignalGroup *self,
++                                  gpointer        target)
++{
++  if ((target != NULL) &&
++      !g_type_is_a (G_OBJECT_TYPE (target), self->target_type))
++    {
++      g_critical ("Failed to set GtkSignalGroup of target type %s "
++                  "using target %p of type %s",
++                  g_type_name (self->target_type),
++                  target, G_OBJECT_TYPE_NAME (target));
++      return FALSE;
++    }
++
++  return TRUE;
++}
++
++void
++gtk_signal_group_block (GtkSignalGroup *self)
++{
++  GObject *target;
++  guint i;
++
++  g_return_if_fail (GTK_IS_SIGNAL_GROUP (self));
++  g_return_if_fail (self->block_count >= 0);
++
++  g_rec_mutex_lock (&self->mutex);
++
++  self->block_count++;
++
++  target = g_weak_ref_get (&self->target_ref);
++
++  if (target == NULL)
++    goto unlock;
++
++  for (i = 0; i < self->handlers->len; i++)
++    {
++      const SignalHandler *handler = g_ptr_array_index (self->handlers, i);
++
++      g_assert (handler != NULL);
++      g_assert (handler->signal_id != 0);
++      g_assert (handler->closure != NULL);
++      g_assert (handler->handler_id != 0);
++
++      g_signal_handler_block (target, handler->handler_id);
++    }
++
++  g_object_unref (target);
++
++unlock:
++  g_rec_mutex_unlock (&self->mutex);
++}
++
++void
++gtk_signal_group_unblock (GtkSignalGroup *self)
++{
++  GObject *target;
++  guint i;
++
++  g_return_if_fail (GTK_IS_SIGNAL_GROUP (self));
++  g_return_if_fail (self->block_count > 0);
++
++  g_rec_mutex_lock (&self->mutex);
++
++  self->block_count--;
++
++  target = g_weak_ref_get (&self->target_ref);
++  if (target == NULL)
++    goto unlock;
++
++  for (i = 0; i < self->handlers->len; i++)
++    {
++      const SignalHandler *handler = g_ptr_array_index (self->handlers, i);
++
++      g_assert (handler != NULL);
++      g_assert (handler->signal_id != 0);
++      g_assert (handler->closure != NULL);
++      g_assert (handler->handler_id != 0);
++
++      g_signal_handler_unblock (target, handler->handler_id);
++    }
++
++  g_object_unref (target);
++
++unlock:
++  g_rec_mutex_unlock (&self->mutex);
++}
++
++gpointer
++gtk_signal_group_dup_target (GtkSignalGroup *self)
++{
++  GObject *target;
++
++  g_return_val_if_fail (GTK_IS_SIGNAL_GROUP (self), NULL);
++
++  g_rec_mutex_lock (&self->mutex);
++  target = g_weak_ref_get (&self->target_ref);
++  g_rec_mutex_unlock (&self->mutex);
++
++  return target;
++}
++
++void
++gtk_signal_group_set_target (GtkSignalGroup *self,
++			     gpointer        target)
++{
++  GObject *object;
++
++  g_return_if_fail (GTK_IS_SIGNAL_GROUP (self));
++
++  g_rec_mutex_lock (&self->mutex);
++
++  object = g_weak_ref_get (&self->target_ref);
++
++  if (object == (GObject *)target)
++    goto cleanup;
++
++  if (!g_signal_group_check_target_type (self, target))
++    goto cleanup;
++
++  /* Only emit unbind if we've ever called bind */
++  if (self->has_bound_at_least_once)
++    g_signal_group_unbind (self);
++
++  g_signal_group_bind (self, target);
++
++  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_TARGET]);
++
++cleanup:
++  g_clear_object (&object);
++  g_rec_mutex_unlock (&self->mutex);
++}
++
++static void
++signal_handler_free (gpointer data)
++{
++  SignalHandler *handler = data;
++
++  if (handler->closure != NULL)
++    g_closure_invalidate (handler->closure);
++
++  handler->handler_id = 0;
++  handler->signal_id = 0;
++  handler->signal_detail = 0;
++  g_clear_pointer (&handler->closure, g_closure_unref);
++  g_slice_free (SignalHandler, handler);
++}
++
++static void
++g_signal_group_constructed (GObject *object)
++{
++  GtkSignalGroup *self = (GtkSignalGroup *)object;
++  GObject *target;
++
++  g_rec_mutex_lock (&self->mutex);
++
++  target = g_weak_ref_get (&self->target_ref);
++  if (!g_signal_group_check_target_type (self, target))
++    gtk_signal_group_set_target (self, NULL);
++
++  G_OBJECT_CLASS (gtk_signal_group_parent_class)->constructed (object);
++
++  g_clear_object (&target);
++
++  g_rec_mutex_unlock (&self->mutex);
++}
++
++static void
++g_signal_group_dispose (GObject *object)
++{
++  GtkSignalGroup *self = (GtkSignalGroup *)object;
++
++  g_rec_mutex_lock (&self->mutex);
++
++  g_signal_group_gc_handlers (self);
++
++  if (self->has_bound_at_least_once)
++    g_signal_group_unbind (self);
++
++  g_clear_pointer (&self->handlers, g_ptr_array_unref);
++
++  g_rec_mutex_unlock (&self->mutex);
++
++  G_OBJECT_CLASS (gtk_signal_group_parent_class)->dispose (object);
++}
++
++static void
++g_signal_group_finalize (GObject *object)
++{
++  GtkSignalGroup *self = (GtkSignalGroup *)object;
++
++  g_weak_ref_clear (&self->target_ref);
++  g_rec_mutex_clear (&self->mutex);
++
++  G_OBJECT_CLASS (gtk_signal_group_parent_class)->finalize (object);
++}
++
++static void
++g_signal_group_get_property (GObject    *object,
++                             guint       prop_id,
++                             GValue     *value,
++                             GParamSpec *pspec)
++{
++  GtkSignalGroup *self = GTK_SIGNAL_GROUP (object);
++
++  switch (prop_id)
++    {
++    case PROP_TARGET:
++      g_value_take_object (value, gtk_signal_group_dup_target (self));
++      break;
++
++    case PROP_TARGET_TYPE:
++      g_value_set_gtype (value, self->target_type);
++      break;
++
++    default:
++      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
++    }
++}
++
++static void
++g_signal_group_set_property (GObject      *object,
++			     guint         prop_id,
++			     const GValue *value,
++			     GParamSpec   *pspec)
++{
++  GtkSignalGroup *self = GTK_SIGNAL_GROUP (object);
++
++  switch (prop_id)
++    {
++    case PROP_TARGET:
++      gtk_signal_group_set_target (self, g_value_get_object (value));
++      break;
++
++    case PROP_TARGET_TYPE:
++      g_signal_group_set_target_type (self, g_value_get_gtype (value));
++      break;
++
++    default:
++      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
++    }
++}
++
++static void
++gtk_signal_group_class_init (GtkSignalGroupClass *klass)
++{
++  GObjectClass *object_class = G_OBJECT_CLASS (klass);
++
++  object_class->constructed = g_signal_group_constructed;
++  object_class->dispose = g_signal_group_dispose;
++  object_class->finalize = g_signal_group_finalize;
++  object_class->get_property = g_signal_group_get_property;
++  object_class->set_property = g_signal_group_set_property;
++
++  properties[PROP_TARGET] =
++      g_param_spec_object ("target",
++                           "Target",
++                           "The target instance used when connecting signals.",
++                           G_TYPE_OBJECT,
++                           (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
++
++  properties[PROP_TARGET_TYPE] =
++      g_param_spec_gtype ("target-type",
++                          "Target Type",
++                          "The GType of the target property.",
++                          G_TYPE_OBJECT,
++                          (G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
++
++  g_object_class_install_properties (object_class, LAST_PROP, properties);
++
++  signals[BIND] =
++      g_signal_new ("bind",
++                    G_TYPE_FROM_CLASS (klass),
++                    G_SIGNAL_RUN_LAST,
++                    0,
++                    NULL, NULL, NULL,
++                    G_TYPE_NONE,
++                    1,
++                    G_TYPE_OBJECT);
++
++  signals[UNBIND] =
++      g_signal_new ("unbind",
++                    G_TYPE_FROM_CLASS (klass),
++                    G_SIGNAL_RUN_LAST,
++                    0,
++                    NULL, NULL, NULL,
++                    G_TYPE_NONE,
++                    0);
++}
++
++static void
++gtk_signal_group_init (GtkSignalGroup *self)
++{
++  g_rec_mutex_init (&self->mutex);
++  self->handlers = g_ptr_array_new_with_free_func (signal_handler_free);
++  self->target_type = G_TYPE_OBJECT;
++}
++
++GtkSignalGroup *
++gtk_signal_group_new (GType target_type)
++{
++  g_return_val_if_fail (g_type_is_a (target_type, G_TYPE_OBJECT), NULL);
++
++  return g_object_new (GTK_TYPE_SIGNAL_GROUP,
++                       "target-type", target_type,
++                       NULL);
++}
++
++static gboolean
++g_signal_group_connect_closure_ (GtkSignalGroup   *self,
++                                 const gchar      *detailed_signal,
++                                 GClosure         *closure,
++                                 gboolean          after)
++{
++  GObject *target;
++  SignalHandler *handler;
++  guint signal_id;
++  GQuark signal_detail;
++
++  g_return_val_if_fail (GTK_IS_SIGNAL_GROUP (self), FALSE);
++  g_return_val_if_fail (detailed_signal != NULL, FALSE);
++  g_return_val_if_fail (g_signal_parse_name (detailed_signal, self->target_type,
++                                             &signal_id, &signal_detail, TRUE) != 0, FALSE);
++  g_return_val_if_fail (closure != NULL, FALSE);
++
++  g_rec_mutex_lock (&self->mutex);
++
++  if (self->has_bound_at_least_once)
++    {
++      g_critical ("Cannot add signals after setting target");
++      g_rec_mutex_unlock (&self->mutex);
++      return FALSE;
++    }
++
++  handler = g_slice_new0 (SignalHandler);
++  handler->group = self;
++  handler->signal_id = signal_id;
++  handler->signal_detail = signal_detail;
++  handler->closure = g_closure_ref (closure);
++  handler->connect_after = after;
++
++  g_closure_sink (closure);
++
++  g_ptr_array_add (self->handlers, handler);
++
++  target = g_weak_ref_get (&self->target_ref);
++
++  if (target != NULL)
++    {
++      g_signal_group_bind_handler (self, handler, target);
++      g_object_unref (target);
++    }
++
++  /* Lazily remove any old handlers on connect */
++  g_signal_group_gc_handlers (self);
++
++  g_rec_mutex_unlock (&self->mutex);
++  return TRUE;
++}
++
++void
++gtk_signal_group_connect_closure (GtkSignalGroup   *self,
++				  const gchar      *detailed_signal,
++				  GClosure         *closure,
++				  gboolean          after)
++{
++  g_signal_group_connect_closure_ (self, detailed_signal, closure, after);
++}
++
++static void
++gtk_signal_group_connect_full (GtkSignalGroup   *self,
++			       const gchar      *detailed_signal,
++			       GCallback         c_handler,
++			       gpointer          data,
++			       GClosureNotify    notify,
++			       GConnectFlags     flags,
++			       gboolean          is_object)
++{
++  GClosure *closure;
++
++  g_return_if_fail (c_handler != NULL);
++  g_return_if_fail (!is_object || G_IS_OBJECT (data));
++
++  if ((flags & G_CONNECT_SWAPPED) != 0)
++    closure = g_cclosure_new_swap (c_handler, data, notify);
++  else
++    closure = g_cclosure_new (c_handler, data, notify);
++
++  if (is_object)
++    {
++      /* Set closure->is_invalid when data is disposed. We only track this to avoid
++       * reconnecting in the future. However, we do a round of cleanup when ever we
++       * connect a new object or the target changes to GC the old handlers.
++       */
++      g_object_watch_closure (data, closure);
++    }
++
++  if (!g_signal_group_connect_closure_ (self,
++                                        detailed_signal,
++                                        closure,
++                                        (flags & G_CONNECT_AFTER) != 0))
++    g_closure_unref (closure);
++}
++
++void
++gtk_signal_group_connect_object (GtkSignalGroup  *self,
++				 const gchar     *detailed_signal,
++				 GCallback        c_handler,
++				 gpointer         object,
++				 GConnectFlags    flags)
++{
++  g_return_if_fail (G_IS_OBJECT (object));
++
++  gtk_signal_group_connect_full (self, detailed_signal, c_handler, object, NULL,
++				 flags, TRUE);
++}
++
++void
++gtk_signal_group_connect_data (GtkSignalGroup   *self,
++			       const gchar      *detailed_signal,
++			       GCallback         c_handler,
++			       gpointer          data,
++			       GClosureNotify    notify,
++			       GConnectFlags     flags)
++{
++  gtk_signal_group_connect_full (self, detailed_signal, c_handler, data, notify,
++				 flags, FALSE);
++}
++
++void
++gtk_signal_group_connect (GtkSignalGroup *self,
++			  const gchar    *detailed_signal,
++			  GCallback       c_handler,
++			  gpointer        data)
++{
++  gtk_signal_group_connect_full (self, detailed_signal, c_handler, data, NULL,
++				 0, FALSE);
++}
++
++void
++gtk_signal_group_connect_after (GtkSignalGroup *self,
++				const gchar    *detailed_signal,
++				GCallback       c_handler,
++				gpointer        data)
++{
++  gtk_signal_group_connect_full (self, detailed_signal, c_handler,
++				 data, NULL, G_CONNECT_AFTER, FALSE);
++}
++
++void
++gtk_signal_group_connect_swapped (GtkSignalGroup *self,
++				  const gchar    *detailed_signal,
++				  GCallback       c_handler,
++				  gpointer        data)
++{
++  gtk_signal_group_connect_full (self, detailed_signal, c_handler, data, NULL,
++				 G_CONNECT_SWAPPED, FALSE);
++}
+diff --git a/gtk/gtksignalgroup.h b/gtk/gtksignalgroup.h
+new file mode 100644
+index 0000000000..e72de0c838
+--- /dev/null
++++ b/gtk/gtksignalgroup.h
+@@ -0,0 +1,72 @@
++/* GObject - GLib Type, Object, Parameter and Signal Library
++ *
++ * Copyright (C) 2015-2022 Christian Hergert <christian@hergert.me>
++ * Copyright (C) 2015 Garrett Regier <garrettregier@gmail.com>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General
++ * Public License along with this library; if not, see <http://www.gnu.org/licenses/>.
++ *
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++
++#ifndef __GTK_SIGNAL_GROUP_H__
++#define __GTK_SIGNAL_GROUP_H__
++
++#include <glib-object.h>
++
++G_BEGIN_DECLS
++
++#define GTK_SIGNAL_GROUP(obj)    (G_TYPE_CHECK_INSTANCE_CAST ((obj), GTK_TYPE_SIGNAL_GROUP, GtkSignalGroup))
++#define GTK_IS_SIGNAL_GROUP(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GTK_TYPE_SIGNAL_GROUP))
++#define GTK_TYPE_SIGNAL_GROUP    (gtk_signal_group_get_type())
++
++typedef struct _GtkSignalGroup GtkSignalGroup;
++
++GType         gtk_signal_group_get_type        (void) G_GNUC_CONST;
++GtkSignalGroup *gtk_signal_group_new             (GType           target_type);
++void          gtk_signal_group_set_target      (GtkSignalGroup   *self,
++						gpointer          target);
++gpointer      gtk_signal_group_dup_target      (GtkSignalGroup   *self);
++void          gtk_signal_group_block           (GtkSignalGroup   *self);
++void          gtk_signal_group_unblock         (GtkSignalGroup   *self);
++void          gtk_signal_group_connect_closure (GtkSignalGroup   *self,
++						const gchar      *detailed_signal,
++						GClosure         *closure,
++						gboolean          after);
++void          gtk_signal_group_connect_object  (GtkSignalGroup   *self,
++						const gchar      *detailed_signal,
++						GCallback         c_handler,
++						gpointer          object,
++						GConnectFlags     flags);
++void          gtk_signal_group_connect_data    (GtkSignalGroup   *self,
++						const gchar      *detailed_signal,
++						GCallback         c_handler,
++						gpointer          data,
++						GClosureNotify    notify,
++						GConnectFlags     flags);
++void          gtk_signal_group_connect         (GtkSignalGroup   *self,
++						const gchar      *detailed_signal,
++						GCallback         c_handler,
++						gpointer          data);
++void          gtk_signal_group_connect_after   (GtkSignalGroup   *self,
++						const gchar      *detailed_signal,
++						GCallback         c_handler,
++						gpointer          data);
++void          gtk_signal_group_connect_swapped (GtkSignalGroup   *self,
++						const gchar      *detailed_signal,
++						GCallback         c_handler,
++						gpointer          data);
++
++G_END_DECLS
++
++#endif /* __GTK_SIGNAL_GROUP_H__ */
+diff --git a/gtk/meson.build b/gtk/meson.build
+index 1bc3ab14e6..20ac76844a 100644
+--- a/gtk/meson.build
++++ b/gtk/meson.build
+@@ -137,6 +137,7 @@ gtk_private_sources = files([
+   'gtksearchengine.c',
+   'gtksearchenginemodel.c',
+   'gtksecurememory.c',
++  'gtksignalgroup.c',
+   'gtksizerequestcache.c',
+   'gtksortkeys.c',
+   'gtkstyleanimation.c',
+-- 
+2.43.0
+
+
+From 5db21b2df160d11cc89b65f0acf6e8e5d7328413 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 29 Nov 2023 17:12:20 +0100
+Subject: [PATCH 05/10] testsuite: Avoid G_TEST_SUBPROCESS_DEFAULT
+
+---
+ testsuite/gdk/display.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/testsuite/gdk/display.c b/testsuite/gdk/display.c
+index 16be96db63..3e285aaa75 100644
+--- a/testsuite/gdk/display.c
++++ b/testsuite/gdk/display.c
+@@ -76,7 +76,7 @@ test_debug_help (void)
+       return;
+     }
+ 
+-  g_test_trap_subprocess (NULL, 0, G_TEST_SUBPROCESS_DEFAULT);
++  g_test_trap_subprocess (NULL, 0, 0);
+   g_test_trap_assert_passed ();
+   g_test_trap_assert_stderr ("*Supported GDK_DEBUG values:*");
+   g_test_trap_assert_stderr ("*Multiple values can be given, separated by : or space.*");
+-- 
+2.43.0
+
+
+From b8bb55fa2946da52d2ec233ce4e512299b240fa3 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 29 Nov 2023 17:16:05 +0100
+Subject: [PATCH 06/10] demos: Do not demo unsupported pango features
+
+---
+ demos/gtk-demo/fontify.c | 27 ---------------------------
+ demos/gtk-demo/tabs.c    |  2 --
+ 2 files changed, 29 deletions(-)
+
+diff --git a/demos/gtk-demo/fontify.c b/demos/gtk-demo/fontify.c
+index cdbdf654d3..7d2ec6766a 100644
+--- a/demos/gtk-demo/fontify.c
++++ b/demos/gtk-demo/fontify.c
+@@ -268,29 +268,6 @@ insert_tags_for_attributes (GtkTextBuffer     *buffer,
+           INT_ATTR (insert_hyphens);
+           break;
+ 
+-        case PANGO_ATTR_LINE_HEIGHT:
+-          FLOAT_ATTR (line_height);
+-          break;
+-
+-        case PANGO_ATTR_ABSOLUTE_LINE_HEIGHT:
+-          break;
+-
+-        case PANGO_ATTR_WORD:
+-          VOID_ATTR (word);
+-          break;
+-
+-        case PANGO_ATTR_SENTENCE:
+-          VOID_ATTR (sentence);
+-          break;
+-
+-        case PANGO_ATTR_BASELINE_SHIFT:
+-          INT_ATTR (baseline_shift);
+-          break;
+-
+-        case PANGO_ATTR_FONT_SCALE:
+-          INT_ATTR (font_scale);
+-          break;
+-
+         case PANGO_ATTR_SHAPE:
+         case PANGO_ATTR_ABSOLUTE_SIZE:
+         case PANGO_ATTR_GRAVITY:
+@@ -299,10 +276,6 @@ insert_tags_for_attributes (GtkTextBuffer     *buffer,
+         case PANGO_ATTR_BACKGROUND_ALPHA:
+           break;
+ 
+-        case PANGO_ATTR_TEXT_TRANSFORM:
+-          INT_ATTR (text_transform);
+-          break;
+-
+         case PANGO_ATTR_INVALID:
+         default:
+           g_assert_not_reached ();
+diff --git a/demos/gtk-demo/tabs.c b/demos/gtk-demo/tabs.c
+index 96c2300ac8..afba8a53a6 100644
+--- a/demos/gtk-demo/tabs.c
++++ b/demos/gtk-demo/tabs.c
+@@ -40,9 +40,7 @@ do_tabs (GtkWidget *do_widget)
+ 
+       tabs = pango_tab_array_new (3, TRUE);
+       pango_tab_array_set_tab (tabs, 0, PANGO_TAB_LEFT, 0);
+-      pango_tab_array_set_tab (tabs, 1, PANGO_TAB_DECIMAL, 150);
+       pango_tab_array_set_decimal_point (tabs, 1, '.');
+-      pango_tab_array_set_tab (tabs, 2, PANGO_TAB_RIGHT, 290);
+       gtk_text_view_set_tabs (GTK_TEXT_VIEW (view), tabs);
+       pango_tab_array_free (tabs);
+ 
+-- 
+2.43.0
+
+
+From 0eea3d49ffdd673ef6d09264c76478e27b121899 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 29 Nov 2023 17:49:55 +0100
+Subject: [PATCH 07/10] gtk: Avoid g_set_str()
+
+---
+ gtk/gtkcolumnviewrow.c | 10 ++++++++--
+ gtk/gtkfiledialog.c    | 38 +++++++++++++++++++++++++++++---------
+ gtk/gtklistitem.c      | 10 ++++++++--
+ 3 files changed, 45 insertions(+), 13 deletions(-)
+
+diff --git a/gtk/gtkcolumnviewrow.c b/gtk/gtkcolumnviewrow.c
+index 23aac2a701..8145fbefb7 100644
+--- a/gtk/gtkcolumnviewrow.c
++++ b/gtk/gtkcolumnviewrow.c
+@@ -565,9 +565,12 @@ gtk_column_view_row_set_accessible_description (GtkColumnViewRow *self,
+ {
+   g_return_if_fail (GTK_IS_COLUMN_VIEW_ROW (self));
+ 
+-  if (!g_set_str (&self->accessible_description, description))
++  if (g_strcmp0 (description, self->accessible_description) == 0)
+     return;
+ 
++  g_clear_pointer (&self->accessible_description, g_free);
++  self->accessible_description = g_strdup (description);
++
+   if (self->owner)
+     gtk_accessible_update_property (GTK_ACCESSIBLE (self->owner),
+                                     GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, self->accessible_description,
+@@ -610,9 +613,12 @@ gtk_column_view_row_set_accessible_label (GtkColumnViewRow *self,
+ {
+   g_return_if_fail (GTK_IS_COLUMN_VIEW_ROW (self));
+ 
+-  if (!g_set_str (&self->accessible_label, label))
++  if (g_strcmp0 (self->accessible_label, label) == 0)
+     return;
+ 
++  g_clear_pointer (&self->accessible_label, g_free);
++  self->accessible_label = g_strdup (label);
++
+   if (self->owner)
+     gtk_accessible_update_property (GTK_ACCESSIBLE (self->owner),
+                                     GTK_ACCESSIBLE_PROPERTY_LABEL, self->accessible_label,
+diff --git a/gtk/gtkfiledialog.c b/gtk/gtkfiledialog.c
+index 2b25842d15..826d254a7b 100644
+--- a/gtk/gtkfiledialog.c
++++ b/gtk/gtkfiledialog.c
+@@ -632,9 +632,12 @@ gtk_file_dialog_set_initial_name (GtkFileDialog *self,
+ {
+   g_return_if_fail (GTK_IS_FILE_DIALOG (self));
+ 
+-  if (!g_set_str (&self->initial_name, name))
++  if (g_strcmp0 (self->initial_name, name) == 0)
+     return;
+ 
++  g_clear_pointer (&self->initial_name, g_free);
++  self->initial_name = g_strdup (name);
++
+   if (self->initial_name && self->initial_folder)
+     {
+       g_clear_object (&self->initial_file);
+@@ -709,8 +712,12 @@ gtk_file_dialog_set_initial_file (GtkFileDialog *self,
+       info = g_file_query_info (file, G_FILE_ATTRIBUTE_STANDARD_EDIT_NAME, 0, NULL, NULL);
+       if (info && g_file_info_get_edit_name (info) != NULL)
+         {
+-          if (g_set_str (&self->initial_name, g_file_info_get_edit_name (info)))
+-            g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_INITIAL_NAME]);
++          if (g_strcmp0 (self->initial_name, g_file_info_get_edit_name (info)) != 0)
++            {
++              g_clear_pointer (&self->initial_name, g_free);
++              self->initial_name = g_strdup (g_file_info_get_edit_name (info));
++              g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_INITIAL_NAME]);
++            }
+         }
+       else
+         {
+@@ -718,8 +725,13 @@ gtk_file_dialog_set_initial_file (GtkFileDialog *self,
+ 
+           relative = g_file_get_relative_path (folder, file);
+           name = g_filename_display_name (relative);
+-          if (g_set_str (&self->initial_name, name))
+-            g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_INITIAL_NAME]);
++
++          if (g_strcmp0 (self->initial_name, name) != 0)
++            {
++              g_clear_pointer (&self->initial_name, g_free);
++              self->initial_name = g_strdup (name);
++              g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_INITIAL_NAME]);
++            }
+ 
+           g_free (name);
+           g_free (relative);
+@@ -734,8 +746,12 @@ invalid_file:
+         g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_INITIAL_FILE]);
+       if (g_set_object (&self->initial_folder, NULL))
+         g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_INITIAL_FOLDER]);
+-      if (g_set_str (&self->initial_name, NULL))
+-        g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_INITIAL_NAME]);
++
++      if (self->initial_name)
++        {
++          g_clear_pointer (&self->initial_name, g_free);
++          g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_INITIAL_NAME]);
++        }
+     }
+ 
+   g_object_thaw_notify (G_OBJECT (self));
+@@ -1307,8 +1323,12 @@ gtk_file_dialog_set_accept_label (GtkFileDialog *self,
+ {
+   g_return_if_fail (GTK_IS_FILE_DIALOG (self));
+ 
+-  if (g_set_str (&self->accept_label, accept_label))
+-    g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ACCEPT_LABEL]);
++  if (g_strcmp0 (self->accept_label, accept_label) == 0)
++    return;
++
++  g_clear_pointer (&self->accept_label, g_free);
++  self->accept_label = g_strdup (accept_label);
++  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ACCEPT_LABEL]);
+ }
+ 
+ /* }}} */
+diff --git a/gtk/gtklistitem.c b/gtk/gtklistitem.c
+index bb07c1f832..3f4c8597a2 100644
+--- a/gtk/gtklistitem.c
++++ b/gtk/gtklistitem.c
+@@ -626,9 +626,12 @@ gtk_list_item_set_accessible_description (GtkListItem *self,
+ {
+   g_return_if_fail (GTK_IS_LIST_ITEM (self));
+ 
+-  if (!g_set_str (&self->accessible_description, description))
++  if (g_strcmp0 (self->accessible_description, description) == 0)
+     return;
+ 
++  g_clear_pointer (&self->accessible_description, g_free);
++  self->accessible_description = g_strdup (description);
++
+   if (self->owner)
+     gtk_accessible_update_property (GTK_ACCESSIBLE (self->owner),
+                                     GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, self->accessible_description,
+@@ -671,9 +674,12 @@ gtk_list_item_set_accessible_label (GtkListItem *self,
+ {
+   g_return_if_fail (GTK_IS_LIST_ITEM (self));
+ 
+-  if (!g_set_str (&self->accessible_label, label))
++  if (g_strcmp0 (self->accessible_label, label) == 0)
+     return;
+ 
++  g_clear_pointer (&self->accessible_label, g_free);
++  self->accessible_label = g_strdup (label);
++
+   if (self->owner)
+     gtk_accessible_update_property (GTK_ACCESSIBLE (self->owner),
+                                     GTK_ACCESSIBLE_PROPERTY_LABEL, self->accessible_label,
+-- 
+2.43.0
+
+
+From 3c4027a438437502f057684cccaf335800011876 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 29 Nov 2023 20:44:54 +0100
+Subject: [PATCH 08/10] gtk: Port back to old pango API
+
+---
+ demos/gtk-demo/font_features.c |   8 -
+ demos/gtk-demo/tabs.c          |   1 -
+ gdk/gdkpango.c                 |   4 +-
+ gtk/a11y/gtkatspipango.c       |  28 +-
+ gtk/gtkbuilder.c               |   3 +-
+ gtk/gtkcssstyle.c              |  32 +-
+ gtk/gtkcssstyleprivate.h       |  10 +
+ gtk/gtkfontchooserwidget.c     |  36 +-
+ gtk/gtkinscription.c           |   4 +-
+ gtk/gtklabel.c                 |   4 +-
+ gtk/gtkpango.c                 | 675 ++++++++++++++++++++++++++++++---
+ gtk/gtkpangoprivate.h          |   3 +
+ gtk/gtkrenderlayout.c          |   2 +-
+ gtk/gtktextbuffer.c            |  27 --
+ gtk/gtktextlayout.c            |  87 ++---
+ gtk/gtktexttag.c               |   7 +-
+ gtk/gtktextutil.c              |  12 +-
+ gtk/inspector/prop-editor.c    |   5 +-
+ 18 files changed, 727 insertions(+), 221 deletions(-)
+
+diff --git a/demos/gtk-demo/font_features.c b/demos/gtk-demo/font_features.c
+index c4a11b41bf..b348bbb52f 100644
+--- a/demos/gtk-demo/font_features.c
++++ b/demos/gtk-demo/font_features.c
+@@ -669,14 +669,6 @@ update_display (void)
+       pango_attr_list_insert (attrs, attr);
+     }
+ 
+-  if (gtk_adjustment_get_value (demo->line_height_adjustment) != 1.)
+-    {
+-      attr = pango_attr_line_height_new (gtk_adjustment_get_value (demo->line_height_adjustment));
+-      attr->start_index = start;
+-      attr->end_index = end;
+-      pango_attr_list_insert (attrs, attr);
+-    }
+-
+     {
+       GdkRGBA rgba;
+       char *fg, *bg, *css;
+diff --git a/demos/gtk-demo/tabs.c b/demos/gtk-demo/tabs.c
+index afba8a53a6..8bb123d1ed 100644
+--- a/demos/gtk-demo/tabs.c
++++ b/demos/gtk-demo/tabs.c
+@@ -40,7 +40,6 @@ do_tabs (GtkWidget *do_widget)
+ 
+       tabs = pango_tab_array_new (3, TRUE);
+       pango_tab_array_set_tab (tabs, 0, PANGO_TAB_LEFT, 0);
+-      pango_tab_array_set_decimal_point (tabs, 1, '.');
+       gtk_text_view_set_tabs (GTK_TEXT_VIEW (view), tabs);
+       pango_tab_array_free (tabs);
+ 
+diff --git a/gdk/gdkpango.c b/gdk/gdkpango.c
+index 3bbeac1cc2..2b53c21409 100644
+--- a/gdk/gdkpango.c
++++ b/gdk/gdkpango.c
+@@ -59,8 +59,8 @@ layout_iter_get_line_clip_region (PangoLayoutIter *iter,
+ 
+       /* Note that get_x_ranges returns layout coordinates
+        */
+-      if (index_ranges[i*2+1] >= pango_layout_line_get_start_index (line) &&
+-	  index_ranges[i*2] < pango_layout_line_get_start_index (line) + pango_layout_line_get_length (line))
++      if (index_ranges[i*2+1] >= line->start_index &&
++	  index_ranges[i*2] < line->start_index + line->length)
+ 	pango_layout_line_get_x_ranges (line,
+ 					index_ranges[i*2],
+ 					index_ranges[i*2+1],
+diff --git a/gtk/a11y/gtkatspipango.c b/gtk/a11y/gtkatspipango.c
+index 2ca7bd419b..aa8f920a19 100644
+--- a/gtk/a11y/gtkatspipango.c
++++ b/gtk/a11y/gtkatspipango.c
+@@ -567,8 +567,8 @@ pango_layout_get_line_before (PangoLayout           *layout,
+   do
+     {
+       line = pango_layout_iter_get_line (iter);
+-      start_index = pango_layout_line_get_start_index (line);
+-      length = pango_layout_line_get_length (line);
++      start_index = line->start_index;
++      length = line->length;
+       end_index = start_index + length;
+ 
+       if (index >= start_index && index <= end_index)
+@@ -644,8 +644,8 @@ pango_layout_get_line_at (PangoLayout           *layout,
+   do
+     {
+       line = pango_layout_iter_get_line (iter);
+-      start_index = pango_layout_line_get_start_index (line);
+-      length = pango_layout_line_get_length (line);
++      start_index = line->start_index;
++      length = line->length;
+       end_index = start_index + length;
+ 
+       if (index >= start_index && index <= end_index)
+@@ -655,11 +655,11 @@ pango_layout_get_line_at (PangoLayout           *layout,
+             {
+             case ATSPI_TEXT_BOUNDARY_LINE_START:
+               if (pango_layout_iter_next_line (iter))
+-                end_index = pango_layout_line_get_start_index (pango_layout_iter_get_line (iter));
++                end_index = pango_layout_iter_get_line (iter)->start_index;
+               break;
+             case ATSPI_TEXT_BOUNDARY_LINE_END:
+               if (prev_line)
+-                start_index = pango_layout_line_get_start_index (prev_line) + pango_layout_line_get_length (prev_line);
++                start_index = prev_line->start_index + prev_line->length;
+               break;
+             case ATSPI_TEXT_BOUNDARY_CHAR:
+             case ATSPI_TEXT_BOUNDARY_WORD_START:
+@@ -680,7 +680,7 @@ pango_layout_get_line_at (PangoLayout           *layout,
+ 
+   if (!found)
+     {
+-      start_index = pango_layout_line_get_start_index (prev_line) + pango_layout_line_get_length (prev_line);
++      start_index = prev_line->start_index + prev_line->length;
+       end_index = start_index;
+     }
+   pango_layout_iter_free (iter);
+@@ -708,8 +708,8 @@ pango_layout_get_line_after (PangoLayout           *layout,
+   do
+     {
+       line = pango_layout_iter_get_line (iter);
+-      start_index = pango_layout_line_get_start_index (line);
+-      length = pango_layout_line_get_length (line);
++      start_index = line->start_index;
++      length = line->length;
+       end_index = start_index + length;
+ 
+       if (index >= start_index && index <= end_index)
+@@ -721,15 +721,15 @@ pango_layout_get_line_after (PangoLayout           *layout,
+               switch (boundary_type)
+                 {
+                 case ATSPI_TEXT_BOUNDARY_LINE_START:
+-                  start_index = pango_layout_line_get_start_index (line);
++                  start_index = line->start_index;
+                   if (pango_layout_iter_next_line (iter))
+-                    end_index = pango_layout_line_get_start_index (pango_layout_iter_get_line (iter));
++                    end_index = pango_layout_iter_get_line (iter)->start_index;
+                   else
+-                    end_index = start_index + pango_layout_line_get_length (line);
++                    end_index = start_index + line->length;;
+                   break;
+                 case ATSPI_TEXT_BOUNDARY_LINE_END:
+                   start_index = end_index;
+-                  end_index = pango_layout_line_get_start_index (line) + pango_layout_line_get_length (line);
++                  end_index = line->start_index + line->length;
+                   break;
+                 case ATSPI_TEXT_BOUNDARY_CHAR:
+                 case ATSPI_TEXT_BOUNDARY_WORD_START:
+@@ -753,7 +753,7 @@ pango_layout_get_line_after (PangoLayout           *layout,
+ 
+   if (!found)
+     {
+-      start_index = pango_layout_line_get_start_index (prev_line) + pango_layout_line_get_length (prev_line);
++      start_index = prev_line->start_index + prev_line->length;
+       end_index = start_index;
+     }
+   pango_layout_iter_free (iter);
+diff --git a/gtk/gtkbuilder.c b/gtk/gtkbuilder.c
+index ebc19445bc..a4741963aa 100644
+--- a/gtk/gtkbuilder.c
++++ b/gtk/gtkbuilder.c
+@@ -325,6 +325,7 @@
+ #include "gtkdebug.h"
+ #include "gtkexpression.h"
+ #include "gtkmain.h"
++#include "gtkpangoprivate.h"
+ #include "gtkprivate.h"
+ #include "gtkshortcutactionprivate.h"
+ #include "gtkshortcuttrigger.h"
+@@ -2457,7 +2458,7 @@ gtk_builder_value_from_string_type (GtkBuilder   *builder,
+         {
+           PangoAttrList *attrs;
+ 
+-          attrs = pango_attr_list_from_string (string);
++          attrs = gtk_pango_attr_list_from_string (string);
+           if (attrs)
+             g_value_take_boxed (value, attrs);
+           else
+diff --git a/gtk/gtkcssstyle.c b/gtk/gtkcssstyle.c
+index 0822e80a46..b9b6c30176 100644
+--- a/gtk/gtkcssstyle.c
++++ b/gtk/gtkcssstyle.c
+@@ -638,39 +638,17 @@ gtk_css_style_get_pango_attributes (GtkCssStyle *style)
+       attrs = add_pango_attr (attrs, pango_attr_letter_spacing_new (letter_spacing * PANGO_SCALE));
+     }
+ 
+-  /* line-height */
+-  {
+-    double height = gtk_css_line_height_value_get (style->font->line_height);
+-    if (height != 0.0)
+-      {
+-        if (gtk_css_number_value_get_dimension (style->font->line_height) == GTK_CSS_DIMENSION_LENGTH)
+-          attrs = add_pango_attr (attrs, pango_attr_line_height_new_absolute (height * PANGO_SCALE));
+-        else
+-          attrs = add_pango_attr (attrs, pango_attr_line_height_new (height));
+-      }
+-   }
+-
+   /* casing variants */
+   switch (_gtk_css_font_variant_caps_value_get (style->font_variant->font_variant_caps))
+     {
+     case GTK_CSS_FONT_VARIANT_CAPS_SMALL_CAPS:
+-      attrs = add_pango_attr (attrs, pango_attr_variant_new (PANGO_VARIANT_SMALL_CAPS));
+-      break;
+     case GTK_CSS_FONT_VARIANT_CAPS_ALL_SMALL_CAPS:
+-      attrs = add_pango_attr (attrs, pango_attr_variant_new (PANGO_VARIANT_ALL_SMALL_CAPS));
+-      break;
+     case GTK_CSS_FONT_VARIANT_CAPS_PETITE_CAPS:
+-      attrs = add_pango_attr (attrs, pango_attr_variant_new (PANGO_VARIANT_PETITE_CAPS));
+-      break;
+     case GTK_CSS_FONT_VARIANT_CAPS_ALL_PETITE_CAPS:
+-      attrs = add_pango_attr (attrs, pango_attr_variant_new (PANGO_VARIANT_ALL_PETITE_CAPS));
++      attrs = add_pango_attr (attrs, pango_attr_variant_new (PANGO_VARIANT_SMALL_CAPS));
+       break;
+     case GTK_CSS_FONT_VARIANT_CAPS_UNICASE:
+-      attrs = add_pango_attr (attrs, pango_attr_variant_new (PANGO_VARIANT_UNICASE));
+-      break;
+     case GTK_CSS_FONT_VARIANT_CAPS_TITLING_CAPS:
+-      attrs = add_pango_attr (attrs, pango_attr_variant_new (PANGO_VARIANT_TITLE_CAPS));
+-      break;
+     case GTK_CSS_FONT_VARIANT_CAPS_NORMAL:
+     default:
+       break;
+@@ -687,14 +665,6 @@ gtk_css_style_get_pango_attributes (GtkCssStyle *style)
+       }
+   }
+ 
+-  /* text-transform */
+-  {
+-    PangoTextTransform transform = gtk_css_style_get_pango_text_transform (style);
+-
+-    if (transform != PANGO_TEXT_TRANSFORM_NONE)
+-      attrs = add_pango_attr (attrs, pango_attr_text_transform_new (transform));
+-  }
+-
+   return attrs;
+ }
+ 
+diff --git a/gtk/gtkcssstyleprivate.h b/gtk/gtkcssstyleprivate.h
+index 82531a6ffe..94aa973741 100644
+--- a/gtk/gtkcssstyleprivate.h
++++ b/gtk/gtkcssstyleprivate.h
+@@ -59,6 +59,16 @@ typedef enum {
+   GTK_CSS_OTHER_INITIAL_VALUES,
+ } GtkCssValuesType;
+ 
++#if !PANGO_VERSION_CHECK(1,50, 0)
++typedef enum
++{
++  PANGO_TEXT_TRANSFORM_NONE,
++  PANGO_TEXT_TRANSFORM_LOWERCASE,
++  PANGO_TEXT_TRANSFORM_UPPERCASE,
++  PANGO_TEXT_TRANSFORM_CAPITALIZE,
++} PangoTextTransform;
++#endif
++
+ typedef struct _GtkCssValues GtkCssValues;
+ typedef struct _GtkCssCoreValues GtkCssCoreValues;
+ typedef struct _GtkCssBackgroundValues GtkCssBackgroundValues;
+diff --git a/gtk/gtkfontchooserwidget.c b/gtk/gtkfontchooserwidget.c
+index 598466d027..6a78260d8b 100644
+--- a/gtk/gtkfontchooserwidget.c
++++ b/gtk/gtkfontchooserwidget.c
+@@ -67,6 +67,10 @@
+ 
+ #include <hb-ot.h>
+ 
++#if defined(HAVE_PANGOFT) && defined(HAVE_HARFBUZZ)
++#include <pango/pangofc-font.h>
++#endif
++
+ #include "language-names.h"
+ #include "open-type-layout.h"
+ 
+@@ -377,7 +381,7 @@ user_filter_cb (gpointer item,
+       PangoFontDescription *desc;
+       PangoContext *context;
+       PangoFont *font;
+-      gboolean ret;
++      gboolean ret = TRUE;
+       PangoLanguage **langs;
+ 
+       desc = pango_font_face_describe (face);
+@@ -386,17 +390,21 @@ user_filter_cb (gpointer item,
+       context = gtk_widget_get_pango_context (GTK_WIDGET (self));
+       font = pango_context_load_font (context, desc);
+ 
+-      ret = FALSE;
+-
+-      langs = pango_font_get_languages (font);
+-      if (langs)
++      if (PANGO_IS_FC_FONT (font))
+         {
+-          for (int i = 0; langs[i]; i++)
++          ret = FALSE;
++
++          langs = pango_fc_font_get_languages (PANGO_FC_FONT (font));
++
++          if (langs)
+             {
+-              if (langs[i] == self->filter_language)
++              for (int i = 0; langs[i]; i++)
+                 {
+-                  ret = TRUE;
+-                  break;
++                  if (langs[i] == self->filter_language)
++                    {
++                      ret = TRUE;
++                      break;
++                    }
+                 }
+             }
+         }
+@@ -552,7 +560,7 @@ maybe_update_preview_text (GtkFontChooserWidget *self,
+   PangoContext *context;
+   PangoFont *font;
+   const char *sample;
+-  PangoLanguage **languages;
++  PangoLanguage **languages = NULL;
+   GHashTable *langs = NULL;
+   PangoLanguage *default_lang;
+   PangoLanguage *alt_default = NULL;
+@@ -599,7 +607,8 @@ maybe_update_preview_text (GtkFontChooserWidget *self,
+       alt_default = pango_language_from_string (q);
+     }
+ 
+-  languages = pango_font_get_languages (font);
++  if (PANGO_IS_FC_FONT (font))
++    languages = pango_fc_font_get_languages (PANGO_FC_FONT (font));
+ 
+   /* If the font supports the default language, just use it. */
+   if (languages)
+@@ -1047,7 +1056,7 @@ add_languages_from_font (GtkFontChooserWidget *self,
+   PangoContext *context;
+   GtkSelectionModel *model = gtk_list_view_get_model (GTK_LIST_VIEW (self->language_list));
+   PangoLanguage *default_lang = pango_language_get_default ();
+-  PangoLanguage **langs;
++  PangoLanguage **langs = NULL;
+   int i;
+ 
+   if (PANGO_IS_FONT_FAMILY (item))
+@@ -1064,7 +1073,8 @@ add_languages_from_font (GtkFontChooserWidget *self,
+   context = gtk_widget_get_pango_context (GTK_WIDGET (self));
+   font = pango_context_load_font (context, desc);
+ 
+-  langs = pango_font_get_languages (font);
++  if (PANGO_IS_FC_FONT (font))
++    langs = pango_fc_font_get_languages (PANGO_FC_FONT (font));
+   if (langs)
+     {
+       for (i = 0; langs[i]; i++)
+diff --git a/gtk/gtkinscription.c b/gtk/gtkinscription.c
+index 25e41c3103..ea2110f2e2 100644
+--- a/gtk/gtkinscription.c
++++ b/gtk/gtkinscription.c
+@@ -480,12 +480,12 @@ gtk_inscription_allocate (GtkWidget *widget,
+             pango_layout_iter_get_line_extents (iter, NULL, &rect);
+             if (rect.y + rect.height > height * PANGO_SCALE)
+               {
+-                while (!pango_layout_line_is_paragraph_start (pango_layout_iter_get_line_readonly (iter)))
++                while (!pango_layout_iter_get_line_readonly (iter)->is_paragraph_start)
+                   {
+                     if (!pango_layout_iter_next_line (iter))
+                       break;
+                   }
+-                if (!pango_layout_line_is_paragraph_start (pango_layout_iter_get_line_readonly (iter)))
++                if (!pango_layout_iter_get_line_readonly (iter)->is_paragraph_start)
+                   {
+                     pango_layout_set_width (self->layout, -1);
+                   }
+diff --git a/gtk/gtklabel.c b/gtk/gtklabel.c
+index 8d59efe0c1..2502d72adb 100644
+--- a/gtk/gtklabel.c
++++ b/gtk/gtklabel.c
+@@ -911,8 +911,8 @@ get_cursor_direction (GtkLabel *self)
+        * definitely in this paragraph, which is good enough
+        * to figure out the resolved direction.
+        */
+-       if (pango_layout_line_get_start_index (line) + pango_layout_line_get_length (line) >= self->select_info->selection_end)
+-        return pango_layout_line_get_resolved_direction (line);
++       if (line->start_index + line->length >= self->select_info->selection_end)
++         return line->resolved_dir;
+     }
+ 
+   return PANGO_DIRECTION_LTR;
+diff --git a/gtk/gtkpango.c b/gtk/gtkpango.c
+index 68a80e5c46..69d96b43a1 100644
+--- a/gtk/gtkpango.c
++++ b/gtk/gtkpango.c
+@@ -248,39 +248,6 @@ attribute_from_text (GtkBuilder  *builder,
+                                                      color->blue * 65535);
+         }
+       break;
+-    case PANGO_ATTR_LINE_HEIGHT:
+-      if (gtk_builder_value_from_string_type (builder, G_TYPE_DOUBLE, value, &val, error))
+-        attribute = pango_attr_line_height_new (g_value_get_double (&val));
+-      break;
+-    case PANGO_ATTR_ABSOLUTE_LINE_HEIGHT:
+-      if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, error))
+-        attribute = pango_attr_line_height_new_absolute (g_value_get_int (&val) * PANGO_SCALE);
+-      break;
+-    case PANGO_ATTR_TEXT_TRANSFORM:
+-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_TEXT_TRANSFORM, value, &val, error))
+-        attribute = pango_attr_text_transform_new (g_value_get_enum (&val));
+-      break;
+-    case PANGO_ATTR_WORD:
+-      attribute = pango_attr_word_new ();
+-      break;
+-    case PANGO_ATTR_SENTENCE:
+-      attribute = pango_attr_sentence_new ();
+-      break;
+-    case PANGO_ATTR_BASELINE_SHIFT:
+-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_BASELINE_SHIFT, value, &val, NULL))
+-        attribute = pango_attr_baseline_shift_new (g_value_get_enum (&val));
+-      else if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, NULL))
+-        attribute = pango_attr_baseline_shift_new (g_value_get_enum (&val));
+-      else
+-        g_set_error (error,
+-                     GTK_BUILDER_ERROR,
+-                     GTK_BUILDER_ERROR_INVALID_VALUE,
+-                     "Could not parse '%s' as baseline shift value", value);
+-      break;
+-    case PANGO_ATTR_FONT_SCALE:
+-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_FONT_SCALE, value, &val, error))
+-        attribute = pango_attr_font_scale_new (g_value_get_enum (&val));
+-      break;
+     case PANGO_ATTR_INVALID:
+     default:
+       break;
+@@ -406,18 +373,8 @@ pango_variant_to_string (PangoVariant variant)
+       return "normal";
+     case PANGO_VARIANT_SMALL_CAPS:
+       return "small_caps";
+-    case PANGO_VARIANT_ALL_SMALL_CAPS:
+-      return "all_small_caps";
+-    case PANGO_VARIANT_PETITE_CAPS:
+-      return "petite_caps";
+-    case PANGO_VARIANT_ALL_PETITE_CAPS:
+-      return "all_petite_caps";
+-    case PANGO_VARIANT_UNICASE:
+-      return "unicase";
+-    case PANGO_VARIANT_TITLE_CAPS:
+-      return "title_caps";
+     default:
+-      g_assert_not_reached ();
++      return "unknown";
+     }
+ }
+ 
+@@ -504,3 +461,633 @@ pango_align_to_string (PangoAlignment align)
+       g_assert_not_reached ();
+     }
+ }
++
++static const char *
++get_attr_type_nick (PangoAttrType attr_type)
++{
++  GEnumClass *enum_class;
++  GEnumValue *enum_value;
++
++  enum_class = g_type_class_ref (pango_attr_type_get_type ());
++  enum_value = g_enum_get_value (enum_class, attr_type);
++  g_type_class_unref (enum_class);
++
++  return enum_value->value_nick;
++}
++
++static GType
++get_attr_value_type (PangoAttrType type)
++{
++  switch ((int)type)
++    {
++    case PANGO_ATTR_STYLE: return PANGO_TYPE_STYLE;
++    case PANGO_ATTR_WEIGHT: return PANGO_TYPE_WEIGHT;
++    case PANGO_ATTR_VARIANT: return PANGO_TYPE_VARIANT;
++    case PANGO_ATTR_STRETCH: return PANGO_TYPE_STRETCH;
++    case PANGO_ATTR_GRAVITY: return PANGO_TYPE_GRAVITY;
++    case PANGO_ATTR_GRAVITY_HINT: return PANGO_TYPE_GRAVITY_HINT;
++    case PANGO_ATTR_UNDERLINE: return PANGO_TYPE_UNDERLINE;
++    case PANGO_ATTR_OVERLINE: return PANGO_TYPE_OVERLINE;
++    default: return G_TYPE_INVALID;
++    }
++}
++
++static void
++append_enum_value (GString *str,
++                   GType    type,
++                   int      value)
++{
++  GEnumClass *enum_class;
++  GEnumValue *enum_value;
++
++  enum_class = g_type_class_ref (type);
++  enum_value = g_enum_get_value (enum_class, value);
++  g_type_class_unref (enum_class);
++
++  if (enum_value)
++    g_string_append_printf (str, " %s", enum_value->value_nick);
++  else
++    g_string_append_printf (str, " %d", value);
++}
++
++static PangoAttrInt *
++pango_attribute_as_int (PangoAttribute *attr)
++{
++  switch ((int)attr->klass->type)
++    {
++    case PANGO_ATTR_STYLE:
++    case PANGO_ATTR_WEIGHT:
++    case PANGO_ATTR_VARIANT:
++    case PANGO_ATTR_STRETCH:
++    case PANGO_ATTR_UNDERLINE:
++    case PANGO_ATTR_STRIKETHROUGH:
++    case PANGO_ATTR_RISE:
++    case PANGO_ATTR_FALLBACK:
++    case PANGO_ATTR_LETTER_SPACING:
++    case PANGO_ATTR_GRAVITY:
++    case PANGO_ATTR_GRAVITY_HINT:
++    case PANGO_ATTR_FOREGROUND_ALPHA:
++    case PANGO_ATTR_BACKGROUND_ALPHA:
++    case PANGO_ATTR_ALLOW_BREAKS:
++    case PANGO_ATTR_SHOW:
++    case PANGO_ATTR_INSERT_HYPHENS:
++    case PANGO_ATTR_OVERLINE:
++      return (PangoAttrInt *)attr;
++
++    default:
++      return NULL;
++    }
++}
++
++static PangoAttrFloat *
++pango_attribute_as_float (PangoAttribute *attr)
++{
++  switch ((int)attr->klass->type)
++    {
++    case PANGO_ATTR_SCALE:
++      return (PangoAttrFloat *)attr;
++
++    default:
++      return NULL;
++    }
++}
++
++static PangoAttrString *
++pango_attribute_as_string (PangoAttribute *attr)
++{
++  switch ((int)attr->klass->type)
++    {
++    case PANGO_ATTR_FAMILY:
++      return (PangoAttrString *)attr;
++
++    default:
++      return NULL;
++    }
++}
++
++static PangoAttrSize *
++pango_attribute_as_size (PangoAttribute *attr)
++{
++  switch ((int)attr->klass->type)
++    {
++    case PANGO_ATTR_SIZE:
++    case PANGO_ATTR_ABSOLUTE_SIZE:
++      return (PangoAttrSize *)attr;
++
++    default:
++      return NULL;
++    }
++}
++
++static PangoAttrColor *
++pango_attribute_as_color (PangoAttribute *attr)
++{
++  switch ((int)attr->klass->type)
++    {
++    case PANGO_ATTR_FOREGROUND:
++    case PANGO_ATTR_BACKGROUND:
++    case PANGO_ATTR_UNDERLINE_COLOR:
++    case PANGO_ATTR_STRIKETHROUGH_COLOR:
++    case PANGO_ATTR_OVERLINE_COLOR:
++      return (PangoAttrColor *)attr;
++
++    default:
++      return NULL;
++    }
++}
++
++static PangoAttrFontDesc *
++pango_attribute_as_font_desc (PangoAttribute *attr)
++{
++  switch ((int)attr->klass->type)
++    {
++    case PANGO_ATTR_FONT_DESC:
++      return (PangoAttrFontDesc *)attr;
++
++    default:
++      return NULL;
++    }
++}
++
++static PangoAttrFontFeatures *
++pango_attribute_as_font_features (PangoAttribute *attr)
++{
++  switch ((int)attr->klass->type)
++    {
++    case PANGO_ATTR_FONT_FEATURES:
++      return (PangoAttrFontFeatures *)attr;
++
++    default:
++      return NULL;
++    }
++}
++
++static PangoAttrLanguage *
++pango_attribute_as_language (PangoAttribute *attr)
++{
++  switch ((int)attr->klass->type)
++    {
++    case PANGO_ATTR_LANGUAGE:
++      return (PangoAttrLanguage *)attr;
++
++    default:
++      return NULL;
++    }
++}
++
++static PangoAttrShape *
++pango_attribute_as_shape (PangoAttribute *attr)
++{
++  switch ((int)attr->klass->type)
++    {
++    case PANGO_ATTR_SHAPE:
++      return (PangoAttrShape *)attr;
++
++    default:
++      return NULL;
++    }
++}
++
++static void
++attr_print (GString        *str,
++            PangoAttribute *attr)
++{
++  PangoAttrString *string;
++  PangoAttrLanguage *lang;
++  PangoAttrInt *integer;
++  PangoAttrFloat *flt;
++  PangoAttrFontDesc *font;
++  PangoAttrColor *color;
++  PangoAttrShape *shape;
++  PangoAttrSize *size;
++  PangoAttrFontFeatures *features;
++
++  g_string_append_printf (str, "%u %u ", attr->start_index, attr->end_index);
++
++  g_string_append (str, get_attr_type_nick (attr->klass->type));
++
++  if (attr->klass->type == PANGO_ATTR_WEIGHT ||
++      attr->klass->type == PANGO_ATTR_STYLE ||
++      attr->klass->type == PANGO_ATTR_STRETCH ||
++      attr->klass->type == PANGO_ATTR_VARIANT ||
++      attr->klass->type == PANGO_ATTR_GRAVITY ||
++      attr->klass->type == PANGO_ATTR_GRAVITY_HINT ||
++      attr->klass->type == PANGO_ATTR_UNDERLINE ||
++      attr->klass->type == PANGO_ATTR_OVERLINE)
++    append_enum_value (str, get_attr_value_type (attr->klass->type), ((PangoAttrInt *)attr)->value);
++  else if (attr->klass->type == PANGO_ATTR_STRIKETHROUGH ||
++           attr->klass->type == PANGO_ATTR_ALLOW_BREAKS ||
++           attr->klass->type == PANGO_ATTR_INSERT_HYPHENS ||
++           attr->klass->type == PANGO_ATTR_FALLBACK)
++    g_string_append (str, ((PangoAttrInt *)attr)->value ? " true" : " false");
++  else if ((string = pango_attribute_as_string (attr)) != NULL)
++    {
++      char *s = g_strescape (string->value, NULL);
++      g_string_append_printf (str, " \"%s\"", s);
++      g_free (s);
++    }
++  else if ((lang = pango_attribute_as_language (attr)) != NULL)
++    g_string_append_printf (str, " %s", pango_language_to_string (lang->value));
++  else if ((integer = pango_attribute_as_int (attr)) != NULL)
++    g_string_append_printf (str, " %d", integer->value);
++  else if ((flt = pango_attribute_as_float (attr)) != NULL)
++    {
++      char buf[20];
++      g_ascii_formatd (buf, 20, "%f", flt->value);
++      g_string_append_printf (str, " %s", buf);
++    }
++  else if ((font = pango_attribute_as_font_desc (attr)) != NULL)
++    {
++      char *s = pango_font_description_to_string (font->desc);
++      char *s2 = g_strescape (s, NULL);
++      g_string_append_printf (str, " \"%s\"", s2);
++      g_free (s2);
++      g_free (s);
++    }
++  else if ((color = pango_attribute_as_color (attr)) != NULL)
++    {
++      char *s = pango_color_to_string (&color->color);
++      g_string_append_printf (str, " %s", s);
++      g_free (s);
++    }
++  else if ((shape = pango_attribute_as_shape (attr)) != NULL)
++    g_string_append (str, "shape"); /* FIXME */
++  else if ((size = pango_attribute_as_size (attr)) != NULL)
++    g_string_append_printf (str, " %d", size->size);
++  else if ((features = pango_attribute_as_font_features (attr)) != NULL)
++    g_string_append_printf (str, " \"%s\"", features->features);
++  else
++    g_assert_not_reached ();
++}
++
++char *
++gtk_pango_attr_list_to_string (PangoAttrList *list)
++{
++  GSList *attrs;
++  GString *s;
++
++  s = g_string_new ("");
++
++  attrs = pango_attr_list_get_attributes (list);
++
++  if (attrs)
++    {
++      for (GSList *l = attrs; l; l = l->next)
++        {
++          PangoAttribute *attr = l->data;
++
++          if (l != attrs)
++            g_string_append (s, "\n");
++          attr_print (s, attr);
++        }
++
++      g_slist_free_full (attrs, (GDestroyNotify) pango_attribute_destroy);
++    }
++
++  return g_string_free (s, FALSE);
++}
++
++static PangoAttrType
++get_attr_type_by_nick (const char *nick,
++                       int         len)
++{
++  GEnumClass *enum_class;
++
++  enum_class = g_type_class_ref (pango_attr_type_get_type ());
++  for (GEnumValue *ev = enum_class->values; ev->value_name; ev++)
++    {
++      if (ev->value_nick && strncmp (ev->value_nick, nick, len) == 0)
++        {
++          g_type_class_unref (enum_class);
++          return (PangoAttrType) ev->value;
++        }
++    }
++
++  g_type_class_unref (enum_class);
++  return PANGO_ATTR_INVALID;
++}
++
++static int
++get_attr_value (PangoAttrType  type,
++                const char    *str,
++                int            len)
++{
++  GEnumClass *enum_class;
++  char *endp;
++  int value;
++
++  enum_class = g_type_class_ref (get_attr_value_type (type));
++  for (GEnumValue *ev = enum_class->values; ev->value_name; ev++)
++    {
++      if (ev->value_nick && strncmp (ev->value_nick, str, len) == 0)
++        {
++          g_type_class_unref (enum_class);
++          return ev->value;
++        }
++    }
++  g_type_class_unref (enum_class);
++
++  value = g_ascii_strtoll (str, &endp, 10);
++  if (endp - str == len)
++    return value;
++
++  return -1;
++}
++
++static gboolean
++is_valid_end_char (char c)
++{
++  return c == ',' || c == '\n' || c == '\0';
++}
++
++PangoAttrList *
++gtk_pango_attr_list_from_string (const char *text)
++{
++  PangoAttrList *list;
++  const char *p;
++
++  g_return_val_if_fail (text != NULL, NULL);
++
++  list = pango_attr_list_new ();
++
++  if (*text == '\0')
++    return list;
++
++  p = text + strspn (text, " \t\n");
++  while (*p)
++    {
++      char *endp;
++      gint64 start_index;
++      gint64 end_index;
++      char *str;
++      PangoAttrType attr_type;
++      PangoAttribute *attr;
++      PangoLanguage *lang;
++      gint64 integer;
++      PangoFontDescription *desc;
++      PangoColor color;
++      double num;
++      int len;
++
++      start_index = g_ascii_strtoll (p, &endp, 10);
++      if (*endp != ' ')
++        goto fail;
++
++      p = endp + strspn (endp, " ");
++      if (!*p)
++        goto fail;
++
++      end_index = g_ascii_strtoll (p, &endp, 10);
++      if (*endp != ' ')
++        goto fail;
++
++      p = endp + strspn (endp, " ");
++
++      endp = (char *)p + strcspn (p, " ");
++      attr_type = get_attr_type_by_nick (p, endp - p);
++
++      p = endp + strspn (endp, " ");
++      if (*p == '\0')
++        goto fail;
++
++#define INT_ATTR(name,type) \
++          integer = g_ascii_strtoll (p, &endp, 10); \
++          if (!is_valid_end_char (*endp)) goto fail; \
++          attr = pango_attr_##name##_new ((type)integer);
++
++#define BOOLEAN_ATTR(name,type) \
++          if (strncmp (p, "true", strlen ("true")) == 0) \
++            { \
++              integer = 1; \
++              endp = (char *)(p + strlen ("true")); \
++            } \
++          else if (strncmp (p, "false", strlen ("false")) == 0) \
++            { \
++              integer = 0; \
++              endp = (char *)(p + strlen ("false")); \
++            } \
++          else \
++            integer = g_ascii_strtoll (p, &endp, 10); \
++          if (!is_valid_end_char (*endp)) goto fail; \
++          attr = pango_attr_##name##_new ((type)integer);
++
++#define ENUM_ATTR(name, type, min, max) \
++          endp = (char *)p + strcspn (p, ",\n"); \
++          len = endp - p; \
++          while (len > 0 && p[len - 1] == ' ') \
++            len--; \
++          integer = get_attr_value (attr_type, p, len); \
++          attr = pango_attr_##name##_new ((type) CLAMP (integer, min, max));
++
++#define FLOAT_ATTR(name) \
++          num = g_ascii_strtod (p, &endp); \
++          if (!is_valid_end_char (*endp)) goto fail; \
++          attr = pango_attr_##name##_new ((float)num);
++
++#define COLOR_ATTR(name) \
++          endp = (char *)p + strcspn (p, ",\n"); \
++          if (!is_valid_end_char (*endp)) goto fail; \
++          str = g_strndup (p, endp - p); \
++          if (!pango_color_parse (&color, str)) \
++            { \
++              g_free (str); \
++              goto fail; \
++            } \
++          attr = pango_attr_##name##_new (color.red, color.green, color.blue); \
++          g_free (str);
++
++      switch (attr_type)
++        {
++        case PANGO_ATTR_INVALID:
++          pango_attr_list_unref (list);
++          return NULL;
++
++        case PANGO_ATTR_LANGUAGE:
++          endp = (char *)p + strcspn (p, ",\n");
++          if (!is_valid_end_char (*endp)) goto fail;
++          str = g_strndup (p, endp - p);
++          lang = pango_language_from_string (str);
++          attr = pango_attr_language_new (lang);
++          g_free (str);
++          break;
++
++        case PANGO_ATTR_FAMILY:
++          endp = (char *)p + strcspn (p, ",\n");
++          if (!is_valid_end_char (*endp)) goto fail;
++          if (p[0] == '"')
++            {
++              char *str2;
++
++              len = endp - p;
++              while (len > 0 && p[len - 1] == ' ')
++                len--;
++
++              if (p[len - 1] != '"') goto fail;
++
++              str2 = g_strndup (p + 1, len - 2);
++              str = g_strcompress (str2);
++              g_free (str2);
++            }
++          else
++            str = g_strndup (p, endp - p);
++          attr = pango_attr_family_new (str);
++          g_free (str);
++          break;
++
++        case PANGO_ATTR_STYLE:
++          ENUM_ATTR(style, PangoStyle, PANGO_STYLE_NORMAL, PANGO_STYLE_ITALIC);
++          break;
++
++        case PANGO_ATTR_WEIGHT:
++          ENUM_ATTR(weight, PangoWeight, PANGO_WEIGHT_THIN, PANGO_WEIGHT_ULTRAHEAVY);
++          break;
++
++        case PANGO_ATTR_VARIANT:
++          ENUM_ATTR(variant, PangoVariant, PANGO_VARIANT_NORMAL, PANGO_VARIANT_SMALL_CAPS);
++          break;
++
++        case PANGO_ATTR_STRETCH:
++          ENUM_ATTR(stretch, PangoStretch, PANGO_STRETCH_ULTRA_CONDENSED, PANGO_STRETCH_ULTRA_EXPANDED);
++          break;
++
++        case PANGO_ATTR_SIZE:
++          INT_ATTR(size, int);
++          break;
++
++        case PANGO_ATTR_FONT_DESC:
++          if (*p != '"') goto fail;
++          p++;
++          endp = strchr (p, '"');
++          if (!endp) goto fail;
++          str = g_strndup (p, endp - p);
++          desc = pango_font_description_from_string (str);
++          attr = pango_attr_font_desc_new (desc);
++          pango_font_description_free (desc);
++          g_free (str);
++          endp++;
++          if (!is_valid_end_char (*endp)) goto fail;
++          break;
++
++        case PANGO_ATTR_FOREGROUND:
++          COLOR_ATTR(foreground);
++          break;
++
++        case PANGO_ATTR_BACKGROUND:
++          COLOR_ATTR(background);
++          break;
++
++        case PANGO_ATTR_UNDERLINE:
++          ENUM_ATTR(underline, PangoUnderline, PANGO_UNDERLINE_NONE, PANGO_UNDERLINE_ERROR_LINE);
++          break;
++
++        case PANGO_ATTR_STRIKETHROUGH:
++          BOOLEAN_ATTR(strikethrough, gboolean);
++          break;
++
++        case PANGO_ATTR_RISE:
++          INT_ATTR(rise, int);
++          break;
++
++        case PANGO_ATTR_SHAPE:
++          endp = (char *)p + strcspn (p, ",\n");
++          continue; /* FIXME */
++
++        case PANGO_ATTR_SCALE:
++          FLOAT_ATTR(scale);
++          break;
++
++        case PANGO_ATTR_FALLBACK:
++          BOOLEAN_ATTR(fallback, gboolean);
++          break;
++
++        case PANGO_ATTR_LETTER_SPACING:
++          INT_ATTR(letter_spacing, int);
++          break;
++
++        case PANGO_ATTR_UNDERLINE_COLOR:
++          COLOR_ATTR(underline_color);
++          break;
++
++        case PANGO_ATTR_STRIKETHROUGH_COLOR:
++          COLOR_ATTR(strikethrough_color);
++          break;
++
++        case PANGO_ATTR_ABSOLUTE_SIZE:
++          integer = g_ascii_strtoll (p, &endp, 10);
++          if (!is_valid_end_char (*endp)) goto fail;
++          attr = pango_attr_size_new_absolute (integer);
++          break;
++
++        case PANGO_ATTR_GRAVITY:
++          ENUM_ATTR(gravity, PangoGravity, PANGO_GRAVITY_SOUTH, PANGO_GRAVITY_WEST);
++          break;
++
++        case PANGO_ATTR_FONT_FEATURES:
++          p++;
++          endp = strchr (p, '"');
++          if (!endp) goto fail;
++          str = g_strndup (p, endp - p);
++          attr = pango_attr_font_features_new (str);
++          g_free (str);
++          endp++;
++          if (!is_valid_end_char (*endp)) goto fail;
++          break;
++
++        case PANGO_ATTR_GRAVITY_HINT:
++          ENUM_ATTR(gravity_hint, PangoGravityHint, PANGO_GRAVITY_HINT_NATURAL, PANGO_GRAVITY_HINT_LINE);
++          break;
++
++        case PANGO_ATTR_FOREGROUND_ALPHA:
++          INT_ATTR(foreground_alpha, int);
++          break;
++
++        case PANGO_ATTR_BACKGROUND_ALPHA:
++          INT_ATTR(background_alpha, int);
++          break;
++
++        case PANGO_ATTR_ALLOW_BREAKS:
++          BOOLEAN_ATTR(allow_breaks, gboolean);
++          break;
++
++        case PANGO_ATTR_SHOW:
++          INT_ATTR(show, PangoShowFlags);
++          break;
++
++        case PANGO_ATTR_INSERT_HYPHENS:
++          BOOLEAN_ATTR(insert_hyphens, gboolean);
++          break;
++
++        case PANGO_ATTR_OVERLINE:
++          ENUM_ATTR(overline, PangoOverline, PANGO_OVERLINE_NONE, PANGO_OVERLINE_SINGLE);
++          break;
++
++        case PANGO_ATTR_OVERLINE_COLOR:
++          COLOR_ATTR(overline_color);
++          break;
++
++        default:
++          g_assert_not_reached ();
++        }
++
++      attr->start_index = (guint)start_index;
++      attr->end_index = (guint)end_index;
++      pango_attr_list_insert (list, attr);
++
++      p = endp;
++      if (*p)
++        {
++          if (*p == ',')
++            p++;
++          p += strspn (p, " \n");
++        }
++    }
++
++  goto success;
++
++fail:
++  pango_attr_list_unref (list);
++  list = NULL;
++
++success:
++  return list;
++}
+diff --git a/gtk/gtkpangoprivate.h b/gtk/gtkpangoprivate.h
+index b03e281582..a5528db823 100644
+--- a/gtk/gtkpangoprivate.h
++++ b/gtk/gtkpangoprivate.h
+@@ -60,5 +60,8 @@ const char *pango_style_to_string (PangoStyle style);
+ const char *pango_variant_to_string (PangoVariant variant);
+ const char *pango_align_to_string (PangoAlignment align);
+ 
++PangoAttrList * gtk_pango_attr_list_from_string (const char *text);
++char * gtk_pango_attr_list_to_string (PangoAttrList *list);
++
+ G_END_DECLS
+ 
+diff --git a/gtk/gtkrenderlayout.c b/gtk/gtkrenderlayout.c
+index 454ca2fc78..3484696774 100644
+--- a/gtk/gtkrenderlayout.c
++++ b/gtk/gtkrenderlayout.c
+@@ -258,7 +258,7 @@ gtk_css_style_snapshot_caret (GtkCssBoxes    *boxes,
+         keyboard_direction = gdk_device_get_direction (keyboard);
+     }
+ 
+-  pango_layout_get_caret_pos (layout, index, &strong_pos, &weak_pos);
++  pango_layout_get_cursor_pos (layout, index, &strong_pos, &weak_pos);
+ 
+   direction2 = PANGO_DIRECTION_NEUTRAL;
+ 
+diff --git a/gtk/gtktextbuffer.c b/gtk/gtktextbuffer.c
+index 09bb01c7d5..430df12ae1 100644
+--- a/gtk/gtktextbuffer.c
++++ b/gtk/gtktextbuffer.c
+@@ -4695,13 +4695,6 @@ insert_tags_for_attributes (GtkTextBuffer     *buffer,
+           INT_ATTR (letter_spacing);
+           break;
+ 
+-        case PANGO_ATTR_LINE_HEIGHT:
+-          FLOAT_ATTR (line_height);
+-          break;
+-
+-        case PANGO_ATTR_ABSOLUTE_LINE_HEIGHT:
+-          break;
+-
+         case PANGO_ATTR_FONT_FEATURES:
+           STRING_ATTR (font_features);
+           break;
+@@ -4718,26 +4711,6 @@ insert_tags_for_attributes (GtkTextBuffer     *buffer,
+           INT_ATTR (insert_hyphens);
+           break;
+ 
+-        case PANGO_ATTR_TEXT_TRANSFORM:
+-          INT_ATTR (text_transform);
+-          break;
+-
+-        case PANGO_ATTR_WORD:
+-          VOID_ATTR (word);
+-          break;
+-
+-        case PANGO_ATTR_SENTENCE:
+-          VOID_ATTR (sentence);
+-          break;
+-
+-        case PANGO_ATTR_BASELINE_SHIFT:
+-          INT_ATTR (baseline_shift);
+-          break;
+-
+-        case PANGO_ATTR_FONT_SCALE:
+-          INT_ATTR (font_scale);
+-          break;
+-
+         case PANGO_ATTR_SHAPE:
+         case PANGO_ATTR_ABSOLUTE_SIZE:
+         case PANGO_ATTR_GRAVITY:
+diff --git a/gtk/gtktextlayout.c b/gtk/gtktextlayout.c
+index 10e9562c48..b68e6b2e54 100644
+--- a/gtk/gtktextlayout.c
++++ b/gtk/gtktextlayout.c
+@@ -1629,18 +1629,6 @@ add_text_attrs (GtkTextLayout      *layout,
+       pango_attr_list_insert (attrs, attr);
+     }
+ 
+-  if (style->line_height != 0.0)
+-    {
+-      if (style->line_height_is_absolute)
+-        attr = pango_attr_line_height_new_absolute (style->line_height * PANGO_SCALE);
+-      else
+-        attr = pango_attr_line_height_new (style->line_height);
+-      attr->start_index = start;
+-      attr->end_index = start + byte_count;
+-
+-      pango_attr_list_insert (attrs, attr);
+-    }
+-
+   if (style->font_features)
+     {
+       attr = pango_attr_font_features_new (style->font_features);
+@@ -1674,33 +1662,6 @@ add_text_attrs (GtkTextLayout      *layout,
+       attr->start_index = start;
+       attr->end_index = start + byte_count;
+ 
+-      pango_attr_list_insert (attrs, attr);
+-    }
+-
+-  if (style->text_transform != PANGO_TEXT_TRANSFORM_NONE)
+-    {
+-      attr = pango_attr_text_transform_new (style->text_transform);
+-      attr->start_index = start;
+-      attr->end_index = start + byte_count;
+-
+-      pango_attr_list_insert (attrs, attr);
+-    }
+-
+-  if (style->word)
+-    {
+-      attr = pango_attr_word_new ();
+-      attr->start_index = start;
+-      attr->end_index = start + byte_count;
+-
+-      pango_attr_list_insert (attrs, attr);
+-    }
+-
+-  if (style->sentence)
+-    {
+-      attr = pango_attr_sentence_new ();
+-      attr->start_index = start;
+-      attr->end_index = start + byte_count;
+-
+       pango_attr_list_insert (attrs, attr);
+     }
+ }
+@@ -3087,7 +3048,7 @@ find_display_line_below (GtkTextLayout *layout,
+           int first_y, last_y;
+           PangoLayoutLine *layout_line = pango_layout_iter_get_line_readonly (layout_iter);
+ 
+-          found_byte = pango_layout_line_get_start_index (layout_line);
++          found_byte = layout_line->start_index;
+ 
+           if (line_top >= y)
+             {
+@@ -3159,7 +3120,7 @@ find_display_line_above (GtkTextLayout *layout,
+           int first_y, last_y;
+           PangoLayoutLine *layout_line = pango_layout_iter_get_line_readonly (layout_iter);
+ 
+-          found_byte = pango_layout_line_get_start_index (layout_line);
++          found_byte = layout_line->start_index;
+ 
+           pango_layout_iter_get_line_yrange (layout_iter, &first_y, &last_y);
+ 
+@@ -3292,10 +3253,10 @@ gtk_text_layout_move_iter_to_previous_line (GtkTextLayout *layout,
+ 
+   if (update_byte)
+     {
+-      line_byte = pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line);
++      line_byte = layout_line->start_index + layout_line->length;
+     }
+ 
+-  if (line_byte < pango_layout_line_get_length (layout_line) || !tmp_list->next) /* first line of paragraph */
++  if (line_byte < layout_line->length || !tmp_list->next) /* first line of paragraph */
+     {
+       GtkTextLine *prev_line;
+ 
+@@ -3317,7 +3278,7 @@ gtk_text_layout_move_iter_to_previous_line (GtkTextLayout *layout,
+               layout_line = tmp_list->data;
+ 
+               line_display_index_to_iter (layout, display, iter,
+-                                          pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line), 0);
++                                          layout_line->start_index + layout_line->length, 0);
+               break;
+             }
+ 
+@@ -3326,21 +3287,21 @@ gtk_text_layout_move_iter_to_previous_line (GtkTextLayout *layout,
+     }
+   else
+     {
+-      int prev_offset = pango_layout_line_get_start_index (layout_line);
++      int prev_offset = layout_line->start_index;
+ 
+       tmp_list = tmp_list->next;
+       while (tmp_list)
+         {
+           layout_line = tmp_list->data;
+ 
+-          if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) ||
++          if (line_byte < layout_line->start_index + layout_line->length ||
+               !tmp_list->next)
+             {
+  	      line_display_index_to_iter (layout, display, iter, prev_offset, 0);
+               break;
+             }
+ 
+-          prev_offset = pango_layout_line_get_start_index (layout_line);
++          prev_offset = layout_line->start_index;
+           tmp_list = tmp_list->next;
+         }
+     }
+@@ -3407,10 +3368,10 @@ gtk_text_layout_move_iter_to_next_line (GtkTextLayout *layout,
+           if (found)
+             {
+ 	      line_display_index_to_iter (layout, display, iter,
+-                                          pango_layout_line_get_start_index (layout_line), 0);
++                                          layout_line->start_index, 0);
+               found_after = TRUE;
+             }
+-          else if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) || !tmp_list->next)
++          else if (line_byte < layout_line->start_index + layout_line->length || !tmp_list->next)
+             found = TRUE;
+ 
+           tmp_list = tmp_list->next;
+@@ -3464,17 +3425,17 @@ gtk_text_layout_move_iter_to_line_end (GtkTextLayout *layout,
+     {
+       PangoLayoutLine *layout_line = tmp_list->data;
+ 
+-      if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) || !tmp_list->next)
++      if (line_byte < layout_line->start_index + layout_line->length || !tmp_list->next)
+         {
+  	  line_display_index_to_iter (layout, display, iter,
+- 				      direction < 0 ? pango_layout_line_get_start_index (layout_line) : pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line),
++ 				      direction < 0 ? layout_line->start_index : layout_line->start_index + layout_line->length,
+  				      0);
+ 
+           /* FIXME: As a bad hack, we move back one position when we
+ 	   * are inside a paragraph to avoid going to next line on a
+ 	   * forced break not at whitespace. Real fix is to keep track
+ 	   * of whether marks are at leading or trailing edge?  */
+-          if (direction > 0 && pango_layout_line_get_length (layout_line) > 0 &&
++          if (direction > 0 && layout_line->length > 0 &&
+ 	      !gtk_text_iter_ends_line (iter) &&
+ 	      !_gtk_text_btree_char_is_invisible (iter))
+             gtk_text_iter_backward_char (iter);
+@@ -3520,7 +3481,7 @@ gtk_text_layout_iter_starts_line (GtkTextLayout       *layout,
+     {
+       PangoLayoutLine *layout_line = tmp_list->data;
+ 
+-      if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) ||
++      if (line_byte < layout_line->start_index + layout_line->length ||
+           !tmp_list->next)
+         {
+           /* We're located on this line or the para delimiters before
+@@ -3528,7 +3489,7 @@ gtk_text_layout_iter_starts_line (GtkTextLayout       *layout,
+            */
+           gtk_text_line_display_unref (display);
+ 
+-          if (line_byte == pango_layout_line_get_start_index (layout_line))
++          if (line_byte == layout_line->start_index)
+             return TRUE;
+           else
+             return FALSE;
+@@ -3585,7 +3546,7 @@ gtk_text_layout_move_iter_to_x (GtkTextLayout *layout,
+     {
+       PangoLayoutLine *layout_line = pango_layout_iter_get_line_readonly (layout_iter);
+ 
+-      if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) ||
++      if (line_byte < layout_line->start_index + layout_line->length ||
+           pango_layout_iter_at_last_line (layout_iter))
+         {
+           PangoRectangle logical_rect;
+@@ -3910,7 +3871,7 @@ render_para (GskPangoRenderer   *crenderer,
+        * only do it if the selection is opaque.
+        */
+       if (selection_start_index < byte_offset &&
+-          selection_end_index > pango_layout_line_get_length (line) + byte_offset &&
++          selection_end_index > line->length + byte_offset &&
+           selection->alpha >= 1)
+         {
+           gtk_snapshot_append_color (crenderer->snapshot,
+@@ -3949,8 +3910,8 @@ render_para (GskPangoRenderer   *crenderer,
+            * that is after pango_layout_line_get_length (line) for the last line of the
+            * paragraph counts as part of the line for this
+            */
+-          if ((selection_start_index < byte_offset + pango_layout_line_get_length (line) ||
+-               (selection_start_index == byte_offset + pango_layout_line_get_length (line) && pango_layout_iter_at_last_line (iter))) &&
++          if ((selection_start_index < byte_offset + line->length ||
++               (selection_start_index == byte_offset + line->length && pango_layout_iter_at_last_line (iter))) &&
+               selection_end_index > byte_offset)
+             {
+               int *ranges = NULL;
+@@ -3998,7 +3959,7 @@ render_para (GskPangoRenderer   *crenderer,
+               /* Paint in the ends of the line */
+               if (line_rect.x > line_display->left_margin * PANGO_SCALE &&
+                   ((line_display->direction == GTK_TEXT_DIR_LTR && selection_start_index < byte_offset) ||
+-                   (line_display->direction == GTK_TEXT_DIR_RTL && selection_end_index > byte_offset + pango_layout_line_get_length (line))))
++                   (line_display->direction == GTK_TEXT_DIR_RTL && selection_end_index > byte_offset + line->length)))
+                 gtk_snapshot_append_color (crenderer->snapshot,
+                                            selection,
+                                            &GRAPHENE_RECT_INIT (line_display->left_margin,
+@@ -4008,7 +3969,7 @@ render_para (GskPangoRenderer   *crenderer,
+ 
+               if (line_rect.x + line_rect.width <
+                   (screen_width + line_display->left_margin) * PANGO_SCALE &&
+-                  ((line_display->direction == GTK_TEXT_DIR_LTR && selection_end_index > byte_offset + pango_layout_line_get_length (line)) ||
++                  ((line_display->direction == GTK_TEXT_DIR_LTR && selection_end_index > byte_offset + line->length) ||
+                    (line_display->direction == GTK_TEXT_DIR_RTL && selection_start_index < byte_offset)))
+                 {
+                   int nonlayout_width = line_display->left_margin
+@@ -4027,8 +3988,8 @@ render_para (GskPangoRenderer   *crenderer,
+                    gtk_widget_has_focus (crenderer->widget) &&
+                    cursor_alpha > 0 &&
+                    byte_offset <= line_display->insert_index &&
+-                   (line_display->insert_index < byte_offset + pango_layout_line_get_length (line) ||
+-                    (at_last_line && line_display->insert_index == byte_offset + pango_layout_line_get_length (line))))
++                   (line_display->insert_index < byte_offset + line->length ||
++                    (at_last_line && line_display->insert_index == byte_offset + line->length)))
+             {
+               GtkCssStyle *style;
+               GdkRGBA cursor_color;
+@@ -4063,7 +4024,7 @@ render_para (GskPangoRenderer   *crenderer,
+             }
+         }
+ 
+-      byte_offset += pango_layout_line_get_length (line);
++      byte_offset += line->length;
+     }
+   while (pango_layout_iter_next_line (iter));
+ 
+diff --git a/gtk/gtktexttag.c b/gtk/gtktexttag.c
+index 9774623b89..c3ef142864 100644
+--- a/gtk/gtktexttag.c
++++ b/gtk/gtktexttag.c
+@@ -785,10 +785,9 @@ gtk_text_tag_class_init (GtkTextTagClass *klass)
+    */
+   g_object_class_install_property (object_class,
+                                    PROP_TEXT_TRANSFORM,
+-                                   g_param_spec_enum ("text-transform", NULL, NULL,
+-                                                         PANGO_TYPE_TEXT_TRANSFORM,
+-                                                         PANGO_TEXT_TRANSFORM_NONE,
+-                                                         GTK_PARAM_READWRITE));
++                                   g_param_spec_uint ("text-transform", NULL, NULL,
++                                                      0, G_MAXUINT, 0,
++                                                      GTK_PARAM_READWRITE));
+ 
+   /**
+    * GtkTextTag:word:
+diff --git a/gtk/gtktextutil.c b/gtk/gtktextutil.c
+index 5d3146b786..f63d853443 100644
+--- a/gtk/gtktextutil.c
++++ b/gtk/gtktextutil.c
+@@ -50,8 +50,8 @@ append_n_lines (GString *str, const char *text, GSList *lines, int n_lines)
+     {
+       line = lines->data;
+       g_string_append_len (str,
+-                           &text[pango_layout_line_get_start_index (line)],
+-                           pango_layout_line_get_length (line));
++                           &text[line->start_index],
++                           line->length);
+       lines = lines->next;
+     }
+ }
+@@ -363,13 +363,13 @@ _gtk_text_util_get_block_cursor_location (PangoLayout    *layout,
+ 
+   text = pango_layout_get_text (layout);
+ 
+-  if (index < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line))
++  if (index < layout_line->start_index + layout_line->length)
+     {
+       /* this may be a zero-width character in the middle of the line,
+        * or it could be a character where line is wrapped, we do want
+        * block cursor in latter case */
+       if (g_utf8_next_char (text + index) - text !=
+-	  pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line))
++	  layout_line->start_index + layout_line->length)
+ 	{
+ 	  /* zero-width character in the middle of the line, do not
+ 	   * bother with block cursor */
+@@ -392,9 +392,9 @@ _gtk_text_util_get_block_cursor_location (PangoLayout    *layout,
+ 
+   /* In case when index points to the end of line, pos->x is always most right
+    * pixel of the layout line, so we need to correct it for RTL text. */
+-  if (pango_layout_line_get_length (layout_line))
++  if (layout_line->length)
+     {
+-      if (pango_layout_line_get_resolved_direction (layout_line) == PANGO_DIRECTION_RTL)
++      if (layout_line->resolved_dir == PANGO_DIRECTION_RTL)
+ 	{
+ 	  PangoLayoutIter *iter;
+ 	  PangoRectangle line_rect;
+diff --git a/gtk/inspector/prop-editor.c b/gtk/inspector/prop-editor.c
+index 15de3d4d23..3184e8ca8a 100644
+--- a/gtk/inspector/prop-editor.c
++++ b/gtk/inspector/prop-editor.c
+@@ -33,6 +33,7 @@
+ #include "gtkcolordialogbutton.h"
+ #include "gtkfontdialogbutton.h"
+ #include "gtklabel.h"
++#include "gtkpangoprivate.h"
+ #include "gtkpopover.h"
+ #include "gtkscrolledwindow.h"
+ #include "gtkspinbutton.h"
+@@ -365,7 +366,7 @@ attr_list_modified (GtkEntry *entry, ObjectProperty *p)
+   GValue val = G_VALUE_INIT;
+   PangoAttrList *attrs;
+ 
+-  attrs = pango_attr_list_from_string (gtk_editable_get_text (GTK_EDITABLE (entry)));
++  attrs = gtk_pango_attr_list_from_string (gtk_editable_get_text (GTK_EDITABLE (entry)));
+   if (!attrs)
+     return;
+ 
+@@ -414,7 +415,7 @@ attr_list_changed (GObject *object, GParamSpec *pspec, gpointer data)
+ 
+   attrs = g_value_get_boxed (&val);
+   if (attrs)
+-    str = pango_attr_list_to_string (attrs);
++    str = gtk_pango_attr_list_to_string (attrs);
+   if (str == NULL)
+     str = g_strdup ("");
+   text = gtk_editable_get_text (GTK_EDITABLE (entry));
+-- 
+2.43.0
+
+
+From 62228a63c461485688642acae46a57a38994aff2 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Wed, 29 Nov 2023 20:45:32 +0100
+Subject: [PATCH 09/10] build: Decrease pango/glib version
+
+---
+ meson.build | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index 998f4c08f2..a3ce04ce70 100644
+--- a/meson.build
++++ b/meson.build
+@@ -11,9 +11,9 @@ project('gtk', 'c',
+         license: 'LGPL-2.1-or-later')
+ 
+ # keep these numbers in sync with wrap files where there exist
+-glib_req           = '>= 2.76.0'
+-introspection_req  = '>= 1.76.0' # keep this in sync with glib
+-pango_req          = '>= 1.50.0' # keep this in sync with .gitlab-ci/test-msys.sh
++glib_req           = '>= 2.68.0'
++introspection_req  = '>= 1.68.0' # keep this in sync with glib
++pango_req          = '>= 1.48.0' # keep this in sync with .gitlab-ci/test-msys.sh
+ harfbuzz_req       = '>= 2.6.0'
+ fribidi_req        = '>= 1.0.6'
+ cairo_req          = '>= 1.14.0'
+-- 
+2.43.0
+
+
+From 64a07ed871fd99ea1f40204eedba6dff96ac7ad4 Mon Sep 17 00:00:00 2001
+From: Carlos Garnacho <carlosg@gnome.org>
+Date: Thu, 7 Dec 2023 17:50:56 +0100
+Subject: [PATCH 10/10] Fixups
+
+---
+ gsk/gl/gskglrenderjob.c   |  9 +--------
+ gsk/gskrendernodeimpl.c   |  6 ++----
+ gsk/gskrendernodeparser.c | 11 +++--------
+ gtk/gtkpango.c            |  2 ++
+ 4 files changed, 8 insertions(+), 20 deletions(-)
+
+diff --git a/gsk/gl/gskglrenderjob.c b/gsk/gl/gskglrenderjob.c
+index 1a3cea3e90..a75917968e 100644
+--- a/gsk/gl/gskglrenderjob.c
++++ b/gsk/gl/gskglrenderjob.c
+@@ -2980,7 +2980,6 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob      *job,
+   guint last_texture = 0;
+   GskGLDrawVertex *vertices;
+   guint used = 0;
+-  guint16 nc[4] = { FP16_MINUS_ONE, FP16_MINUS_ONE, FP16_MINUS_ONE, FP16_MINUS_ONE };
+   guint16 cc[4];
+   const guint16 *c;
+   const PangoGlyphInfo *gi;
+@@ -3019,13 +3018,7 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob      *job,
+ 
+           lookup.glyph = gi->glyph;
+ 
+-          /* If the glyph has color, we don't need to recolor anything.
+-           * We tell the shader by setting the color to vec4(-1).
+-           */
+-          if (!force_color && ((GtkPangoGlyphVisAttr*) &gi->attr)->is_color)
+-            c = nc;
+-          else
+-            c = cc;
++          c = cc;
+ 
+           cx = (float)(x_position + gi->geometry.x_offset) / PANGO_SCALE;
+           lookup.xshift = compute_phase_and_pos (x + cx, &cx);
+diff --git a/gsk/gskrendernodeimpl.c b/gsk/gskrendernodeimpl.c
+index d0043b08e6..90c9401194 100644
+--- a/gsk/gskrendernodeimpl.c
++++ b/gsk/gskrendernodeimpl.c
+@@ -5105,8 +5105,7 @@ gsk_text_node_diff (GskRenderNode  *node1,
+               info1->geometry.width == info2->geometry.width &&
+               info1->geometry.x_offset == info2->geometry.x_offset &&
+               info1->geometry.y_offset == info2->geometry.y_offset &&
+-              info1->attr.is_cluster_start == info2->attr.is_cluster_start &&
+-              ((GtkPangoGlyphVisAttr*) &info1->attr)->is_color == ((GtkPangoGlyphVisAttr*) &info2->attr)->is_color)
++              info1->attr.is_cluster_start == info2->attr.is_cluster_start)
+             continue;
+ 
+           gsk_render_node_diff_impossible (node1, node2, region);
+@@ -5185,8 +5184,7 @@ gsk_text_node_new (PangoFont              *font,
+ 
+       glyph_infos[n] = glyphs->glyphs[i];
+ 
+-      if (((GtkPangoGlyphVisAttr*) &glyphs->glyphs[i].attr)->is_color)
+-        self->has_color_glyphs = TRUE;
++      self->has_color_glyphs = FALSE;
+ 
+       n++;
+     }
+diff --git a/gsk/gskrendernodeparser.c b/gsk/gskrendernodeparser.c
+index 2c39447352..41edc8bcff 100644
+--- a/gsk/gskrendernodeparser.c
++++ b/gsk/gskrendernodeparser.c
+@@ -1014,9 +1014,8 @@ parse_glyphs (GtkCssParser *parser,
+                 gi.attr.is_cluster_start = 1;
+ 
+               if (gtk_css_parser_try_ident (parser, "color"))
+-                ((GtkPangoGlyphVisAttr*) &gi.attr)->is_color = 1;
+-              else
+-                ((GtkPangoGlyphVisAttr*) &gi.attr)->is_color = 0;
++                {
++                }
+             }
+ 
+           pango_glyph_string_set_size (glyph_string, glyph_string->num_glyphs + 1);
+@@ -2979,8 +2978,7 @@ gsk_text_node_serialize_glyphs (GskRenderNode *node,
+                   glyphs[i].geometry.width == ascii->glyphs[j].geometry.width &&
+                   glyphs[i].geometry.x_offset == 0 &&
+                   glyphs[i].geometry.y_offset == 0 &&
+-                  glyphs[i].attr.is_cluster_start &&
+-                  !((GtkPangoGlyphVisAttr*) &glyphs[i].attr)->is_color)
++                  glyphs[i].attr.is_cluster_start)
+                 {
+                   switch (j + MIN_ASCII_GLYPH)
+                     {
+@@ -3010,7 +3008,6 @@ gsk_text_node_serialize_glyphs (GskRenderNode *node,
+       g_string_append_printf (p, "%u ", glyphs[i].glyph);
+       string_append_double (p, (double) glyphs[i].geometry.width / PANGO_SCALE);
+       if (!glyphs[i].attr.is_cluster_start ||
+-          ((GtkPangoGlyphVisAttr*) &glyphs[i].attr)->is_color ||
+           glyphs[i].geometry.x_offset != 0 ||
+           glyphs[i].geometry.y_offset != 0)
+         {
+@@ -3020,8 +3017,6 @@ gsk_text_node_serialize_glyphs (GskRenderNode *node,
+           string_append_double (p, (double) glyphs[i].geometry.y_offset / PANGO_SCALE);
+           if (!glyphs[i].attr.is_cluster_start)
+             g_string_append (p, " same-cluster");
+-          if (((GtkPangoGlyphVisAttr*) &glyphs[i].attr)->is_color)
+-            g_string_append (p, " color");
+         }
+ 
+       if (i + 1 < n_glyphs)
+diff --git a/gtk/gtkpango.c b/gtk/gtkpango.c
+index 69d96b43a1..e85d2efd26 100644
+--- a/gtk/gtkpango.c
++++ b/gtk/gtkpango.c
+@@ -510,6 +510,7 @@ append_enum_value (GString *str,
+     g_string_append_printf (str, " %d", value);
+ }
+ 
++#if !PANGO_VERSION_CHECK(1, 50, 0)
+ static PangoAttrInt *
+ pango_attribute_as_int (PangoAttribute *attr)
+ {
+@@ -647,6 +648,7 @@ pango_attribute_as_shape (PangoAttribute *attr)
+       return NULL;
+     }
+ }
++#endif
+ 
+ static void
+ attr_print (GString        *str,
+-- 
+2.43.0
+

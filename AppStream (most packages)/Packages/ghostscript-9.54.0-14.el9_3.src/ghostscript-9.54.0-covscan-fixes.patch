@@ -1,0 +1,98 @@
+diff -ur ghostscript-9.54.0/base/gdevvec.c ghostscript-9.54.0-patched/base/gdevvec.c
+--- ghostscript-9.54.0/base/gdevvec.c
++++ ghostscript-9.54.0-patched/base/gdevvec.c
+@@ -643,7 +643,7 @@
+  */
+ int
+ gdev_vector_dopath_segment(gdev_vector_dopath_state_t *state, int pe_op,
+-                           gs_fixed_point vs[3])
++                           gs_fixed_point *vs)
+ {
+     gx_device_vector *vdev = state->vdev;
+     const gs_matrix *const pmat = &state->scale_mat;
+diff -ur ghostscript-9.54.0/base/gdevvec.h ghostscript-9.54.0-patched/base/gdevvec.h
+--- ghostscript-9.54.0/base/gdevvec.h
++++ ghostscript-9.54.0-patched/base/gdevvec.h
+@@ -306,7 +306,7 @@
+ 
+ /* Write a segment of a path using the default implementation. */
+ int gdev_vector_dopath_segment(gdev_vector_dopath_state_t *state, int pe_op,
+-                               gs_fixed_point vs[3]);
++                               gs_fixed_point *vs);
+ 
+ typedef struct gdev_vector_path_seg_record_s {
+     int op;
+diff -ur ghostscript-9.54.0/base/gxclpath.c ghostscript-9.54.0-patched/base/gxclpath.c
+--- ghostscript-9.54.0/base/gxclpath.c	2021-03-30 09:40:28.000000000 +0200
++++ ghostscript-9.54.0-patched/base/gxclpath.c	2021-11-23 11:06:14.670137576 +0100
+@@ -715,10 +715,10 @@
+         } else {
+             code = set_cmd_put_op(&dp, cldev, pcls, cmd_opv_set_color_space,
+                 2 + sizeof(clist_icc_color_t));
+-            memcpy(dp + 2, &(cldev->color_space.icc_info),
+-                   sizeof(clist_icc_color_t));
+             if (code < 0)
+                 return code;
++            memcpy(dp + 2, &(cldev->color_space.icc_info),
++                   sizeof(clist_icc_color_t));
+         }
+         dp[1] = cldev->color_space.byte1;
+         pcls->known |= color_space_known;
+diff -ur ghostscript-9.54.0/extract/src/mem.c ghostscript-9.54.0-patched/extract/src/mem.c
+--- ghostscript-9.54.0/extract/src/mem.c	2021-03-30 09:40:28.000000000 +0200
++++ ghostscript-9.54.0-patched/extract/src/mem.c	2021-11-23 11:11:37.293082828 +0100
+@@ -19,14 +19,24 @@
+ int extract_vasprintf(extract_alloc_t* alloc, char** out, const char* format, va_list va)
+ {
+     int n;
+-    int n2;
++    int ret;
+     va_list va2;
+     va_copy(va2, va);
+     n = vsnprintf(NULL, 0, format, va);
+-    if (n < 0) return n;
+-    if (extract_malloc(alloc, out, n + 1)) return -1;
+-    n2 = vsnprintf(*out, n + 1, format, va2);
++    if (n < 0)
++    {
++        ret = n;
++        goto end;
++    }
++    if (extract_malloc(alloc, out, n + 1))
++    {
++        ret = -1;
++        goto end;
++    }
++    vsnprintf(*out, n + 1, format, va2);
++    ret = 0;
++
++    end:
+     va_end(va2);
+-    assert(n2 == n);
+-    return n2;
++    return ret;
+ }
+diff -ur ghostscript-9.54.0/psi/icie.h ghostscript-9.54.0-patched/psi/icie.h
+--- ghostscript-9.54.0/psi/icie.h	2021-03-30 09:40:28.000000000 +0200
++++ ghostscript-9.54.0-patched/psi/icie.h	2021-10-29 12:48:43.405814563 +0200
+@@ -53,7 +53,7 @@
+ 
+ /* Get 3 procedures from a dictionary. */
+ int dict_proc3_param(const gs_memory_t *mem, const ref *pdref,
+-                     const char *kstr, ref proc3[3]);
++                     const char *kstr, ref *proc3);
+ 
+ /* Get WhitePoint and BlackPoint values. */
+ int cie_points_param(const gs_memory_t *mem,
+diff -ur ghostscript-9.54.0/psi/zcie.c ghostscript-9.54.0-patched/psi/zcie.c
+--- ghostscript-9.54.0/psi/zcie.c	2021-03-30 09:40:28.000000000 +0200
++++ ghostscript-9.54.0-patched/psi/zcie.c	2021-11-02 14:36:28.463448728 +0100
+@@ -144,7 +144,7 @@
+ 
+ /* Get 3 procedures from a dictionary. */
+ int
+-dict_proc3_param(const gs_memory_t *mem, const ref *pdref, const char *kstr, ref proc3[3])
++dict_proc3_param(const gs_memory_t *mem, const ref *pdref, const char *kstr, ref *proc3)
+ {
+     return dict_proc_array_param(mem, pdref, kstr, 3, proc3);
+ }
