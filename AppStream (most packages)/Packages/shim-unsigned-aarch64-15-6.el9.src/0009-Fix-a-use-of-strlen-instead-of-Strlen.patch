@@ -1,0 +1,28 @@
+From 1870bae796022f8bbf60465352eac329ff1d6ffd Mon Sep 17 00:00:00 2001
+From: Peter Jones <pjones@redhat.com>
+Date: Thu, 5 Sep 2019 10:36:23 -0400
+Subject: [PATCH] Fix a use of strlen() instead of Strlen()
+
+Resolves: rhbz#1817882
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+---
+ src/shim.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/shim.c b/shim.c
+index 3f131f48572..38f1346da7f 100644
+--- a/shim.c
++++ b/shim.c
+@@ -2053,7 +2053,7 @@ static int is_our_path(EFI_LOADED_IMAGE *li, CHAR16 *path)
+ 
+ 	dprint(L"dppath: %s\n", dppath);
+ 	dprint(L"path:   %s\n", path);
+-	if (StrnCaseCmp(dppath, PathName, strlen(dppath)))
++	if (StrnCaseCmp(dppath, PathName, StrLen(dppath)))
+ 		ret = 0;
+ 
+ done:
+-- 
+2.25.1
+

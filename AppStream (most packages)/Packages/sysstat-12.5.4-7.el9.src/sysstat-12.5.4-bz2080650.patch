@@ -1,0 +1,112 @@
+From 398585bfe7b1340d41143f50dfc868ef8ab9a5e4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Luk=C3=A1=C5=A1=20Zaoral?= <lzaoral@redhat.com>
+Date: Tue, 21 Feb 2023 12:43:42 +0100
+Subject: [PATCH] Tools that take --dec=X option should only accept digits
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Right now the argument of --dec is passed to atoi(3) which returns 0
+on conversion error.  Therefore, --dec=A was not rejected and was
+equivalent to --dec=0 by mistake.
+
+Signed-off-by: Lukáš Zaoral <lzaoral@redhat.com>
+---
+ cifsiostat.c | 5 +++++
+ iostat.c     | 5 +++++
+ mpstat.c     | 5 +++++
+ pidstat.c    | 5 +++++
+ sar.c        | 6 ++++++
+ 5 files changed, 26 insertions(+)
+
+diff --git a/cifsiostat.c b/cifsiostat.c
+index 375b1ff..849583b 100644
+--- a/cifsiostat.c
++++ b/cifsiostat.c
+@@ -522,6 +522,11 @@ int main(int argc, char **argv)
+ 		}
+ 
+ 		else if (!strncmp(argv[opt], "--dec=", 6) && (strlen(argv[opt]) == 7)) {
++			/* Check that the argument is a digit */
++			if (!isdigit(argv[opt][6])) {
++				usage(argv[0]);
++			}
++
+ 			/* Get number of decimal places */
+ 			dplaces_nr = atoi(argv[opt] + 6);
+ 			if ((dplaces_nr < 0) || (dplaces_nr > 2)) {
+diff --git a/iostat.c b/iostat.c
+index 1d7ea3c..7ac56ef 100644
+--- a/iostat.c
++++ b/iostat.c
+@@ -2142,6 +2142,11 @@ int main(int argc, char **argv)
+ #endif
+ 
+ 		else if (!strncmp(argv[opt], "--dec=", 6) && (strlen(argv[opt]) == 7)) {
++			/* Check that the argument is a digit */
++			if (!isdigit(argv[opt][6])) {
++				usage(argv[0]);
++			}
++
+ 			/* Get number of decimal places */
+ 			dplaces_nr = atoi(argv[opt] + 6);
+ 			if ((dplaces_nr < 0) || (dplaces_nr > 2)) {
+diff --git a/mpstat.c b/mpstat.c
+index 90d6226..5045e45 100644
+--- a/mpstat.c
++++ b/mpstat.c
+@@ -2221,6 +2221,11 @@ int main(int argc, char **argv)
+ 	while (++opt < argc) {
+ 
+ 		if (!strncmp(argv[opt], "--dec=", 6) && (strlen(argv[opt]) == 7)) {
++			/* Check that the argument is a digit */
++			if (!isdigit(argv[opt][6])) {
++				usage(argv[0]);
++			}
++
+ 			/* Get number of decimal places */
+ 			dplaces_nr = atoi(argv[opt] + 6);
+ 			if ((dplaces_nr < 0) || (dplaces_nr > 2)) {
+diff --git a/pidstat.c b/pidstat.c
+index 21fed6c..d550605 100644
+--- a/pidstat.c
++++ b/pidstat.c
+@@ -2633,6 +2633,11 @@ int main(int argc, char **argv)
+ 		}
+ 
+ 		else if (!strncmp(argv[opt], "--dec=", 6) && (strlen(argv[opt]) == 7)) {
++			/* Check that the argument is a digit */
++			if (!isdigit(argv[opt][6])) {
++				usage(argv[0]);
++			}
++
+ 			/* Get number of decimal places */
+ 			dplaces_nr = atoi(argv[opt] + 6);
+ 			if ((dplaces_nr < 0) || (dplaces_nr > 2)) {
+diff --git a/sar.c b/sar.c
+index 4f06172..7691793 100644
+--- a/sar.c
++++ b/sar.c
+@@ -28,6 +28,7 @@
+ #include <errno.h>
+ #include <signal.h>
+ #include <sys/stat.h>
++#include <ctype.h>
+ 
+ #include "version.h"
+ #include "sa.h"
+@@ -1372,6 +1373,11 @@ int main(int argc, char **argv)
+ 		}
+ 
+ 		else if (!strncmp(argv[opt], "--dec=", 6) && (strlen(argv[opt]) == 7)) {
++			/* Check that the argument is a digit */
++			if (!isdigit(argv[opt][6])) {
++				usage(argv[0]);
++			}
++
+ 			/* Get number of decimal places */
+ 			dplaces_nr = atoi(argv[opt] + 6);
+ 			if ((dplaces_nr < 0) || (dplaces_nr > 2)) {
+-- 
+2.39.2
+

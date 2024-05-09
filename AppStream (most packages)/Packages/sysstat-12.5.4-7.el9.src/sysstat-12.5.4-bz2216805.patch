@@ -1,0 +1,34 @@
+From 370ad59826c2320288a1999ef9038e2a2655b8a0 Mon Sep 17 00:00:00 2001
+From: Sebastien GODARD <sysstat@users.noreply.github.com>
+Date: Thu, 22 Jun 2023 17:47:59 +0200
+Subject: [PATCH] Add UMASK definition to sysstat(5) manual page (#362)
+
+Explain UMASK variable in sysstat(5) manual page.
+
+Signed-off-by: Sebastien GODARD <sysstat@users.noreply.github.com>
+Cherry-picked-by: Lukáš Zaoral <lzaoral@redhat.com>
+Upstream-commit: 370ad59826c2320288a1999ef9038e2a2655b8a0
+---
+ man/sysstat.in | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/man/sysstat.in b/man/sysstat.in
+index 6ce6b473..89bdd3f4 100644
+--- a/man/sysstat.in
++++ b/man/sysstat.in
+@@ -140,6 +140,15 @@ daily data files.
+ These options are used only when a new data file is created. They will be
+ ignored with an already existing one.
+ .TP
++.B UMASK
++.RB "The " "sa1" " and " "sa2"
++scripts generate system activity data and report files in the
++.IR /var/log/sa
++directory. By default the files are created with umask 0022
++and are therefore readable for all users. Change this variable to restrict
++the permissions on the files (e.g. use 0027 to adhere to more strict
++security standards).
++.TP
+ .B YESTERDAY
+ .RB "By default " "sa2"
+ script generates yesterday's summary, since the

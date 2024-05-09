@@ -1,0 +1,26 @@
+From 0f508191647a41f92264c0c8fc877b0110bbd468 Mon Sep 17 00:00:00 2001
+From: Petr Lautrbach <plautrba@redhat.com>
+Date: Tue, 10 Aug 2021 20:11:20 +0200
+Subject: [PATCH] restorecon.py: exclude more paths
+
+It doesn't make sense to run restorecon on /sys/ /proc/ and /memfd:
+---
+ src/restorecon.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/restorecon.py b/src/restorecon.py
+index e3044c742367..9594c0d59d96 100644
+--- a/src/restorecon.py
++++ b/src/restorecon.py
+@@ -39,7 +39,7 @@ def customizable(target):
+ 
+ 
+ # List of path prefixes for which this plugin is not executed
+-excluded_paths = ["/sys/fs"]
++excluded_paths = ["/sys/", "/proc/", "/memfd:"]
+ # Test if the specified path starts with some excluded prefix
+ def excluded_path(target_path):
+     for path in excluded_paths:
+-- 
+2.32.0
+

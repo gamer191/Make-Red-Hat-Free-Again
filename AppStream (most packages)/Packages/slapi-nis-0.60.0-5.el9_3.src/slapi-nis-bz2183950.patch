@@ -1,0 +1,78 @@
+From 24eeccd408d9627299231d7843ca9e65e71af3de Mon Sep 17 00:00:00 2001
+From: Alexander Bokovoy <abokovoy@redhat.com>
+Date: Tue, 21 Mar 2023 17:32:47 +0200
+Subject: [PATCH 1/2] Test the case when container is a child of the target DN
+
+We can have target DN both inside or outside of a container.
+Previously, the code did not look into the latter one. When container is
+a child of the target DN (like using IPA's base DN instead of
+cn=compat,$BASE_DN) and a search was done with a subtree scope, the
+check failed.
+
+With this change a subtree scope search which starts with a base DN
+that includes a compat tree's container would be considered for the
+search.
+
+Fixes: rhbz#2168893
+
+Signed-off-by: Alexander Bokovoy <abokovoy@redhat.com>
+---
+ src/back-sch.c | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/back-sch.c b/src/back-sch.c
+index 93746b1..e447bda 100644
+--- a/src/back-sch.c
++++ b/src/back-sch.c
+@@ -1340,11 +1340,12 @@ backend_search_find_set_dn_in_group_cb(const char *group, const char *set, bool_
+ 
+ 	if (slapi_sdn_scope_test(cbdata->target_dn,
+ 				 set_data->container_sdn,
+-				 cbdata->scope) == 1) {
++				 cbdata->scope) != 0) {
+ 		cbdata->answer = TRUE;
+-	}
+-
+-	if (slapi_sdn_issuffix(cbdata->target_dn, set_data->container_sdn) == 1) {
++	} else if ((cbdata->scope == LDAP_SCOPE_SUBTREE) &&
++		   slapi_sdn_scope_test(set_data->container_sdn,
++					cbdata->target_dn,
++					cbdata->scope) != 0) {
+ 		cbdata->answer = TRUE;
+ 	}
+ 
+-- 
+2.40.0
+
+
+From 73058645eac86b40913deec01807854e0a8bda0d Mon Sep 17 00:00:00 2001
+From: Alexander Bokovoy <abokovoy@redhat.com>
+Date: Mon, 24 Apr 2023 12:19:10 +0300
+Subject: [PATCH 2/2] Identify the container without search base check
+
+Ignore the actual search base when identifying whether a target DN is
+within a known data container. The reason is that we need to know
+whether a search would have to descent into a particular container. The
+scope validation will happen later.
+
+Signed-off-by: Alexander Bokovoy <abokovoy@redhat.com>
+---
+ src/back-sch.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/back-sch.c b/src/back-sch.c
+index e447bda..a79f61b 100644
+--- a/src/back-sch.c
++++ b/src/back-sch.c
+@@ -1340,7 +1340,7 @@ backend_search_find_set_dn_in_group_cb(const char *group, const char *set, bool_
+ 
+ 	if (slapi_sdn_scope_test(cbdata->target_dn,
+ 				 set_data->container_sdn,
+-				 cbdata->scope) != 0) {
++				 LDAP_SCOPE_SUBTREE) != 0) {
+ 		cbdata->answer = TRUE;
+ 	} else if ((cbdata->scope == LDAP_SCOPE_SUBTREE) &&
+ 		   slapi_sdn_scope_test(set_data->container_sdn,
+-- 
+2.40.0
+

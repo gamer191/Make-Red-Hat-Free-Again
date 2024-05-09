@@ -1,0 +1,127 @@
+diff --git a/src/clients/FtpClient.cc b/src/clients/FtpClient.cc
+index 747ed35..f2b7126 100644
+--- a/src/clients/FtpClient.cc
++++ b/src/clients/FtpClient.cc
+@@ -795,7 +795,8 @@ Ftp::Client::connectDataChannel()
+ bool
+ Ftp::Client::openListenSocket()
+ {
+-    return false;
++    debugs(9, 3, HERE);
++	  return false;
+ }
+ 
+ /// creates a data channel Comm close callback
+diff --git a/src/clients/FtpClient.h b/src/clients/FtpClient.h
+index eb5ea1b..e92c007 100644
+--- a/src/clients/FtpClient.h
++++ b/src/clients/FtpClient.h
+@@ -137,7 +137,7 @@ public:
+     bool sendPort();
+     bool sendPassive();
+     void connectDataChannel();
+-    bool openListenSocket();
++    virtual bool openListenSocket();
+     void switchTimeoutToDataChannel();
+ 
+     CtrlChannel ctrl; ///< FTP control channel state
+diff --git a/src/clients/FtpGateway.cc b/src/clients/FtpGateway.cc
+index 05db817..2989cd2 100644
+--- a/src/clients/FtpGateway.cc
++++ b/src/clients/FtpGateway.cc
+@@ -86,6 +86,13 @@ struct GatewayFlags {
+ class Gateway;
+ typedef void (StateMethod)(Ftp::Gateway *);
+ 
++} // namespace FTP
++
++static void ftpOpenListenSocket(Ftp::Gateway * ftpState, int fallback);
++
++namespace Ftp
++{
++
+ /// FTP Gateway: An FTP client that takes an HTTP request with an ftp:// URI,
+ /// converts it into one or more FTP commands, and then
+ /// converts one or more FTP responses into the final HTTP response.
+@@ -136,7 +143,11 @@ public:
+ 
+     /// create a data channel acceptor and start listening.
+     void listenForDataChannel(const Comm::ConnectionPointer &conn);
+-
++    virtual bool openListenSocket() {
++    		debugs(9, 3, HERE);
++				ftpOpenListenSocket(this, 0);
++        return Comm::IsConnOpen(data.conn);
++		}
+     int checkAuth(const HttpHeader * req_hdr);
+     void checkUrlpath();
+     void buildTitleUrl();
+@@ -1786,6 +1797,7 @@ ftpOpenListenSocket(Ftp::Gateway * ftpState, int fallback)
+     }
+ 
+     ftpState->listenForDataChannel(temp);
++    ftpState->data.listenConn = temp;
+ }
+ 
+ static void
+@@ -1821,13 +1833,19 @@ ftpSendPORT(Ftp::Gateway * ftpState)
+     // pull out the internal IP address bytes to send in PORT command...
+     // source them from the listen_conn->local
+ 
++    struct sockaddr_in addr;
++    socklen_t addrlen = sizeof(addr);
++    getsockname(ftpState->data.listenConn->fd, (struct sockaddr *) &addr, &addrlen);
++    unsigned char port_high = ntohs(addr.sin_port) >> 8;
++    unsigned char port_low  = ntohs(addr.sin_port) & 0xff;
++
+     struct addrinfo *AI = NULL;
+     ftpState->data.listenConn->local.getAddrInfo(AI, AF_INET);
+     unsigned char *addrptr = (unsigned char *) &((struct sockaddr_in*)AI->ai_addr)->sin_addr;
+-    unsigned char *portptr = (unsigned char *) &((struct sockaddr_in*)AI->ai_addr)->sin_port;
++    // unsigned char *portptr = (unsigned char *) &((struct sockaddr_in*)AI->ai_addr)->sin_port;
+     snprintf(cbuf, CTRL_BUFLEN, "PORT %d,%d,%d,%d,%d,%d\r\n",
+              addrptr[0], addrptr[1], addrptr[2], addrptr[3],
+-             portptr[0], portptr[1]);
++             port_high, port_low);
+     ftpState->writeCommand(cbuf);
+     ftpState->state = Ftp::Client::SENT_PORT;
+ 
+@@ -1880,14 +1898,27 @@ ftpSendEPRT(Ftp::Gateway * ftpState)
+         return;
+     }
+ 
++
++    unsigned int port;
++    struct sockaddr_storage addr;
++    socklen_t addrlen = sizeof(addr);
++    getsockname(ftpState->data.listenConn->fd, (struct sockaddr *) &addr, &addrlen);
++    if (addr.ss_family == AF_INET) {
++        struct sockaddr_in *addr4 = (struct sockaddr_in*) &addr;
++        port = ntohs( addr4->sin_port );
++    } else {
++        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *) &addr;
++        port = ntohs( addr6->sin6_port );
++    }
++
+     char buf[MAX_IPSTRLEN];
+ 
+     /* RFC 2428 defines EPRT as IPv6 equivalent to IPv4 PORT command. */
+     /* Which can be used by EITHER protocol. */
+-    snprintf(cbuf, CTRL_BUFLEN, "EPRT |%d|%s|%d|\r\n",
++    snprintf(cbuf, CTRL_BUFLEN, "EPRT |%d|%s|%u|\r\n",
+              ( ftpState->data.listenConn->local.isIPv6() ? 2 : 1 ),
+              ftpState->data.listenConn->local.toStr(buf,MAX_IPSTRLEN),
+-             ftpState->data.listenConn->local.port() );
++             port);
+ 
+     ftpState->writeCommand(cbuf);
+     ftpState->state = Ftp::Client::SENT_EPRT;
+@@ -1906,7 +1937,7 @@ ftpReadEPRT(Ftp::Gateway * ftpState)
+         ftpSendPORT(ftpState);
+         return;
+     }
+-
++    ftpState->ctrl.message = NULL;
+     ftpRestOrList(ftpState);
+ }
+ 

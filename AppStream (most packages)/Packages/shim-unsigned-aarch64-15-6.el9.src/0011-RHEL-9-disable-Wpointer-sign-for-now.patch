@@ -1,0 +1,25 @@
+From 7e7fa748c8651ca3d9fdd55f0ad891c816949ff5 Mon Sep 17 00:00:00 2001
+From: Peter Jones <pjones@redhat.com>
+Date: Fri, 6 Aug 2021 16:43:37 -0400
+Subject: [PATCH] RHEL-9: disable -Wpointer-sign for now
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+---
+ Make.defaults | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Make.defaults b/Make.defaults
+index e11ab5a7f2c..9b28720d186 100644
+--- a/Make.defaults
++++ b/Make.defaults
+@@ -42,6 +42,7 @@ EFI_LDS		= $(TOPDIR)/elf_$(ARCH)_efi.lds
+ CFLAGS		= -ggdb -O0 -fno-stack-protector -fno-strict-aliasing -fpic \
+ 		  -fshort-wchar -Wall -Wsign-compare -Werror -fno-builtin \
+ 		  -Werror=sign-compare -ffreestanding -std=gnu89 \
++		  -Wno-pointer-sign -Wno-address-of-packed-member \
+ 		  -I$(shell $(CC) -print-file-name=include) \
+ 		  "-DDEFAULT_LOADER=L\"$(DEFAULT_LOADER)\"" \
+ 		  "-DDEFAULT_LOADER_CHAR=\"$(DEFAULT_LOADER)\"" \
+-- 
+2.31.1
+

@@ -1,0 +1,24 @@
+diff --git a/src/tests/testStoreHashIndex.cc b/src/tests/testStoreHashIndex.cc
+index 0564380..fcd60b9 100644
+--- a/src/tests/testStoreHashIndex.cc
++++ b/src/tests/testStoreHashIndex.cc
+@@ -102,6 +102,8 @@ void commonInit()
+     if (inited)
+         return;
+ 
++    inited = true;
++
+     Mem::Init();
+ 
+     Config.Store.avgObjectSize = 1024;
+@@ -109,6 +111,10 @@ void commonInit()
+     Config.Store.objectsPerBucket = 20;
+ 
+     Config.Store.maxObjectSize = 2048;
++
++    Config.memShared.defaultTo(false);
++
++    Config.store_dir_select_algorithm = xstrdup("round-robin");
+ }
+ 
+ /* TODO make this a cbdata class */

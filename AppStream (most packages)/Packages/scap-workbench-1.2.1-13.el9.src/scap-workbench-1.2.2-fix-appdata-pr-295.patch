@@ -1,0 +1,81 @@
+From 408019f129027c120b71db3c029d5291e3275ea2 Mon Sep 17 00:00:00 2001
+From: Evgeny Kolesnikov <ekolesni@redhat.com>
+Date: Tue, 16 Nov 2021 00:08:32 +0100
+Subject: [PATCH] Fix appdata, desktop and icons for Linux (Freedesktop)
+
+Satisfy:
+https://specifications.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html#install_icons
+https://freedesktop.org/software/appstream/docs/chap-Quickstart.html
+---
+ CMakeLists.txt                                            | 6 +++---
+ ...ppdata.xml => org.open_scap.scap_workbench.appdata.xml | 5 +++--
+ ...kbench.desktop => org.open_scap.scap_workbench.desktop | 8 ++++----
+ 3 files changed, 10 insertions(+), 9 deletions(-)
+ rename org.open-scap.scap-workbench.appdata.xml => org.open_scap.scap_workbench.appdata.xml (92%)
+ rename scap_workbench.desktop => org.open_scap.scap_workbench.desktop (67%)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5c42e733..55eed972 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -263,13 +263,13 @@ install(FILES "man/scap-workbench.8"
+ 
+ install(DIRECTORY "share/scap-workbench"
+     DESTINATION "${CMAKE_INSTALL_DATADIR}")
+-install(FILES "scap_workbench.desktop"
++install(FILES "org.open_scap.scap_workbench.desktop"
+     DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
+ install(FILES "share/pixmaps/scap-workbench.png"
+     DESTINATION "${CMAKE_INSTALL_DATADIR}/pixmaps")
+ install(FILES "share/pixmaps/scap-workbench.svg"
+-    DESTINATION "${CMAKE_INSTALL_DATADIR}/pixmaps")
+-install(FILES "org.open-scap.scap-workbench.appdata.xml"
++    DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps")
++install(FILES "org.open_scap.scap_workbench.appdata.xml"
+     DESTINATION "${CMAKE_INSTALL_DATADIR}/metainfo")
+ 
+ if (ASCIIDOC_EXECUTABLE)
+diff --git a/org.open-scap.scap-workbench.appdata.xml b/org.open_scap.scap_workbench.appdata.xml
+similarity index 92%
+rename from org.open-scap.scap-workbench.appdata.xml
+rename to org.open_scap.scap_workbench.appdata.xml
+index bed9b05c..191796b2 100644
+--- a/org.open-scap.scap-workbench.appdata.xml
++++ b/org.open_scap.scap_workbench.appdata.xml
+@@ -1,10 +1,11 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+-<component type="desktop">
+-    <id>org.openscap.scap_workbench.desktop</id>
++<component type="desktop-application">
++    <id>org.open_scap.scap_workbench</id>
+     <metadata_license>CC0-1.0</metadata_license>
+     <project_license>GPL-3.0+</project_license>
+     <name>SCAP Workbench</name>
+     <summary>A GUI tool that serves as an SCAP scanner and provides tailoring functionality for SCAP content</summary>
++    <launchable type="desktop-id">org.open_scap.scap_workbench.desktop</launchable>
+     <description>
+         <p>
+             The main goal of this application is to lower the initial barrier of using SCAP.
+diff --git a/scap_workbench.desktop b/org.open_scap.scap_workbench.desktop
+similarity index 67%
+rename from scap_workbench.desktop
+rename to org.open_scap.scap_workbench.desktop
+index 5b4bb899..0d568b1d 100644
+--- a/scap_workbench.desktop
++++ b/org.open_scap.scap_workbench.desktop
+@@ -1,11 +1,11 @@
+ [Desktop Entry]
++Version=1.0
+ Type=Application
+ Name=SCAP Workbench
+ GenericName=SCAP Scanner and Profile Editor
+-Comment=GUI tool that allows scanning both local and remote computers using SCAP content of your choice.
++Comment=GUI tool that allows scanning both local and remote computers using SCAP content of your choice
+ TryExec=scap-workbench
+ Exec=scap-workbench
+ Icon=scap-workbench
+-Categories=System;
+-Keywords=scap;
+-X-Desktop-File-Install-Version=0.3
++Categories=System;Security;
++Keywords=SCAP;

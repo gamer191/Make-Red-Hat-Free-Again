@@ -1,0 +1,35 @@
+From 87e5db488d509fb3f88fdd5aed3d58afcc930814 Mon Sep 17 00:00:00 2001
+From: Felipe Borges <felipeborges@gnome.org>
+Date: Mon, 4 Apr 2022 10:06:07 +0200
+Subject: [PATCH] Enable webkit sandbox on GApplication.startup
+
+This needs to be done only once, so this is a good place for it.
+
+In commit 3fcb670f7385 we enabled it using Gjs "static" syntax, which
+is not available in Gjs versions older than 1.71.1.
+https://gitlab.gnome.org/GNOME/gjs/-/blob/70552bee79f644836a5e9f9a54845791b1ef7a94/NEWS#L67
+
+Let's enable it on GApplication.startup for GNOME 41.
+
+Fixes #81
+---
+ src/ui/application.js | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/ui/application.js b/src/ui/application.js
+index 53fe2b4..f84a9bc 100644
+--- a/src/ui/application.js
++++ b/src/ui/application.js
+@@ -85,6 +85,9 @@ var Application = GObject.registerClass(class Application extends Gtk.Applicatio
+     vfunc_startup() {
+         super.vfunc_startup();
+ 
++        // Enable web process sandbox
++        WebKit2.WebContext.get_default().set_sandbox_enabled(true);
++
+         this._defineStyleAndThemes();
+     }
+ 
+-- 
+GitLab
+

@@ -1,0 +1,560 @@
+From 0e48a7161be7fbabc02ba05407131be2595e9b6d Mon Sep 17 00:00:00 2001
+From: Matej Tyc <matyc@redhat.com>
+Date: Tue, 1 Dec 2020 18:46:20 +0100
+Subject: [PATCH 1/4] Implement possibility to scan by sudoers.
+
+- The remote scanning dialog got a "user is sudoer" checkbox.
+- Dry run can make use of sudo in connection with oscap-ssh.
+- The scanning procedure uses sudo invocation as part of the ssh command.
+---
+ include/OscapScannerRemoteSsh.h |  2 ++
+ include/RemoteMachineComboBox.h |  2 ++
+ src/MainWindow.cpp              |  4 ++++
+ src/OscapScannerRemoteSsh.cpp   | 28 +++++++++++++++++++------
+ src/RemoteMachineComboBox.cpp   |  7 +++++++
+ ui/RemoteMachineComboBox.ui     | 36 +++++++++++++++++++++++++++++----
+ 6 files changed, 69 insertions(+), 10 deletions(-)
+
+diff --git a/include/OscapScannerRemoteSsh.h b/include/OscapScannerRemoteSsh.h
+index d2aa7013..69eedfe4 100644
+--- a/include/OscapScannerRemoteSsh.h
++++ b/include/OscapScannerRemoteSsh.h
+@@ -36,6 +36,7 @@ class OscapScannerRemoteSsh : public OscapScannerBase
+         OscapScannerRemoteSsh();
+         virtual ~OscapScannerRemoteSsh();
+ 
++        void setUserIsSudoer(bool userIsSudoer);
+         virtual void setTarget(const QString& target);
+         virtual void setSession(ScanningSession* session);
+ 
+@@ -57,6 +58,7 @@ class OscapScannerRemoteSsh : public OscapScannerBase
+         void removeRemoteDirectory(const QString& path, const QString& desc);
+ 
+         SshConnection mSshConnection;
++        bool mUserIsSudoer;
+ };
+ 
+ #endif
+diff --git a/include/RemoteMachineComboBox.h b/include/RemoteMachineComboBox.h
+index 41a9643c..3b338127 100644
+--- a/include/RemoteMachineComboBox.h
++++ b/include/RemoteMachineComboBox.h
+@@ -44,6 +44,7 @@ class RemoteMachineComboBox : public QWidget
+ 
+         void setRecentMachineCount(unsigned int count);
+         unsigned int getRecentMachineCount() const;
++        bool userIsSudoer() const;
+ 
+     public slots:
+         void notifyTargetUsed(const QString& target);
+@@ -65,6 +66,7 @@ class RemoteMachineComboBox : public QWidget
+ 
+         QStringList mRecentTargets;
+         QComboBox* mRecentComboBox;
++        QCheckBox* mUserIsSudoer;
+ };
+ 
+ #endif
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index c9a0937b..236cfde1 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -678,6 +678,7 @@ void MainWindow::scanAsync(ScannerMode scannerMode)
+     // In the OscapScannerRemoteSsh class the port will be parsed out again...
+     const QString target = mUI.localMachineRadioButton->isChecked() ?
+         "localhost" : mUI.remoteMachineDetails->getTarget();
++    const bool userIsSudoer = mUI.remoteMachineDetails->userIsSudoer();
+ 
+     bool fetchRemoteResources = mUI.fetchRemoteResourcesCheckbox->isChecked();
+     try
+@@ -689,7 +690,10 @@ void MainWindow::scanAsync(ScannerMode scannerMode)
+             if (target == "localhost")
+                 mScanner = new OscapScannerLocal();
+             else
++            {
+                 mScanner = new OscapScannerRemoteSsh();
++                ((OscapScannerRemoteSsh *)mScanner)->setUserIsSudoer(userIsSudoer);
++            }
+ 
+             mScanner->setTarget(target);
+ 
+diff --git a/src/OscapScannerRemoteSsh.cpp b/src/OscapScannerRemoteSsh.cpp
+index dcfd6d5f..d20faf59 100644
+--- a/src/OscapScannerRemoteSsh.cpp
++++ b/src/OscapScannerRemoteSsh.cpp
+@@ -37,7 +37,8 @@ extern "C"
+ 
+ OscapScannerRemoteSsh::OscapScannerRemoteSsh():
+     OscapScannerBase(),
+-    mSshConnection(this)
++    mSshConnection(this),
++    mUserIsSudoer(false)
+ {
+     mSshConnection.setCancelRequestSource(&mCancelRequested);
+ }
+@@ -87,6 +88,11 @@ void OscapScannerRemoteSsh::setTarget(const QString& target)
+     mSshConnection.setPort(port);
+ }
+ 
++void OscapScannerRemoteSsh::setUserIsSudoer(bool userIsSudoer)
++{
++    mUserIsSudoer = userIsSudoer;
++}
++
+ void OscapScannerRemoteSsh::setSession(ScanningSession* session)
+ {
+     OscapScannerBase::setSession(session);
+@@ -99,6 +105,10 @@ void OscapScannerRemoteSsh::setSession(ScanningSession* session)
+ QStringList OscapScannerRemoteSsh::getCommandLineArgs() const
+ {
+     QStringList args("oscap-ssh");
++    if (mUserIsSudoer)
++    {
++	    args.append("--sudo");
++    }
+     args.append(mSshConnection.getTarget());
+     args.append(QString::number(mSshConnection.getPort()));
+ 
+@@ -235,19 +245,19 @@ void OscapScannerRemoteSsh::evaluate()
+ 
+     if (mScannerMode == SM_OFFLINE_REMEDIATION)
+     {
+-        args = buildOfflineRemediationArgs(inputFile,
++        args.append(buildOfflineRemediationArgs(inputFile,
+                 resultFile,
+                 reportFile,
+-                arfFile);
++                arfFile));
+     }
+     else
+     {
+-        args = buildEvaluationArgs(inputFile,
++        args.append(buildEvaluationArgs(inputFile,
+                 tailoringFile,
+                 resultFile,
+                 reportFile,
+                 arfFile,
+-                mScannerMode == SM_SCAN_ONLINE_REMEDIATION);
++                mScannerMode == SM_SCAN_ONLINE_REMEDIATION));
+     }
+ 
+     const QString sshCmd = args.join(" ");
+@@ -255,8 +265,14 @@ void OscapScannerRemoteSsh::evaluate()
+     emit infoMessage(QObject::tr("Starting the remote process..."));
+ 
+     QProcess process(this);
++    QString sudo;
++    if (mUserIsSudoer)
++    {
++	    // tell sudo not to bother to read password from the terminal
++	    sudo = " sudo -n";
++    }
+ 
+-    process.start(SCAP_WORKBENCH_LOCAL_SSH_PATH, baseArgs + QStringList(QString("cd '%1'; " SCAP_WORKBENCH_REMOTE_OSCAP_PATH " %2").arg(workingDir).arg(sshCmd)));
++    process.start(SCAP_WORKBENCH_LOCAL_SSH_PATH, baseArgs + QStringList(QString("cd '%1';" "%2 " SCAP_WORKBENCH_REMOTE_OSCAP_PATH " %3").arg(workingDir).arg(sudo).arg(sshCmd)));
+     process.waitForStarted();
+ 
+     if (process.state() != QProcess::Running)
+diff --git a/src/RemoteMachineComboBox.cpp b/src/RemoteMachineComboBox.cpp
+index 46d1b7d1..7b402344 100644
+--- a/src/RemoteMachineComboBox.cpp
++++ b/src/RemoteMachineComboBox.cpp
+@@ -41,6 +41,8 @@ RemoteMachineComboBox::RemoteMachineComboBox(QWidget* parent):
+         this, SLOT(updateHostPort(int))
+     );
+ 
++    mUserIsSudoer = mUI.userIsSudoer;
++
+     setRecentMachineCount(5);
+     syncFromQSettings();
+ 
+@@ -51,6 +53,11 @@ RemoteMachineComboBox::~RemoteMachineComboBox()
+     delete mQSettings;
+ }
+ 
++bool RemoteMachineComboBox::userIsSudoer() const
++{
++    return mUserIsSudoer->isChecked();
++}
++
+ QString RemoteMachineComboBox::getTarget() const
+ {
+     return QString("%1:%2").arg(mUI.host->text()).arg(mUI.port->value());
+diff --git a/ui/RemoteMachineComboBox.ui b/ui/RemoteMachineComboBox.ui
+index 780d06ce..f9e9665c 100644
+--- a/ui/RemoteMachineComboBox.ui
++++ b/ui/RemoteMachineComboBox.ui
+@@ -6,15 +6,24 @@
+    <rect>
+     <x>0</x>
+     <y>0</y>
+-    <width>553</width>
+-    <height>29</height>
++    <width>609</width>
++    <height>42</height>
+    </rect>
+   </property>
+   <property name="windowTitle">
+    <string>RemoteMachineComboBox</string>
+   </property>
+   <layout class="QHBoxLayout" name="horizontalLayout">
+-   <property name="margin">
++   <property name="leftMargin">
++    <number>0</number>
++   </property>
++   <property name="topMargin">
++    <number>0</number>
++   </property>
++   <property name="rightMargin">
++    <number>0</number>
++   </property>
++   <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+@@ -73,8 +82,17 @@
+    </item>
+    <item>
+     <widget class="QSpinBox" name="port">
++     <property name="enabled">
++      <bool>true</bool>
++     </property>
++     <property name="sizePolicy">
++      <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
++       <horstretch>0</horstretch>
++       <verstretch>0</verstretch>
++      </sizepolicy>
++     </property>
+      <property name="buttonSymbols">
+-      <enum>QAbstractSpinBox::UpDownArrows</enum>
++      <enum>QAbstractSpinBox::NoButtons</enum>
+      </property>
+      <property name="minimum">
+       <number>1</number>
+@@ -87,6 +105,16 @@
+      </property>
+     </widget>
+    </item>
++   <item>
++    <widget class="QCheckBox" name="userIsSudoer">
++     <property name="toolTip">
++      <string>Check if the remote user doesn't have root privileges, but they can perform administrative tasks using paswordless sudo.</string>
++     </property>
++     <property name="text">
++      <string>user is sudoer</string>
++     </property>
++    </widget>
++   </item>
+    <item>
+     <widget class="QComboBox" name="recentComboBox">
+      <property name="sizePolicy">
+
+From 1fd9bc807f1c76452c0803436efd311000d7470b Mon Sep 17 00:00:00 2001
+From: Matej Tyc <matyc@redhat.com>
+Date: Wed, 27 Jan 2021 14:33:04 +0100
+Subject: [PATCH 2/4] Updated message handling of sudo-related issues.
+
+---
+ include/OscapScannerRemoteSsh.h |  5 +++++
+ src/OscapScannerRemoteSsh.cpp   | 23 +++++++++++++++++++++++
+ 2 files changed, 28 insertions(+)
+
+diff --git a/include/OscapScannerRemoteSsh.h b/include/OscapScannerRemoteSsh.h
+index 69eedfe4..280a69da 100644
+--- a/include/OscapScannerRemoteSsh.h
++++ b/include/OscapScannerRemoteSsh.h
+@@ -43,6 +43,11 @@ class OscapScannerRemoteSsh : public OscapScannerBase
+         virtual QStringList getCommandLineArgs() const;
+         virtual void evaluate();
+ 
++    protected:
++
++       virtual void selectError(MessageType& kind, const QString& message);
++       virtual void processError(QString& message);
++
+     private:
+         void ensureConnected();
+ 
+diff --git a/src/OscapScannerRemoteSsh.cpp b/src/OscapScannerRemoteSsh.cpp
+index d20faf59..69b51373 100644
+--- a/src/OscapScannerRemoteSsh.cpp
++++ b/src/OscapScannerRemoteSsh.cpp
+@@ -344,6 +344,29 @@ void OscapScannerRemoteSsh::evaluate()
+     signalCompletion(mCancelRequested);
+ }
+ 
++void OscapScannerRemoteSsh::selectError(MessageType& kind, const QString& message)
++{
++    OscapScannerBase::selectError(kind, message);
++    if (mUserIsSudoer)
++    {
++        if (message.contains(QRegExp("^sudo:")))
++        {
++            kind = MSG_ERROR;
++        }
++    }
++
++}
++
++void OscapScannerRemoteSsh::processError(QString& message)
++{
++    OscapScannerBase::processError(message);
++    if (mUserIsSudoer && message.contains(QRegExp("^sudo:")))
++    {
++        message.replace(QRegExp("^sudo:"), "Error invoking sudo on the host:");
++        message += ".\nOnly passwordless sudo setup on the remote host is supported by scap-workbench.";
++    }
++}
++
+ void OscapScannerRemoteSsh::ensureConnected()
+ {
+     if (mSshConnection.isConnected())
+
+From 57097b3b9d6f85caa96ab2940c29e94f16382252 Mon Sep 17 00:00:00 2001
+From: Matej Tyc <matyc@redhat.com>
+Date: Thu, 28 Jan 2021 17:12:08 +0100
+Subject: [PATCH 3/4] Added documentation about setting up passwordless sudo.
+
+---
+ doc/user_manual.adoc          | 11 +++++++++++
+ src/OscapScannerRemoteSsh.cpp |  2 ++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/doc/user_manual.adoc b/doc/user_manual.adoc
+index 29ebd919..2c8501a0 100644
+--- a/doc/user_manual.adoc
++++ b/doc/user_manual.adoc
+@@ -363,6 +363,17 @@ files are not supported yet!
+ .Selecting a remote machine for scanning
+ image::scanning_remote_machine.png[align="center"]
+ 
++The remote user doesn't have to be a superuser - you can setup the remote
++`/etc/sudoers` file (using `visudo`) to enable the paswordless sudo for that particular user,
++and you check the "user is sudoer" checkbox.
++
++For example, if the scanning user is `oscap-user`, that would involve putting
++
++   oscap-user ALL=(root) NOPASSWD: /usr/bin/oscap xccdf eval *
++
++user specification into the `sudoers` file, or into a separate file
++that is included by `sudoers` s.a. `/etc/sudoers.d/99-oscap-user`.
++
+ === Enable Online Remediation (optional)
+ 
+ ****
+diff --git a/src/OscapScannerRemoteSsh.cpp b/src/OscapScannerRemoteSsh.cpp
+index 69b51373..7fa38b2e 100644
+--- a/src/OscapScannerRemoteSsh.cpp
++++ b/src/OscapScannerRemoteSsh.cpp
+@@ -364,6 +364,8 @@ void OscapScannerRemoteSsh::processError(QString& message)
+     {
+         message.replace(QRegExp("^sudo:"), "Error invoking sudo on the host:");
+         message += ".\nOnly passwordless sudo setup on the remote host is supported by scap-workbench.";
++        message += " \nTo configure a non-privileged user oscap-user to run only the oscap binary as root, "
++		"add this User Specification to your sudoers file: oscap-user ALL=(root) NOPASSWD: /usr/bin/oscap xccdf eval *";
+     }
+ }
+ 
+
+From e8daecc80ad54e95de764728f0cbe4863a67be0d Mon Sep 17 00:00:00 2001
+From: Matej Tyc <matyc@redhat.com>
+Date: Thu, 28 Jan 2021 17:45:09 +0100
+Subject: [PATCH 4/4] Added suport for the sudoers checkbox to history.
+
+Recent remote scans now encode the sudo mode into the "target" that is
+stored in the recent remote hosts list.
+---
+ include/OscapScannerRemoteSsh.h |  3 ++-
+ include/RemoteMachineComboBox.h |  2 +-
+ src/MainWindow.cpp              |  5 ++++-
+ src/OscapScannerRemoteSsh.cpp   | 30 +++++++++++++++++++++++-------
+ src/RemoteMachineComboBox.cpp   | 17 +++++++++++------
+ 5 files changed, 41 insertions(+), 16 deletions(-)
+
+diff --git a/include/OscapScannerRemoteSsh.h b/include/OscapScannerRemoteSsh.h
+index 280a69da..50214b80 100644
+--- a/include/OscapScannerRemoteSsh.h
++++ b/include/OscapScannerRemoteSsh.h
+@@ -31,11 +31,12 @@ class OscapScannerRemoteSsh : public OscapScannerBase
+     Q_OBJECT
+ 
+     public:
+-        static void splitTarget(const QString& in, QString& target, unsigned short& port);
++        static void splitTarget(const QString& in, QString& target, unsigned short& port, bool& userIsSudoer);
+ 
+         OscapScannerRemoteSsh();
+         virtual ~OscapScannerRemoteSsh();
+ 
++        bool getUserIsSudoer() const;
+         void setUserIsSudoer(bool userIsSudoer);
+         virtual void setTarget(const QString& target);
+         virtual void setSession(ScanningSession* session);
+diff --git a/include/RemoteMachineComboBox.h b/include/RemoteMachineComboBox.h
+index 3b338127..c2d946c9 100644
+--- a/include/RemoteMachineComboBox.h
++++ b/include/RemoteMachineComboBox.h
+@@ -47,7 +47,7 @@ class RemoteMachineComboBox : public QWidget
+         bool userIsSudoer() const;
+ 
+     public slots:
+-        void notifyTargetUsed(const QString& target);
++        void notifyTargetUsed(const QString& target, bool userIsSudoer);
+         void clearHistory();
+ 
+     protected slots:
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index 236cfde1..496e1724 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -763,7 +763,10 @@ void MainWindow::scanAsync(ScannerMode scannerMode)
+     );
+ 
+     if (target != "localhost")
+-        mUI.remoteMachineDetails->notifyTargetUsed(mScanner->getTarget());
++    {
++        bool userIsSudoer = ((OscapScannerRemoteSsh *)mScanner)->getUserIsSudoer();
++        mUI.remoteMachineDetails->notifyTargetUsed(mScanner->getTarget(), userIsSudoer);
++    }
+ 
+     mScanThread->start();
+ }
+diff --git a/src/OscapScannerRemoteSsh.cpp b/src/OscapScannerRemoteSsh.cpp
+index 7fa38b2e..b1c4426f 100644
+--- a/src/OscapScannerRemoteSsh.cpp
++++ b/src/OscapScannerRemoteSsh.cpp
+@@ -46,7 +46,7 @@ OscapScannerRemoteSsh::OscapScannerRemoteSsh():
+ OscapScannerRemoteSsh::~OscapScannerRemoteSsh()
+ {}
+ 
+-void OscapScannerRemoteSsh::splitTarget(const QString& in, QString& target, unsigned short& port)
++void OscapScannerRemoteSsh::splitTarget(const QString& in, QString& target, unsigned short& port, bool& userIsSudoer)
+ {
+     // NB: We dodge a bullet here because the editor will always pass a port
+     //     as the last component. A lot of checking and parsing does not need
+@@ -56,10 +56,19 @@ void OscapScannerRemoteSsh::splitTarget(const QString& in, QString& target, unsi
+     //     being there and always being the last component.
+ 
+     // FIXME: Ideally, this should split from the right side and stop after one split
+-    QStringList split = in.split(':');
++    userIsSudoer = false;
++    QStringList sudoerSplit = in.split(' ');
++    if (sudoerSplit.size() > 1)
++    {
++        if (sudoerSplit.at(1) == "sudo")
++	{
++	    userIsSudoer = true;
++	}
++    }
++    QStringList hostPortSplit = sudoerSplit.at(0).split(':');
+ 
+-    const QString portString = split.back();
+-    split.removeLast();
++    const QString portString = hostPortSplit.back();
++    hostPortSplit.removeLast();
+ 
+     {
+         bool status = false;
+@@ -69,25 +78,32 @@ void OscapScannerRemoteSsh::splitTarget(const QString& in, QString& target, unsi
+         port = status ? portCandidate : 22;
+     }
+ 
+-    target = split.join(":");
++    target = hostPortSplit.join(":");
+ }
+ 
+ void OscapScannerRemoteSsh::setTarget(const QString& target)
+ {
+-    OscapScannerBase::setTarget(target);
++    QStringList sudoerSplit = target.split(' ');
++    OscapScannerBase::setTarget(sudoerSplit.at(0));
+ 
+     if (mSshConnection.isConnected())
+         mSshConnection.disconnect();
+ 
+     QString cleanTarget;
+     unsigned short port;
++    bool userIsSudoer;
+ 
+-    splitTarget(target, cleanTarget, port);
++    splitTarget(target, cleanTarget, port, userIsSudoer);
+ 
+     mSshConnection.setTarget(cleanTarget);
+     mSshConnection.setPort(port);
+ }
+ 
++bool OscapScannerRemoteSsh::getUserIsSudoer() const
++{
++    return mUserIsSudoer;
++}
++
+ void OscapScannerRemoteSsh::setUserIsSudoer(bool userIsSudoer)
+ {
+     mUserIsSudoer = userIsSudoer;
+diff --git a/src/RemoteMachineComboBox.cpp b/src/RemoteMachineComboBox.cpp
+index 7b402344..127bdac7 100644
+--- a/src/RemoteMachineComboBox.cpp
++++ b/src/RemoteMachineComboBox.cpp
+@@ -30,7 +30,7 @@ RemoteMachineComboBox::RemoteMachineComboBox(QWidget* parent):
+ 
+ #if (QT_VERSION >= QT_VERSION_CHECK(4, 7, 0))
+     // placeholder text is only supported in Qt 4.7 onwards
+-    mUI.host->setPlaceholderText(QObject::tr("username@hostname"));
++    mUI.host->setPlaceholderText(QObject::tr("username@hostname [sudo]"));
+ #endif
+ 
+     mQSettings = new QSettings(this);
+@@ -77,11 +77,12 @@ unsigned int RemoteMachineComboBox::getRecentMachineCount() const
+     return mRecentTargets.size();
+ }
+ 
+-void RemoteMachineComboBox::notifyTargetUsed(const QString& target)
++void RemoteMachineComboBox::notifyTargetUsed(const QString& target, bool userIsSudoer)
+ {
+     QString host;
+     unsigned short port;
+-    OscapScannerRemoteSsh::splitTarget(target, host, port);
++    bool placeholder;
++    OscapScannerRemoteSsh::splitTarget(target, host, port, placeholder);
+ 
+     // skip invalid suggestions
+     if (host.isEmpty() || port == 0)
+@@ -90,7 +91,8 @@ void RemoteMachineComboBox::notifyTargetUsed(const QString& target)
+     const unsigned int machineCount = getRecentMachineCount();
+ 
+     // this moves target to the beginning of the list if it was in the list already
+-    mRecentTargets.prepend(target);
++    QString targetWithSudo = target + (userIsSudoer ? " sudo" : "");
++    mRecentTargets.prepend(targetWithSudo);
+     mRecentTargets.removeDuplicates();
+ 
+     setRecentMachineCount(machineCount);
+@@ -106,6 +108,7 @@ void RemoteMachineComboBox::clearHistory()
+ {
+     mUI.host->setText("");
+     mUI.port->setValue(22);
++    mUI.userIsSudoer->setChecked(false);
+ 
+     const unsigned int machineCount = getRecentMachineCount();
+     mRecentTargets.clear();
+@@ -167,6 +170,7 @@ void RemoteMachineComboBox::updateHostPort(int index)
+     {
+         mUI.host->setText("");
+         mUI.port->setValue(22);
++        mUI.userIsSudoer->setChecked(false);
+         return;
+     }
+ 
+@@ -179,10 +183,11 @@ void RemoteMachineComboBox::updateHostPort(int index)
+ 
+     QString host;
+     unsigned short port;
++    bool userIsSudoer;
+ 
+-    OscapScannerRemoteSsh::splitTarget(target, host, port);
++    OscapScannerRemoteSsh::splitTarget(target, host, port, userIsSudoer);
+ 
+     mUI.host->setText(host);
+     mUI.port->setValue(port);
+-
++    mUI.userIsSudoer->setChecked(userIsSudoer);
+ }

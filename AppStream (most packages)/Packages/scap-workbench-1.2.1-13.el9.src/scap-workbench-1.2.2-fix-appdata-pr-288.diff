@@ -1,0 +1,73 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 77bb3ae9..5c42e733 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -263,14 +263,14 @@ install(FILES "man/scap-workbench.8"
+ 
+ install(DIRECTORY "share/scap-workbench"
+     DESTINATION "${CMAKE_INSTALL_DATADIR}")
+-install(FILES "scap-workbench.desktop"
++install(FILES "scap_workbench.desktop"
+     DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
+ install(FILES "share/pixmaps/scap-workbench.png"
+     DESTINATION "${CMAKE_INSTALL_DATADIR}/pixmaps")
+ install(FILES "share/pixmaps/scap-workbench.svg"
+     DESTINATION "${CMAKE_INSTALL_DATADIR}/pixmaps")
+-install(FILES "scap-workbench.appdata.xml"
+-    DESTINATION "${CMAKE_INSTALL_DATADIR}/appdata")
++install(FILES "org.open-scap.scap-workbench.appdata.xml"
++    DESTINATION "${CMAKE_INSTALL_DATADIR}/metainfo")
+ 
+ if (ASCIIDOC_EXECUTABLE)
+     file(GLOB USER_MANUAL_SCREENSHOTS "${CMAKE_CURRENT_SOURCE_DIR}/doc/user_manual/*.png")
+diff --git a/scap-workbench.appdata.xml b/org.open-scap.scap-workbench.appdata.xml
+similarity index 65%
+rename from scap-workbench.appdata.xml
+rename to org.open-scap.scap-workbench.appdata.xml
+index d4288f3d..bed9b05c 100644
+--- a/scap-workbench.appdata.xml
++++ b/org.open-scap.scap-workbench.appdata.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+-<application>
+-    <id type="desktop">scap-workbench.desktop</id>
++<component type="desktop">
++    <id>org.openscap.scap_workbench.desktop</id>
+     <metadata_license>CC0-1.0</metadata_license>
+     <project_license>GPL-3.0+</project_license>
+     <name>SCAP Workbench</name>
+@@ -23,10 +23,16 @@
+         </ul>
+     </description>
+     <screenshots>
+-        <screenshot type="default" width="1280" height="720">https://github.com/OpenSCAP/scap-workbench/raw/v1-1/doc/user_manual/default_content_opened.png</screenshot>
+-        <screenshot width="1280" height="720">https://github.com/OpenSCAP/scap-workbench/raw/v1-1/doc/user_manual/intro_screenshot.png</screenshot>
+-        <screenshot width="1280" height="720">https://github.com/OpenSCAP/scap-workbench/raw/v1-1/doc/user_manual/tailoring_undo_history.png</screenshot>
++        <screenshot type="default">
++            <image type="source" width="1280" height="720">https://github.com/OpenSCAP/scap-workbench/raw/v1-1/doc/user_manual/default_content_opened.png</image>
++        </screenshot>
++        <screenshot>
++            <image type="source" width="1280" height="720">https://github.com/OpenSCAP/scap-workbench/raw/v1-1/doc/user_manual/intro_screenshot.png</image>
++        </screenshot>
++        <screenshot>
++            <image type="source" width="1280" height="720">https://github.com/OpenSCAP/scap-workbench/raw/v1-1/doc/user_manual/tailoring_undo_history.png</image>
++        </screenshot>
+     </screenshots>
+     <url type="homepage">https://www.open-scap.org/tools/scap-workbench</url>
+-    <updatecontact>open-scap-list@redhat.com</updatecontact>
+-</application>
++    <update_contact>open-scap-list@redhat.com</update_contact>
++</component>
+diff --git a/scap-workbench.desktop b/scap_workbench.desktop
+similarity index 95%
+rename from scap-workbench.desktop
+rename to scap_workbench.desktop
+index 60b67e49..5b4bb899 100644
+--- a/scap-workbench.desktop
++++ b/scap_workbench.desktop
+@@ -7,4 +7,5 @@ TryExec=scap-workbench
+ Exec=scap-workbench
+ Icon=scap-workbench
+ Categories=System;
++Keywords=scap;
+ X-Desktop-File-Install-Version=0.3

@@ -1,0 +1,26 @@
+commit 8bb6f6fd35342ab070d1a8a8ac4f2dbd18b7c063
+Author: Peter Rajnoha <prajnoha@redhat.com>
+Date:   Mon Jan 25 10:42:45 2021 +0100
+
+    modules: ucmd: dm_mpath: sync with mpath_valid changes
+    
+    Use symbolic MPATH_LOG_PRIO_NOLOG (instead of '-1') and MPATH_LOG_STDERR
+    (instead of MPATH_LOG_STDOUT which was removed) for mpathvalid_init
+    call.
+---
+ src/modules/ucmd/block/dm_mpath/dm_mpath.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/modules/ucmd/block/dm_mpath/dm_mpath.c b/src/modules/ucmd/block/dm_mpath/dm_mpath.c
+index 2c474b6..a31fee0 100644
+--- a/src/modules/ucmd/block/dm_mpath/dm_mpath.c
++++ b/src/modules/ucmd/block/dm_mpath/dm_mpath.c
+@@ -39,7 +39,7 @@ static int _dm_mpath_init(struct module *module, struct sid_ucmd_mod_ctx *ucmd_m
+ {
+ 	log_debug(MID, "init");
+ 	/* TODO - set up dm/udev logging */
+-	if (mpathvalid_init(-1, MPATH_LOG_STDIO)) {
++	if (mpathvalid_init(MPATH_LOG_PRIO_NOLOG, MPATH_LOG_STDERR)) {
+ 		log_error(MID, "failed to initialize mpathvalid");
+ 		return -1;
+ 	}

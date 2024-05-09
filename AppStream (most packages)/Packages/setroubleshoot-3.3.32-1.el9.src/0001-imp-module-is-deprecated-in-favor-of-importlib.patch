@@ -1,0 +1,71 @@
+From 2f9e575333af7c7798956f211c29a46a338155e5 Mon Sep 17 00:00:00 2001
+From: Petr Lautrbach <lautrbach@redhat.com>
+Date: Mon, 24 Jul 2023 17:33:17 +0200
+Subject: [PATCH] 'imp' module is deprecated in favor of 'importlib'
+Content-type: text/plain
+
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2224393
+---
+ src/setroubleshoot/util.py | 26 ++++++++------------------
+ 1 file changed, 8 insertions(+), 18 deletions(-)
+
+diff --git a/src/setroubleshoot/util.py b/src/setroubleshoot/util.py
+index 0e02f12de682..828a598ef1c2 100755
+--- a/src/setroubleshoot/util.py
++++ b/src/setroubleshoot/util.py
+@@ -73,6 +73,7 @@ import datetime
+ from dasbus.connection import SystemMessageBus
+ import glob
+ from gi.repository import GObject
++import importlib
+ import os
+ import pwd
+ import re
+@@ -771,37 +772,26 @@ def load_plugins(filter_glob=None):
+ 
+     # load the parent (e.g. the package containing the submodules), required for python 2.5 and above
+     module_name = plugin_base
+-    plugin_name = '__init__'
+     if module_name not in sys.modules:
+         try:
+-            import imp
+-            mod_fp, mod_path, mod_description = imp.find_module(plugin_name, [plugin_dir])
+-            mod = imp.load_module(module_name, mod_fp, mod_path, mod_description)
++            mod_spec = importlib.util.spec_from_file_location(plugin_base, plugin_dir + "/__init__.py")
++            mod = importlib.util.module_from_spec(mod_spec)
++            mod_spec.loader.exec_module(mod)
+         except Exception as e:
+             syslog.syslog(syslog.LOG_ERR, "failed to initialize plugins in %s: %s" % (plugin_dir, str(e)))
+             return []
+ 
+-        if mod_fp:
+-            mod_fp.close()
+-
+     for plugin_name in plugin_names:
+         module_name = "%s.%s" % (plugin_base, plugin_name)
+-        mod = sys.modules.get(module_name)
+-        if mod is not None:
+-            log_debug("load_plugins() %s previously imported" % module_name)
+-            plugins.append(mod.plugin())
+-            continue
++
+         try:
+-            import imp
+-            mod_fp, mod_path, mod_description = imp.find_module(plugin_name, [plugin_dir])
+-            mod = imp.load_module(module_name, mod_fp, mod_path, mod_description)
++            mod_spec = importlib.util.spec_from_file_location(module_name, plugin_dir + "/" + plugin_name + ".py")
++            mod = importlib.util.module_from_spec(mod_spec)
++            mod_spec.loader.exec_module(mod)
+             plugins.append(mod.plugin())
+         except Exception as e:
+             syslog.syslog(syslog.LOG_ERR, "failed to load %s plugin: %s" % (plugin_name, str(e)))
+ 
+-        if mod_fp:
+-            mod_fp.close()
+-
+     plugins.sort(key=cmp_to_key(sort_plugins))
+     return plugins
+ 
+-- 
+2.41.0
+

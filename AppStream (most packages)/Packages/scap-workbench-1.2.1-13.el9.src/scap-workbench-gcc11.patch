@@ -1,0 +1,13 @@
+diff --git a/src/MainWindow.cpp b/src/MainWindow.cpp
+index c9a0937..e811e83 100644
+--- a/src/MainWindow.cpp
++++ b/src/MainWindow.cpp
+@@ -409,7 +409,7 @@ void MainWindow::openFile(const QString& path, bool reload)
+ 
+         // Refill mFSWatch after opening file
+         mFSWatch->removePaths(mFSWatch->files());
+-        for (const QString path : mScanningSession->getOriginalClosure())
++        for (const QString &path : mScanningSession->getOriginalClosure())
+         {
+             mFSWatch->addPath(path);
+         }

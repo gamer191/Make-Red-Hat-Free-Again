@@ -1,0 +1,42 @@
+From 99a496dd49d0e0035b12db43e09aa3ab144bbfbc Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jan=20=C4=8Cern=C3=BD?= <jcerny@redhat.com>
+Date: Tue, 27 Jul 2021 11:14:23 +0200
+Subject: [PATCH] Do not set rpath
+
+See: https://fedoraproject.org/wiki/Changes/Broken_RPATH_will_fail_rpmbuild
+Similar to: https://github.com/OpenSCAP/openscap/pull/1765
+---
+ CMakeLists.txt | 17 -----------------
+ 1 file changed, 17 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index fe33466..77bb3ae 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -128,23 +128,6 @@ set(SCAP_WORKBENCH_LINK_LIBRARIES
+     Qt5::Widgets Qt5::XmlPatterns
+     ${OPENSCAP_LIBRARIES})
+ 
+-# ---------- RPATHS for linking
+-
+-# see https://gitlab.kitware.com/cmake/community/wikis/doc/cmake/RPATH-handling
+-
+-# when building, use the install RPATH
+-# (but later on when installing)
+-set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+-
+-set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_FULL_LIBDIR})
+-
+-# add the automatically determined parts of the RPATH
+-# which point to directories outside the build tree to the install RPATH
+-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+-
+-# Turn on RPATH for OSX
+-set(CMAKE_MACOSX_RPATH ON)
+-
+ configure_file("include/Config.h.in" "${CMAKE_CURRENT_BINARY_DIR}/Config.h")
+ # It is not trivial to make the resulting file executable :-(
+ # People will have to `bash runwrapper.sh ...` in the meantime.
+-- 
+2.31.1
+

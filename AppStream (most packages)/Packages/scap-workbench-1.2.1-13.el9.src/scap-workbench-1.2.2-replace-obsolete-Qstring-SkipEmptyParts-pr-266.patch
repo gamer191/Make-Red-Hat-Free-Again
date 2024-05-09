@@ -1,0 +1,50 @@
+From c4a7616b9c61acee077359e71db2b3ab4db8098b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jan=20=C4=8Cern=C3=BD?= <jcerny@redhat.com>
+Date: Wed, 7 Oct 2020 08:54:22 +0200
+Subject: [PATCH] Replace obsolete QString::SkipEmptyParts
+
+Starting from Qt 5.15, the enum QString::SplitBehavior is obsolete
+and Qt::SplitBehavior should be used instead.
+See:
+https://doc.qt.io/qt-5.15/qstring-obsolete.html#SplitBehavior-enum
+https://doc.qt.io/qt-5/qt.html#SplitBehaviorFlags-enum
+---
+ src/OscapCapabilities.cpp | 4 ++++
+ src/RPMOpenHelper.cpp     | 4 ++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/src/OscapCapabilities.cpp b/src/OscapCapabilities.cpp
+index 03099fb..83d75f7 100644
+--- a/src/OscapCapabilities.cpp
++++ b/src/OscapCapabilities.cpp
+@@ -86,7 +86,11 @@ void OscapCapabilities::parse(const QString& mmv)
+     if (lines.size() < 1)
+         return; // TODO: Throw exception?
+ 
++#if (QT_VERSION >= QT_VERSION_CHECK(5, 15, 0))
++    const QStringList firstLine = lines[0].split(' ', Qt::SkipEmptyParts);
++#else
+     const QStringList firstLine = lines[0].split(' ', QString::SkipEmptyParts);
++#endif
+     const QString& versionCandidate = firstLine.last();
+ 
+     if (!versionCandidate.contains(QRegExp("^([0-9]+\\.){2,}[0-9]+$")))
+diff --git a/src/RPMOpenHelper.cpp b/src/RPMOpenHelper.cpp
+index b12f109..180571b 100644
+--- a/src/RPMOpenHelper.cpp
++++ b/src/RPMOpenHelper.cpp
+@@ -54,7 +54,11 @@ RPMOpenHelper::RPMOpenHelper(const QString& path)
+         static QRegExp tailoringRE("^\\.\\/usr\\/share\\/xml\\/scap\\/[^\\/]+\\/tailoring-xccdf\\.xml+$");
+         static QRegExp inputRE("^\\.\\/usr\\/share\\/xml\\/scap\\/[^\\/]+\\/[^\\/]+\\-(xccdf|ds)\\.xml+$");
+ 
++#if (QT_VERSION >= QT_VERSION_CHECK(5, 15, 0))
++        QStringList lines = proc.getStdErrContents().split('\n', Qt::SkipEmptyParts);
++#else
+         QStringList lines = proc.getStdErrContents().split('\n', QString::SkipEmptyParts);
++#endif
+         for (QStringList::const_iterator it = lines.constBegin(); it != lines.constEnd(); ++it)
+         {
+             const QString& line = *it;
+-- 
+2.26.2
+

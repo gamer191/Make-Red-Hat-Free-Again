@@ -1,0 +1,25 @@
+From 6cfb73889129bd537115479b5756b834f4bf1070 Mon Sep 17 00:00:00 2001
+From: Michal Sekletar <msekleta@redhat.com>
+Date: Mon, 21 Feb 2022 18:42:28 +0100
+Subject: [PATCH] build: don't set RPATH on Linux
+
+---
+ SuiteSparse/SuiteSparse_config/SuiteSparse_config.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/SuiteSparse/SuiteSparse_config/SuiteSparse_config.mk b/SuiteSparse/SuiteSparse_config/SuiteSparse_config.mk
+index 1d3d18f..ee60de4 100644
+--- a/SuiteSparse/SuiteSparse_config/SuiteSparse_config.mk
++++ b/SuiteSparse/SuiteSparse_config/SuiteSparse_config.mk
+@@ -358,7 +358,7 @@ SUITESPARSE_VERSION = 5.4.0
+ 
+     ifeq ($(UNAME),Linux)
+         # add the realtime library, librt, and SuiteSparse/lib
+-        LDLIBS += -lrt -Wl,-rpath=$(INSTALL_LIB)
++        LDLIBS += -lrt
+     endif
+ 
+     #---------------------------------------------------------------------------
+-- 
+2.33.1
+

@@ -1,0 +1,59 @@
+commit 0fef0bd60ff4b359a32da52262855dfe82fe51ae
+gpg: Signature made Tue 14 Nov 2023 03:20:12 PM EST
+gpg:                using RSA key 4B35DCD2EA45C4E0783135BC8094BE9C9F4696A1
+gpg: Can't check signature: No public key
+Author: Yichun Zhang (agentzh) <yichun@openresty.com>
+Date:   Fri Nov 10 21:51:56 2023 -0800
+
+    PR31051: memory and uprobe leaks in early uprobe registraton code when errors happen
+
+diff --git a/runtime/linux/uprobes-inode.c b/runtime/linux/uprobes-inode.c
+index 997f4528d..289cce00b 100644
+--- a/runtime/linux/uprobes-inode.c
++++ b/runtime/linux/uprobes-inode.c
+@@ -529,6 +529,16 @@ stapiu_init(struct stapiu_consumer *consumers, size_t nconsumers)
+   }
+ 
+   if (unlikely(ret != 0)) {
++    for ( ;; ) {
++      struct stapiu_consumer *c = &consumers[i];
++      // protect against conceivable stapiu_refresh() at same time
++      mutex_lock(& c->consumer_lock);
++      stapiu_consumer_unreg(c);
++      mutex_unlock(& c->consumer_lock);
++      if (i == 0)
++        break;
++      i--;
++    }
+     return ret;
+   }
+ 
+@@ -545,7 +555,27 @@ stapiu_init(struct stapiu_consumer *consumers, size_t nconsumers)
+       break;
+     }
+   }
+-  return ret;
++
++  if (unlikely(ret != 0)) {
++    int j;
++    for (j = 0; j < nconsumers; ++j) {
++      struct stapiu_consumer *c = &consumers[j];
++      // protect against conceivable stapiu_refresh() at same time
++      mutex_lock(& c->consumer_lock);
++      stapiu_consumer_unreg(c);
++      mutex_unlock(& c->consumer_lock);
++    }
++    for ( ;; ) {
++      struct stapiu_consumer *c = &consumers[i];
++      stap_cleanup_task_finder_target(&c->finder);
++      if (i == 0)
++        break;
++      i--;
++    }
++    return ret;
++  }
++
++  return 0;
+ }
+ 
+ 

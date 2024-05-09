@@ -1,0 +1,29 @@
+From 659f10a0ab422251f4d6857fb34ddf1c25b21b37 Mon Sep 17 00:00:00 2001
+From: Petr Lautrbach <lautrbach@redhat.com>
+Date: Wed, 3 May 2023 09:35:28 +0200
+Subject: [PATCH] Always reset pending alarms when alarm(0)
+Content-type: text/plain
+
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=2112573
+
+Signed-off-by: Petr Lautrbach <lautrbach@redhat.com>
+---
+ src/setroubleshoot/server.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/setroubleshoot/server.py b/src/setroubleshoot/server.py
+index fd89a5448912..2b1b0b1c30d0 100755
+--- a/src/setroubleshoot/server.py
++++ b/src/setroubleshoot/server.py
+@@ -703,7 +703,7 @@ Deletes an alert from the database.
+         return ""
+ 
+     def alarm(self, timeout=10):
+-        if self.conn_ctr == 0:
++        if self.conn_ctr == 0 or timeout == 0:
+             signal.alarm(timeout)
+ 
+ 
+-- 
+2.41.0
+

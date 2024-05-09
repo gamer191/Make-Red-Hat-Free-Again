@@ -1,0 +1,34 @@
+From f9c0ade7cd9a514d4ca6f81f797284e11c56b31a Mon Sep 17 00:00:00 2001
+From: Chris White <chwhite@redhat.com>
+Date: Wed, 21 Feb 2024 15:22:44 -0500
+Subject: [PATCH] Make fill_process_comm() open comm file as READ_ONLY
+
+The fill_process_comm() opens the comm file using O_RDWR. The
+function itself does not perform a write operation on the file,
+and opening this in read and write mode can cause selinux policy
+violations where opening the file with write permission is
+restricted. Since the function itself only needs to read from this
+fd, changing this to READ_ONLY (O_RDONLY)
+
+Signed-off-by: Chris White <chwhite@redhat.com>
+Signed-off-by: John Kacur <jkacur@redhat.com>
+---
+ src/utils.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/utils.c b/src/utils.c
+index f6feca7040d8..898f4a5d06a7 100644
+--- a/src/utils.c
++++ b/src/utils.c
+@@ -55,7 +55,7 @@ int fill_process_comm(int tgid, int pid, char *comm, int comm_size)
+ 	if (retval < 0)
+ 		goto out_error;
+ 
+-	fd = open(path, O_RDWR);
++	fd = open(path, O_RDONLY);
+ 	if (fd < 0) {
+ 		log_msg("failed to open comm file at %s\n", path);
+ 		goto out_error;
+-- 
+2.43.0
+

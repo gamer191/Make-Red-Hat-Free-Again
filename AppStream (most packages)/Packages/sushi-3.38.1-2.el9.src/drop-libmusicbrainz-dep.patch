@@ -1,0 +1,244 @@
+From 93adbd744a52c32879637375885b1df4feff21f4 Mon Sep 17 00:00:00 2001
+From: Felipe Borges <felipeborges@gnome.org>
+Date: Wed, 14 Jul 2021 16:19:19 +0200
+Subject: [PATCH] Drop libmusicbrainz dependency
+
+We are only using libmusicbrainz for finding the ASIN code for a
+given artist and album.
+
+With this changes we use libsoup to query the musicbrainz API
+directly, allowing for the dependency on libmusicbrainz5 to be
+dropped.
+
+See https://musicbrainz.org/doc/MusicBrainz_API
+and https://musicbrainz.org/doc/ASIN
+---
+ flatpak/org.gnome.NautilusPreviewer.json |  11 ---
+ meson.build                              |   1 -
+ src/libsushi/meson.build                 |   1 -
+ src/libsushi/sushi-utils.c               | 110 -----------------------
+ src/viewers/audio.js                     |  30 +++++--
+ 5 files changed, 23 insertions(+), 130 deletions(-)
+
+diff --git a/flatpak/org.gnome.NautilusPreviewer.json b/flatpak/org.gnome.NautilusPreviewer.json
+index 22502f7..4291a26 100644
+--- a/flatpak/org.gnome.NautilusPreviewer.json
++++ b/flatpak/org.gnome.NautilusPreviewer.json
+@@ -86,17 +86,6 @@
+                 }
+             ]
+         },
+-        {
+-            "name": "libmusicbrainz",
+-            "buildsystem": "cmake",
+-            "sources": [
+-                {
+-                    "type": "archive",
+-                    "url": "https://github.com/metabrainz/libmusicbrainz/releases/download/release-5.1.0/libmusicbrainz-5.1.0.tar.gz",
+-                    "sha256": "6749259e89bbb273f3f5ad7acdffb7c47a2cf8fcaeab4c4695484cef5f4c6b46"
+-                }
+-            ]
+-        },
+         {
+             "name": "gtksourceview",
+             "config-opts": [
+diff --git a/meson.build b/meson.build
+index 21a292a..c712397 100644
+--- a/meson.build
++++ b/meson.build
+@@ -21,7 +21,6 @@ gtk_x11_dep = dependency('gtk+-x11-3.0', required: get_option('X11'))
+ gtk_wayland_dep = dependency('gtk+-wayland-3.0', version: '>= 3.21.5', required: get_option('wayland'))
+ gtksourceview_dep = dependency('gtksourceview-4', version: '>=4.0.3')
+ harfbuzz_dep = dependency('harfbuzz', version: '>=0.9.9')
+-musicbrainz_dep = dependency('libmusicbrainz5')
+ webkit_dep = dependency('webkit2gtk-4.0')
+ 
+ bindir = join_paths(get_option('prefix'), get_option('bindir'))
+diff --git a/src/libsushi/meson.build b/src/libsushi/meson.build
+index fe2e874..8740954 100644
+--- a/src/libsushi/meson.build
++++ b/src/libsushi/meson.build
+@@ -39,7 +39,6 @@ libsushi_deps = [
+   gstreamer_video_dep,
+   gtk_dep,
+   harfbuzz_dep,
+-  musicbrainz_dep
+ ]
+ 
+ libsushi_sources = [
+diff --git a/src/libsushi/sushi-utils.c b/src/libsushi/sushi-utils.c
+index 5096fe4..d39b3f4 100644
+--- a/src/libsushi/sushi-utils.c
++++ b/src/libsushi/sushi-utils.c
+@@ -27,7 +27,6 @@
+ 
+ #include <glib/gstdio.h>
+ #include <gtk/gtk.h>
+-#include <musicbrainz5/mb5_c.h>
+ 
+ #ifdef GDK_WINDOWING_X11
+ #include <gdk/gdkx.h>
+@@ -400,112 +399,3 @@ sushi_pixbuf_from_gst_sample (GstSample *sample,
+ 
+   return pixbuf;
+ }
+-
+-typedef struct {
+-  gchar *artist;
+-  gchar *album;
+-} FetchUriTaskData;
+-
+-static void
+-fetch_uri_task_data_free (gpointer user_data)
+-{
+-  FetchUriTaskData *data = user_data;
+-
+-  g_free (data->artist);
+-  g_free (data->album);
+-
+-  g_slice_free (FetchUriTaskData, data);
+-}
+-
+-static FetchUriTaskData *
+-fetch_uri_task_data_new (const gchar *artist,
+-                         const gchar *album)
+-{
+-  FetchUriTaskData *retval;
+-
+-  retval = g_slice_new0 (FetchUriTaskData);
+-  retval->artist = g_strdup (artist);
+-  retval->album = g_strdup (album);
+-
+-  return retval;
+-}
+-
+-static void
+-fetch_uri_job (GTask *task,
+-               gpointer source_object,
+-               gpointer task_data,
+-               GCancellable *cancellable)
+-{
+-  FetchUriTaskData *data = task_data;
+-  g_autofree gchar *retval = NULL;
+-  g_auto(GStrv) param_names = NULL, param_values = NULL;
+-  Mb5Metadata metadata;
+-  Mb5Query query;
+-  Mb5Release release;
+-  Mb5ReleaseList release_list;
+-
+-  query = mb5_query_new ("sushi", NULL, 0);
+-
+-  param_names = g_new (gchar*, 3);
+-  param_values = g_new (gchar*, 3);
+-
+-  param_names[0] = g_strdup ("query");
+-  param_values[0] = g_strdup_printf ("artist:\"%s\" AND release:\"%s\"", data->artist, data->album);
+-
+-  param_names[1] = g_strdup ("limit");
+-  param_values[1] = g_strdup ("10");
+-
+-  param_names[2] = NULL;
+-  param_values[2] = NULL;
+-
+-  metadata = mb5_query_query (query, "release", "", "",
+-                              2, param_names, param_values);
+-
+-  mb5_query_delete (query);
+-
+-  if (metadata) {
+-    release_list = mb5_metadata_get_releaselist (metadata);
+-    int i;
+-    int release_list_length = mb5_release_list_size (release_list);
+-    for (i = 0; i < release_list_length; i++) {
+-      gchar asin[255];
+-
+-      release = mb5_release_list_item (release_list, i);
+-      mb5_release_get_asin (release, asin, 255);
+-
+-      if (asin != NULL && asin[0] != '\0') {
+-        retval = g_strdup (asin);
+-        break;
+-      }
+-    }
+-  }
+-  mb5_metadata_delete (metadata);
+-
+-  if (retval == NULL)
+-    g_task_return_new_error (task,
+-                             G_IO_ERROR,
+-                             G_IO_ERROR_NOT_FOUND, "%s",
+-                             "Error getting the ASIN from MusicBrainz");
+-  else
+-    g_task_return_pointer (task, g_steal_pointer (&retval), g_free);
+-}
+-
+-gchar *
+-sushi_get_asin_for_track_finish (GAsyncResult *result,
+-                                 GError **error)
+-{
+-  return g_task_propagate_pointer (G_TASK (result), error);
+-}
+-
+-void
+-sushi_get_asin_for_track (const gchar *artist,
+-                          const gchar *album,
+-                          GAsyncReadyCallback callback,
+-                          gpointer user_data)
+-{
+-  g_autoptr(GTask) task = g_task_new (NULL, NULL, callback, user_data);
+-  FetchUriTaskData *data = fetch_uri_task_data_new (artist, album);
+-
+-  g_task_set_task_data (task, data, fetch_uri_task_data_free);
+-  g_task_run_in_thread (task, fetch_uri_job);
+-}
+diff --git a/src/viewers/audio.js b/src/viewers/audio.js
+index f210165..dba474e 100644
+--- a/src/viewers/audio.js
++++ b/src/viewers/audio.js
+@@ -47,6 +47,7 @@ function _formatTimeString(timeVal) {
+ }
+ 
+ const AMAZON_IMAGE_FORMAT = "http://images.amazon.com/images/P/%s.01.LZZZZZZZ.jpg";
++const MUSIC_BRAINZ_ASIN_FORMAT = "https://musicbrainz.org/ws/2/release/?query=release:\"%s\"AND artist:\"%s\"&limit=1&fmt=json&inc=asin";
+ const fetchCoverArt = function(_tagList, _callback) {
+     function _fetchFromTags() {
+         let coverSample = null;
+@@ -191,13 +192,28 @@ const fetchCoverArt = function(_tagList, _callback) {
+         let artist = _tagList.get_string('artist')[1];
+         let album = _tagList.get_string('album')[1];
+ 
+-        Sushi.get_asin_for_track(artist, album, (o, res) => {
+-            let asin
+-            try {
+-                asin = Sushi.get_asin_for_track_finish(res);
+-            } catch (e) {
+-                done(e, null);
+-                return;
++        let uri = MUSIC_BRAINZ_ASIN_FORMAT.format(album, artist);
++        let session = new Soup.SessionAsync();
++
++        let request;
++        try {
++            request = Soup.Message.new('GET', uri);
++            request.request_headers.append('User-Agent', 'gnome-sushi');
++        } catch (e) {
++            done(e, null);
++            return;
++        }
++
++        session.queue_message(request, (r, res) => {
++            let asin = null;
++            if (request.status_code == Soup.Status.OK) {
++                try {
++                    let json_response = JSON.parse(request.response_body.data);
++                    asin = json_response['release'][0]['asin'].toString();
++                } catch (e) {
++                    done(e, null);
++                    return;
++                }
+             }
+ 
+             _fetchFromCache(asin, (err, cover) => {
+-- 
+2.31.1
+

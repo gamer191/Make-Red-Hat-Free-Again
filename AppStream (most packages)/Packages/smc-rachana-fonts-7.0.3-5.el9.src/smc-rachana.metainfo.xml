@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+ <component type="font">
+   <id>com.smcrachana</id>
+   <metadata_license>CC-BY-3.0</metadata_license>
+   <project_license>OFL-1.1</project_license>
+   <name>smc-rachana</name>
+   <summary>Open Type Fonts for Malayalam script.</summary>
+   <description>
+     <p>
+      Rachana is Malayalam font designed by Hussain K H. The project was part of Rachana
+	Aksharavedi for the original script of Malayalam in the digital computing.
+     </p>
+   </description>
+
+   <updatecontact>vishalvijayraghavan_at_gmail_dot_com</updatecontact>
+   <url type="homepage">https://gitlab.com/smc/fonts/rachana</url>
+   <provides>
+     <font>Rachana Bold</font>
+     <font>Rachana Regular</font>
+   </provides>
+ </component>

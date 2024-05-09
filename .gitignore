@@ -15,7 +15,6 @@ AppStream (most packages)/Packages/m*
 AppStream (most packages)/Packages/n*
 AppStream (most packages)/Packages/open*
 AppStream (most packages)/Packages/qt5-*
-AppStream (most packages)/Packages/s*
 BaseOS
 
 # this .tar file is too big for Github (over 100mb), and contains symbolic links making it hard to extract using Windows. I'll add it back later (using my Linux VM)
