@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+ * This file is part of the LibreOffice project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ -->
+<helpdocument version="1.0">
+<meta>
+<topic id="textswriter0105170000xml" indexer="include" status="PUBLISH">
+<title id="tit" xml-lang="en-US">Load Styles</title>
+<filename>/text/swriter/01/05170000.xhp</filename>
+</topic>
+<history>
+<created date="2003-10-31T00:00:00">Sun Microsystems, Inc.</created>
+</history>
+</meta>
+<body>
+<bookmark xml-lang="en-US" branch="hid/.uno:LoadStyles" id="bm_id6197481" localize="false"/>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/@@nowidget@@" id="@@nowidget@@" localize="false"/>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/LoadTemplateDialog" id="bm_id3154764" localize="false"/>
+<h1 id="hd_id3151242" xml-lang="en-US"><variable id="load_styles_header"><link href="text/swriter/01/05170000.xhp" name="Load Styles">Load Styles</link></variable></h1>
+<paragraph role="paragraph" id="par_id3083446" xml-lang="en-US">
+<variable id="vorlagentext"><ahelp hid=".">Imports formatting styles from another document or template into the current document.</ahelp>
+</variable></paragraph>
+<section id="howtoget">
+  <embed href="text/swriter/00/00000405.xhp#vorlagenladen"/>
+</section>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/categories" id="bm_id3154555" localize="false"/>
+<h2 id="hd_id3149354" xml-lang="en-US">Categories</h2>
+<paragraph role="paragraph" id="par_id3154561" xml-lang="en-US"><ahelp hid="sfx/ui/loadtemplatedialog/categories">Lists the available template categories. Click a category to view its contents in the <emph>Templates </emph>list.</ahelp></paragraph>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/templates" id="bm_id3145242" localize="false"/>
+<h2 id="hd_id3149885" xml-lang="en-US">Templates</h2>
+<paragraph role="paragraph" id="par_id3145249" xml-lang="en-US"><ahelp hid="sfx/ui/loadtemplatedialog/templates">Lists the available templates for the selected category.</ahelp></paragraph>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/text" id="bm_id3148772" localize="false"/>
+<h2 id="hd_id3148392" xml-lang="en-US">Text</h2>
+<paragraph role="paragraph" id="par_id3149026" xml-lang="en-US"><ahelp hid="sfx/ui/loadtemplatedialog/text">Loads the paragraph and the character styles from the selected document into the current document.</ahelp></paragraph>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/frame" id="bm_id3147174" localize="false"/>
+<h2 id="hd_id3153717" xml-lang="en-US">Frame</h2>
+<paragraph role="paragraph" id="par_id3156320" xml-lang="en-US"><ahelp hid="sfx/ui/loadtemplatedialog/frame">Loads the frame styles from the selected document into the current document.</ahelp></paragraph>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/pages" id="bm_id3151271" localize="false"/>
+<h2 id="hd_id3147565" xml-lang="en-US">Pages</h2>
+<paragraph role="paragraph" id="par_id3154642" xml-lang="en-US"><ahelp hid="sfx/ui/loadtemplatedialog/pages">Loads the page styles from the selected document into the current document.</ahelp></paragraph>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/numbering" id="bm_id3149756" localize="false"/>
+<h2 id="hd_id3153147" xml-lang="en-US">Numbering</h2>
+<paragraph role="paragraph" id="par_id3152587" xml-lang="en-US"><ahelp hid="sfx/ui/loadtemplatedialog/numbering">Loads the numbering styles from the selected document into the current document.</ahelp></paragraph>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/overwrite" id="bm_id3147507" localize="false"/>
+<h2 id="hd_id3151176" xml-lang="en-US">Overwrite</h2>
+<paragraph role="paragraph" id="par_id3147514" xml-lang="en-US"><ahelp hid="sfx/ui/loadtemplatedialog/overwrite">Replaces styles in the current document that have the same name as the styles you are loading. No warning message is given.</ahelp></paragraph>
+<note id="par_id3150358" xml-lang="en-US">Only applied styles and modified styles are loaded from a document or template. The styles shown in the sidebar cannot be used as a guide.</note>
+<bookmark xml-lang="en-US" branch="hid/sfx/ui/loadtemplatedialog/fromfile" id="bm_id3147520" localize="false"/>
+<h2 id="hd_id3153668" xml-lang="en-US">From File</h2>
+<paragraph role="paragraph" id="par_id3147526" xml-lang="en-US"><ahelp hid="sfx/ui/loadtemplatedialog/fromfile">Locate the file containing the styles that you want to load, and then click <emph>Open</emph>.</ahelp></paragraph>
+</body>
+</helpdocument>

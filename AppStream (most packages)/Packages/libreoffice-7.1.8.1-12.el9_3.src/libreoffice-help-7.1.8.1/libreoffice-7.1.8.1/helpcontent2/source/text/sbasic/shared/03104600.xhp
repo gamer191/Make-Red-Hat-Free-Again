@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+ * This file is part of the LibreOffice project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ -->
+
+<helpdocument version="1.0">
+<meta>
+<topic id="textsbasicshared03104600xml" indexer="include" status="PUBLISH">
+<title id="tit" xml-lang="en-US">EqualUnoObjects Function</title>
+<filename>/text/sbasic/shared/03104600.xhp</filename>
+</topic>
+<history>
+<created date="2003-10-31T00:00:00">Sun Microsystems, Inc.</created>
+</history>
+</meta>
+<body>
+<section id="equalunoobjects">
+<bookmark xml-lang="en-US" branch="index" id="bm_id3149205"><bookmark_value>EqualUnoObjects function</bookmark_value>
+</bookmark>
+<paragraph role="heading" id="hd_id3149205" xml-lang="en-US" level="1"><link href="text/sbasic/shared/03104600.xhp" name="EqualUnoObjects Function">EqualUnoObjects Function</link></paragraph>
+<paragraph role="paragraph" id="par_id3145090" xml-lang="en-US">Returns True if the two specified Basic Uno objects represent the same Uno object instance.</paragraph>
+</section>
+<embed href="text/sbasic/shared/00000003.xhp#functsyntax"/>
+<paragraph role="code" localize="false" id="par_id3150669" xml-lang="en-US">EqualUnoObjects( oObj1, oObj2 )</paragraph>
+<embed href="text/sbasic/shared/00000003.xhp#functvalue"/>
+<paragraph role="paragraph" id="par_id3154285" xml-lang="en-US">Bool</paragraph>
+<embed href="text/sbasic/shared/00000003.xhp#functexample"/>
+<bascode>
+    <paragraph role="bascode" id="par_id3156024" xml-lang="en-US">' Copy of objects -&gt; same instance</paragraph>
+    <paragraph role="bascode" localize="false" id="par_id3154923" xml-lang="en-US">oIntrospection = CreateUnoService( "com.sun.star.beans.Introspection" )</paragraph>
+    <paragraph role="bascode" localize="false" id="par_id3147559" xml-lang="en-US">oIntro2 = oIntrospection</paragraph>
+    <paragraph role="bascode" localize="false" id="par_id3150541" xml-lang="en-US">print EqualUnoObjects( oIntrospection, oIntro2 )</paragraph>
+    <paragraph role="bascode" id="par_id3153525" xml-lang="en-US">' Copy of structs as value -&gt; new instance</paragraph>
+    <paragraph role="bascode" localize="false" id="par_id3154366" xml-lang="en-US">Dim Struct1 as new com.sun.star.beans.Property</paragraph>
+    <paragraph role="bascode" localize="false" id="par_id3154348" xml-lang="en-US">Struct2 = Struct1</paragraph>
+    <paragraph role="bascode" localize="false" id="par_id3154125" xml-lang="en-US">print EqualUnoObjects( Struct1, Struct2 )</paragraph>
+</bascode>
+</body>
+</helpdocument>

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<helpdocument version="1.0">
+<!--
+ * This file is part of the LibreOffice project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ -->
+
+<meta>
+  <topic id="textshared0202160000xml" indexer="include" status="PUBLISH">
+    <title id="tit" xml-lang="en-US">Highlight Color</title>
+    <filename>/text/shared/02/02160000.xhp</filename>
+  </topic>
+  <history>
+    <created date="2003-10-31T00:00:00">Sun Microsystems, Inc.</created>
+  </history>
+</meta>
+<body>
+<section id="zeichenhintergrund">
+<bookmark xml-lang="en-US" branch="hid/.uno:BackColor" id="bm_id3153323" localize="false"/>
+<h1 id="hd_id3109850"><link href="text/shared/02/02160000.xhp" name="Highlight Color">Highlighting</link></h1>
+<paragraph role="paragraph" id="par_id3154927" xml-lang="en-US"><variable id="zeichenhintergrundtext"><ahelp hid=".uno:BackColor">Applies the current highlight color to the background of a character style or text selection.</ahelp></variable></paragraph>
+</section>
+<paragraph role="paragraph" id="par_id871592838003088">If no text is selected, click the <emph>Highlight Color</emph> icon, select the text that you want to highlight, and then click the <emph>Highlight Color</emph> icon again. To change the highlight color, click the arrow next to the <emph>Highlight Color</emph> icon, and then click the color that you want.</paragraph>
+<section id="howtoget">
+    <paragraph id="par_id3147330" role="paragraph" xml-lang="en-US">Choose <menuitem>Format - Character - Highlighting</menuitem> tab.</paragraph>
+    <paragraph role="paragraph" id="par_id61592838932801">When editing a character style, choose <emph>Highlighting</emph> tab.</paragraph>
+<section id="syzeichenhintergrund">
+<table id="tbl_id3149182">
+  <tablerow>
+    <tablecell colspan="" rowspan="">
+      <paragraph role="paragraph" id="par_id3152551" xml-lang="en-US"><image id="img_id3149177" src="cmd/sc_backcolor.png" width="1cm" height="1cm"><alt id="alt_id3149177" xml-lang="en-US">Icon Highlighting</alt></image></paragraph>
+    </tablecell>
+    <tablecell colspan="" rowspan="">
+      <paragraph role="paragraph" id="par_id3147210" xml-lang="en-US">Highlight Color</paragraph>
+    </tablecell>
+  </tablerow>
+</table>
+</section>
+</section>
+<h2 id="par_id3166460">To Apply Highlighting<comment>UFI: see #112387#</comment></h2>
+<list type="ordered">
+  <listitem>
+    <paragraph role="paragraph" id="par_idN1072B" xml-lang="en-US">On the <emph>Formatting</emph> bar, click the <emph>Highlight Color</emph> icon.</paragraph>
+    <note id="par_idN10736">To change the highlighting color, click the arrow next to the <emph>Highlight Color</emph> icon, and then click the color that you want.</note>
+  </listitem>
+  <listitem>
+    <paragraph role="paragraph" id="par_idN1073E" xml-lang="en-US">Select the text that you want to highlight.</paragraph>
+    <tip id="par_idN10743">To apply highlighting to a single word, double-click the word.</tip>
+  </listitem>
+  <listitem>
+    <paragraph role="paragraph" id="par_idN10757" xml-lang="en-US">To turn off highlighting, press <emph>Esc</emph>.</paragraph>
+  </listitem>
+</list>
+<h2 id="par_idN1075A">To Remove Highlighting</h2>
+<list type="ordered">
+  <listitem>
+    <paragraph role="paragraph" id="par_idN10760" xml-lang="en-US">Select the highlighted text.</paragraph>
+  </listitem>
+  <listitem>
+    <paragraph role="paragraph" id="par_id3149784" xml-lang="en-US">On the <emph>Formatting</emph> bar, click the arrow next to the <emph>Highlight Color</emph> icon, and then click <emph>No Fill</emph>.</paragraph>
+  </listitem>
+</list>
+</body>
+</helpdocument>
