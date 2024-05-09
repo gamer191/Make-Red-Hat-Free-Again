@@ -1,0 +1,31 @@
+From bdf4474ed82aaf964e7d94e72ca56b496e3815f9 Mon Sep 17 00:00:00 2001
+From: Timo Sirainen <timo.sirainen@open-xchange.com>
+Date: Fri, 1 Oct 2021 15:08:45 +0300
+Subject: [PATCH] virtual: Fix leaking mailboxes if virtual mailbox can't be
+ opened
+
+Fixes also a crash at deinit:
+Panic: file mail-user.c: line 232 (mail_user_deinit): assertion failed: ((*user)->refcount == 1)
+---
+ src/plugins/virtual/virtual-storage.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/plugins/virtual/virtual-storage.c b/src/plugins/virtual/virtual-storage.c
+index 2f31503d53..a0779cc186 100644
+--- a/src/plugins/virtual/virtual-storage.c
++++ b/src/plugins/virtual/virtual-storage.c
+@@ -495,12 +495,12 @@ static int virtual_mailbox_open(struct mailbox *box)
+ 		ret = virtual_mailboxes_open(mbox, box->flags);
+ 		array_pop_back(&mbox->storage->open_stack);
+ 	}
++	if (ret == 0)
++		ret = index_storage_mailbox_open(box, FALSE);
+ 	if (ret < 0) {
+ 		virtual_mailbox_close_internal(mbox);
+ 		return -1;
+ 	}
+-	if (index_storage_mailbox_open(box, FALSE) < 0)
+-		return -1;
+ 
+ 	mbox->virtual_ext_id =
+ 		mail_index_ext_register(mbox->box.index, "virtual", 0,

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <GitCommitHash>31373ce8529c3d2f6b91e61585872160b0d7d7cd</GitCommitHash>
+    <OfficialBuildId>20221109.1</OfficialBuildId>
+    <OutputPackageVersion>3.3.4-beta1.22559.1</OutputPackageVersion>
+    <PreReleaseVersionLabel>beta1</PreReleaseVersionLabel>
+  </PropertyGroup>
+</Project>

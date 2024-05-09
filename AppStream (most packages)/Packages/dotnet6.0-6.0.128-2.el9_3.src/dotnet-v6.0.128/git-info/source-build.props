@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <GitCommitHash>7649ca7106e7e91ac06f169626bf01a77c2258eb</GitCommitHash>
+    <IsStable>false</IsStable>
+    <OfficialBuildId>20220819.2</OfficialBuildId>
+    <OutputPackageVersion>6.0.0-servicing.22419.2</OutputPackageVersion>
+    <PreReleaseVersionLabel>servicing</PreReleaseVersionLabel>
+  </PropertyGroup>
+</Project>

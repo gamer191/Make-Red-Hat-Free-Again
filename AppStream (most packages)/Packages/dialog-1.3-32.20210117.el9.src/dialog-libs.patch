@@ -1,0 +1,12 @@
+diff -up dialog-1.3-20200327/makefile.in.libs dialog-1.3-20200327/makefile.in
+--- dialog-1.3-20200327/makefile.in.libs	2020-03-31 10:23:58.460871536 +0200
++++ dialog-1.3-20200327/makefile.in	2020-03-31 10:25:12.231861304 +0200
+@@ -204,7 +204,7 @@ dialog$o \
+ $(OBJECTS) : $(srcdir)/dialog.h $(srcdir)/dlg_keys.h dlg_config.h VERSION
+ 
+ $(PROG) : $(LIB) dialog$o @INTLDIR_MAKE@ @INTLLIBS@
+-	$(LINK) -o $@ dialog$o -L. -l@PACKAGE@ $(CFLAGS) $(LDFLAGS) $(LIBS)
++	$(LINK) -o $@ dialog$o -L. -l@PACKAGE@ $(CFLAGS) $(LDFLAGS)
+ 
+ clean	\
+ distclean \

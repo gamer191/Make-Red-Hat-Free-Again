@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <GitCommitHash>9ce52f1afbfb819fc8499a590385200b97b13f33</GitCommitHash>
+    <OfficialBuildId>20221025.1</OfficialBuildId>
+    <OutputPackageVersion>7.0.0-preview.5.22525.1</OutputPackageVersion>
+    <PreReleaseVersionLabel>preview.5</PreReleaseVersionLabel>
+  </PropertyGroup>
+</Project>

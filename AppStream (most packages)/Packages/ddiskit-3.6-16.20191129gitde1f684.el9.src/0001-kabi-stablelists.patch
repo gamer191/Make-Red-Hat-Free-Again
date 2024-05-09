@@ -1,0 +1,42 @@
+Index: ddiskit-de1f6847223085dcdd177e02a7298c835fae12a3/templates/spec
+===================================================================
+--- ddiskit-de1f6847223085dcdd177e02a7298c835fae12a3.orig/templates/spec	2019-07-11 06:00:36.000000000 +0200
++++ ddiskit-de1f6847223085dcdd177e02a7298c835fae12a3/templates/spec	2022-02-15 01:18:40.875578229 +0100
+@@ -21,12 +21,19 @@
+ %endif
+ 
+ %if "%{kmod_dist_build_deps}" == ""
++%if (0%{?rhel} > 8) || (0%{?centos} > 8)
++%define abi_list stablelist
++%define kmod_dist_build_deps redhat-rpm-config kernel-abi-stablelists elfutils-libelf-devel kernel-rpm-macros kmod
++%else
+ %if (0%{?rhel} > 7) || (0%{?centos} > 7)
++%define abi_list whitelist
+ %define kmod_dist_build_deps redhat-rpm-config kernel-abi-whitelists elfutils-libelf-devel kernel-rpm-macros kmod
+ %else
++%define abi_list whitelist
+ %define kmod_dist_build_deps redhat-rpm-config kernel-abi-whitelists
+ %endif
+ %endif
++%endif
+ 
+ Source0:	%{kmod_name}-%{kmod_vendor}-%{kmod_driver_version}.tar.bz2
+ %{SOURCE_PATCHES}
+@@ -210,7 +217,7 @@
+ # mark modules executable so that strip-to-file can strip them
+ find obj/%{kmod_kbuild_dir} -name "*.ko" -type f -exec chmod u+x '{}' +
+ 
+-whitelist="/lib/modules/kabi-current/kabi_whitelist_%{_target_cpu}"
++kabilist="/lib/modules/kabi-current/kabi_%{abi_list}_%{_target_cpu}"
+ for modules in $( find obj/%{kmod_kbuild_dir} -name "*.ko" -type f -printf "%{findpat}\n" | sed 's|\.ko$||' | sort -u ) ; do
+ 	# update depmod.conf
+ 	module_weak_path=$(echo "$modules" | sed 's/[\/]*[^\/]*$//')
+@@ -227,7 +234,7 @@
+ 
+ 	# update greylist
+ 	nm -u obj/%{kmod_kbuild_dir}/$modules.ko | sed 's/.*U //' |  sed 's/^\.//' | sort -u | while read -r symbol; do
+-		grep -q "^\s*$symbol\$" $whitelist || echo "$symbol" >> source/greylist
++		grep -q "^\s*$symbol\$" $kabilist || echo "$symbol" >> source/greylist
+ 	done
+ done
+ sort -u source/greylist | uniq > source/greylist.txt

@@ -1,0 +1,46 @@
+diff -up dialog-1.3-20191110/dialog-config.in.multilib dialog-1.3-20191110/dialog-config.in
+--- dialog-1.3-20191110/dialog-config.in.multilib	2019-09-26 02:50:46.000000000 +0200
++++ dialog-1.3-20191110/dialog-config.in	2019-11-11 13:05:01.327868746 +0100
+@@ -53,14 +53,14 @@ while test $# -gt 0; do
+ 
+ 	eval bindir='"@bindir@"'
+ 	eval includedir='"@includedir@"'
+-	eval libdir='"@libdir@"'
++	eval libdir=''
+ 	eval datadir='"@datadir@"'
+ 	eval mandir='"@mandir@"'
+ 
+ 	[ -z "$includedir" ] && includedir="${prefix}/include" 
+ 
+-	eval LDFLAGS='"@LDFLAGS@"'
+-	eval LIBS='"@LIBS@"'
++	eval LDFLAGS=''
++	eval LIBS=''
+ 	LIBS="-l${THIS} $LIBS"
+ 
+ 	# If the directory given by --libdir is not in the LDFLAGS+LIBS set,
+@@ -74,12 +74,12 @@ while test $# -gt 0; do
+ 			break
+ 		fi
+ 	done
+-	if [ $found = no ]
++	if false
+ 	then
+ 		[ -n "$LFLAGS" ] && LDFLAGS=" $LFDLAGS"
+ 		LDFLAGS="-L${libdir}$LDFLAGS"
+ 	fi
+-	[ -z "$LDFLAGS" ] && LDFLAGS="-L${exec_prefix}/lib"
++	#[ -z "$LDFLAGS" ] && LDFLAGS="-L${exec_prefix}/lib"
+ 
+ 	# Ignore -L options which do not correspond to an actual directory,
+ 	# or which are standard library directories (i.e., the linker is
+@@ -94,9 +94,6 @@ while test $# -gt 0; do
+ 		-L*)
+ 			[ -d ${opt##-L} ] || continue
+ 			case ${opt##-L} in
+-			@LD_SEARCHPATH@) # skip standard libdir
+-				continue
+-				;;
+ 			*)
+ 				;;
+ 			esac

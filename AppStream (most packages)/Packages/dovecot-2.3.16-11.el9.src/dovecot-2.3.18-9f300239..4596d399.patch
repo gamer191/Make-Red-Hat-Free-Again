@@ -1,0 +1,578 @@
+From 9f3002393fe1c1fe317121d03591569dac120739 Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Tue, 17 Aug 2021 19:09:13 +0200
+Subject: [PATCH 01/12] lib-sieve: sieve-interpreter - Fix field mixup in debug
+ message.
+
+---
+ src/lib-sieve/sieve-interpreter.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lib-sieve/sieve-interpreter.c b/src/lib-sieve/sieve-interpreter.c
+index 9ee6c659..274e142d 100644
+--- a/src/lib-sieve/sieve-interpreter.c
++++ b/src/lib-sieve/sieve-interpreter.c
+@@ -1003,8 +1003,8 @@ int sieve_interpreter_continue(struct sieve_interpreter *interp,
+ 		}
+ 		e_debug(e->event(), "Finished running script `%s' "
+ 			"(status=%s, resource usage: %s)",
+-			sieve_execution_exitcode_to_str(ret),
+ 			sieve_binary_source(interp->runenv.sbin),
++			sieve_execution_exitcode_to_str(ret),
+ 			sieve_resource_usage_get_summary(&interp->rusage));
+ 		interp->running = FALSE;
+ 	}
+
+From 54e020c1212f626049bffc6c6fea8e606a893af2 Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 01:44:23 +0200
+Subject: [PATCH 02/12] lib-sieve: sieve-result - Remove success parameter from
+ sieve_result_implicit_keep_execute().
+
+---
+ src/lib-sieve/sieve-result.c | 18 ++++++++----------
+ 1 file changed, 8 insertions(+), 10 deletions(-)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index 55eb9f54..d3f2f925 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1475,8 +1475,7 @@ void sieve_result_execution_destroy(struct sieve_result_execution **_rexec)
+ }
+ 
+ static void
+-sieve_result_implicit_keep_execute(struct sieve_result_execution *rexec,
+-				   bool success)
++sieve_result_implicit_keep_execute(struct sieve_result_execution *rexec)
+ {
+ 	const struct sieve_action_exec_env *aenv = &rexec->action_env;
+ 	struct sieve_result *result = aenv->result;
+@@ -1486,6 +1485,7 @@ sieve_result_implicit_keep_execute(struct sieve_result_execution *rexec,
+ 	struct sieve_action_execution *aexec_keep = &rexec->keep;
+ 	struct sieve_result_action *ract_keep = &rexec->keep_action;
+ 	struct sieve_action *act_keep = &ract_keep->action;
++	bool success = (rexec->status == SIEVE_EXEC_OK);
+ 
+ 	if (rexec->keep_equiv_action != NULL) {
+ 		e_debug(rexec->event, "No implicit keep needed "
+@@ -1579,8 +1579,8 @@ sieve_result_implicit_keep_execute(struct sieve_result_execution *rexec,
+ 		}
+ 	}
+ 
+-	e_debug(rexec->event, "Execute implicit keep (failure=%s)",
+-		(!success ? "yes" : "no"));
++	e_debug(rexec->event, "Execute implicit keep (status=%s)",
++		sieve_execution_exitcode_to_str(rexec->status));
+ 
+ 	/* Initialize side effects */
+ 	sieve_action_execution_add_side_effects(rexec, aexec_keep, ract_keep);
+@@ -1633,7 +1633,7 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec,
+ 	/* Start keep if necessary */
+ 	if (act_keep->def == NULL ||
+ 	    aexec_keep->state != SIEVE_ACTION_EXECUTION_STATE_EXECUTED) {
+-		sieve_result_implicit_keep_execute(rexec, success);
++		sieve_result_implicit_keep_execute(rexec);
+ 	/* Switch to failure keep if necessary. */
+ 	} else if (rexec->keep_success && !success){
+ 		e_debug(rexec->event, "Switch to failure implicit keep");
+@@ -1645,7 +1645,7 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec,
+ 		i_zero(aexec_keep);
+ 
+ 		/* Start failure keep action. */
+-		sieve_result_implicit_keep_execute(rexec, success);
++		sieve_result_implicit_keep_execute(rexec);
+ 	}
+ 	if (act_keep->def == NULL)
+ 		return rexec->keep_status;
+@@ -1931,10 +1931,8 @@ int sieve_result_execute(struct sieve_result_execution *rexec, int status,
+ 		/* Execute implicit keep if the transaction failed or when the
+ 		   implicit keep was not canceled during transaction.
+ 		 */
+-		if (rexec->status != SIEVE_EXEC_OK || rexec->keep_implicit) {
+-			sieve_result_implicit_keep_execute(
+-				rexec, (rexec->status == SIEVE_EXEC_OK));
+-		}
++		if (rexec->status != SIEVE_EXEC_OK || rexec->keep_implicit)
++			sieve_result_implicit_keep_execute(rexec);
+ 	}
+ 
+ 	/* Transaction commit/rollback */
+
+From 291f2fdb77b86db566dca7c028dd93fc741f6b31 Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 01:40:57 +0200
+Subject: [PATCH 03/12] lib-sieve: sieve-result - Remove success parameter from
+ sieve_result_implicit_keep_finalize().
+
+---
+ src/lib-sieve/sieve-result.c | 11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index d3f2f925..3cf2c02a 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1603,8 +1603,7 @@ sieve_result_implicit_keep_execute(struct sieve_result_execution *rexec)
+ }
+ 
+ static int
+-sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec,
+-				    bool success)
++sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec)
+ {
+ 	const struct sieve_action_exec_env *aenv = &rexec->action_env;
+ 	const struct sieve_execute_env *eenv = aenv->exec_env;
+@@ -1612,6 +1611,7 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec,
+ 	struct sieve_result_action *ract_keep = &rexec->keep_action;
+ 	struct sieve_action *act_keep = &ract_keep->action;
+ 	int commit_status = SIEVE_EXEC_OK;
++	bool success = (rexec->status == SIEVE_EXEC_OK);
+ 
+ 	if (rexec->keep_equiv_action != NULL) {
+ 		struct sieve_action_execution *ke_aexec =
+@@ -1627,8 +1627,8 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec,
+ 		return rexec->keep_status;
+ 	}
+ 
+-	e_debug(rexec->event, "Finalize implicit keep (failure=%s)",
+-		(!success ? "yes" : "no"));
++	e_debug(rexec->event, "Finalize implicit keep (status=%s)",
++		sieve_execution_exitcode_to_str(rexec->status));
+ 
+ 	/* Start keep if necessary */
+ 	if (act_keep->def == NULL ||
+@@ -1950,8 +1950,7 @@ int sieve_result_execute(struct sieve_result_execution *rexec, int status,
+ 		   implicit keep was not canceled during transaction.
+ 		 */
+ 		if (rexec->status != SIEVE_EXEC_OK || rexec->keep_implicit) {
+-			ret = sieve_result_implicit_keep_finalize(
+-				rexec, (rexec->status == SIEVE_EXEC_OK));
++			ret = sieve_result_implicit_keep_finalize(rexec);
+ 			switch (ret) {
+ 			case SIEVE_EXEC_OK:
+ 				if (result_status == SIEVE_EXEC_TEMP_FAILURE)
+
+From 10e347e3c9eb5e7bf5bc6f178389005357f527fe Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 02:07:01 +0200
+Subject: [PATCH 04/12] lib-sieve: sieve-result - Move temp failure status
+ checks into sieve_result_implicit_keep_execute().
+
+---
+ src/lib-sieve/sieve-result.c | 38 ++++++++++++++++++++++++------------
+ 1 file changed, 26 insertions(+), 12 deletions(-)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index 3cf2c02a..44afeef7 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -934,6 +934,7 @@ struct sieve_result_execution {
+ 	bool keep_success:1;
+ 	bool keep_explicit:1;
+ 	bool keep_implicit:1;
++	bool keep_finalizing:1;
+ 	bool seen_delivery:1;
+ 	bool executed:1;
+ 	bool executed_delivery:1;
+@@ -1485,7 +1486,24 @@ sieve_result_implicit_keep_execute(struct sieve_result_execution *rexec)
+ 	struct sieve_action_execution *aexec_keep = &rexec->keep;
+ 	struct sieve_result_action *ract_keep = &rexec->keep_action;
+ 	struct sieve_action *act_keep = &ract_keep->action;
+-	bool success = (rexec->status == SIEVE_EXEC_OK);
++	bool success = FALSE;
++
++	switch (rexec->status) {
++	case SIEVE_EXEC_OK:
++		success = TRUE;
++		break;
++	case SIEVE_EXEC_TEMP_FAILURE:
++	case SIEVE_EXEC_RESOURCE_LIMIT:
++		if (rexec->executed)
++			break;
++		if (rexec->committed)
++			break;
++		if (rexec->keep_finalizing)
++			break;
++		return;
++	default:
++		break;
++	}
+ 
+ 	if (rexec->keep_equiv_action != NULL) {
+ 		e_debug(rexec->event, "No implicit keep needed "
+@@ -1630,6 +1648,8 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec)
+ 	e_debug(rexec->event, "Finalize implicit keep (status=%s)",
+ 		sieve_execution_exitcode_to_str(rexec->status));
+ 
++	rexec->keep_finalizing = TRUE;
++
+ 	/* Start keep if necessary */
+ 	if (act_keep->def == NULL ||
+ 	    aexec_keep->state != SIEVE_ACTION_EXECUTION_STATE_EXECUTED) {
+@@ -1923,17 +1943,11 @@ int sieve_result_execute(struct sieve_result_execution *rexec, int status,
+ 		return rexec->status;
+ 	}
+ 
+-	/* Execute implicit keep if necessary */
+-
+-	if (rexec->executed ||
+-	    (rexec->status != SIEVE_EXEC_TEMP_FAILURE &&
+-	     rexec->status != SIEVE_EXEC_RESOURCE_LIMIT)) {
+-		/* Execute implicit keep if the transaction failed or when the
+-		   implicit keep was not canceled during transaction.
+-		 */
+-		if (rexec->status != SIEVE_EXEC_OK || rexec->keep_implicit)
+-			sieve_result_implicit_keep_execute(rexec);
+-	}
++	/* Execute implicit keep if the transaction failed or when the
++	   implicit keep was not canceled during transaction.
++	 */
++	if (rexec->status != SIEVE_EXEC_OK || rexec->keep_implicit)
++		sieve_result_implicit_keep_execute(rexec);
+ 
+ 	/* Transaction commit/rollback */
+ 
+
+From c84e6e5d8d1d8b03a0ba5958804d200c6e1916d8 Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 02:26:32 +0200
+Subject: [PATCH 05/12] lib-sieve: sieve-result - Move temp failure status
+ checks into sieve_result_implicit_keep_finalize().
+
+---
+ src/lib-sieve/sieve-result.c | 56 +++++++++++++++++++++---------------
+ 1 file changed, 33 insertions(+), 23 deletions(-)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index 44afeef7..10cc3b95 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1629,7 +1629,20 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec)
+ 	struct sieve_result_action *ract_keep = &rexec->keep_action;
+ 	struct sieve_action *act_keep = &ract_keep->action;
+ 	int commit_status = SIEVE_EXEC_OK;
+-	bool success = (rexec->status == SIEVE_EXEC_OK);
++	bool success = FALSE;
++
++	switch (rexec->status) {
++	case SIEVE_EXEC_OK:
++		success = TRUE;
++		break;
++	case SIEVE_EXEC_TEMP_FAILURE:
++	case SIEVE_EXEC_RESOURCE_LIMIT:
++		if (rexec->committed)
++			break;
++		return rexec->status;
++	default:
++		break;
++	}
+ 
+ 	if (rexec->keep_equiv_action != NULL) {
+ 		struct sieve_action_execution *ke_aexec =
+@@ -1957,32 +1970,29 @@ int sieve_result_execute(struct sieve_result_execution *rexec, int status,
+ 	/* Commit implicit keep if necessary */
+ 
+ 	result_status = rexec->status;
+-	if (rexec->committed ||
+-	    (rexec->status != SIEVE_EXEC_TEMP_FAILURE &&
+-	     rexec->status != SIEVE_EXEC_RESOURCE_LIMIT)) {
+-		/* Commit implicit keep if the transaction failed or when the
+-		   implicit keep was not canceled during transaction.
+-		 */
+-		if (rexec->status != SIEVE_EXEC_OK || rexec->keep_implicit) {
+-			ret = sieve_result_implicit_keep_finalize(rexec);
+-			switch (ret) {
+-			case SIEVE_EXEC_OK:
+-				if (result_status == SIEVE_EXEC_TEMP_FAILURE)
+-					result_status = SIEVE_EXEC_FAILURE;
++
++	/* Commit implicit keep if the transaction failed or when the
++	   implicit keep was not canceled during transaction.
++	 */
++	if (rexec->status != SIEVE_EXEC_OK || rexec->keep_implicit) {
++		ret = sieve_result_implicit_keep_finalize(rexec);
++		switch (ret) {
++		case SIEVE_EXEC_OK:
++			if (result_status == SIEVE_EXEC_TEMP_FAILURE)
++				result_status = SIEVE_EXEC_FAILURE;
++			break;
++		case SIEVE_EXEC_TEMP_FAILURE:
++			if (!rexec->committed) {
++				result_status = ret;
+ 				break;
+-			case SIEVE_EXEC_TEMP_FAILURE:
+-				if (!rexec->committed) {
+-					result_status = ret;
+-					break;
+-				}
+-				/* fall through */
+-			default:
+-				result_status = SIEVE_EXEC_KEEP_FAILED;
+ 			}
++			/* fall through */
++		default:
++			result_status = SIEVE_EXEC_KEEP_FAILED;
+ 		}
+-		if (rexec->status == SIEVE_EXEC_OK)
+-			rexec->status = result_status;
+ 	}
++	if (rexec->status == SIEVE_EXEC_OK)
++		rexec->status = result_status;
+ 
+ 	/* Finish execution */
+ 
+
+From 92b4b06d5d8deeefdd17d5fb18d7f0d23e8e414b Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 02:46:18 +0200
+Subject: [PATCH 06/12] lib-sieve: sieve-result - Skip implicit keep in
+ execution stage upon temp failure.
+
+It will be executed in the commit phase if necessary; don't do it early; it will
+only be rolled back.
+---
+ src/lib-sieve/sieve-result.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index 10cc3b95..82354831 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1494,8 +1494,6 @@ sieve_result_implicit_keep_execute(struct sieve_result_execution *rexec)
+ 		break;
+ 	case SIEVE_EXEC_TEMP_FAILURE:
+ 	case SIEVE_EXEC_RESOURCE_LIMIT:
+-		if (rexec->executed)
+-			break;
+ 		if (rexec->committed)
+ 			break;
+ 		if (rexec->keep_finalizing)
+
+From f2b81cc6ebaa3001bde693f7abdb990f467f7831 Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 02:56:32 +0200
+Subject: [PATCH 07/12] lib-sieve: sieve-result - Fix handling of resource
+ limit status after implicit keep commit.
+
+---
+ src/lib-sieve/sieve-result.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index 82354831..96582075 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1980,6 +1980,7 @@ int sieve_result_execute(struct sieve_result_execution *rexec, int status,
+ 				result_status = SIEVE_EXEC_FAILURE;
+ 			break;
+ 		case SIEVE_EXEC_TEMP_FAILURE:
++		case SIEVE_EXEC_RESOURCE_LIMIT:
+ 			if (!rexec->committed) {
+ 				result_status = ret;
+ 				break;
+
+From 293f0027106a725e4cbcf56b673f1eedda00c317 Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 02:54:25 +0200
+Subject: [PATCH 08/12] lib-sieve: sieve-result - Fix resource leak occurring
+ when implicit keep is executed before temporary failure at commit.
+
+In the commit phase the implicit keep was never finalized, meaning that it was
+not rolled back and thus not cleaned up properly. This leads to a memory leak
+and a mailbox reference leak. This in turn causes an assert crash at the end
+of delivery when the mail user is destroyed.
+---
+ src/lib-sieve/sieve-result.c | 18 ++++++++++++++----
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index 96582075..10ea349c 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1627,7 +1627,7 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec)
+ 	struct sieve_result_action *ract_keep = &rexec->keep_action;
+ 	struct sieve_action *act_keep = &ract_keep->action;
+ 	int commit_status = SIEVE_EXEC_OK;
+-	bool success = FALSE;
++	bool success = FALSE, temp_failure = FALSE;
+ 
+ 	switch (rexec->status) {
+ 	case SIEVE_EXEC_OK:
+@@ -1637,7 +1637,15 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec)
+ 	case SIEVE_EXEC_RESOURCE_LIMIT:
+ 		if (rexec->committed)
+ 			break;
+-		return rexec->status;
++
++		if (aexec_keep->state !=
++		    SIEVE_ACTION_EXECUTION_STATE_EXECUTED)
++			return rexec->status;
++		/* Roll back for temporary failure when no other action
++		   is committed. */
++		commit_status = rexec->status;
++		temp_failure = TRUE;
++		break;
+ 	default:
+ 		break;
+ 	}
+@@ -1662,8 +1670,10 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec)
+ 	rexec->keep_finalizing = TRUE;
+ 
+ 	/* Start keep if necessary */
+-	if (act_keep->def == NULL ||
+-	    aexec_keep->state != SIEVE_ACTION_EXECUTION_STATE_EXECUTED) {
++	if (temp_failure) {
++		rexec->keep_status = rexec->status;
++	} else if (act_keep->def == NULL ||
++		   aexec_keep->state != SIEVE_ACTION_EXECUTION_STATE_EXECUTED) {
+ 		sieve_result_implicit_keep_execute(rexec);
+ 	/* Switch to failure keep if necessary. */
+ 	} else if (rexec->keep_success && !success){
+
+From 81bd53d6c9fa14fc6b32304e49dddb8fd022de91 Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 13:29:41 +0200
+Subject: [PATCH 09/12] lib-sieve: sieve-result - Assert that implicit keep is
+ executed in sieve_result_implicit_keep_finalize().
+
+---
+ src/lib-sieve/sieve-result.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index 10ea349c..de97d6ae 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1691,6 +1691,8 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec)
+ 	if (act_keep->def == NULL)
+ 		return rexec->keep_status;
+ 
++	i_assert(aexec_keep->state == SIEVE_ACTION_EXECUTION_STATE_EXECUTED);
++
+ 	/* Finalize keep action */
+ 	rexec->keep_status = sieve_result_action_commit_or_rollback(
+ 		rexec, aexec_keep, rexec->keep_status, &commit_status);
+
+From dbf5b62ba82766a7d824e81005b2517d96984ef0 Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 02:43:05 +0200
+Subject: [PATCH 10/12] lib-sieve: sieve-result - Add debug messages for temp
+ failure handling.
+
+---
+ src/lib-sieve/sieve-result.c | 28 +++++++++++++++++++++++++---
+ 1 file changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index de97d6ae..c21c8017 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1494,10 +1494,21 @@ sieve_result_implicit_keep_execute(struct sieve_result_execution *rexec)
+ 		break;
+ 	case SIEVE_EXEC_TEMP_FAILURE:
+ 	case SIEVE_EXEC_RESOURCE_LIMIT:
+-		if (rexec->committed)
++		if (rexec->committed) {
++			e_debug(rexec->event,
++				"Temporary failure occurred (status=%s), "
++				"but other actions were already committed: "
++				"execute failure implicit keep",
++				sieve_execution_exitcode_to_str(rexec->status));
+ 			break;
++		}
+ 		if (rexec->keep_finalizing)
+ 			break;
++
++		e_debug(rexec->event,
++			"Skip implicit keep for temporary failure "
++			"(state=execute, status=%s)",
++			sieve_execution_exitcode_to_str(rexec->status));
+ 		return;
+ 	default:
+ 		break;
+@@ -1635,12 +1646,23 @@ sieve_result_implicit_keep_finalize(struct sieve_result_execution *rexec)
+ 		break;
+ 	case SIEVE_EXEC_TEMP_FAILURE:
+ 	case SIEVE_EXEC_RESOURCE_LIMIT:
+-		if (rexec->committed)
++		if (rexec->committed) {
++			e_debug(rexec->event,
++				"Temporary failure occurred (status=%s), "
++				"but other actions were already committed: "
++				"commit failure implicit keep",
++				sieve_execution_exitcode_to_str(rexec->status));
+ 			break;
++		}
+ 
+ 		if (aexec_keep->state !=
+-		    SIEVE_ACTION_EXECUTION_STATE_EXECUTED)
++		    SIEVE_ACTION_EXECUTION_STATE_EXECUTED) {
++			e_debug(rexec->event,
++				"Skip implicit keep for temporary failure "
++				"(state=commit, status=%s)",
++				sieve_execution_exitcode_to_str(rexec->status));
+ 			return rexec->status;
++		}
+ 		/* Roll back for temporary failure when no other action
+ 		   is committed. */
+ 		commit_status = rexec->status;
+
+From 65d771c15bf443690580dbb0643556794106522b Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 13:26:26 +0200
+Subject: [PATCH 11/12] lib-sieve: sieve-result - Indicate in
+ sieve_result_transaction_execute() debug message whether actions were
+ executed.
+
+---
+ src/lib-sieve/sieve-result.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index c21c8017..6f3cb954 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1796,10 +1796,11 @@ sieve_result_transaction_execute(struct sieve_result_execution *rexec,
+ 	}
+ 
+ 	e_debug(rexec->event, "Finished executing actions "
+-		"(status=%s, keep=%s)",
++		"(status=%s, keep=%s, executed=%s)",
+ 		sieve_execution_exitcode_to_str(status),
+ 		(rexec->keep_explicit ? "explicit" :
+-		 (rexec->keep_implicit ? "implicit" : "none")));
++		 (rexec->keep_implicit ? "implicit" : "none")),
++		(rexec->executed ? "yes" : "no"));
+ 	return status;
+ }
+ 
+
+From 4596d39908a868783fae9a0c2fd264409c0aaa96 Mon Sep 17 00:00:00 2001
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Wed, 18 Aug 2021 13:27:50 +0200
+Subject: [PATCH 12/12] lib-sieve: sieve-result - Indicate in
+ sieve_result_transaction_finalize() debug message whether actions were
+ committed.
+
+---
+ src/lib-sieve/sieve-result.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/lib-sieve/sieve-result.c b/src/lib-sieve/sieve-result.c
+index 6f3cb954..effd6f28 100644
+--- a/src/lib-sieve/sieve-result.c
++++ b/src/lib-sieve/sieve-result.c
+@@ -1859,10 +1859,11 @@ sieve_result_transaction_commit_or_rollback(
+ 	}
+ 
+ 	e_debug(rexec->event, "Finished finalizing actions "
+-		"(status=%s, keep=%s)",
++		"(status=%s, keep=%s, committed=%s)",
+ 		sieve_execution_exitcode_to_str(status),
+ 		(rexec->keep_explicit ? "explicit" :
+-		 (rexec->keep_implicit ? "implicit" : "none")));
++		 (rexec->keep_implicit ? "implicit" : "none")),
++		(rexec->committed ? "yes" : "no"));
+ 
+ 	return commit_status;
+ }
