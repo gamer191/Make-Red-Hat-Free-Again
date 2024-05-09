@@ -1,0 +1,37 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Alexandra=20H=C3=A1jkov=C3=A1?= <ahajkova@redhat.com>
+Date: Tue, 11 Jan 2022 12:22:29 +0100
+Subject: gdb-rhbz2024875-fix-unittest-failure.patch
+
+;;Backport upstream commit from Tom Tromey
+;;2a8f1f47446 Fix unittest.exp failure due to 'set debuginfod' addition
+
+Fix unittest.exp failure due to 'set debuginfod' addition
+
+The 'set debuginfod' change caused a regression in unittest.exp:
+
+    Running selftest help_doc_invariants.
+    help doc broken invariant: command 'info set debuginfod' help doc first line is not terminated with a '.' character
+    help doc broken invariant: command 'set debuginfod' help doc first line is not terminated with a '.' character
+    help doc broken invariant: command 'show debuginfod' help doc first line is not terminated with a '.' character
+    Self test failed: self-test failed at ../../binutils-gdb/gdb/unittests/command-def-selftests.c:100
+
+This patch fixes the problem.  I'm checking it in.
+
+diff --git a/gdb/debuginfod-support.c b/gdb/debuginfod-support.c
+--- a/gdb/debuginfod-support.c
++++ b/gdb/debuginfod-support.c
+@@ -390,11 +390,11 @@ _initialize_debuginfod ()
+ {
+   /* set/show debuginfod */
+   add_basic_prefix_cmd ("debuginfod", class_run,
+-                        _("Set debuginfod options"),
++                        _("Set debuginfod options."),
+                         &set_debuginfod_prefix_list, 0, &setlist);
+ 
+   add_show_prefix_cmd ("debuginfod", class_run,
+-                       _("Show debuginfod options"),
++                       _("Show debuginfod option."),
+                        &show_debuginfod_prefix_list, 0, &showlist);
+ 
+   /* set debuginfod on */

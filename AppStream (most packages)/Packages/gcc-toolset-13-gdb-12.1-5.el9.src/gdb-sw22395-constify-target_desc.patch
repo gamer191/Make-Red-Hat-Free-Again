@@ -1,0 +1,1153 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 2 Sep 2022 12:43:03 -0700
+Subject: gdb-sw22395-constify-target_desc.patch
+
+;; Constify target_desc to fix PPC ODR violations.
+;; (Keith Seitz, build/22395)
+
+cleanup: Add missing feature/ XML files to Makefile
+
+    This patch adds some missing .xml files to features/Makefile so that when the
+    directory's C files are regenerated, all files are appropriately remade.
+
+    This has demonstrated that there have been several "misses" in regenerating
+    files in this directory. Namely, arm-secext.c and sparc{32,64}-solaris.c. For
+    the former case, there was what essentially amounts to a typo regarding the
+    create feature function's name. In the later case, this file has missed at least
+    one important update in July, 2020, when allocate_target_description was
+    changed to return a unique pointer.
+
+    Those corrections are included.
+
+Constify target_desc declarations
+
+    This patch changes various global target_desc declarations to const, thereby
+    correcting a prominent source of ODR violations in PowerPC-related target code.
+    The majority of files/changes are mechanical const-ifications accomplished by
+    regenerating the C files in features/.
+
+    This also required manually updating mips-linux-tdep.h,  s390-linux-tdep.h,
+    nios2-tdep.h, s390-tdep.h, arch/ppc-linux-tdesc.h, arch/ppc-linux-common.c,
+    and rs6000-tdep.c.
+
+    Patch tested against the sourceware trybot, and fully regression tested against
+    our (Red Hat's) internal  test infrastructure on Rawhide aarch64, s390x, x86_64,
+    and powerpcle.
+
+    With this patch, I can finally enable LTO in our GDB package builds. [Tested
+    with a rawhide scratch build containing this patch.]
+
+    Bug: https://sourceware.org/bugzilla/show_bug.cgi?id=22395
+
+diff --git a/gdb/arch/ppc-linux-common.c b/gdb/arch/ppc-linux-common.c
+--- a/gdb/arch/ppc-linux-common.c
++++ b/gdb/arch/ppc-linux-common.c
+@@ -46,7 +46,7 @@ ppc_linux_has_isa205 (CORE_ADDR hwcap)
+ const struct target_desc *
+ ppc_linux_match_description (struct ppc_linux_features features)
+ {
+-  struct target_desc *tdesc = NULL;
++  const struct target_desc *tdesc = NULL;
+ 
+   if (features.wordsize == 8)
+     {
+diff --git a/gdb/arch/ppc-linux-tdesc.h b/gdb/arch/ppc-linux-tdesc.h
+--- a/gdb/arch/ppc-linux-tdesc.h
++++ b/gdb/arch/ppc-linux-tdesc.h
+@@ -22,25 +22,25 @@
+ 
+ struct target_desc;
+ 
+-extern struct target_desc *tdesc_powerpc_32l;
+-extern struct target_desc *tdesc_powerpc_altivec32l;
+-extern struct target_desc *tdesc_powerpc_vsx32l;
+-extern struct target_desc *tdesc_powerpc_isa205_32l;
+-extern struct target_desc *tdesc_powerpc_isa205_altivec32l;
+-extern struct target_desc *tdesc_powerpc_isa205_vsx32l;
+-extern struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx32l;
+-extern struct target_desc *tdesc_powerpc_isa207_vsx32l;
+-extern struct target_desc *tdesc_powerpc_isa207_htm_vsx32l;
+-extern struct target_desc *tdesc_powerpc_e500l;
+-
+-extern struct target_desc *tdesc_powerpc_64l;
+-extern struct target_desc *tdesc_powerpc_altivec64l;
+-extern struct target_desc *tdesc_powerpc_vsx64l;
+-extern struct target_desc *tdesc_powerpc_isa205_64l;
+-extern struct target_desc *tdesc_powerpc_isa205_altivec64l;
+-extern struct target_desc *tdesc_powerpc_isa205_vsx64l;
+-extern struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx64l;
+-extern struct target_desc *tdesc_powerpc_isa207_vsx64l;
+-extern struct target_desc *tdesc_powerpc_isa207_htm_vsx64l;
++extern const struct target_desc *tdesc_powerpc_32l;
++extern const struct target_desc *tdesc_powerpc_altivec32l;
++extern const struct target_desc *tdesc_powerpc_vsx32l;
++extern const struct target_desc *tdesc_powerpc_isa205_32l;
++extern const struct target_desc *tdesc_powerpc_isa205_altivec32l;
++extern const struct target_desc *tdesc_powerpc_isa205_vsx32l;
++extern const struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx32l;
++extern const struct target_desc *tdesc_powerpc_isa207_vsx32l;
++extern const struct target_desc *tdesc_powerpc_isa207_htm_vsx32l;
++extern const struct target_desc *tdesc_powerpc_e500l;
++
++extern const struct target_desc *tdesc_powerpc_64l;
++extern const struct target_desc *tdesc_powerpc_altivec64l;
++extern const struct target_desc *tdesc_powerpc_vsx64l;
++extern const struct target_desc *tdesc_powerpc_isa205_64l;
++extern const struct target_desc *tdesc_powerpc_isa205_altivec64l;
++extern const struct target_desc *tdesc_powerpc_isa205_vsx64l;
++extern const struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx64l;
++extern const struct target_desc *tdesc_powerpc_isa207_vsx64l;
++extern const struct target_desc *tdesc_powerpc_isa207_htm_vsx64l;
+ 
+ #endif /* ARCH_PPC_LINUX_TDESC_H */
+diff --git a/gdb/features/Makefile b/gdb/features/Makefile
+--- a/gdb/features/Makefile
++++ b/gdb/features/Makefile
+@@ -74,6 +74,7 @@ mips-dsp-expedite = r29,pc
+ mips64-expedite = r29,pc
+ mips64-dsp-expedite = r29,pc
+ nios2-linux-expedite = sp,pc
++or1k-expedite = r1,npc
+ powerpc-expedite = r1,pc
+ s390-linux32-expedite = r14,r15,pswa
+ s390-linux32v1-expedite = r14,r15,pswa
+@@ -108,6 +109,7 @@ XMLTOC = \
+ 	nds32.xml \
+ 	nios2.xml \
+ 	or1k.xml \
++	or1k-linux.xml \
+ 	rs6000/powerpc-32.xml \
+ 	rs6000/powerpc-32l.xml \
+ 	rs6000/powerpc-403.xml \
+@@ -164,6 +166,8 @@ XMLTOC = \
+ 	s390x-vx-linux64.xml \
+ 	s390-gs-linux64.xml \
+ 	s390x-gs-linux64.xml \
++	sparc/sparc32-solaris.xml \
++	sparc/sparc64-solaris.xml \
+ 	z80.xml
+ 
+ TDESC_CFILES = $(patsubst %.xml,%.c,$(XMLTOC))
+diff --git a/gdb/features/microblaze-with-stack-protect.c b/gdb/features/microblaze-with-stack-protect.c
+--- a/gdb/features/microblaze-with-stack-protect.c
++++ b/gdb/features/microblaze-with-stack-protect.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_microblaze_with_stack_protect;
++const struct target_desc *tdesc_microblaze_with_stack_protect;
+ static void
+ initialize_tdesc_microblaze_with_stack_protect (void)
+ {
+diff --git a/gdb/features/microblaze.c b/gdb/features/microblaze.c
+--- a/gdb/features/microblaze.c
++++ b/gdb/features/microblaze.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_microblaze;
++const struct target_desc *tdesc_microblaze;
+ static void
+ initialize_tdesc_microblaze (void)
+ {
+diff --git a/gdb/features/mips-dsp-linux.c b/gdb/features/mips-dsp-linux.c
+--- a/gdb/features/mips-dsp-linux.c
++++ b/gdb/features/mips-dsp-linux.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_mips_dsp_linux;
++const struct target_desc *tdesc_mips_dsp_linux;
+ static void
+ initialize_tdesc_mips_dsp_linux (void)
+ {
+diff --git a/gdb/features/mips-linux.c b/gdb/features/mips-linux.c
+--- a/gdb/features/mips-linux.c
++++ b/gdb/features/mips-linux.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_mips_linux;
++const struct target_desc *tdesc_mips_linux;
+ static void
+ initialize_tdesc_mips_linux (void)
+ {
+diff --git a/gdb/features/mips64-dsp-linux.c b/gdb/features/mips64-dsp-linux.c
+--- a/gdb/features/mips64-dsp-linux.c
++++ b/gdb/features/mips64-dsp-linux.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_mips64_dsp_linux;
++const struct target_desc *tdesc_mips64_dsp_linux;
+ static void
+ initialize_tdesc_mips64_dsp_linux (void)
+ {
+diff --git a/gdb/features/mips64-linux.c b/gdb/features/mips64-linux.c
+--- a/gdb/features/mips64-linux.c
++++ b/gdb/features/mips64-linux.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_mips64_linux;
++const struct target_desc *tdesc_mips64_linux;
+ static void
+ initialize_tdesc_mips64_linux (void)
+ {
+diff --git a/gdb/features/nds32.c b/gdb/features/nds32.c
+--- a/gdb/features/nds32.c
++++ b/gdb/features/nds32.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_nds32;
++const struct target_desc *tdesc_nds32;
+ static void
+ initialize_tdesc_nds32 (void)
+ {
+diff --git a/gdb/features/nios2.c b/gdb/features/nios2.c
+--- a/gdb/features/nios2.c
++++ b/gdb/features/nios2.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_nios2;
++const struct target_desc *tdesc_nios2;
+ static void
+ initialize_tdesc_nios2 (void)
+ {
+diff --git a/gdb/features/or1k-linux.c b/gdb/features/or1k-linux.c
+--- a/gdb/features/or1k-linux.c
++++ b/gdb/features/or1k-linux.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_or1k_linux;
++const struct target_desc *tdesc_or1k_linux;
+ static void
+ initialize_tdesc_or1k_linux (void)
+ {
+diff --git a/gdb/features/or1k.c b/gdb/features/or1k.c
+--- a/gdb/features/or1k.c
++++ b/gdb/features/or1k.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_or1k;
++const struct target_desc *tdesc_or1k;
+ static void
+ initialize_tdesc_or1k (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-32.c b/gdb/features/rs6000/powerpc-32.c
+--- a/gdb/features/rs6000/powerpc-32.c
++++ b/gdb/features/rs6000/powerpc-32.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_32;
++const struct target_desc *tdesc_powerpc_32;
+ static void
+ initialize_tdesc_powerpc_32 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-32l.c b/gdb/features/rs6000/powerpc-32l.c
+--- a/gdb/features/rs6000/powerpc-32l.c
++++ b/gdb/features/rs6000/powerpc-32l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_32l;
++const struct target_desc *tdesc_powerpc_32l;
+ static void
+ initialize_tdesc_powerpc_32l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-403.c b/gdb/features/rs6000/powerpc-403.c
+--- a/gdb/features/rs6000/powerpc-403.c
++++ b/gdb/features/rs6000/powerpc-403.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_403;
++const struct target_desc *tdesc_powerpc_403;
+ static void
+ initialize_tdesc_powerpc_403 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-403gc.c b/gdb/features/rs6000/powerpc-403gc.c
+--- a/gdb/features/rs6000/powerpc-403gc.c
++++ b/gdb/features/rs6000/powerpc-403gc.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_403gc;
++const struct target_desc *tdesc_powerpc_403gc;
+ static void
+ initialize_tdesc_powerpc_403gc (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-405.c b/gdb/features/rs6000/powerpc-405.c
+--- a/gdb/features/rs6000/powerpc-405.c
++++ b/gdb/features/rs6000/powerpc-405.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_405;
++const struct target_desc *tdesc_powerpc_405;
+ static void
+ initialize_tdesc_powerpc_405 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-505.c b/gdb/features/rs6000/powerpc-505.c
+--- a/gdb/features/rs6000/powerpc-505.c
++++ b/gdb/features/rs6000/powerpc-505.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_505;
++const struct target_desc *tdesc_powerpc_505;
+ static void
+ initialize_tdesc_powerpc_505 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-601.c b/gdb/features/rs6000/powerpc-601.c
+--- a/gdb/features/rs6000/powerpc-601.c
++++ b/gdb/features/rs6000/powerpc-601.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_601;
++const struct target_desc *tdesc_powerpc_601;
+ static void
+ initialize_tdesc_powerpc_601 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-602.c b/gdb/features/rs6000/powerpc-602.c
+--- a/gdb/features/rs6000/powerpc-602.c
++++ b/gdb/features/rs6000/powerpc-602.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_602;
++const struct target_desc *tdesc_powerpc_602;
+ static void
+ initialize_tdesc_powerpc_602 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-603.c b/gdb/features/rs6000/powerpc-603.c
+--- a/gdb/features/rs6000/powerpc-603.c
++++ b/gdb/features/rs6000/powerpc-603.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_603;
++const struct target_desc *tdesc_powerpc_603;
+ static void
+ initialize_tdesc_powerpc_603 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-604.c b/gdb/features/rs6000/powerpc-604.c
+--- a/gdb/features/rs6000/powerpc-604.c
++++ b/gdb/features/rs6000/powerpc-604.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_604;
++const struct target_desc *tdesc_powerpc_604;
+ static void
+ initialize_tdesc_powerpc_604 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-64.c b/gdb/features/rs6000/powerpc-64.c
+--- a/gdb/features/rs6000/powerpc-64.c
++++ b/gdb/features/rs6000/powerpc-64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_64;
++const struct target_desc *tdesc_powerpc_64;
+ static void
+ initialize_tdesc_powerpc_64 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-64l.c b/gdb/features/rs6000/powerpc-64l.c
+--- a/gdb/features/rs6000/powerpc-64l.c
++++ b/gdb/features/rs6000/powerpc-64l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_64l;
++const struct target_desc *tdesc_powerpc_64l;
+ static void
+ initialize_tdesc_powerpc_64l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-7400.c b/gdb/features/rs6000/powerpc-7400.c
+--- a/gdb/features/rs6000/powerpc-7400.c
++++ b/gdb/features/rs6000/powerpc-7400.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_7400;
++const struct target_desc *tdesc_powerpc_7400;
+ static void
+ initialize_tdesc_powerpc_7400 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-750.c b/gdb/features/rs6000/powerpc-750.c
+--- a/gdb/features/rs6000/powerpc-750.c
++++ b/gdb/features/rs6000/powerpc-750.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_750;
++const struct target_desc *tdesc_powerpc_750;
+ static void
+ initialize_tdesc_powerpc_750 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-860.c b/gdb/features/rs6000/powerpc-860.c
+--- a/gdb/features/rs6000/powerpc-860.c
++++ b/gdb/features/rs6000/powerpc-860.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_860;
++const struct target_desc *tdesc_powerpc_860;
+ static void
+ initialize_tdesc_powerpc_860 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-altivec32.c b/gdb/features/rs6000/powerpc-altivec32.c
+--- a/gdb/features/rs6000/powerpc-altivec32.c
++++ b/gdb/features/rs6000/powerpc-altivec32.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_altivec32;
++const struct target_desc *tdesc_powerpc_altivec32;
+ static void
+ initialize_tdesc_powerpc_altivec32 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-altivec32l.c b/gdb/features/rs6000/powerpc-altivec32l.c
+--- a/gdb/features/rs6000/powerpc-altivec32l.c
++++ b/gdb/features/rs6000/powerpc-altivec32l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_altivec32l;
++const struct target_desc *tdesc_powerpc_altivec32l;
+ static void
+ initialize_tdesc_powerpc_altivec32l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-altivec64.c b/gdb/features/rs6000/powerpc-altivec64.c
+--- a/gdb/features/rs6000/powerpc-altivec64.c
++++ b/gdb/features/rs6000/powerpc-altivec64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_altivec64;
++const struct target_desc *tdesc_powerpc_altivec64;
+ static void
+ initialize_tdesc_powerpc_altivec64 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-altivec64l.c b/gdb/features/rs6000/powerpc-altivec64l.c
+--- a/gdb/features/rs6000/powerpc-altivec64l.c
++++ b/gdb/features/rs6000/powerpc-altivec64l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_altivec64l;
++const struct target_desc *tdesc_powerpc_altivec64l;
+ static void
+ initialize_tdesc_powerpc_altivec64l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-e500.c b/gdb/features/rs6000/powerpc-e500.c
+--- a/gdb/features/rs6000/powerpc-e500.c
++++ b/gdb/features/rs6000/powerpc-e500.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_e500;
++const struct target_desc *tdesc_powerpc_e500;
+ static void
+ initialize_tdesc_powerpc_e500 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-e500l.c b/gdb/features/rs6000/powerpc-e500l.c
+--- a/gdb/features/rs6000/powerpc-e500l.c
++++ b/gdb/features/rs6000/powerpc-e500l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_e500l;
++const struct target_desc *tdesc_powerpc_e500l;
+ static void
+ initialize_tdesc_powerpc_e500l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa205-32l.c b/gdb/features/rs6000/powerpc-isa205-32l.c
+--- a/gdb/features/rs6000/powerpc-isa205-32l.c
++++ b/gdb/features/rs6000/powerpc-isa205-32l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa205_32l;
++const struct target_desc *tdesc_powerpc_isa205_32l;
+ static void
+ initialize_tdesc_powerpc_isa205_32l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa205-64l.c b/gdb/features/rs6000/powerpc-isa205-64l.c
+--- a/gdb/features/rs6000/powerpc-isa205-64l.c
++++ b/gdb/features/rs6000/powerpc-isa205-64l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa205_64l;
++const struct target_desc *tdesc_powerpc_isa205_64l;
+ static void
+ initialize_tdesc_powerpc_isa205_64l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa205-altivec32l.c b/gdb/features/rs6000/powerpc-isa205-altivec32l.c
+--- a/gdb/features/rs6000/powerpc-isa205-altivec32l.c
++++ b/gdb/features/rs6000/powerpc-isa205-altivec32l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa205_altivec32l;
++const struct target_desc *tdesc_powerpc_isa205_altivec32l;
+ static void
+ initialize_tdesc_powerpc_isa205_altivec32l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa205-altivec64l.c b/gdb/features/rs6000/powerpc-isa205-altivec64l.c
+--- a/gdb/features/rs6000/powerpc-isa205-altivec64l.c
++++ b/gdb/features/rs6000/powerpc-isa205-altivec64l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa205_altivec64l;
++const struct target_desc *tdesc_powerpc_isa205_altivec64l;
+ static void
+ initialize_tdesc_powerpc_isa205_altivec64l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa205-ppr-dscr-vsx32l.c b/gdb/features/rs6000/powerpc-isa205-ppr-dscr-vsx32l.c
+--- a/gdb/features/rs6000/powerpc-isa205-ppr-dscr-vsx32l.c
++++ b/gdb/features/rs6000/powerpc-isa205-ppr-dscr-vsx32l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx32l;
++const struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx32l;
+ static void
+ initialize_tdesc_powerpc_isa205_ppr_dscr_vsx32l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa205-ppr-dscr-vsx64l.c b/gdb/features/rs6000/powerpc-isa205-ppr-dscr-vsx64l.c
+--- a/gdb/features/rs6000/powerpc-isa205-ppr-dscr-vsx64l.c
++++ b/gdb/features/rs6000/powerpc-isa205-ppr-dscr-vsx64l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx64l;
++const struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx64l;
+ static void
+ initialize_tdesc_powerpc_isa205_ppr_dscr_vsx64l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa205-vsx32l.c b/gdb/features/rs6000/powerpc-isa205-vsx32l.c
+--- a/gdb/features/rs6000/powerpc-isa205-vsx32l.c
++++ b/gdb/features/rs6000/powerpc-isa205-vsx32l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa205_vsx32l;
++const struct target_desc *tdesc_powerpc_isa205_vsx32l;
+ static void
+ initialize_tdesc_powerpc_isa205_vsx32l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa205-vsx64l.c b/gdb/features/rs6000/powerpc-isa205-vsx64l.c
+--- a/gdb/features/rs6000/powerpc-isa205-vsx64l.c
++++ b/gdb/features/rs6000/powerpc-isa205-vsx64l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa205_vsx64l;
++const struct target_desc *tdesc_powerpc_isa205_vsx64l;
+ static void
+ initialize_tdesc_powerpc_isa205_vsx64l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa207-htm-vsx32l.c b/gdb/features/rs6000/powerpc-isa207-htm-vsx32l.c
+--- a/gdb/features/rs6000/powerpc-isa207-htm-vsx32l.c
++++ b/gdb/features/rs6000/powerpc-isa207-htm-vsx32l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa207_htm_vsx32l;
++const struct target_desc *tdesc_powerpc_isa207_htm_vsx32l;
+ static void
+ initialize_tdesc_powerpc_isa207_htm_vsx32l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa207-htm-vsx64l.c b/gdb/features/rs6000/powerpc-isa207-htm-vsx64l.c
+--- a/gdb/features/rs6000/powerpc-isa207-htm-vsx64l.c
++++ b/gdb/features/rs6000/powerpc-isa207-htm-vsx64l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa207_htm_vsx64l;
++const struct target_desc *tdesc_powerpc_isa207_htm_vsx64l;
+ static void
+ initialize_tdesc_powerpc_isa207_htm_vsx64l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa207-vsx32l.c b/gdb/features/rs6000/powerpc-isa207-vsx32l.c
+--- a/gdb/features/rs6000/powerpc-isa207-vsx32l.c
++++ b/gdb/features/rs6000/powerpc-isa207-vsx32l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa207_vsx32l;
++const struct target_desc *tdesc_powerpc_isa207_vsx32l;
+ static void
+ initialize_tdesc_powerpc_isa207_vsx32l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-isa207-vsx64l.c b/gdb/features/rs6000/powerpc-isa207-vsx64l.c
+--- a/gdb/features/rs6000/powerpc-isa207-vsx64l.c
++++ b/gdb/features/rs6000/powerpc-isa207-vsx64l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_isa207_vsx64l;
++const struct target_desc *tdesc_powerpc_isa207_vsx64l;
+ static void
+ initialize_tdesc_powerpc_isa207_vsx64l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-vsx32.c b/gdb/features/rs6000/powerpc-vsx32.c
+--- a/gdb/features/rs6000/powerpc-vsx32.c
++++ b/gdb/features/rs6000/powerpc-vsx32.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_vsx32;
++const struct target_desc *tdesc_powerpc_vsx32;
+ static void
+ initialize_tdesc_powerpc_vsx32 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-vsx32l.c b/gdb/features/rs6000/powerpc-vsx32l.c
+--- a/gdb/features/rs6000/powerpc-vsx32l.c
++++ b/gdb/features/rs6000/powerpc-vsx32l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_vsx32l;
++const struct target_desc *tdesc_powerpc_vsx32l;
+ static void
+ initialize_tdesc_powerpc_vsx32l (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-vsx64.c b/gdb/features/rs6000/powerpc-vsx64.c
+--- a/gdb/features/rs6000/powerpc-vsx64.c
++++ b/gdb/features/rs6000/powerpc-vsx64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_vsx64;
++const struct target_desc *tdesc_powerpc_vsx64;
+ static void
+ initialize_tdesc_powerpc_vsx64 (void)
+ {
+diff --git a/gdb/features/rs6000/powerpc-vsx64l.c b/gdb/features/rs6000/powerpc-vsx64l.c
+--- a/gdb/features/rs6000/powerpc-vsx64l.c
++++ b/gdb/features/rs6000/powerpc-vsx64l.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_powerpc_vsx64l;
++const struct target_desc *tdesc_powerpc_vsx64l;
+ static void
+ initialize_tdesc_powerpc_vsx64l (void)
+ {
+diff --git a/gdb/features/rs6000/rs6000.c b/gdb/features/rs6000/rs6000.c
+--- a/gdb/features/rs6000/rs6000.c
++++ b/gdb/features/rs6000/rs6000.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_rs6000;
++const struct target_desc *tdesc_rs6000;
+ static void
+ initialize_tdesc_rs6000 (void)
+ {
+diff --git a/gdb/features/rx.c b/gdb/features/rx.c
+--- a/gdb/features/rx.c
++++ b/gdb/features/rx.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_rx;
++const struct target_desc *tdesc_rx;
+ static void
+ initialize_tdesc_rx (void)
+ {
+diff --git a/gdb/features/s390-gs-linux64.c b/gdb/features/s390-gs-linux64.c
+--- a/gdb/features/s390-gs-linux64.c
++++ b/gdb/features/s390-gs-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_gs_linux64;
++const struct target_desc *tdesc_s390_gs_linux64;
+ static void
+ initialize_tdesc_s390_gs_linux64 (void)
+ {
+diff --git a/gdb/features/s390-linux32.c b/gdb/features/s390-linux32.c
+--- a/gdb/features/s390-linux32.c
++++ b/gdb/features/s390-linux32.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_linux32;
++const struct target_desc *tdesc_s390_linux32;
+ static void
+ initialize_tdesc_s390_linux32 (void)
+ {
+diff --git a/gdb/features/s390-linux32v1.c b/gdb/features/s390-linux32v1.c
+--- a/gdb/features/s390-linux32v1.c
++++ b/gdb/features/s390-linux32v1.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_linux32v1;
++const struct target_desc *tdesc_s390_linux32v1;
+ static void
+ initialize_tdesc_s390_linux32v1 (void)
+ {
+diff --git a/gdb/features/s390-linux32v2.c b/gdb/features/s390-linux32v2.c
+--- a/gdb/features/s390-linux32v2.c
++++ b/gdb/features/s390-linux32v2.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_linux32v2;
++const struct target_desc *tdesc_s390_linux32v2;
+ static void
+ initialize_tdesc_s390_linux32v2 (void)
+ {
+diff --git a/gdb/features/s390-linux64.c b/gdb/features/s390-linux64.c
+--- a/gdb/features/s390-linux64.c
++++ b/gdb/features/s390-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_linux64;
++const struct target_desc *tdesc_s390_linux64;
+ static void
+ initialize_tdesc_s390_linux64 (void)
+ {
+diff --git a/gdb/features/s390-linux64v1.c b/gdb/features/s390-linux64v1.c
+--- a/gdb/features/s390-linux64v1.c
++++ b/gdb/features/s390-linux64v1.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_linux64v1;
++const struct target_desc *tdesc_s390_linux64v1;
+ static void
+ initialize_tdesc_s390_linux64v1 (void)
+ {
+diff --git a/gdb/features/s390-linux64v2.c b/gdb/features/s390-linux64v2.c
+--- a/gdb/features/s390-linux64v2.c
++++ b/gdb/features/s390-linux64v2.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_linux64v2;
++const struct target_desc *tdesc_s390_linux64v2;
+ static void
+ initialize_tdesc_s390_linux64v2 (void)
+ {
+diff --git a/gdb/features/s390-te-linux64.c b/gdb/features/s390-te-linux64.c
+--- a/gdb/features/s390-te-linux64.c
++++ b/gdb/features/s390-te-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_te_linux64;
++const struct target_desc *tdesc_s390_te_linux64;
+ static void
+ initialize_tdesc_s390_te_linux64 (void)
+ {
+diff --git a/gdb/features/s390-tevx-linux64.c b/gdb/features/s390-tevx-linux64.c
+--- a/gdb/features/s390-tevx-linux64.c
++++ b/gdb/features/s390-tevx-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_tevx_linux64;
++const struct target_desc *tdesc_s390_tevx_linux64;
+ static void
+ initialize_tdesc_s390_tevx_linux64 (void)
+ {
+diff --git a/gdb/features/s390-vx-linux64.c b/gdb/features/s390-vx-linux64.c
+--- a/gdb/features/s390-vx-linux64.c
++++ b/gdb/features/s390-vx-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390_vx_linux64;
++const struct target_desc *tdesc_s390_vx_linux64;
+ static void
+ initialize_tdesc_s390_vx_linux64 (void)
+ {
+diff --git a/gdb/features/s390x-gs-linux64.c b/gdb/features/s390x-gs-linux64.c
+--- a/gdb/features/s390x-gs-linux64.c
++++ b/gdb/features/s390x-gs-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390x_gs_linux64;
++const struct target_desc *tdesc_s390x_gs_linux64;
+ static void
+ initialize_tdesc_s390x_gs_linux64 (void)
+ {
+diff --git a/gdb/features/s390x-linux64.c b/gdb/features/s390x-linux64.c
+--- a/gdb/features/s390x-linux64.c
++++ b/gdb/features/s390x-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390x_linux64;
++const struct target_desc *tdesc_s390x_linux64;
+ static void
+ initialize_tdesc_s390x_linux64 (void)
+ {
+diff --git a/gdb/features/s390x-linux64v1.c b/gdb/features/s390x-linux64v1.c
+--- a/gdb/features/s390x-linux64v1.c
++++ b/gdb/features/s390x-linux64v1.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390x_linux64v1;
++const struct target_desc *tdesc_s390x_linux64v1;
+ static void
+ initialize_tdesc_s390x_linux64v1 (void)
+ {
+diff --git a/gdb/features/s390x-linux64v2.c b/gdb/features/s390x-linux64v2.c
+--- a/gdb/features/s390x-linux64v2.c
++++ b/gdb/features/s390x-linux64v2.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390x_linux64v2;
++const struct target_desc *tdesc_s390x_linux64v2;
+ static void
+ initialize_tdesc_s390x_linux64v2 (void)
+ {
+diff --git a/gdb/features/s390x-te-linux64.c b/gdb/features/s390x-te-linux64.c
+--- a/gdb/features/s390x-te-linux64.c
++++ b/gdb/features/s390x-te-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390x_te_linux64;
++const struct target_desc *tdesc_s390x_te_linux64;
+ static void
+ initialize_tdesc_s390x_te_linux64 (void)
+ {
+diff --git a/gdb/features/s390x-tevx-linux64.c b/gdb/features/s390x-tevx-linux64.c
+--- a/gdb/features/s390x-tevx-linux64.c
++++ b/gdb/features/s390x-tevx-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390x_tevx_linux64;
++const struct target_desc *tdesc_s390x_tevx_linux64;
+ static void
+ initialize_tdesc_s390x_tevx_linux64 (void)
+ {
+diff --git a/gdb/features/s390x-vx-linux64.c b/gdb/features/s390x-vx-linux64.c
+--- a/gdb/features/s390x-vx-linux64.c
++++ b/gdb/features/s390x-vx-linux64.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_s390x_vx_linux64;
++const struct target_desc *tdesc_s390x_vx_linux64;
+ static void
+ initialize_tdesc_s390x_vx_linux64 (void)
+ {
+diff --git a/gdb/features/sparc/sparc32-solaris.c b/gdb/features/sparc/sparc32-solaris.c
+--- a/gdb/features/sparc/sparc32-solaris.c
++++ b/gdb/features/sparc/sparc32-solaris.c
+@@ -5,18 +5,18 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_sparc32_solaris;
++const struct target_desc *tdesc_sparc32_solaris;
+ static void
+ initialize_tdesc_sparc32_solaris (void)
+ {
+-  struct target_desc *result = allocate_target_description ();
+-  struct tdesc_feature *feature;
++  target_desc_up result = allocate_target_description ();
++  set_tdesc_architecture (result.get (), bfd_scan_arch ("sparc"));
+ 
+-  set_tdesc_architecture (result, bfd_scan_arch ("sparc"));
++  set_tdesc_osabi (result.get (), osabi_from_tdesc_string ("Solaris"));
+ 
+-  set_tdesc_osabi (result, osabi_from_tdesc_string ("Solaris"));
++  struct tdesc_feature *feature;
+ 
+-  feature = tdesc_create_feature (result, "org.gnu.gdb.sparc.cpu");
++  feature = tdesc_create_feature (result.get (), "org.gnu.gdb.sparc.cpu");
+   tdesc_create_reg (feature, "g0", 0, 1, NULL, 32, "uint32");
+   tdesc_create_reg (feature, "g1", 1, 1, NULL, 32, "uint32");
+   tdesc_create_reg (feature, "g2", 2, 1, NULL, 32, "uint32");
+@@ -50,7 +50,7 @@ initialize_tdesc_sparc32_solaris (void)
+   tdesc_create_reg (feature, "fp", 30, 1, NULL, 32, "uint32");
+   tdesc_create_reg (feature, "i7", 31, 1, NULL, 32, "uint32");
+ 
+-  feature = tdesc_create_feature (result, "org.gnu.gdb.sparc.cp0");
++  feature = tdesc_create_feature (result.get (), "org.gnu.gdb.sparc.cp0");
+   tdesc_create_reg (feature, "y", 64, 1, NULL, 32, "uint32");
+   tdesc_create_reg (feature, "psr", 65, 1, NULL, 32, "uint32");
+   tdesc_create_reg (feature, "wim", 66, 1, NULL, 32, "uint32");
+@@ -60,7 +60,7 @@ initialize_tdesc_sparc32_solaris (void)
+   tdesc_create_reg (feature, "fsr", 70, 1, NULL, 32, "uint32");
+   tdesc_create_reg (feature, "csr", 71, 1, NULL, 32, "uint32");
+ 
+-  feature = tdesc_create_feature (result, "org.gnu.gdb.sparc.fpu");
++  feature = tdesc_create_feature (result.get (), "org.gnu.gdb.sparc.fpu");
+   tdesc_create_reg (feature, "f0", 32, 1, NULL, 32, "ieee_single");
+   tdesc_create_reg (feature, "f1", 33, 1, NULL, 32, "ieee_single");
+   tdesc_create_reg (feature, "f2", 34, 1, NULL, 32, "ieee_single");
+@@ -94,5 +94,5 @@ initialize_tdesc_sparc32_solaris (void)
+   tdesc_create_reg (feature, "f30", 62, 1, NULL, 32, "ieee_single");
+   tdesc_create_reg (feature, "f31", 63, 1, NULL, 32, "ieee_single");
+ 
+-  tdesc_sparc_solaris = result;
++  tdesc_sparc32_solaris = result.release ();
+ }
+diff --git a/gdb/features/sparc/sparc64-solaris.c b/gdb/features/sparc/sparc64-solaris.c
+--- a/gdb/features/sparc/sparc64-solaris.c
++++ b/gdb/features/sparc/sparc64-solaris.c
+@@ -5,18 +5,18 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_sparc64_solaris;
++const struct target_desc *tdesc_sparc64_solaris;
+ static void
+ initialize_tdesc_sparc64_solaris (void)
+ {
+-  struct target_desc *result = allocate_target_description ();
+-  struct tdesc_feature *feature;
++  target_desc_up result = allocate_target_description ();
++  set_tdesc_architecture (result.get (), bfd_scan_arch ("sparc:v9"));
+ 
+-  set_tdesc_architecture (result, bfd_scan_arch ("sparc"));
++  set_tdesc_osabi (result.get (), osabi_from_tdesc_string ("Solaris"));
+ 
+-  set_tdesc_osabi (result, osabi_from_tdesc_string ("Solaris"));
++  struct tdesc_feature *feature;
+ 
+-  feature = tdesc_create_feature (result, "org.gnu.gdb.sparc.cpu");
++  feature = tdesc_create_feature (result.get (), "org.gnu.gdb.sparc.cpu");
+   tdesc_create_reg (feature, "g0", 0, 1, NULL, 64, "uint64");
+   tdesc_create_reg (feature, "g1", 1, 1, NULL, 64, "uint64");
+   tdesc_create_reg (feature, "g2", 2, 1, NULL, 64, "uint64");
+@@ -47,18 +47,18 @@ initialize_tdesc_sparc64_solaris (void)
+   tdesc_create_reg (feature, "i3", 27, 1, NULL, 64, "uint64");
+   tdesc_create_reg (feature, "i4", 28, 1, NULL, 64, "uint64");
+   tdesc_create_reg (feature, "i5", 29, 1, NULL, 64, "uint64");
+-  tdesc_create_reg (feature, "fp", 30, 1, NULL, 32, "uint64");
++  tdesc_create_reg (feature, "fp", 30, 1, NULL, 64, "uint64");
+   tdesc_create_reg (feature, "i7", 31, 1, NULL, 64, "uint64");
+ 
+-  feature = tdesc_create_feature (result, "org.gnu.gdb.sparc.cp0");
++  feature = tdesc_create_feature (result.get (), "org.gnu.gdb.sparc.cp0");
+   tdesc_create_reg (feature, "pc", 80, 1, NULL, 64, "code_ptr");
+   tdesc_create_reg (feature, "npc", 81, 1, NULL, 64, "code_ptr");
+   tdesc_create_reg (feature, "state", 82, 1, NULL, 64, "uint64");
+-  tdesc_create_reg (feature, "fsr", 83, 1, NULL, 32, "ieee_single");
+-  tdesc_create_reg (feature, "fprs", 84, 1, NULL, 32, "ieee_single");
++  tdesc_create_reg (feature, "fsr", 83, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "fprs", 84, 1, NULL, 64, "uint64");
+   tdesc_create_reg (feature, "y", 85, 1, NULL, 64, "uint64");
+ 
+-  feature = tdesc_create_feature (result, "org.gnu.gdb.sparc.fpu");
++  feature = tdesc_create_feature (result.get (), "org.gnu.gdb.sparc.fpu");
+   tdesc_create_reg (feature, "f0", 32, 1, NULL, 32, "ieee_single");
+   tdesc_create_reg (feature, "f1", 33, 1, NULL, 32, "ieee_single");
+   tdesc_create_reg (feature, "f2", 34, 1, NULL, 32, "ieee_single");
+@@ -108,5 +108,5 @@ initialize_tdesc_sparc64_solaris (void)
+   tdesc_create_reg (feature, "f60", 78, 1, NULL, 64, "ieee_double");
+   tdesc_create_reg (feature, "f62", 79, 1, NULL, 64, "ieee_double");
+ 
+-  tdesc_sparc64_solaris = result;
++  tdesc_sparc64_solaris = result.release ();
+ }
+diff --git a/gdb/features/z80.c b/gdb/features/z80.c
+--- a/gdb/features/z80.c
++++ b/gdb/features/z80.c
+@@ -5,7 +5,7 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_z80;
++const struct target_desc *tdesc_z80;
+ static void
+ initialize_tdesc_z80 (void)
+ {
+diff --git a/gdb/mips-linux-tdep.h b/gdb/mips-linux-tdep.h
+--- a/gdb/mips-linux-tdep.h
++++ b/gdb/mips-linux-tdep.h
+@@ -108,9 +108,9 @@ enum {
+ int mips_linux_restart_reg_p (struct gdbarch *gdbarch);
+ 
+ /* Target descriptions.  */
+-extern struct target_desc *tdesc_mips_linux;
+-extern struct target_desc *tdesc_mips64_linux;
+-extern struct target_desc *tdesc_mips_dsp_linux;
+-extern struct target_desc *tdesc_mips64_dsp_linux;
++extern const struct target_desc *tdesc_mips_linux;
++extern const struct target_desc *tdesc_mips64_linux;
++extern const struct target_desc *tdesc_mips_dsp_linux;
++extern const struct target_desc *tdesc_mips64_dsp_linux;
+ 
+ #endif /* MIPS_LINUX_TDEP_H */
+diff --git a/gdb/nios2-tdep.h b/gdb/nios2-tdep.h
+--- a/gdb/nios2-tdep.h
++++ b/gdb/nios2-tdep.h
+@@ -84,7 +84,7 @@ struct nios2_gdbarch_tdep : gdbarch_tdep
+   int jb_pc = 0;
+ };
+ 
+-extern struct target_desc *tdesc_nios2_linux;
+-extern struct target_desc *tdesc_nios2;
++extern const struct target_desc *tdesc_nios2_linux;
++extern const struct target_desc *tdesc_nios2;
+ 
+ #endif /* NIOS2_TDEP_H */
+diff --git a/gdb/rs6000-tdep.c b/gdb/rs6000-tdep.c
+--- a/gdb/rs6000-tdep.c
++++ b/gdb/rs6000-tdep.c
+@@ -3466,7 +3466,7 @@ struct ppc_variant
+     unsigned long mach;
+ 
+     /* Target description for this variant.  */
+-    struct target_desc **tdesc;
++    const struct target_desc **tdesc;
+   };
+ 
+ static struct ppc_variant variants[] =
+diff --git a/gdb/s390-linux-tdep.h b/gdb/s390-linux-tdep.h
+--- a/gdb/s390-linux-tdep.h
++++ b/gdb/s390-linux-tdep.h
+@@ -48,20 +48,20 @@ extern const struct regset s390_gs_regset;
+ extern const struct regset s390_gsbc_regset;
+ 
+ /* GNU/Linux target descriptions.  */
+-extern struct target_desc *tdesc_s390_linux32v1;
+-extern struct target_desc *tdesc_s390_linux32v2;
+-extern struct target_desc *tdesc_s390_linux64;
+-extern struct target_desc *tdesc_s390_linux64v1;
+-extern struct target_desc *tdesc_s390_linux64v2;
+-extern struct target_desc *tdesc_s390_te_linux64;
+-extern struct target_desc *tdesc_s390_vx_linux64;
+-extern struct target_desc *tdesc_s390_tevx_linux64;
+-extern struct target_desc *tdesc_s390_gs_linux64;
+-extern struct target_desc *tdesc_s390x_linux64v1;
+-extern struct target_desc *tdesc_s390x_linux64v2;
+-extern struct target_desc *tdesc_s390x_te_linux64;
+-extern struct target_desc *tdesc_s390x_vx_linux64;
+-extern struct target_desc *tdesc_s390x_tevx_linux64;
+-extern struct target_desc *tdesc_s390x_gs_linux64;
++extern const struct target_desc *tdesc_s390_linux32v1;
++extern const struct target_desc *tdesc_s390_linux32v2;
++extern const struct target_desc *tdesc_s390_linux64;
++extern const struct target_desc *tdesc_s390_linux64v1;
++extern const struct target_desc *tdesc_s390_linux64v2;
++extern const struct target_desc *tdesc_s390_te_linux64;
++extern const struct target_desc *tdesc_s390_vx_linux64;
++extern const struct target_desc *tdesc_s390_tevx_linux64;
++extern const struct target_desc *tdesc_s390_gs_linux64;
++extern const struct target_desc *tdesc_s390x_linux64v1;
++extern const struct target_desc *tdesc_s390x_linux64v2;
++extern const struct target_desc *tdesc_s390x_te_linux64;
++extern const struct target_desc *tdesc_s390x_vx_linux64;
++extern const struct target_desc *tdesc_s390x_tevx_linux64;
++extern const struct target_desc *tdesc_s390x_gs_linux64;
+ 
+ #endif /* S390_LINUX_TDEP_H */
+diff --git a/gdb/s390-tdep.h b/gdb/s390-tdep.h
+--- a/gdb/s390-tdep.h
++++ b/gdb/s390-tdep.h
+@@ -317,7 +317,7 @@ extern struct value *s390_trad_frame_prev_register
+     (struct frame_info *this_frame, struct trad_frame_saved_reg saved_regs[],
+      int regnum);
+ 
+-extern struct target_desc *tdesc_s390_linux32;
+-extern struct target_desc *tdesc_s390x_linux64;
++extern const struct target_desc *tdesc_s390_linux32;
++extern const struct target_desc *tdesc_s390x_linux64;
+ 
+ #endif /* S390_TDEP_H */
+diff --git a/gdb/target-descriptions.c b/gdb/target-descriptions.c
+--- a/gdb/target-descriptions.c
++++ b/gdb/target-descriptions.c
+@@ -1367,7 +1367,7 @@ class print_c_tdesc : public tdesc_element_visitor
+     printf_filtered ("#include \"target-descriptions.h\"\n");
+     printf_filtered ("\n");
+ 
+-    printf_filtered ("struct target_desc *tdesc_%s;\n", m_function);
++    printf_filtered ("const struct target_desc *tdesc_%s;\n", m_function);
+     printf_filtered ("static void\n");
+     printf_filtered ("initialize_tdesc_%s (void)\n", m_function);
+     printf_filtered ("{\n");

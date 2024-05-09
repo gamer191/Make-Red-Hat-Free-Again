@@ -1,0 +1,40 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Guinevere Larsen <blarsen@redhat.com>
+Date: Mon, 30 Oct 2023 12:48:01 +0100
+Subject: libiberty-infinite-recursion-fix-3-of-3.patch
+
+fix backport error in patch 1 of this series.
+
+diff --git a/libiberty/rust-demangle.c b/libiberty/rust-demangle.c
+--- a/libiberty/rust-demangle.c
++++ b/libiberty/rust-demangle.c
+@@ -1082,6 +1082,18 @@ demangle_path_maybe_open_generics (struct rust_demangler *rdm)
+   if (rdm->errored)
+     return open;
+ 
++  if (rdm->recursion != RUST_NO_RECURSION_LIMIT)
++  {
++    ++ rdm ->recursion;
++    if (rdm->recursion > RUST_MAX_RECURSION_COUNT)
++      {
++	/* FIXME: there ought to be a way to report
++	   that the recorsion limit has been reached.  */
++	rdm->errored = 1;
++	goto end_of_func;
++      }
++  }
++
+   if (eat (rdm, 'B'))
+     {
+       backref = parse_integer_62 (rdm);
+@@ -1107,6 +1119,10 @@ demangle_path_maybe_open_generics (struct rust_demangler *rdm)
+     }
+   else
+     demangle_path (rdm, 0);
++ end_of_func:
++  if (rdm->recursion != RUST_NO_RECURSION_LIMIT)
++    -- rdm->recursion;
++
+   return open;
+ }
+ 

@@ -1,0 +1,315 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Wed, 10 Nov 2021 18:52:22 -0700
+Subject: gdb-rhbz2022177-dprintf-1.patch
+
+;; Backport fix for dprintf bug (RH BZ 2022177).
+
+Fix PR 28308 - dprintf breakpoints not working when run from script
+
+This commit fixes Bug 28308, titled "Strange interactions with
+dprintf and break/commands":
+
+Bug: https://sourceware.org/bugzilla/show_bug.cgi?id=28308
+
+Since creating that bug report, I've found a somewhat simpler way of
+reproducing the problem.  I've encapsulated it into the GDB test case
+which I've created along with this bug fix.  The name of the new test
+is gdb.base/dprintf-execution-x-script.exp, I'll demonstrate the
+problem using this test case, though for brevity, I've placed all
+relevant files in the same directory and have renamed the files to all
+start with 'dp-bug' instead of 'dprintf-execution-x-script'.
+
+The script file, named dp-bug.gdb, consists of the following commands:
+
+dprintf increment, "dprintf in increment(), vi=%d\n", vi
+break inc_vi
+commands
+  continue
+end
+run
+
+Note that the final command in this script is 'run'.  When 'run' is
+instead issued interactively, the  bug does not occur.  So, let's look
+at the interactive case first in order to see the correct/expected
+output:
+
+$ gdb -q -x dp-bug.gdb dp-bug
+... eliding buggy output which I'll discuss later ...
+(gdb) run
+Starting program: /mesquite2/sourceware-git/f34-master/bld/gdb/tmp/dp-bug
+vi=0
+dprintf in increment(), vi=0
+
+Breakpoint 2, inc_vi () at dprintf-execution-x-script.c:26
+26	in dprintf-execution-x-script.c
+vi=1
+dprintf in increment(), vi=1
+
+Breakpoint 2, inc_vi () at dprintf-execution-x-script.c:26
+26	in dprintf-execution-x-script.c
+vi=2
+dprintf in increment(), vi=2
+
+Breakpoint 2, inc_vi () at dprintf-execution-x-script.c:26
+26	in dprintf-execution-x-script.c
+vi=3
+[Inferior 1 (process 1539210) exited normally]
+
+In this run, in which 'run' was issued from the gdb prompt (instead
+of at the end of the script), there are three dprintf messages along
+with three 'Breakpoint 2' messages.  This is the correct output.
+
+Now let's look at the output that I snipped above; this is the output
+when 'run' is issued from the script loaded via GDB's -x switch:
+
+$ gdb -q -x dp-bug.gdb dp-bug
+Reading symbols from dp-bug...
+Dprintf 1 at 0x40116e: file dprintf-execution-x-script.c, line 38.
+Breakpoint 2 at 0x40113a: file dprintf-execution-x-script.c, line 26.
+vi=0
+dprintf in increment(), vi=0
+
+Breakpoint 2, inc_vi () at dprintf-execution-x-script.c:26
+26	dprintf-execution-x-script.c: No such file or directory.
+vi=1
+
+Breakpoint 2, inc_vi () at dprintf-execution-x-script.c:26
+26	in dprintf-execution-x-script.c
+vi=2
+
+Breakpoint 2, inc_vi () at dprintf-execution-x-script.c:26
+26	in dprintf-execution-x-script.c
+vi=3
+[Inferior 1 (process 1539175) exited normally]
+
+In the output shown above, only the first dprintf message is printed.
+The 2nd and 3rd dprintf messages are missing!  However, all three
+'Breakpoint 2...' messages are still printed.
+
+Why does this happen?
+
+bpstat_do_actions_1() in gdb/breakpoint.c contains the following
+comment and code near the start of the function:
+
+  /* Avoid endless recursion if a `source' command is contained
+     in bs->commands.  */
+  if (executing_breakpoint_commands)
+    return 0;
+
+  scoped_restore save_executing
+    = make_scoped_restore (&executing_breakpoint_commands, 1);
+
+Also, as described by this comment prior to the 'async' field
+in 'struct ui' in top.h, the main UI starts off in sync mode
+when processing command line arguments:
+
+  /* True if the UI is in async mode, false if in sync mode.  If in
+     sync mode, a synchronous execution command (e.g, "next") does not
+     return until the command is finished.  If in async mode, then
+     running a synchronous command returns right after resuming the
+     target.  Waiting for the command's completion is later done on
+     the top event loop.  For the main UI, this starts out disabled,
+     until all the explicit command line arguments (e.g., `gdb -ex
+     "start" -ex "next"') are processed.  */
+
+This combination of things, the state of the static global
+'executing_breakpoint_commands' plus the state of the async
+field in the main UI causes this behavior.
+
+This is a backtrace after hitting the dprintf breakpoint for
+the second time when doing 'run' from the script file, i.e.
+non-interactively:
+
+Thread 1 "gdb" hit Breakpoint 3, bpstat_do_actions_1 (bsp=0x7fffffffc2b8)
+    at /ironwood1/sourceware-git/f34-master/bld/../../worktree-master/gdb/breakpoint.c:4431
+4431	  if (executing_breakpoint_commands)
+
+ #0  bpstat_do_actions_1 (bsp=0x7fffffffc2b8)
+     at gdb/breakpoint.c:4431
+ #1  0x00000000004d8bc6 in dprintf_after_condition_true (bs=0x1538090)
+     at gdb/breakpoint.c:13048
+ #2  0x00000000004c5caa in bpstat_stop_status (aspace=0x116dbc0, bp_addr=0x40116e, thread=0x137f450, ws=0x7fffffffc718,
+     stop_chain=0x1538090) at gdb/breakpoint.c:5498
+ #3  0x0000000000768d98 in handle_signal_stop (ecs=0x7fffffffc6f0)
+     at gdb/infrun.c:6172
+ #4  0x00000000007678d3 in handle_inferior_event (ecs=0x7fffffffc6f0)
+     at gdb/infrun.c:5662
+ #5  0x0000000000763cd5 in fetch_inferior_event ()
+     at gdb/infrun.c:4060
+ #6  0x0000000000746d7d in inferior_event_handler (event_type=INF_REG_EVENT)
+     at gdb/inf-loop.c:41
+ #7  0x00000000007a702f in handle_target_event (error=0, client_data=0x0)
+     at gdb/linux-nat.c:4207
+ #8  0x0000000000b8cd6e in gdb_wait_for_event (block=block@entry=0)
+     at gdbsupport/event-loop.cc:701
+ #9  0x0000000000b8d032 in gdb_wait_for_event (block=0)
+     at gdbsupport/event-loop.cc:597
+ #10 gdb_do_one_event () at gdbsupport/event-loop.cc:212
+ #11 0x00000000009d19b6 in wait_sync_command_done ()
+     at gdb/top.c:528
+ #12 0x00000000009d1a3f in maybe_wait_sync_command_done (was_sync=0)
+     at gdb/top.c:545
+ #13 0x00000000009d2033 in execute_command (p=0x7fffffffcb18 "", from_tty=0)
+     at gdb/top.c:676
+ #14 0x0000000000560d5b in execute_control_command_1 (cmd=0x13b9bb0, from_tty=0)
+     at gdb/cli/cli-script.c:547
+ #15 0x000000000056134a in execute_control_command (cmd=0x13b9bb0, from_tty=0)
+     at gdb/cli/cli-script.c:717
+ #16 0x00000000004c3bbe in bpstat_do_actions_1 (bsp=0x137f530)
+     at gdb/breakpoint.c:4469
+ #17 0x00000000004c3d40 in bpstat_do_actions ()
+     at gdb/breakpoint.c:4533
+ #18 0x00000000006a473a in command_handler (command=0x1399ad0 "run")
+     at gdb/event-top.c:624
+ #19 0x00000000009d182e in read_command_file (stream=0x113e540)
+     at gdb/top.c:443
+ #20 0x0000000000563697 in script_from_file (stream=0x113e540, file=0x13bb0b0 "dp-bug.gdb")
+     at gdb/cli/cli-script.c:1642
+ #21 0x00000000006abd63 in source_gdb_script (extlang=0xc44e80 <extension_language_gdb>, stream=0x113e540,
+     file=0x13bb0b0 "dp-bug.gdb") at gdb/extension.c:188
+ #22 0x0000000000544400 in source_script_from_stream (stream=0x113e540, file=0x7fffffffd91a "dp-bug.gdb",
+     file_to_open=0x13bb0b0 "dp-bug.gdb")
+     at gdb/cli/cli-cmds.c:692
+ #23 0x0000000000544557 in source_script_with_search (file=0x7fffffffd91a "dp-bug.gdb", from_tty=1, search_path=0)
+     at gdb/cli/cli-cmds.c:750
+ #24 0x00000000005445cf in source_script (file=0x7fffffffd91a "dp-bug.gdb", from_tty=1)
+     at gdb/cli/cli-cmds.c:759
+ #25 0x00000000007cf6d9 in catch_command_errors (command=0x5445aa <source_script(char const*, int)>,
+     arg=0x7fffffffd91a "dp-bug.gdb", from_tty=1, do_bp_actions=false)
+     at gdb/main.c:523
+ #26 0x00000000007cf85d in execute_cmdargs (cmdarg_vec=0x7fffffffd1b0, file_type=CMDARG_FILE, cmd_type=CMDARG_COMMAND,
+     ret=0x7fffffffd18c) at gdb/main.c:615
+ #27 0x00000000007d0c8e in captured_main_1 (context=0x7fffffffd3f0)
+     at gdb/main.c:1322
+ #28 0x00000000007d0eba in captured_main (data=0x7fffffffd3f0)
+     at gdb/main.c:1343
+ #29 0x00000000007d0f25 in gdb_main (args=0x7fffffffd3f0)
+     at gdb/main.c:1368
+ #30 0x00000000004186dd in main (argc=5, argv=0x7fffffffd508)
+     at gdb/gdb.c:32
+
+There are two frames for bpstat_do_actions_1(), one at frame #16 and
+the other at frame #0.  The one at frame #16 is processing the actions
+for Breakpoint 2, which is a 'continue'.  The one at frame #0 is attempting
+to process the dprintf breakpoint action.  However, at this point,
+the value of 'executing_breakpoint_commands' is 1, forcing an early
+return, i.e. prior to executing the command(s) associated with the dprintf
+breakpoint.
+
+For the sake of comparison, this is what the stack looks like when hitting
+the dprintf breakpoint for the second time when issuing the 'run'
+command from the GDB prompt.
+
+Thread 1 "gdb" hit Breakpoint 3, bpstat_do_actions_1 (bsp=0x7fffffffccd8)
+    at /ironwood1/sourceware-git/f34-master/bld/../../worktree-master/gdb/breakpoint.c:4431
+4431	  if (executing_breakpoint_commands)
+
+ #0  bpstat_do_actions_1 (bsp=0x7fffffffccd8)
+     at gdb/breakpoint.c:4431
+ #1  0x00000000004d8bc6 in dprintf_after_condition_true (bs=0x16b0290)
+     at gdb/breakpoint.c:13048
+ #2  0x00000000004c5caa in bpstat_stop_status (aspace=0x116dbc0, bp_addr=0x40116e, thread=0x13f0e60, ws=0x7fffffffd138,
+     stop_chain=0x16b0290) at gdb/breakpoint.c:5498
+ #3  0x0000000000768d98 in handle_signal_stop (ecs=0x7fffffffd110)
+     at gdb/infrun.c:6172
+ #4  0x00000000007678d3 in handle_inferior_event (ecs=0x7fffffffd110)
+     at gdb/infrun.c:5662
+ #5  0x0000000000763cd5 in fetch_inferior_event ()
+     at gdb/infrun.c:4060
+ #6  0x0000000000746d7d in inferior_event_handler (event_type=INF_REG_EVENT)
+     at gdb/inf-loop.c:41
+ #7  0x00000000007a702f in handle_target_event (error=0, client_data=0x0)
+     at gdb/linux-nat.c:4207
+ #8  0x0000000000b8cd6e in gdb_wait_for_event (block=block@entry=0)
+     at gdbsupport/event-loop.cc:701
+ #9  0x0000000000b8d032 in gdb_wait_for_event (block=0)
+     at gdbsupport/event-loop.cc:597
+ #10 gdb_do_one_event () at gdbsupport/event-loop.cc:212
+ #11 0x00000000007cf512 in start_event_loop ()
+     at gdb/main.c:421
+ #12 0x00000000007cf631 in captured_command_loop ()
+     at gdb/main.c:481
+ #13 0x00000000007d0ebf in captured_main (data=0x7fffffffd3f0)
+     at gdb/main.c:1353
+ #14 0x00000000007d0f25 in gdb_main (args=0x7fffffffd3f0)
+     at gdb/main.c:1368
+ #15 0x00000000004186dd in main (argc=5, argv=0x7fffffffd508)
+     at gdb/gdb.c:32
+
+This relatively short backtrace is due to the current UI's async field
+being set to 1.
+
+Yet another thing to be aware of regarding this problem is the
+difference in the way that commands associated to dprintf breakpoints
+versus regular breakpoints are handled.  While they both use a command
+list associated with the breakpoint, regular breakpoints will place
+the commands to be run on the bpstat chain constructed in
+bp_stop_status().  These commands are run later on.  For dprintf
+breakpoints, commands are run via the 'after_condition_true' function
+pointer directly from bpstat_stop_status().  (The 'commands' field in
+the bpstat is cleared in dprintf_after_condition_true().  This
+prevents the dprintf commands from being run again later on when other
+commands on the bpstat chain are processed.)
+
+Another thing that I noticed is that dprintf breakpoints are the only
+type of breakpoint which use 'after_condition_true'.  This suggests
+that one possible way of fixing this problem, that of making dprintf
+breakpoints work more like regular breakpoints, probably won't work.
+(I must admit, however, that my understanding of this code isn't
+complete enough to say why.  I'll trust that whoever implemented it
+had a good reason for doing it this way.)
+
+The comment referenced earlier regarding 'executing_breakpoint_commands'
+states that the reason for checking this variable is to avoid
+potential endless recursion when a 'source' command appears in
+bs->commands.  We know that a dprintf command is constrained to either
+1) execution of a GDB printf command, 2) an inferior function call of
+a printf-like function, or 3) execution of an agent-printf command.
+Therefore, infinite recursion due to a 'source' command cannot happen
+when executing commands upon hitting a dprintf breakpoint.
+
+I chose to fix this problem by having dprintf_after_condition_true()
+directly call execute_control_commands().  This means that it no
+longer attempts to go through bpstat_do_actions_1() avoiding the
+infinite recursion check for potential 'source' commands on the
+command chain.  I think it simplifies this code a little bit too, a
+definite bonus.
+
+Summary:
+
+	* breakpoint.c (dprintf_after_condition_true): Don't call
+	bpstat_do_actions_1().  Call execute_control_commands()
+	instead.
+
+diff --git a/gdb/breakpoint.c b/gdb/breakpoint.c
+--- a/gdb/breakpoint.c
++++ b/gdb/breakpoint.c
+@@ -13043,9 +13043,6 @@ dprintf_print_recreate (struct breakpoint *tp, struct ui_file *fp)
+ static void
+ dprintf_after_condition_true (struct bpstats *bs)
+ {
+-  struct bpstats tmp_bs;
+-  struct bpstats *tmp_bs_p = &tmp_bs;
+-
+   /* dprintf's never cause a stop.  This wasn't set in the
+      check_status hook instead because that would make the dprintf's
+      condition not be evaluated.  */
+@@ -13056,14 +13053,9 @@ dprintf_after_condition_true (struct bpstats *bs)
+      bpstat_do_actions, if a breakpoint that causes a stop happens to
+      be set at same address as this dprintf, or even if running the
+      commands here throws.  */
+-  tmp_bs.commands = bs->commands;
+-  bs->commands = NULL;
+-
+-  bpstat_do_actions_1 (&tmp_bs_p);
+-
+-  /* 'tmp_bs.commands' will usually be NULL by now, but
+-     bpstat_do_actions_1 may return early without processing the whole
+-     list.  */
++  counted_command_line cmds = std::move (bs->commands);
++  gdb_assert (cmds != nullptr);
++  execute_control_commands (cmds.get (), 0);
+ }
+ 
+ /* The breakpoint_ops structure to be used on static tracepoints with

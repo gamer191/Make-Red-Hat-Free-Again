@@ -1,0 +1,94 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Kevin Buettner <kevinb@redhat.com>
+Date: Wed, 30 Mar 2022 13:28:26 -0700
+Subject: gdb-rhbz2068280-debuginfod-unavailable-size.patch
+
+;; Backport upstream patch from Aaron Merey which suppresses debuginfod
+;; progress messages when size is zero.  (RH BZ 2068280).
+
+Remove download size from debuginfod progress messages if unavailable
+
+Currently debuginfod progress update messages include the size of
+each download:
+
+  Downloading 7.5 MB separate debug info for /lib/libxyz.so.0
+
+This value originates from the Content-Length HTTP header of the
+transfer.  However this header is not guaranteed to be present for
+each download.  This can happen when debuginfod servers compress files
+on-the-fly at the time of transfer.  In this case gdb wrongly prints
+"-0.00 MB" as the size.
+
+This patch removes download sizes from progress messages when they are
+not available.  It also removes usage of the progress bar until
+a more thorough reworking of progress updating is implemented. [1]
+
+[1] https://sourceware.org/pipermail/gdb-patches/2022-February/185798.html
+
+diff --git a/gdb/debuginfod-support.c b/gdb/debuginfod-support.c
+--- a/gdb/debuginfod-support.c
++++ b/gdb/debuginfod-support.c
+@@ -81,12 +81,12 @@ debuginfod_debuginfo_query (const unsigned char *build_id,
+ struct user_data
+ {
+   user_data (const char *desc, const char *fname)
+-    : desc (desc), fname (fname)
++    : desc (desc), fname (fname), has_printed (false)
+   { }
+ 
+   const char * const desc;
+   const char * const fname;
+-  gdb::optional<ui_out::progress_meter> meter;
++  bool has_printed;
+ };
+ 
+ /* Deleter for a debuginfod_client.  */
+@@ -116,24 +116,32 @@ progressfn (debuginfod_client *c, long cur, long total)
+       return 1;
+     }
+ 
+-  if (total == 0)
+-    return 0;
+-
+-  if (!data->meter.has_value ())
++  if (!data->has_printed)
+     {
+-      float size_in_mb = 1.0f * total / (1024 * 1024);
+-      string_file styled_filename (current_uiout->can_emit_style_escape ());
+-      fprintf_styled (&styled_filename,
+-		      file_name_style.style (),
+-		      "%s",
+-		      data->fname);
+-      std::string message
+-	= string_printf ("Downloading %.2f MB %s %s", size_in_mb, data->desc,
+-			 styled_filename.c_str());
+-      data->meter.emplace (current_uiout, message, 1);
+-    }
++      /* Include the transfer size, if available.  */
++      if (total > 0)
++	{
++	  float size = 1.0f * total / 1024;
++	  const char *unit = "KB";
++
++	  /* If size is greater than 0.01 MB, set unit to MB.  */
++	  if (size > 10.24)
++	    {
++	      size /= 1024;
++	      unit = "MB";
++	    }
++
++	  printf_filtered ("Downloading %.2f %s %s %ps...\n",
++			   size, unit, data->desc,
++			   styled_string (file_name_style.style (),
++					  data->fname));
++	}
++      else
++	printf_filtered ("Downloading %s %ps...\n", data->desc,
++			 styled_string (file_name_style.style (), data->fname));
+ 
+-  current_uiout->progress ((double)cur / (double)total);
++      data->has_printed = true;
++    }
+ 
+   return 0;
+ }

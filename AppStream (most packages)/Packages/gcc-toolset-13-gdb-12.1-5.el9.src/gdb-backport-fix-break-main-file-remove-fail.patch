@@ -1,0 +1,101 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Bruno Larsen <blarsen@redhat.com>
+Date: Tue, 18 Oct 2022 11:10:41 +0200
+Subject: gdb-backport-fix-break-main-file-remove-fail.patch
+
+;; [gdb/testsuite] Use prototype to call libc functions
+;; (Tom de Vries)
+
+On openSUSE Tumbleweed (using glibc 2.36), I run into:
+...
+(gdb) print /d (int) munmap (4198400, 4096)^M
+Invalid cast.^M
+(gdb) FAIL: gdb.base/break-main-file-remove-fail.exp: cmdline: \
+  get integer valueof "(int) munmap (4198400, 4096)"
+...
+
+The problem is that after starting the executable, the symbol has type
+"void (*) (void)":
+...
+(gdb) p munmap
+$1 = {<text variable, no debug info>} 0x401030 <munmap@plt>
+(gdb) start
+  ...
+(gdb) p munmap
+$2 = {void (void)} 0x7ffff7feb9a0 <__GI_munmap>
+...
+which causes the "Invalid cast" error.
+
+Looking at the debug info for glibc for symbol __GI_munmap:
+...
+ <0><189683>: Abbrev Number: 1 (DW_TAG_compile_unit)
+    <189691>   DW_AT_name        : ../sysdeps/unix/syscall-template.S
+    <189699>   DW_AT_producer    : GNU AS 2.39.0
+<1><1896ae>: Abbrev Number: 2 (DW_TAG_subprogram)
+    <1896af>   DW_AT_name        : __GI___munmap
+    <1896b3>   DW_AT_external    : 1
+    <1896b4>   DW_AT_low_pc      : 0x10cad0
+    <1896bc>   DW_AT_high_pc     : 37
+...
+that's probably caused by this bit (or similar bits for other munmap aliases).
+
+This is fixed in gas on trunk by commit 5578fbf672e ("GAS: Add a return type
+tag to DWARF DIEs generated for function symbols").
+
+Work around this (for say gas 2.39) by explicitly specifying the prototype for
+munmap.
+
+Likewise for getpid in a couple of other test-cases.
+
+Tested on x86_64-linux.
+
+diff --git a/gdb/testsuite/gdb.base/break-main-file-remove-fail.exp b/gdb/testsuite/gdb.base/break-main-file-remove-fail.exp
+--- a/gdb/testsuite/gdb.base/break-main-file-remove-fail.exp
++++ b/gdb/testsuite/gdb.base/break-main-file-remove-fail.exp
+@@ -87,7 +87,9 @@ proc test_remove_bp { initial_load } {
+ 	# should warn the user about it.
+ 	set pagesize [get_integer_valueof "pg_size" 0]
+ 	set align_addr [expr $bp_addr - $bp_addr % $pagesize]
+-	set munmap [get_integer_valueof "(int) munmap ($align_addr, $pagesize)" -1]
++	set munmap_prototype "int (*) (void *, size_t)"
++	set munmap_expr "(($munmap_prototype) munmap) ($align_addr, $pagesize)"
++	set munmap [get_integer_valueof $munmap_expr -1]
+ 
+ 	if {$munmap != 0} {
+ 	    unsupported "can't munmap foo's page"
+diff --git a/gdb/testsuite/gdb.base/dprintf-detach.exp b/gdb/testsuite/gdb.base/dprintf-detach.exp
+--- a/gdb/testsuite/gdb.base/dprintf-detach.exp
++++ b/gdb/testsuite/gdb.base/dprintf-detach.exp
+@@ -52,7 +52,7 @@ proc dprintf_detach_test { breakpoint_always_inserted dprintf_style disconnected
+ 	# Get PID of test program.
+ 	set inferior_pid -1
+ 	set test "get inferior process ID"
+-	gdb_test_multiple "call (int) getpid ()" $test {
++	gdb_test_multiple "call ((int (*) (void)) getpid) ()" $test {
+ 	    -re ".* = ($decimal).*$gdb_prompt $" {
+ 		set inferior_pid $expect_out(1,string)
+ 		pass $test
+diff --git a/gdb/testsuite/gdb.base/info-os.exp b/gdb/testsuite/gdb.base/info-os.exp
+--- a/gdb/testsuite/gdb.base/info-os.exp
++++ b/gdb/testsuite/gdb.base/info-os.exp
+@@ -39,7 +39,7 @@ if ![runto_main] then {
+ # Get PID of test program.
+ set inferior_pid ""
+ set test "get inferior process ID"
+-gdb_test_multiple "call (int) getpid()" $test {
++gdb_test_multiple "call ((int (*) (void)) getpid) ()" $test {
+     -re ".* = ($decimal).*$gdb_prompt $" {
+ 	set inferior_pid $expect_out(1,string)
+ 	pass $test
+diff --git a/gdb/testsuite/gdb.threads/siginfo-threads.exp b/gdb/testsuite/gdb.threads/siginfo-threads.exp
+--- a/gdb/testsuite/gdb.threads/siginfo-threads.exp
++++ b/gdb/testsuite/gdb.threads/siginfo-threads.exp
+@@ -41,7 +41,7 @@ gdb_breakpoint [gdb_get_line_number "break-at-exit"]
+ 
+ set test "get pid"
+ set pid ""
+-gdb_test_multiple "p (int) getpid ()" $test {
++gdb_test_multiple "p ((int (*) (void))getpid) ()" $test {
+     -re " = (\[0-9\]+)\r\n$gdb_prompt $" {
+ 	set pid $expect_out(1,string)
+ 	pass $test

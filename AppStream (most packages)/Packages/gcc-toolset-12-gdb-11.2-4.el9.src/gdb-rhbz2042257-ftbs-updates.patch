@@ -1,0 +1,101 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Wed, 26 Jan 2022 08:56:18 -0800
+Subject: gdb-rhbz2042257-ftbs-updates.patch
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+;; Fix build problems.
+;; (RHBZ 2042257, Keith Seitz, Andrew Burgess)
+
+1) Reference array of structs instead of first member during memcpy
+
+aarch64-tdep.c defines the following macro:
+
+        do  \
+          { \
+            unsigned int mem_len = LENGTH; \
+            if (mem_len) \
+              { \
+                MEMS =  XNEWVEC (struct aarch64_mem_r, mem_len);  \
+                memcpy(&MEMS->len, &RECORD_BUF[0], \
+                       sizeof(struct aarch64_mem_r) * LENGTH); \
+              } \
+          } \
+          while (0)
+
+This is simlpy allocating a new array and copying it. However, for
+the destination address, it is actually copying into the first member
+of the first element of the array (`&MEMS->len"). This elicits a
+warning with GCC 12:
+
+../../binutils-gdb/gdb/aarch64-tdep.c: In function ‘int aarch64_process_record(gdbarch*, regcache*, CORE_ADDR)’:
+../../binutils-gdb/gdb/aarch64-tdep.c:3711:23: error: writing 16 bytes into a region of size 8 [-Werror=stringop-overflow=]
+ 3711 |                 memcpy(&MEMS->len, &RECORD_BUF[0], \
+      |                       ^
+../../binutils-gdb/gdb/aarch64-tdep.c:4394:3: note: in expansion of macro ‘MEM_ALLOC’
+ 4394 |   MEM_ALLOC (aarch64_insn_r->aarch64_mems, aarch64_insn_r->mem_rec_count,
+      |   ^~~~~~~~~
+../../binutils-gdb/gdb/aarch64-tdep.c:3721:12: note: destination object ‘aarch64_mem_r::len’ of size 8
+ 3721 |   uint64_t len;    /* Record length.  */
+      |            ^~~
+
+The simple fix is to reference the array, `MEMS' as the destination of the copy.
+
+Tested by rebuilding.
+
+2)     Fix build with current GCC: EL_EXPLICIT(location) always non-NULL
+
+    Compiling GDB with current GCC (1b4a63593b) runs into this:
+
+      src/gdb/location.c: In function 'int event_location_empty_p(const event_location*)':
+      src/gdb/location.c:963:38: error: the address of 'event_location::<unnamed union>::explicit_loc' will never be NULL [-Werror=address]
+        963 |       return (EL_EXPLICIT (location) == NULL
+            |                                      ^
+      src/gdb/location.c:57:30: note: 'event_location::<unnamed union>::explicit_loc' declared here
+         57 |     struct explicit_location explicit_loc;
+            |                              ^~~~~~~~~~~~
+
+    GCC is right, EL_EXPLICIT is defined as returning the address of an
+    union field:
+
+          /* An explicit location.  */
+          struct explicit_location explicit_loc;
+      #define EL_EXPLICIT(P) (&((P)->u.explicit_loc))
+
+    and thus must always be non-NULL.
+
+diff --git a/gdb/aarch64-tdep.c b/gdb/aarch64-tdep.c
+--- a/gdb/aarch64-tdep.c
++++ b/gdb/aarch64-tdep.c
+@@ -3666,7 +3666,7 @@ When on, AArch64 specific debugging is enabled."),
+ 	    if (mem_len) \
+ 	      { \
+ 		MEMS =  XNEWVEC (struct aarch64_mem_r, mem_len);  \
+-		memcpy(&MEMS->len, &RECORD_BUF[0], \
++		memcpy(MEMS, &RECORD_BUF[0], \
+ 		       sizeof(struct aarch64_mem_r) * LENGTH); \
+ 	      } \
+ 	  } \
+diff --git a/gdb/location.c b/gdb/location.c
+--- a/gdb/location.c
++++ b/gdb/location.c
+@@ -960,12 +960,11 @@ event_location_empty_p (const struct event_location *location)
+       return 0;
+ 
+     case EXPLICIT_LOCATION:
+-      return (EL_EXPLICIT (location) == NULL
+-	      || (EL_EXPLICIT (location)->source_filename == NULL
+-		  && EL_EXPLICIT (location)->function_name == NULL
+-		  && EL_EXPLICIT (location)->label_name == NULL
+-		  && (EL_EXPLICIT (location)->line_offset.sign
+-		      == LINE_OFFSET_UNKNOWN)));
++      return (EL_EXPLICIT (location)->source_filename == NULL
++	      && EL_EXPLICIT (location)->function_name == NULL
++	      && EL_EXPLICIT (location)->label_name == NULL
++	      && (EL_EXPLICIT (location)->line_offset.sign
++		  == LINE_OFFSET_UNKNOWN));
+ 
+     case PROBE_LOCATION:
+       return EL_PROBE (location) == NULL;

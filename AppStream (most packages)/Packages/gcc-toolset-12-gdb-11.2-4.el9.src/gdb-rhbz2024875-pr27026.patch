@@ -1,0 +1,60 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Alexandra=20H=C3=A1jkov=C3=A1?= <ahajkova@redhat.com>
+Date: Tue, 11 Jan 2022 13:22:44 +0100
+Subject: gdb-rhbz2024875-pr27026.patch
+
+;;Backport upstream commit from Aaron Merey
+;;b9db26b4c44 [PR gdb/27026] CTRL-C is ignored when debug info is downloaded
+
+[PR gdb/27026] CTRL-C is ignored when debug info is downloaded
+
+During debuginfod downloads, ctrl-c should result in the download
+being cancelled and skipped.  However in some cases, ctrl-c fails to
+get delivered to gdb during downloading.  This can result in downloads
+being unskippable.
+
+Fix this by ensuring that target_terminal::ours is in effect for the
+duration of each download.
+
+Co-authored-by: Tom de Vries <tdevries@suse.de>
+https://sourceware.org/bugzilla/show_bug.cgi?id=27026#c3
+
+diff --git a/gdb/debuginfod-support.c b/gdb/debuginfod-support.c
+--- a/gdb/debuginfod-support.c
++++ b/gdb/debuginfod-support.c
+@@ -23,6 +23,7 @@
+ #include "gdbsupport/gdb_optional.h"
+ #include "cli/cli-cmds.h"
+ #include "cli/cli-style.h"
++#include "target.h"
+ 
+ /* Set/show debuginfod commands.  */
+ static cmd_list_element *set_debuginfod_prefix_list;
+@@ -208,6 +209,13 @@ debuginfod_source_query (const unsigned char *build_id,
+   user_data data ("source file", srcpath);
+ 
+   debuginfod_set_user_data (c, &data);
++  gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
++  if (target_supports_terminal_ours ())
++    {
++      term_state.emplace ();
++      target_terminal::ours ();
++    }
++
+   scoped_fd fd (debuginfod_find_source (c,
+ 					build_id,
+ 					build_id_len,
+@@ -246,6 +254,13 @@ debuginfod_debuginfo_query (const unsigned char *build_id,
+   user_data data ("separate debug info for", filename);
+ 
+   debuginfod_set_user_data (c, &data);
++  gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
++  if (target_supports_terminal_ours ())
++    {
++      term_state.emplace ();
++      target_terminal::ours ();
++    }
++
+   scoped_fd fd (debuginfod_find_debuginfo (c, build_id, build_id_len,
+ 					   &dname));
+   debuginfod_set_user_data (c, nullptr);

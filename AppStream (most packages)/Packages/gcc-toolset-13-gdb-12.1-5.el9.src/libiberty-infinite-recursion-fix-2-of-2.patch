@@ -1,0 +1,23 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Nick Clifton <nickc@redhat.com>
+Date: Mon, 4 Jul 2022 16:31:18 +0100
+Subject: libiberty-infinite-recursion-fix-2-of-2.patch
+
+;; Backport Fix typo in recent code to add stack recursion limit to the Rust demangler.
+;; (Nick Clifton)
+
+libiberty
+	* rust-demangle.c (demangle_const): Add a missing goto pass_return
+	at the end of the function.
+
+diff --git a/libiberty/rust-demangle.c b/libiberty/rust-demangle.c
+--- a/libiberty/rust-demangle.c
++++ b/libiberty/rust-demangle.c
+@@ -1217,6 +1217,7 @@ demangle_const (struct rust_demangler *rdm)
+       PRINT (": ");
+       PRINT (basic_type (ty_tag));
+     }
++  goto pass_return;
+ 
+  fail_return:
+   rdm->errored = 1;

@@ -1,0 +1,88 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Alexandra=20H=C3=A1jkov=C3=A1?= <ahajkova@redhat.com>
+Date: Thu, 19 Jan 2023 19:18:58 +0100
+Subject: gdb-backport-python-config-replace-deprecated-distutils.patch
+
+;;Backport replace deprecated distutils.sysconfig in
+;;python-config (Lancelot SIX)
+
+gdb/python-config: replace deprecated distutils.sysconfig
+
+When running the gdb/configure script on ubuntu 22.04 with
+python-3.10.4, I see:
+
+    checking for python... no
+    checking for python3... /usr/bin/python3
+    [...]/gdb/python/python-config.py:7: DeprecationWarning: The distutils package is deprecated and slated for removal in Python 3.12. Use setuptools or check PEP 632 for potential alternatives
+      from distutils import sysconfig
+    [...]/gdb/python/python-config.py:7: DeprecationWarning: The distutils.sysconfig module is deprecated, use sysconfig instead
+      from distutils import sysconfig
+    [...]/gdb/python/python-config.py:7: DeprecationWarning: The distutils package is deprecated and slated for removal in Python 3.12. Use setuptools or check PEP 632 for potential alternatives
+      from distutils import sysconfig
+    [...]/gdb/python/python-config.py:7: DeprecationWarning: The distutils.sysconfig module is deprecated, use sysconfig instead
+      from distutils import sysconfig
+    [...]/gdb/python/python-config.py:7: DeprecationWarning: The distutils package is deprecated and slated for removal in Python 3.12. Use setuptools or check PEP 632 for potential alternatives
+      from distutils import sysconfig
+    [...]/gdb/python/python-config.py:7: DeprecationWarning: The distutils.sysconfig module is deprecated, use sysconfig instead
+      from distutils import sysconfig
+    checking for python... yes
+
+The distutils module is deprecated as per the PEP 632[1] and will be
+removed in python-3.12.
+
+This patch migrates gdb/python/python-config.py from distutils.sysconfig
+to the sysconfig module[2].
+
+The sysconfig module has has been introduced in the standard library in
+python 3.2.  Given that support for python < 3.2 has been removed by
+edae3fd6600f: "gdb/python: remove Python 2 support", this patch does not
+need to support both implementations for backward compatibility.
+
+Tested on ubuntu-22.04 and ubuntu 20.04.
+
+[1] https://peps.python.org/pep-0632/
+[2] https://docs.python.org/3/library/sysconfig.html
+
+Change-Id: Id0df2baf3ee6ce68bd01c236b829ab4c0a4526f6
+
+diff --git a/gdb/python/python-config.py b/gdb/python/python-config.py
+--- a/gdb/python/python-config.py
++++ b/gdb/python/python-config.py
+@@ -4,7 +4,7 @@
+ import sys
+ import os
+ import getopt
+-from distutils import sysconfig
++import sysconfig
+ 
+ valid_opts = ["prefix", "exec-prefix", "includes", "libs", "cflags", "ldflags", "help"]
+ 
+@@ -49,15 +49,15 @@ def to_unix_path(path):
+ 
+ for opt in opt_flags:
+     if opt == "--prefix":
+-        print(to_unix_path(sysconfig.PREFIX))
++        print(to_unix_path(os.path.normpath(sys.prefix)))
+ 
+     elif opt == "--exec-prefix":
+-        print(to_unix_path(sysconfig.EXEC_PREFIX))
++        print(to_unix_path(os.path.normpath(sys.exec_prefix)))
+ 
+     elif opt in ("--includes", "--cflags"):
+         flags = [
+-            "-I" + sysconfig.get_python_inc(),
+-            "-I" + sysconfig.get_python_inc(plat_specific=True),
++            "-I" + sysconfig.get_path("include"),
++            "-I" + sysconfig.get_path("platinclude"),
+         ]
+         if opt == "--cflags":
+             flags.extend(getvar("CFLAGS").split())
+@@ -76,7 +76,7 @@ for opt in opt_flags:
+                 if getvar("LIBPL") is not None:
+                     libs.insert(0, "-L" + getvar("LIBPL"))
+                 elif os.name == "nt":
+-                    libs.insert(0, "-L" + sysconfig.PREFIX + "/libs")
++                    libs.insert(0, "-L" + os.path.normpath(sys.prefix) + "/libs")
+             if getvar("LINKFORSHARED") is not None:
+                 libs.extend(getvar("LINKFORSHARED").split())
+         print(to_unix_path(" ".join(libs)))

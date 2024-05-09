@@ -1,0 +1,181 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Andrew Burgess <aburgess@redhat.com>
+Date: Mon, 19 Dec 2022 15:57:59 +0000
+Subject: gdb-rhbz2152431-label-symbol-value.patch
+
+Backport these two upstream commits to fix bug 2152431:
+
+  commit 38665d717a3e65c70e6432243d5eed9728a4888a
+  Date:   Mon Dec 12 14:09:40 2022 +0000
+
+      gdb: use gdb_assert not internal_error
+
+And:
+
+  commit c3efaf0afd9d37004c42cdfd3ce0c1bfa979c45e
+  Date:   Mon Dec 12 14:05:22 2022 +0000
+
+      gdb: fix crash when getting the value of a label symbol
+
+diff --git a/gdb/findvar.c b/gdb/findvar.c
+--- a/gdb/findvar.c
++++ b/gdb/findvar.c
+@@ -152,11 +152,7 @@ extract_long_unsigned_integer (const gdb_byte *addr, int orig_len,
+ CORE_ADDR
+ extract_typed_address (const gdb_byte *buf, struct type *type)
+ {
+-  if (!type->is_pointer_or_reference ())
+-    internal_error (__FILE__, __LINE__,
+-		    _("extract_typed_address: "
+-		    "type is not a pointer or reference"));
+-
++  gdb_assert (type->is_pointer_or_reference ());
+   return gdbarch_pointer_to_address (type->arch (), type, buf);
+ }
+ 
+@@ -205,11 +201,7 @@ template void store_integer (gdb_byte *addr, int len,
+ void
+ store_typed_address (gdb_byte *buf, struct type *type, CORE_ADDR addr)
+ {
+-  if (!type->is_pointer_or_reference ())
+-    internal_error (__FILE__, __LINE__,
+-		    _("store_typed_address: "
+-		    "type is not a pointer or reference"));
+-
++  gdb_assert (type->is_pointer_or_reference ());
+   gdbarch_address_to_pointer (type->arch (), type, buf, addr);
+ }
+ 
+@@ -634,19 +626,32 @@ language_defn::read_var_value (struct symbol *var,
+ 
+     case LOC_LABEL:
+       /* Put the constant back in target format.  */
+-      v = allocate_value (type);
+-      if (overlay_debugging)
+-	{
+-	  struct objfile *var_objfile = symbol_objfile (var);
+-	  addr = symbol_overlayed_address (SYMBOL_VALUE_ADDRESS (var),
+-					   var->obj_section (var_objfile));
+-	  store_typed_address (value_contents_raw (v).data (), type, addr);
+-	}
+-      else
+-	store_typed_address (value_contents_raw (v).data (), type,
+-			      SYMBOL_VALUE_ADDRESS (var));
+-      VALUE_LVAL (v) = not_lval;
+-      return v;
++      {
++	/* Put the constant back in target format.  */
++	if (overlay_debugging)
++	  {
++	    struct objfile *var_objfile = symbol_objfile (var);
++	    addr = symbol_overlayed_address (SYMBOL_VALUE_ADDRESS (var),
++					     var->obj_section (var_objfile));
++	  }
++	else
++	  addr = SYMBOL_VALUE_ADDRESS (var);
++
++	/* First convert the CORE_ADDR to a function pointer type, this
++	   ensures the gdbarch knows what type of pointer we are
++	   manipulating when value_from_pointer is called.  */
++	type = builtin_type (symbol_arch (var))->builtin_func_ptr;
++	v = value_from_pointer (type, addr);
++
++	/* But we want to present the value as 'void *', so cast it to the
++	   required type now, this will not change the values bit
++	   representation.  */
++	struct type *void_ptr_type
++	  = builtin_type (symbol_arch (var))->builtin_data_ptr;
++	v = value_cast_pointers (void_ptr_type, v, 0);
++	VALUE_LVAL (v) = not_lval;
++	return v;
++      }
+ 
+     case LOC_CONST_BYTES:
+       if (is_dynamic_type (type))
+diff --git a/gdb/testsuite/gdb.python/py-label-symbol-value.c b/gdb/testsuite/gdb.python/py-label-symbol-value.c
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.python/py-label-symbol-value.c
+@@ -0,0 +1,38 @@
++/* This testcase is part of GDB, the GNU debugger.
++
++   Copyright 2022 Free Software Foundation, Inc.
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see  <http://www.gnu.org/licenses/>.  */
++
++volatile int global_var = 1;
++
++int
++get_value ()
++{
++  return global_var;
++}
++
++int
++main (void)
++{
++  int value = get_value ();
++  if (value > 0)
++    goto some_label;
++
++  return 1;
++
++ some_label:
++
++  return 0;
++}
+diff --git a/gdb/testsuite/gdb.python/py-label-symbol-value.exp b/gdb/testsuite/gdb.python/py-label-symbol-value.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.python/py-label-symbol-value.exp
+@@ -0,0 +1,39 @@
++# Copyright 2022 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++# Check that GDB handles the user asking for the value of a label
++# symbol (i.e. a symbol for a goto label).
++
++load_lib gdb-python.exp
++standard_testfile
++
++if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile}] } {
++    return -1
++}
++
++# Skip all tests if Python scripting is not enabled.
++if { [skip_python_tests] } { continue }
++
++if ![runto_main] {
++   return -1
++}
++
++# Use Python to print the value of the 'some_label' symbol.
++gdb_test "python frame = gdb.selected_frame()"
++gdb_test "python frame_pc = frame.pc()"
++gdb_test "python block = gdb.current_progspace().block_for_pc(frame_pc)"
++gdb_test "python symbol,_ = gdb.lookup_symbol('some_label', block, gdb.SYMBOL_LABEL_DOMAIN)"
++gdb_test "python print(str(symbol.value()))" "$hex <main\\+$decimal>"
++gdb_test "python print(str(symbol.value().type))" "void \\*"
