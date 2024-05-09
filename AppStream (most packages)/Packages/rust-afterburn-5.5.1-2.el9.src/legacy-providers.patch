@@ -1,0 +1,20 @@
+diff --git a/src/metadata.rs b/src/metadata.rs
+index f27dc7e..4562459 100644
+--- a/src/metadata.rs
++++ b/src/metadata.rs
+@@ -51,6 +51,7 @@ pub fn fetch_metadata(provider: &str) -> Result<Box<dyn providers::MetadataProvi
+     match provider {
+         "aliyun" => box_result!(AliyunProvider::try_new()?),
+         "aws" => box_result!(AwsProvider::try_new()?),
++        "ec2" => box_result!(AwsProvider::try_new()?),
+         "azure" => box_result!(Azure::try_new()?),
+         "azurestack" => box_result!(AzureStack::try_new()?),
+         "cloudstack-metadata" => box_result!(CloudstackNetwork::try_new()?),
+@@ -58,6 +59,7 @@ pub fn fetch_metadata(provider: &str) -> Result<Box<dyn providers::MetadataProvi
+         "digitalocean" => box_result!(DigitalOceanProvider::try_new()?),
+         "exoscale" => box_result!(ExoscaleProvider::try_new()?),
+         "gcp" => box_result!(GcpProvider::try_new()?),
++        "gce" => box_result!(GcpProvider::try_new()?),
+         "hetzner" => box_result!(HetznerProvider::try_new()?),
+         // IBM Cloud - VPC Generation 2.
+         "ibmcloud" => box_result!(IBMGen2Provider::try_new()?),

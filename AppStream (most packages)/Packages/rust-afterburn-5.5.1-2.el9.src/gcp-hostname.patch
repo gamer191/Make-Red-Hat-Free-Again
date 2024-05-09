@@ -1,0 +1,27 @@
+From d613c69d4b133b0287c5205118a2df992c3962a0 Mon Sep 17 00:00:00 2001
+From: Michael Nguyen <mnguyen@redhat.com>
+Date: Thu, 1 Feb 2024 17:20:24 -0500
+Subject: [PATCH] Turn on Afterburn hostname support for GCP
+
+On GCP the DHCP server send the FQDN as the shortname in DHCP.
+So when the code that truncates the hostname in the kubelet runs,
+NM gets ornery that it didn't change the hostname and flips it back to the long name
+---
+ dracut/30afterburn/afterburn-hostname.service | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/dracut/30afterburn/afterburn-hostname.service b/dracut/30afterburn/afterburn-hostname.service
+index 485cd82..8c55a9a 100644
+--- a/dracut/30afterburn/afterburn-hostname.service
++++ b/dracut/30afterburn/afterburn-hostname.service
+@@ -9,6 +9,7 @@ ConditionKernelCommandLine=|ignition.platform.id=azure
+ ConditionKernelCommandLine=|ignition.platform.id=azurestack
+ ConditionKernelCommandLine=|ignition.platform.id=digitalocean
+ ConditionKernelCommandLine=|ignition.platform.id=exoscale
++ConditionKernelCommandLine=|ignition.platform.id=gcp
+ ConditionKernelCommandLine=|ignition.platform.id=hetzner
+ ConditionKernelCommandLine=|ignition.platform.id=ibmcloud
+ ConditionKernelCommandLine=|ignition.platform.id=kubevirt
+-- 
+2.43.0
+

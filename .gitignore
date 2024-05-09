@@ -26,8 +26,9 @@ AppStream (most packages)/Packages/ceph-16.2.4-5.el9.src/ceph-16.2.4.tar
 # needs to be extracted (over 100mb)
 AppStream (most packages)/Packages/mysql-8.0.36-1.el9_3.src/mysql-boost-8.0.36.tar.gz
 AppStream (most packages)/Packages/osbuild-composer-101-1.el9.src/osbuild-composer-101.tar.gz
-AppStream (most packages)/Packages/qemu-kvm*
-AppStream (most packages)/Packages/rust*
-AppStream (most packages)/Packages/tesseract-tessdata*
-AppStream (most packages)/Packages/thunderbird*
-AppStream (most packages)/Packages/virtio-win-*
+AppStream (most packages)/Packages/qemu-kvm-8.2.0-11.el9_4.src/qemu-8.2.0.tar.xz
+AppStream (most packages)/Packages/rust-1.75.0-1.el9.src/rustc-1.75.0-src.tar.xz
+AppStream (most packages)/Packages/tesseract-tessdata-4.1.0-3.el9.src/tessdata_fast-4.1.0.tar.gz
+AppStream (most packages)/Packages/thunderbird-115.9.0-1.el9_3.src/thunderbird-115.9.0.processed-source.tar.xz
+AppStream (most packages)/Packages/virtio-win-1.9.38-0.el9_4.src/virtio-win-1.9.38-bin-for-rpm.tar.gz
+AppStream (most packages)/Packages/virtio-win-1.9.38-0.el9_4.src/mingw-qemu-ga-win-107.0.1-1.el9.src.rpm
