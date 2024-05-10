@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Opt out of certain Arcade features -->
+  <PropertyGroup>
+    <!-- Bumping the Roslyn version used in order to ingest the new runtime source generators -->
+    <UsingToolMicrosoftNetCompilers>true</UsingToolMicrosoftNetCompilers>
+    <MicrosoftNetCompilersToolsetVersion>4.4.0-3.22452.8</MicrosoftNetCompilersToolsetVersion>
+    <UsingToolXliff>true</UsingToolXliff>
+    <UsingToolNetFrameworkReferenceAssemblies>true</UsingToolNetFrameworkReferenceAssemblies>
+    <VersionPrefix>7.0.117</VersionPrefix>
+    <PreReleaseVersionLabel>servicing</PreReleaseVersionLabel>
+    <PreReleaseVersionIteration>
+    </PreReleaseVersionIteration>
+    <!-- When StabilizePackageVersion is set to 'true', this branch will produce stable outputs for 'Shipping' packages -->
+    <StabilizePackageVersion Condition="'$(StabilizePackageVersion)' == ''">true</StabilizePackageVersion>
+    <DotNetFinalVersionKind Condition="'$(StabilizePackageVersion)' == 'true'">release</DotNetFinalVersionKind>
+    <PackSpecific Condition="'$(OS)' != 'Windows_NT'">true</PackSpecific>
+  </PropertyGroup>
+  <!-- Package Versions -->
+  <PropertyGroup>
+    <!-- Pinned Package Versions - Ordered by package name -->
+    <MicrosoftDotNetCliUtilsVersion>6.0.100-rc.1.21423.4</MicrosoftDotNetCliUtilsVersion>
+    <!-- Maestro-managed Package Versions - Ordered by repo name -->
+    <!-- Dependencies from https://github.com/dotnet/command-line-api -->
+    <SystemCommandLinePackageVersion>2.0.0-beta4.22402.1</SystemCommandLinePackageVersion>
+    <!-- Dependencies from https://github.com/dotnet/runtime -->
+    <MicrosoftNETCoreAppRefPackageVersion>7.0.17</MicrosoftNETCoreAppRefPackageVersion>
+    <MicrosoftNETCoreAppRuntimewinx64PackageVersion>7.0.17</MicrosoftNETCoreAppRuntimewinx64PackageVersion>
+    <VSRedistCommonNetCoreSharedFrameworkx6470PackageVersion>7.0.17-servicing.24115.8</VSRedistCommonNetCoreSharedFrameworkx6470PackageVersion>
+    <!-- Dependencies from https://github.com/dotnet/roslyn-analyzers -->
+    <MicrosoftCodeAnalysisNetAnalyzersPackageVersion>7.0.0-preview1.22559.1</MicrosoftCodeAnalysisNetAnalyzersPackageVersion>
+  </PropertyGroup>
+</Project>

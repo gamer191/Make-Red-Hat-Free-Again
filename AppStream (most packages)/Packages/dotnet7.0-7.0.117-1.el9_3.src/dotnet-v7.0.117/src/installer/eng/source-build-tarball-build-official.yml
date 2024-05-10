@@ -1,0 +1,24 @@
+trigger: none
+pr: none
+resources:
+  pipelines:
+  - pipeline: installer-build-resource
+    source: dotnet-installer-official-ci
+    trigger:
+      branches:
+        include:
+        - release/6.0.1xx
+        - internal/release/6.0.1xx*
+        - internal/release/*/6.0.1xx*
+        - release/7.0.1xx
+        - internal/release/7.0.1xx*
+        - internal/release/*/7.0.1xx*
+      stages:
+      - build
+
+stages:
+- stage: build
+  jobs:
+  - template: /src/SourceBuild/Arcade/eng/common/templates/job/source-build-run-tarball-build.yml
+    parameters:
+      installerBuildResourceId: installer-build-resource
