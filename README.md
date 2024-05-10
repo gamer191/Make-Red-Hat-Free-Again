@@ -6,6 +6,7 @@ I uploaded their full source code ISO image at https://archive.org/details/rhel-
 
 I'm not a lawyer, but I believe that this code can be used in other open source programs, subject to the terms of the GPL v2, the EULA, and the individual licenses in each package.
 
+**This package is intended as an easily accessible reference point, but not recommended for compiling**. Due to numourous edge cases (needing to manually decrypt individual folders, Git modifying the line endings of binary files, NTFS possibly replacing special characters in file names) this repo is far from identical to the original source code. If you would like to download and compile a package, I recommend downloading the individual package's .src.rpm file from https://ia800304.us.archive.org/view_archive.php?archive=/2/items/rhel-9.4-source-dvd/rhel-9.4-source-dvd.iso, then extracting it using 7-zip. If you choose to distribute it, please read the EULA (especially section 2), the GPLv2, and any licenses included in the .src.rpm files.
 
 TODO:
 - Replace all tarballs with decompressed folders (feel free to open issues requesting specific packages)
